@@ -60,11 +60,11 @@ function NewRequest({ onClose, onSaved }: { onClose: () => void; onSaved: (id: s
             <DialogDescription>Log it the day it arrives. Nothing is deleted until identity is verified and the hold has passed.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className={field}>Phone number<input className={toolbarControl} inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
-            <label className={field}>Email<input className={toolbarControl} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
-            <label className={field}>Who asked<input className={toolbarControl} value={f.requester_name} onChange={(e) => setF({ ...f, requester_name: e.target.value })} /></label>
+            <label className={field}>Phone number<input className={toolbarControl} inputMode="tel" maxLength={40} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
+            <label className={field}>Email<input className={toolbarControl} type="email" maxLength={254} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
+            <label className={field}>Who asked<input className={toolbarControl} maxLength={200} value={f.requester_name} onChange={(e) => setF({ ...f, requester_name: e.target.value })} /></label>
             <label className={field}>Arrived by<select className={toolbarControl} value={f.received_via} onChange={(e) => setF({ ...f, received_via: e.target.value })}>{DELETION_VIA.map((v) => <option key={v} value={v}>{VIA_LABELS[v]}</option>)}</select></label>
-            <label className={field}>Received on<input type="date" className={toolbarControl} value={f.received_at} onChange={(e) => setF({ ...f, received_at: e.target.value })} /></label>
+            <label className={field}>Received on<input type="date" className={toolbarControl} max={new Date().toISOString().slice(0, 10)} value={f.received_at} onChange={(e) => setF({ ...f, received_at: e.target.value })} /></label>
           </div>
           {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
           <DialogFooter>
@@ -127,7 +127,7 @@ function RequestPanel({ id, methods, holdDays, isOwner, readOnly, onClose, onCha
             <div className="flex flex-col gap-2 border-t border-border pt-4">
               <span className="text-sm font-semibold">Verify who it is</span>
               <select className={toolbarControl} value={method} onChange={(e) => setMethod(e.target.value as VerificationMethod)} aria-label="How identity was verified">{methods.map((m) => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}</select>
-              <input className={toolbarControl} placeholder="Number they called from, or address they wrote from" value={contact} onChange={(e) => setContact(e.target.value)} aria-label="The number or email the request came from" />
+              <input className={toolbarControl} placeholder="Number they called from, or address they wrote from" maxLength={254} value={contact} onChange={(e) => setContact(e.target.value)} aria-label="The number or email the request came from" />
               <textarea className="min-h-16 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Note (required for a document)" value={note} onChange={(e) => setNote(e.target.value)} />
               <Button disabled={busy} onClick={() => void act({ action: "verify", method, note: note || null, contact: contact || null },`Verified. Deletable after ${holdDays} days.`)}>Verify and start the {holdDays}-day hold</Button>
               <span className="text-sm font-semibold">Or reject it</span>

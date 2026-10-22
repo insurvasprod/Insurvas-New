@@ -8,7 +8,7 @@ import { inviteTeamMemberSchema } from "@/lib/tenantTeam/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { buildInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { sendTeamInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { assertOutboundLimit, outboundLimitResponse, outboundLimitSnapshot } from "@/lib/metering/outbound";
 import { isAgencyTenant } from "@/lib/agency/audience";
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     });
     if (!invited.ok) return NextResponse.json(invited.body, { status: invited.status });
     const agencyInviteUrl = buildInviteUrl(agencyToken, configuredAppOrigin("agent"));
-    const { delivered: sent } = await sendInvitationEmail({ to: email, name, inviteUrl: agencyInviteUrl, expiresAt: invited.expiresAt, userId: invited.userId, tenantId: auth.context.tenantId });
+    const { delivered: sent } = await sendTeamInvitationEmail({ to: email, name, inviteUrl: agencyInviteUrl, expiresAt: invited.expiresAt, userId: invited.userId, tenantId: auth.context.tenantId, inviterId: auth.context.userId, role, audience: "agency", existingAccount: invited.existing });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.member_invited", targetType: "user", targetId: invited.userId, metadata: { email, role, tenantId: auth.context.tenantId, delivered: sent, existingAccount: invited.existing, producerId: invited.producerId }, request });
     await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${invited.userId}`, label: `${name} (${email})`, from: null, to: `invited as ${role}` }] });
     return NextResponse.json({ ok: true, member: { id: invited.userId, name, email, role, producerId: invited.producerId }, invite: { url: agencyInviteUrl, expiresAt: invited.expiresAt.toISOString(), delivered: sent } }, { status: 201 });
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
 
   const result = Array.isArray(data) ? data[0] : data;
   const inviteUrl = buildInviteUrl(token, origin);
-  const { delivered } = await sendInvitationEmail({ to: email, name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id });
+  const { delivered } = await sendTeamInvitationEmail({ to: email, name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id, inviterId: auth.context.userId, role, audience: "individual", existingAccount: false });
 
   await audit({
     actorType: "tenant",

@@ -8,7 +8,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 
 /** LA-3.12 · recent grants (an owner sees the agency's, a producer their own) and the carrier sites. */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("carrier_extension", ["owner", "producer"]);
+  const auth = await requireFeatureRole("carrier_extension", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const [activity, scope] = await Promise.all([listGrantActivity(actorOf(auth, request)), scopeFor(auth.context)]);

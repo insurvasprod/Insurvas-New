@@ -15,7 +15,7 @@ const NOT_SETTER = ["owner", "producer", "assistant", "bookkeeper"] as const;
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("book_of_business", NOT_SETTER);
+  const auth = await requireFeatureRole("book_of_business", NOT_SETTER, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);

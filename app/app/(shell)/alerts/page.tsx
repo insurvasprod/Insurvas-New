@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { listAlertCentre } from "@/lib/agentAlerts/service";
 import { getSlaDailyDigests, getSlaJobStatus } from "@/lib/queueSla/digest";
 import { scopeFor } from "@/lib/agency/visibility";
-import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
+import { contextRoles, resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
+import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 
 /**
  * The alert centre — where the alerts panel's "Open the alert centre" leads.
@@ -43,7 +44,7 @@ export default async function AlertCentrePage() {
         : <ErrorState title="SLA job status did not load" detail="Reload the page to try again. Nothing has changed." />}
       <AlertCentre
         lists={centre ? { open: centre.open, resolved: centre.resolved } : null}
-        canClaim={context.role === "owner" || context.role === "producer" || context.role === "assistant"}
+        canClaim={holdsAnyRole(contextRoles(context), ["owner", "producer", "assistant"])}
         // Before 20260925709910 the strip's one line already says the update is pending; one is enough,
         // so the digest tab is left out until then.
         digest={digest === undefined ? undefined : digest

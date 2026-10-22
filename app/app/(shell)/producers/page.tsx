@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ProducersRoster } from "@/components/app/agency/producers-roster";
@@ -22,7 +22,7 @@ export default async function ProducersPage() {
     if (data) redirect(`/app/producers/${data.id}`);
     return <RoleGateNotice featureLabel="Producers" detail="Your producer record is set up when you accept your invitation." />;
   }
-  if (!(["owner", "bookkeeper"].includes(guard.role) || manager)) return <RoleGateNotice featureLabel="Producers" detail="The owner, admins, managers and the bookkeeper see the roster." />;
+  if (!(actAsPage(guard, ["owner", "bookkeeper"]) || manager)) return <RoleGateNotice featureLabel="Producers" detail="The owner, admins, managers and the bookkeeper see the roster." />;
   const accountOwner = guard.role === "owner" && guard.context.memberRole !== "admin";
   return (
     <Suspense fallback={<PageLoading />}>

@@ -168,7 +168,7 @@ export function PartnerMarketAccessPanel({
         <div className="flex items-start gap-2 rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
           <MapPin className="mt-0.5 size-4 shrink-0" />
           <p>
-            Partners must select <strong>Product, Carrier, and State</strong>
+            Partners must select <strong>Product, Carrier, and State</strong>{" "}
             before submitting. The Partner Portal receives only the pairs saved
             here.
           </p>

@@ -13,7 +13,7 @@ import { scopeFor } from "@/lib/agency/visibility";
  * where it lands and how much it is used. Owners only: it is the screen they configure from.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("book_of_business", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("book_of_business", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     if (request.nextUrl.searchParams.get("library") === "1") {

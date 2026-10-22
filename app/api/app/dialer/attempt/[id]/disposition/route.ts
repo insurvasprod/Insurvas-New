@@ -6,6 +6,7 @@ import { APPLICATION_OUTCOME, fallbackOutcomeKeys, INBOUND_RETURN_CALL } from "@
 import { callModeWorkItem, getCallModeWizard, linkWalkToAttempt, loadDialOutcomeRow } from "@/lib/dialerScripts/callOutcome";
 import { DIAL_OUTCOME_KEY_PATTERN, decideDialOutcomeKey, setterMayRecord, type DialOutcomeRow } from "@/lib/dialerScripts/dialOutcomeKey";
 import { applicationOutcomeFor, assertApplicationOutcomeVerified } from "@/lib/dispositions/applicationGate";
+import { workItemPipelineId } from "@/lib/pipelines/outcomeStages";
 import { answerDisposition, DispositionError } from "@/lib/dispositions/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { guardCallAttempt } from "@/lib/agency/guards";
@@ -131,7 +132,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // same test the verification gate below uses. The screen does not offer them; this is the refusal
   // for anything else that calls the API.
   if (auth.context.role === "setter") {
-    const isApplication = key === INBOUND_RETURN_CALL ? false : await applicationOutcomeFor(auth.context.tenantId, key).then((outcome) => Boolean(outcome), () => null);
+    // Judged in the lead's own pipeline, where its own stage for the outcome wins (20261022200000).
+    const isApplication = key === INBOUND_RETURN_CALL ? false : await attemptWorkItemId({ tenantId: auth.context.tenantId, agentId: auth.context.userId, attemptId })
+      .then((itemId) => (itemId ? workItemPipelineId(auth.context.tenantId, itemId) : null))
+      .then((pipelineId) => applicationOutcomeFor(auth.context.tenantId, key, pipelineId))
+      .then((outcome) => Boolean(outcome), () => null);
     if (!setterMayRecord({ role: auth.context.role, key, isApplication }))
       return NextResponse.json({ error: "Setters book appointments; an application is recorded by the licensed agent who takes it.", code: "setter_may_not_sell" }, { status: 403 });
   }

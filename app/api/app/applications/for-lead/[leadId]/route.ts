@@ -8,7 +8,7 @@ import { scopeFor, scopeQuery } from "@/lib/agency/visibility";
 
 /** LA-3 · the lead page's "Open application": this lead's open case, or its most recent one. */
 export async function GET(request: Request, { params }: { params: Promise<{ leadId: string }> }) {
-  const auth = await requireFeatureRole("applications", ["owner", "producer"]);
+  const auth = await requireFeatureRole("applications", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   const { leadId } = await params;

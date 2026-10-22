@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RateCardWorkspace } from "@/components/app/rate-card";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -16,7 +16,7 @@ const whole = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-
 export default async function RateCardPage() {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Rate card" description="Know what every carrier should pay you." />;
-  if (guard.role !== "owner" && guard.role !== "bookkeeper") return <RoleGateNotice featureLabel="Rate card" detail="Rates and contract levels are set by the account owner or a bookkeeper." />;
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Rate card" detail="Rates and contract levels are set by the account owner or a bookkeeper." />;
   const view = await loadRateCard(guard.context.tenantId);
   const today = new Date().toISOString().slice(0, 10);
 

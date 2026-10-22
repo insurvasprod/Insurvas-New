@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { bookGapScan, buildEvidenceReport, EvidenceError, mayGenerateReports, type EvidenceScope } from "@/lib/compliance/evidenceReport";
 import { evidenceRange } from "@/lib/compliance/evidenceRange";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -6,7 +6,6 @@ import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { EvidenceReportView } from "@/components/app/compliance/evidence-report";
 import { PageHeader } from "@/components/ui/page-header";
-import { ErrorState } from "@/components/ui/page-states";
 
 /**
  * Setup › Evidence report (LA-6.3, Notion sprint). With no number: the book-wide gap scan — where
@@ -18,11 +17,11 @@ export default async function EvidenceReportPage({ searchParams }: { searchParam
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Evidence report" description="Every compliance record held about a number, and every gap." />;
   }
-  if (!["owner", "producer"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer"])) {
     return <RoleGateNotice featureLabel="Evidence report" detail="Only owners and producers can see a consumer's compliance records." />;
   }
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
-  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Evidence report" detail="In an agency, the owner and admins handle evidence report." />;
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Evidence report" detail="In an agency, the owner and admins handle evidence report." />;
   if (!(await mayGenerateReports(guard.context.tenantId, guard.role))) {
     return <RoleGateNotice featureLabel="Evidence report" detail="Your agency has not allowed your role to generate compliance reports." />;
   }
@@ -44,7 +43,9 @@ export default async function EvidenceReportPage({ searchParams }: { searchParam
       problem = error.message;
     }
   }
-  const content = "error" in range ? <ErrorState detail={range.error} /> : <EvidenceReportView query={query} report={report} scan={scan} problem={problem} />;
+  // A bad range keeps the form on screen with the reason, as a bad number does: it used to replace the
+  // whole page, leaving nothing to correct the dates with (QA pass 2026-10-22).
+  const content = <EvidenceReportView query={query} report={report} scan={scan} problem={"error" in range ? range.error : problem} />;
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="Evidence report" description="What we hold about a number — and what is missing." />

@@ -7,7 +7,7 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 // One partner's quality figures for a period (the /app/partner-quality/[partnerId] page). Same
 // feature and roles as the list report; the partner must belong to the caller's tenant. No cost data.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ partnerId: string }> }) {
-  const auth = await requireFeatureRole("partner_quality", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("partner_quality", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Partner quality");
   if (refused) return refused;

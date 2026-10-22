@@ -13,7 +13,8 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
+import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { fileDay } from "@/lib/ingestion/constants";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { RISK_LABELS, statusLabel, type RiskBand } from "@/lib/ingestion/policyBook";
@@ -37,7 +38,7 @@ const policyHref = (carrierId: string, policyNumber: string) => `/app/policies/c
 export default async function PolicyPage({ params }: { params: Promise<{ carrierId: string; policyNumber: string }> }) {
   const guard = await guardPage("book_of_business");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Book of business" description="Your policies, premiums and carriers in one place." />;
-  if (!["owner", "producer", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
+  if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
   const { carrierId, policyNumber: raw } = await params;
   const policyNumber = decodeURIComponent(raw);
   if (!isRecordUuid(carrierId) || !policyNumber || policyNumber.length > 100) notFound();
@@ -224,7 +225,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                 {view.expected.rows.length === 0 ? (
                   <span className="text-muted-foreground">Nothing expected yet: the carrier hasn&apos;t reached its pay trigger, or its trigger isn&apos;t set in Carrier rules.</span>
                 ) : view.expected.rows[0].confidence === "no_rate_card" ? (
-                  <span className="text-[var(--warning-ink)]">Unknown: {view.expected.rows[0].reason}. {["owner", "bookkeeper"].includes(guard.role) && <Link href="/app/rate-card" className="font-semibold underline">Add the rate</Link>}</span>
+                  <span className="text-[var(--warning-ink)]">Unknown: {view.expected.rows[0].reason}. {holdsAnyRole(guard.roles, ["owner", "bookkeeper"]) && <Link href="/app/rate-card" className="font-semibold underline">Add the rate</Link>}</span>
                 ) : (
                   <>
                     <span className="font-semibold tabular-nums text-foreground">{dollars(Number(view.expected.rows[0].expected_amount_cents))}</span>

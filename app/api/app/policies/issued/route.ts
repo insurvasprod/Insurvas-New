@@ -20,7 +20,7 @@ async function hiddenDeal(context: { tenantId: string; userId: string }, dealId:
  * and producers who work deals are the ones who learn a policy was issued.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("daily_deal_flow", ["owner", "producer"]);
+  const auth = await requireFeatureRole("daily_deal_flow", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const hidden = await hiddenDeal(auth.context, request.nextUrl.searchParams.get("deal_id"));
   if (hidden) return hidden;

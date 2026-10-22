@@ -278,7 +278,7 @@ export function QueueSlaSettings() {
 
       <SettingsSaveBar visible={dirty} note="Unsaved changes to the ladder">
         <Button type="button" variant="outline" onClick={() => { setTexts(textsFor(saved)); setError(""); }} disabled={saving}>Discard</Button>
-        <Button type="button" onClick={() => void save()} disabled={saving || Boolean(problem)}>{saving ? "Saving…" : "Save changes"}</Button>
+        <Button data-guide="queue-sla-save" type="button" onClick={() => void save()} disabled={saving || Boolean(problem)}>{saving ? "Saving…" : "Save changes"}</Button>
       </SettingsSaveBar>
     </SettingsStack>
   );

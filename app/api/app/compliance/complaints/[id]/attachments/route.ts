@@ -20,7 +20,7 @@ const fail = (error: unknown) => {
 };
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("tcpa_checker", ROLES);
+  const auth = await requireFeatureRole("tcpa_checker", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Complaints");
   if (refused) return refused;

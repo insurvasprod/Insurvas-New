@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AttributionBoard } from "@/components/app/agency/attribution-board";
@@ -7,6 +7,6 @@ import { AttributionBoard } from "@/components/app/agency/attribution-board";
 export default async function AttributionPage() {
   const guard = await guardPage("producer_payouts");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Attribution queue" description="Statement rows we could not safely give to one producer." />;
-  if (!["owner", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="Attribution queue" detail="The owner, admins and the bookkeeper resolve attribution." />;
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Attribution queue" detail="The owner, admins and the bookkeeper resolve attribution." />;
   return <AttributionBoard canResolve={guard.entitlement.access !== "read_only"} />;
 }

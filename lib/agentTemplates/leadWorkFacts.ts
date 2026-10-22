@@ -40,9 +40,12 @@ export async function leadWorkFacts(tenantId: string, leadIds: string[], withPre
       if (error) throw new Error(`Could not load ${table === "lead_queue" ? "who holds these leads" : "the quoted premiums"}: ${error.message}`);
       return data ?? [];
     });
-  const [queue, deals] = await Promise.all([
+  // When each lead entered its stage (migration 20260925100000) is read in the same round trip: it needs
+  // nothing the other two return.
+  const [queue, deals, entered] = await Promise.all([
     Promise.all(chunks.map((ids) => read("lead_queue", "lead_id, owner_user_id, disposition, disposition_at", ids))),
     withPremium ? Promise.all(chunks.map((ids) => read("deal_flow", "lead_id, monthly_premium_cents", ids))) : Promise.resolve([] as Row[][]),
+    Promise.all(chunks.map((ids) => db.from("agent_leads").select("id, stage_entered_at").eq("tenant_id", tenantId).in("id", ids))),
   ]);
   const facts = new Map<string, LeadWorkFacts>(leadIds.map((id) => [id, { ownerUserId: null, ownerName: null, disposition: null, dispositionAt: null, stageEnteredAt: null, monthlyPremiumCents: null }]));
   for (const row of queue.flat()) {
@@ -58,7 +61,6 @@ export async function leadWorkFacts(tenantId: string, leadIds: string[], withPre
   }
   // When each lead entered its stage (migration 20260925100000). Absent before it is applied, and
   // then "in stage" is simply unknown — never guessed from another timestamp.
-  const entered = await Promise.all(chunks.map((ids) => db.from("agent_leads").select("id, stage_entered_at").eq("tenant_id", tenantId).in("id", ids)));
   for (const page of entered) {
     if (page.error) break;
     for (const row of page.data ?? []) {

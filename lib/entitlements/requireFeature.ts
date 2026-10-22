@@ -6,6 +6,7 @@ import { getEntitlement } from "./get";
 import { DISABLED_FOR_TENANT_MESSAGE, canWrite, hasFeature, isDisabledForTenant, type Entitlement } from "./types";
 import { featureKillState } from "@/lib/features/killSwitch";
 import { getMaintenanceStatus } from "@/lib/system/service";
+import { rememberScope, visibleProducerUserIds, type ProducerScope } from "@/lib/agency/visibility";
 
 /** Why a write was refused, in the words of the account's state (LA-8.5 adds cancelled). */
 function readOnlyMessage(status: Entitlement["status"]): string {
@@ -35,7 +36,8 @@ export type EntitledContext = {
  */
 export async function requireFeature(
   featureKey: string,
-  options: { write?: boolean } = {},
+  /** `prefetchScope`: the route will ask `scopeFor(auth.context)`; start that read in this round trip. */
+  options: { write?: boolean; prefetchScope?: boolean } = {},
 ): Promise<EntitledContext | NextResponse> {
   // ── Four reads, one round trip ──────────────────────────────────────────────
   //
@@ -70,11 +72,15 @@ export async function requireFeature(
       (error: unknown) => ({ ok: false as const, error }),
     );
 
-  const [auth, maintenance, entitlementSettled, killSettled] = await Promise.all([
+  // The producer scope (AG-0.4) is keyed by the same two signed ids, so a route that will need it can have
+  // it read here, beside the rest, instead of in a second trip after. It is only handed to `scopeFor` for
+  // this request's own context object, once authorisation has passed; any failure leaves `scopeFor` to read.
+  const [auth, maintenance, entitlementSettled, killSettled, scopeSettled] = await Promise.all([
     requireTenant(),
     getMaintenanceStatus(),
     settle(getEntitlement(session.tenantId)),
     settle(featureKillState(featureKey, session.tenantId)),
+    options.prefetchScope ? settle<ProducerScope>(visibleProducerUserIds(session.tenantId, session.sub)) : null,
   ]);
 
   if (auth instanceof NextResponse) return auth;
@@ -153,6 +159,9 @@ export async function requireFeature(
     );
   }
 
+  if (scopeSettled?.ok && auth.context.tenantId === session.tenantId && auth.context.userId === session.sub) {
+    rememberScope(auth.context, scopeSettled.value);
+  }
   return { context: auth.context, entitlement };
 }
 

@@ -2,6 +2,7 @@ import "server-only";
 
 import { applicationKeyConfigured, decryptSensitive, encryptSensitive } from "@/lib/applications/crypto";
 import { csvCell } from "@/lib/csv/cell";
+import { mapLimit } from "@/lib/retention/batch";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { BusinessIdentityMissingError, requireBusinessIdentity } from "@/lib/agencyProfile/identity";
@@ -164,34 +165,38 @@ const dollars = (c: number) => { const d = String(Math.abs(c)).padStart(3, "0");
 
 /** Every transaction of the year with its bucket (paged past the API's row cap). */
 async function transactions(tenantId: string, year: number, basis: "cash" | "accrual") {
-  const map = await categoryMap(tenantId);
-  const bucket = new Map(map.map((m) => [`${m.sourceType}|${m.sourceValue}`, m.category]));
   const col = basis === "cash" ? "paid_on" : "incurred_on";
   const rows: Loose[] = [];
-  for (let from = 0; from < 100_000; from += 1000) {
-    const { data, error } = await db().from("money_entry").select("side, entry_id, entry_type, amount_cents, incurred_on, paid_on, description, policy_number, expense_id").eq("tenant_id", tenantId)
-      .gte(col, `${year}-01-01`).lt(col, `${year + 1}-01-01`).order(col).order("entry_id").range(from, from + 999);
-    if (error) fail(error);
-    rows.push(...(data ?? []));
-    if (!data || data.length < 1000) break;
-  }
+  // The category map is read beside the (in-order) pages; a failure is still reported map first.
+  const [mapRead, pageRead] = await Promise.allSettled([categoryMap(tenantId), (async () => {
+    for (let from = 0; from < 100_000; from += 1000) {
+      const { data, error } = await db().from("money_entry").select("side, entry_id, entry_type, amount_cents, incurred_on, paid_on, description, policy_number, expense_id").eq("tenant_id", tenantId)
+        .gte(col, `${year}-01-01`).lt(col, `${year + 1}-01-01`).order(col).order("entry_id").range(from, from + 999);
+      if (error) fail(error);
+      rows.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
+  })()]);
+  if (mapRead.status === "rejected") throw mapRead.reason;
+  if (pageRead.status === "rejected") throw pageRead.reason;
+  const map = mapRead.value;
+  const bucket = new Map(map.map((m) => [`${m.sourceType}|${m.sourceValue}`, m.category]));
   const expenseIds = [...new Set(rows.map((r) => r.expense_id).filter(Boolean))];
   const categories = new Map<string, string>();
-  for (let i = 0; i < expenseIds.length; i += 200) {
-    const { data } = await db().from("expense").select("id, category").in("id", expenseIds.slice(i, i + 200));
-    for (const e of (data ?? []) as Loose[]) categories.set(e.id, e.category);
-  }
   // What each commission correction corrects (the money view does not carry it): a reversal is
   // bucketed as what it reverses, and held money — reversed or not — is not income.
   const corrects = new Map<string, string | null>();
   const reversalIds = rows.filter((r) => r.side === "commission" && r.entry_type === "reversal").map((r) => r.entry_id as string);
-  for (let i = 0; i < reversalIds.length; i += 200) {
-    const ids = reversalIds.slice(i, i + 200);
-    for (const table of ["commission_entry", "commission_account_entry"]) {
-      const { data, error } = await db().from(table).select("id, corrects_type").in("id", ids);
-      if (error) fail(error);
-      for (const c of (data ?? []) as Loose[]) corrects.set(c.id, c.corrects_type ?? null);
-    }
+  // Expense categories and corrections are independent chunked reads: a few at a time, folded in the old order.
+  const starts = (n: number) => Array.from({ length: Math.ceil(n / 200) }, (_, k) => k * 200);
+  const [expenseReads, correctReads] = await Promise.all([
+    mapLimit(starts(expenseIds.length), 6, (i) => db().from("expense").select("id, category").in("id", expenseIds.slice(i, i + 200))),
+    mapLimit(starts(reversalIds.length).flatMap((i) => ["commission_entry", "commission_account_entry"].map((table) => ({ i, table }))), 6, ({ i, table }) => db().from(table).select("id, corrects_type").in("id", reversalIds.slice(i, i + 200))),
+  ]);
+  for (const { data } of expenseReads as Loose[]) for (const e of (data ?? []) as Loose[]) categories.set(e.id, e.category);
+  for (const { data, error } of correctReads as Loose[]) {
+    if (error) fail(error);
+    for (const c of (data ?? []) as Loose[]) corrects.set(c.id, c.corrects_type ?? null);
   }
   const out: { date: string; side: string; type: string; description: string; amountCents: number; category: TaxCategory }[] = [];
   for (const r of rows) {

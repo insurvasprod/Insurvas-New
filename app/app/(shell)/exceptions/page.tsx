@@ -21,7 +21,7 @@ export default async function ExceptionsPage() {
   if (!hasTenantPermission(guard.role, "policies.view")) return <RoleGateNotice featureLabel="Exceptions" detail="Exceptions are cleared by producers, bookkeepers and the account owner." />;
   // AG-0.5: inside an agency these are operations — every item's choices reach across producers' books — so a
   // narrow session is refused, as the API refuses it. A solo tenant and the all-seeing roles are unchanged.
-  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Exceptions" detail="In an agency, the owner, admins and the bookkeeper clear exceptions." />;
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Exceptions" detail="In an agency, the owner, admins and the bookkeeper clear exceptions." />;
   const seesAll = guard.role === "owner" || guard.role === "bookkeeper";
   // Ages are counted in the agency's day, not UTC's.
   const [view, today] = await Promise.all([loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll }), agencyToday(guard.context.tenantId)]);

@@ -7,7 +7,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 
 /** LA-3 · the Applications list. No sensitive value is in this payload, masked or otherwise. */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("applications", ["owner", "producer"]);
+  const auth = await requireFeatureRole("applications", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   try {

@@ -8,6 +8,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { InfoTip } from "@/components/ui/info-tip";
 import { dollars } from "@/lib/agency/constants";
 import { Money } from "./money";
 import { useAgencyData } from "./use-agency-data";
@@ -46,17 +47,17 @@ export function ScorecardsBoard({ scoped }: { scoped: boolean }) {
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="Producer scorecards" description={scoped ? "Your production, persistency and what your business costs." : "Which producers are profitable, not just busy."} actions={<Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "this", label: "This quarter" }, { key: "last", label: "Last quarter" }]} />} />
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />} description={data ? `Counts until ${data.minSample} policies; then percentages.` : undefined}>
+      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />}>
         {error ? <ErrorState detail={error} /> : loading || !data ? <SectionLoading rows={5} columns={9} label="Loading scorecards" /> : !data.available ? (
           <EmptyState title="No carrier files yet" hint="Scorecards are built from your carriers' policy files. Import one under Data in." />
-        ) : data.rows.length === 0 ? <EmptyState title="No producers yet" hint="Each producer's row appears once he is active." /> : (
+        ) : data.rows.length === 0 ? <EmptyState title="No producers yet" hint="Each producer's row appears once they are active." /> : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Producer</TableHead>
                 <TableHead className="text-right">Submitted</TableHead>
                 <TableHead className="text-right">Issued</TableHead>
-                <TableHead className="text-right">Placement</TableHead>
+                <TableHead className="text-right">Placement <InfoTip label="About placement and persistency">{`Placement and persistency show counts until ${data.minSample} policies, then percentages.`}</InfoTip></TableHead>
                 <TableHead className="text-right">Month 4</TableHead>
                 <TableHead className="text-right">Month 13</TableHead>
                 <TableHead className="text-right">Chargebacks</TableHead>

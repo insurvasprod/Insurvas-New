@@ -30,8 +30,8 @@ export type ReviewRow = {
 };
 
 export async function readReviews(context: { tenantId: string; userId: string }): Promise<ReviewRow[]> {
-  await agencyRpc<number>("agency_review_sample", { p_tenant_id: context.tenantId });
-  const scope = await scopeFor(context);
+  // the scope does not depend on the sample, so it is read while the sample is drawn
+  const [, scope] = await Promise.all([agencyRpc<number>("agency_review_sample", { p_tenant_id: context.tenantId }), scopeFor(context)]);
   let query = db()
     .from("application_review")
     .select("id, application_id, producer_user_id, sample_bps, sampled_at, status, error_types, note, reviewed_at, tenant_applications(carrier_id, case_id, carriers(name))")

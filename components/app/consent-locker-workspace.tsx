@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Download, ExternalLink, ShieldCheck } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -92,8 +92,12 @@ export function ConsentLockerWorkspace() {
     setLoaded(body as Loaded);
   }, [query]);
 
+  // The 250 ms wait is for typing in the search and flicking filters; the page's first read goes at once.
+  const firstLoad = useRef(true);
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 250);
+    const delay = firstLoad.current ? 0 : 250;
+    firstLoad.current = false;
+    const timer = setTimeout(() => void load(), delay);
     return () => clearTimeout(timer);
   }, [load]);
 

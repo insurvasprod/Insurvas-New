@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getCarrierLibrary } from "@/lib/carriers/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { getCommissionLedger } from "@/lib/ledger/service";
+import { mapLimit } from "@/lib/retention/batch";
 
 import {
   carrierLagDays,
@@ -101,8 +102,9 @@ async function gather(tenantId: string, today: string) {
 
   // LA-4.3 premium and rate, when the carrier showed them (after 20261002100000).
   const rates = new Map<string, { premium: number | null; rate: number | null }>();
-  for (const part of chunks(entries.rows.map((row) => row.line_id))) {
-    const read = await db().from("tenant_commission_statement_lines").select("id, premium_cents, rate_bp").eq("tenant_id", tenantId).in("id", part);
+  // Chunks read a few at a time, then taken in chunk order, so the first failing chunk decides as before.
+  const rateReads = await mapLimit(chunks(entries.rows.map((row) => row.line_id)), 6, (part) => db().from("tenant_commission_statement_lines").select("id, premium_cents, rate_bp").eq("tenant_id", tenantId).in("id", part));
+  for (const read of rateReads) {
     if (read.error) { if (isSchemaGap(read.error)) break; throw new Error(`Could not read statement rates: ${read.error.message}`); }
     for (const row of (read.data ?? []) as Array<{ id: string; premium_cents: number | string | null; rate_bp: number | null }>) {
       rates.set(row.id, { premium: row.premium_cents === null ? null : Number(row.premium_cents), rate: row.rate_bp });
@@ -251,21 +253,26 @@ export async function listDiscrepancies(tenantId: string, options: { ids?: strin
     ...rows.rows.map((row) => row.status_changed_by),
     ...rows.rows.flatMap((row) => (Array.isArray(row.history) ? row.history : []).map((change) => change?.by ?? null)),
   ].filter((id): id is string => Boolean(id)))];
+  // Policies (chunked, a few at a time), carriers and names are independent reads; their errors are checked in the old order.
+  const [policyReads, carrierRead, userRead] = await Promise.all([
+    mapLimit(chunks(policyIds), 6, (part) => db().from("tenant_policies").select("id, policy_number, insured_name, carrier").eq("tenant_id", tenantId).in("id", part)),
+    carrierIds.length ? db().from("carriers").select("id, name").in("id", carrierIds) : null,
+    userIds.length ? db().from("users").select("id, name").in("id", userIds) : null,
+  ]);
   const policies = new Map<string, { policy_number: string; insured_name: string; carrier: string }>();
-  for (const part of chunks(policyIds)) {
-    const read = await db().from("tenant_policies").select("id, policy_number, insured_name, carrier").eq("tenant_id", tenantId).in("id", part);
+  for (const read of policyReads) {
     if (read.error) throw new Error(`Could not load policies: ${read.error.message}`);
     for (const row of (read.data ?? []) as Array<{ id: string; policy_number: string; insured_name: string; carrier: string }>) policies.set(row.id, row);
   }
   const carriers = new Map<string, string>();
-  if (carrierIds.length) {
-    const read = await db().from("carriers").select("id, name").in("id", carrierIds);
+  if (carrierRead) {
+    const read = carrierRead;
     if (read.error) throw new Error(`Could not load carriers: ${read.error.message}`);
     for (const row of (read.data ?? []) as Array<{ id: string; name: string }>) carriers.set(row.id, row.name);
   }
   const names = new Map<string, string>();
-  if (userIds.length) {
-    const read = await db().from("users").select("id, name").in("id", userIds);
+  if (userRead) {
+    const read = userRead;
     if (!read.error) for (const row of (read.data ?? []) as Array<{ id: string; name: string }>) names.set(row.id, row.name);
   }
   return {

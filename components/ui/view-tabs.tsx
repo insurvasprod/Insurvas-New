@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
+import { TabTrack } from "./tab-track";
+
 /**
  * A page's views, as segmented tabs on the row under its header: one view at a time instead of
  * stacked tables (the 2026-10-06 redesign), with the page's actions on the right of the same row.
@@ -65,7 +67,7 @@ export function ViewTabs<K extends string>({
   controls?: string;
 }) {
   const list = (
-    <div role="tablist" aria-label={label} className={TRACK}>
+    <TabTrack role="tablist" aria-label={label} className={TRACK}>
       {tabs.map((tab) => {
         const selected = tab.key === value;
         const body = <>{tab.label}<Count value={tab.count} tone={tab.tone} /></>;
@@ -76,7 +78,7 @@ export function ViewTabs<K extends string>({
           <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={controls} onClick={() => onChange?.(tab.key)} className={item(selected)}>{body}</button>
         );
       })}
-    </div>
+    </TabTrack>
   );
   if (!actions) return list;
   return (
@@ -100,13 +102,13 @@ export function Segmented<K extends string>({
   onChange: (key: K) => void;
 }) {
   return (
-    <span role="group" aria-label={label} className={cn(TRACK, "w-auto")}>
+    <TabTrack role="group" aria-label={label} className={cn(TRACK, "w-auto")}>
       {options.map((option) => (
         <button key={option.key} type="button" aria-pressed={value === option.key} onClick={() => onChange(option.key)} className={item(value === option.key, "px-2.5")}>
           {option.label}
           <Count value={option.count} tone={option.tone} />
         </button>
       ))}
-    </span>
+    </TabTrack>
   );
 }

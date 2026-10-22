@@ -19,9 +19,9 @@ import { publicPriceForCycle, type PublicPlan } from "@/lib/publicPlans/types";
 
 type LegalDoc = { id: string; doc_type: string; version: number; title: string; is_draft: boolean };
 
-type Props = { initialPlanCode?: string; initialCycle?: string };
+type Props = { initialPlanCode?: string; initialCycle?: string; /** CHECKOUT_PAYMENT_MODE=none: no card is asked for anywhere. */ noPayment?: boolean };
 
-export function SignupForm({ initialPlanCode, initialCycle }: Props) {
+export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }: Props) {
   const router = useRouter();
   const [plans, setPlans] = useState<PublicPlan[]>([]);
   const [planCode, setPlanCode] = useState(initialPlanCode ?? "");
@@ -255,7 +255,9 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
           </Button>
 
           <p className="text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-            No card is taken here. At checkout you enter a card on the provider&rsquo;s hosted page; nothing is charged during the trial.
+            {noPayment
+              ? "No card is needed. You confirm your plan at the last step and your workspace opens straight away."
+              : <>No card is taken here. At checkout you enter a card on the provider&rsquo;s hosted page; nothing is charged during the trial.</>}
           </p>
           <p className="text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
             Already have an account?{" "}

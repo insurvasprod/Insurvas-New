@@ -8,7 +8,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 
 /** The DealFlow day funnel for a range of the agency's local dates. Read-only. */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("daily_deal_flow", ["owner", "producer"]);
+  const auth = await requireFeatureRole("daily_deal_flow", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const params = request.nextUrl.searchParams;
   try {

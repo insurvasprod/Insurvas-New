@@ -1,5 +1,5 @@
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { RADAR_PENDING_MESSAGE } from "@/lib/retention/constants";
 import { SORTS, type QueueSort } from "@/lib/retention/queue";
 import { loadSaveQueue } from "@/lib/retention/queueStore";
@@ -22,22 +22,21 @@ import { TableCard } from "@/components/ui/table-card";
  * Opening the page recomputes the scores only when a day has passed or a newer file arrived.
  */
 export default async function SaveQueuePage({ searchParams }: { searchParams: Promise<{ sort?: string }> }) {
-  const guard = await guardPage("chargeback_radar");
+  // The three feature checks and the search params together (each guard is memoised for the request, so
+  // they share the session, membership and entitlement reads); still decided in the order below.
+  const [guard, servicing, reinstatement, { sort: sortParam }] = await Promise.all([guardPage("chargeback_radar"), guardPage("payment_repair"), guardPage("winback"), searchParams]);
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Save queue" description="Policies paying fine today that the radar says will stop, with the reason and the fix." />;
   }
-  if (!["owner", "producer", "retention"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer", "retention"])) {
     return <RoleGateNotice featureLabel="Save queue" detail="Only owners, producers and retention reps can view retention risk and the advance at risk." />;
   }
 
-  const { sort: sortParam } = await searchParams;
   // No sort in the address: the agency's default (LA-5.11).
   const asked: QueueSort | undefined = (SORTS as readonly string[]).includes(sortParam ?? "") ? (sortParam as QueueSort) : undefined;
-  // "Start the fix" opens an LA-5.4 servicing request, which is the `payment_repair` feature.
-  const servicing = await guardPage("payment_repair");
+  // "Start the fix" opens an LA-5.4 servicing request, which is the `payment_repair` feature (`servicing`).
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
-  // LA-5.6: a reinstatement window about to close is pinned above everything else here.
-  const reinstatement = await guardPage("winback");
+  // LA-5.6: a reinstatement window about to close is pinned above everything else here (`reinstatement`).
   const [queue, closing] = await Promise.all([loadSaveQueue(viewer, asked), reinstatement.entitled ? closingSoon(viewer).catch(() => null) : Promise.resolve(null)]);
 
   return (

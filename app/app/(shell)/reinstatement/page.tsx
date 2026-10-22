@@ -1,5 +1,5 @@
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { loadReinstatement, REINSTATEMENT_PENDING_MESSAGE } from "@/lib/retention/reinstatementStore";
 import { loadWinback, WINBACK_PENDING_MESSAGE } from "@/lib/retention/winbackStore";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -24,7 +24,7 @@ export default async function ReinstatementPage({ searchParams }: { searchParams
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Reinstatement" description="Lapsed policies the carrier will still take back, and former clients worth winning back." />;
   }
-  if (!["owner", "producer", "retention"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer", "retention"])) {
     return <RoleGateNotice featureLabel="Reinstatement" detail="Only owners, producers and retention reps can work reinstatement cases." />;
   }
   const { view } = await searchParams;

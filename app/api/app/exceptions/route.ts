@@ -28,7 +28,7 @@ function failure(error: unknown) {
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("statement_ingestion", roles);
+  const auth = await requireFeatureRole("statement_ingestion", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, AGENCY_DESK);
   if (refused) return refused;

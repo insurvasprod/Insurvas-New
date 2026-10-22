@@ -28,12 +28,14 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
   const supabase = getSupabaseServiceClient();
   const planIds = latest.map((plan) => plan.id);
 
-  const [{ data: prices, error: priceError }, { data: grants, error: grantError }] = await Promise.all([
+  const [{ data: prices, error: priceError }, { data: grants, error: grantError }, { data: limits }] = await Promise.all([
     supabase
       .from("plan_prices")
       .select("plan_id, price_monthly_cents, price_quarterly_cents, price_yearly_cents, trial_days")
       .in("plan_id", planIds),
     supabase.from("plan_features").select("plan_id, feature_key").in("plan_id", planIds),
+    // Seat limits only label the agency bands; an unreadable limit just leaves the label out.
+    supabase.from("plan_limits").select("plan_id, max_seats").in("plan_id", planIds),
   ]);
 
   if (priceError) throw new Error(`Could not load public plan prices: ${priceError.message}`);
@@ -57,6 +59,7 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
     throw new Error(`Could not load public feature bullets: ${featureResult.error.message}`);
   }
 
+  const seatsByPlan = new Map(((limits ?? []) as { plan_id: string; max_seats: number | null }[]).map((row) => [row.plan_id, row.max_seats]));
   const priceByPlan = new Map((prices as PriceRow[] | null)?.map((row) => [row.plan_id, row]) ?? []);
   const featureByKey = new Map(
     ((featureResult.data ?? []) as FeatureRow[]).map((feature) => [feature.feature_key, feature]),
@@ -94,6 +97,8 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
       // Read, not inferred. This was `index === 0`, which silently meant "the cheapest published
       // plan" — and the plan a business wants to lead with is rarely the cheapest one.
       is_default: plan.is_default,
+      audience: plan.plan_type === "individual" ? "individual" : "agency",
+      max_seats: seatsByPlan.get(plan.id) ?? null,
     };
   });
 }

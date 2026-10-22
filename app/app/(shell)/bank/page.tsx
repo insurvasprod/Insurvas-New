@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { BankError, findings, listAccounts, matchQueue, openStatements } from "@/lib/accounting/bankStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -16,7 +16,7 @@ export default async function BankPage() {
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Bank deposits" description="What actually landed in the bank." />;
   }
-  if (!["owner", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Bank deposits" detail="Only owners and bookkeepers can see the agency's bank lines." />;
   }
   const tenantId = guard.context.tenantId;

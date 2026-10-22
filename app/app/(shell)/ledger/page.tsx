@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { hasFeature, isDisabledForTenant } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -54,7 +54,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
       />
     );
   }
-  if (guard.role !== "owner" && guard.role !== "producer" && guard.role !== "bookkeeper") {
+  if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Commission ledger" detail="Your tenant role does not include commission visibility." />;
   }
   const readOnly = guard.entitlement.access === "read_only";
@@ -96,31 +96,35 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const scope = await scopeFor(guard.context);
   const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId) && rowVisible(scope, producerUserId);
   const importParam = params.import;
-  const [ledger, statements, book] = await Promise.all([
-    getCommissionLedger({ tenantId: guard.context.tenantId, canView }),
-    getStatementLedger({ tenantId: guard.context.tenantId, canView }),
-    view === "lines" ? loadLedger({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }) : null,
-  ]);
-  const { totals, entries, gaps } = ledger;
-  const isOwner = guard.role === "owner";
-
   // Who may import, and when not, the reason — printed, never only a tooltip.
   const handlesStatements = hasTenantPermission(guard.role, "statements.view");
   const statementsOnPlan = hasFeature(guard.entitlement, "statement_ingestion");
-  const importBlocked = !handlesStatements
+  const importBlockedFor = (statementsAvailable: boolean) => !handlesStatements
     ? "Statements are imported by the account owner or a bookkeeper. Entries appear here once one of them accepts a match."
     : !statementsOnPlan
       ? isDisabledForTenant(guard.entitlement, "statement_ingestion")
         ? "Carrier statement import is not available on your account."
         : "Your plan does not include carrier statement import."
-      : !statements.available
+      : !statementsAvailable
         ? STATEMENT_SCHEMA_PENDING_MESSAGE
         : readOnly
           ? "Importing is paused while the account is read-only."
           : null;
-  const [carriers, savedMappings]: [StatementCarrierOption[], Record<string, StatementMapping>] = importBlocked
-    ? [[], {}]
-    : await Promise.all([listStatementCarriers(), getSavedStatementMappings(guard.context.tenantId)]);
+  // What waits on the statement lines (the import picker's carriers and mappings, the hand lines as ledger
+  // rows) starts as soon as they are in, beside the other two reads, rather than after all three.
+  const statementsRead = getStatementLedger({ tenantId: guard.context.tenantId, canView });
+  const [ledger, statements, book, [carriers, savedMappings], handLines] = await Promise.all([
+    getCommissionLedger({ tenantId: guard.context.tenantId, canView }),
+    statementsRead,
+    view === "lines" ? loadLedger({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }) : null,
+    statementsRead.then((read): Promise<[StatementCarrierOption[], Record<string, StatementMapping>]> | [StatementCarrierOption[], Record<string, StatementMapping>] => importBlockedFor(read.available)
+      ? [[], {}]
+      : Promise.all([listStatementCarriers(), getSavedStatementMappings(guard.context.tenantId)])),
+    view === "lines" ? statementsRead.then((read) => statementLinesAsLedger(read.entries)) : null,
+  ]);
+  const { totals, entries, gaps } = ledger;
+  const isOwner = guard.role === "owner";
+  const importBlocked = importBlockedFor(statements.available);
   const importControl = importBlocked ? (
     <Button type="button" disabled title={importBlocked}>Import statement</Button>
   ) : (
@@ -170,9 +174,8 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const showExpected = entries.length > 0 || reconciliation.length > 0;
 
   if (view === "lines") {
-    const handLines = await statementLinesAsLedger(reported);
     // Newest statement first, whichever source a line came from.
-    const lines = [...(book?.available ? book.entries : []), ...handLines].sort((a, b) => String(b.statementDate ?? b.transactionDate ?? "").localeCompare(String(a.statementDate ?? a.transactionDate ?? "")));
+    const lines = [...(book?.available ? book.entries : []), ...(handLines ?? [])].sort((a, b) => String(b.statementDate ?? b.transactionDate ?? "").localeCompare(String(a.statementDate ?? a.transactionDate ?? "")));
     return (
       <div className="m-stagger flex flex-col gap-6">
         {header("Every commission line: each line of every carrier commission file, and each accepted line of a statement imported by hand, with the source behind it.", headerActions)}

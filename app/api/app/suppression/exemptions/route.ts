@@ -53,7 +53,7 @@ function failure(error: unknown, fallback: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("tcpa_checker", READ_ROLES);
+  const auth = await requireFeatureRole("tcpa_checker", READ_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "DNC exemptions");
   if (refused) return refused;

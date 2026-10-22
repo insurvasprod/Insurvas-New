@@ -6,6 +6,8 @@ import { phoneLists, suppressionOverview } from "@/lib/suppression/overview";
 import { activeExemption } from "@/lib/suppression/exemptions";
 import { listScreeningAudit } from "@/lib/suppression/screeningAudit";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
+import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import {
   LIST_TYPES,
   MANUAL_SOURCES,
@@ -42,11 +44,11 @@ const addSchema = z
   .strict();
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("tcpa_checker", READ_ROLES);
-  if (auth instanceof NextResponse) return auth;
-
   const params = request.nextUrl.searchParams;
   const check = params.get("check");
+  // Every view but `?check=` asks the producer scope below, so it is read in the auth round trip.
+  const auth = await requireFeatureRole("tcpa_checker", READ_ROLES, { prefetchScope: !check });
+  if (auth instanceof NextResponse) return auth;
 
   // `?check=` answers one question — "may we call this number" — using the same function the
   // dialer calls. It is separate from the list because the list is a `like` match on digits and
@@ -112,7 +114,7 @@ export async function GET(request: NextRequest) {
       limit: Number(params.get("limit")) || undefined,
     });
     return NextResponse.json(
-      { ...page, canEdit: (WRITE_ROLES as readonly string[]).includes(auth.context.role) },
+      { ...page, canEdit: holdsAnyRole(contextRoles(auth.context), WRITE_ROLES) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

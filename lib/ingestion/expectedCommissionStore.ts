@@ -41,10 +41,15 @@ const chunks = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(
 /** Everything the calculation reads for one agency (optionally one carrier). */
 async function inputs(tenantId: string, carrierId?: string) {
   const scoped = (query: Loose) => (carrierId ? query.eq("carrier_id", carrierId) : query);
-  const [policies, settings, schedules, levels, families, advance] = await Promise.all([
+  // The age bands are read as soon as the schedules are in, beside the policies (which page longer).
+  const [policies, settings, [schedules, bands], levels, families, advance] = await Promise.all([
     everyRow(() => scoped(db().from("policy_current").select("carrier_id, policy_number, product_code, annualised_premium_cents, issue_date, issued_on, effective_date, paid_to_date, first_seen_date, contact_id, status_normalized").eq("tenant_id", tenantId)).order("carrier_id").order("policy_number")),
     scoped(db().from("carrier_operating_settings").select("tenant_id, carrier_id, commission_trigger, expected_lag_days").or(`tenant_id.eq.${tenantId},tenant_id.is.null`)),
-    scoped(db().from("commission_schedules").select("id, carrier_id, product_code, contract_level_bp, policy_year, rate_bp, effective_from, applies_onward").eq("tenant_id", tenantId)),
+    Promise.resolve(scoped(db().from("commission_schedules").select("id, carrier_id, product_code, contract_level_bp, policy_year, rate_bp, effective_from, applies_onward").eq("tenant_id", tenantId))).then(async (schedules: Loose): Promise<[Loose, Loose[]]> => {
+      const scheduleIds = (schedules.data ?? []).map((s: Loose) => s.id);
+      const bands = scheduleIds.length ? (await Promise.all(chunks(scheduleIds, 200).map((ids) => db().from("commission_schedule_band").select("id, schedule_id, age_min, age_max, rate_bp").in("schedule_id", ids)))).flatMap((r: Loose) => r.data ?? []) : [];
+      return [schedules, bands];
+    }),
     scoped(db().from("tenant_carriers").select("carrier_id, contract_level_bp, effective_from").eq("tenant_id", tenantId).eq("is_active", true)),
     scoped(db().from("carrier_product_family").select("tenant_id, carrier_id, carrier_product_code, product_code").or(`tenant_id.eq.${tenantId},tenant_id.is.null`)),
     scoped(db().from("advance_rules").select("carrier_id, product_code, advance_months, advance_pct_bp, effective_from").eq("tenant_id", tenantId)),
@@ -54,8 +59,6 @@ async function inputs(tenantId: string, carrierId?: string) {
     if (isSchemaGap(families.error)) return null;
     throw new Error(`Could not load the product families: ${families.error.message}`);
   }
-  const scheduleIds = (schedules.data ?? []).map((s: Loose) => s.id);
-  const bands = scheduleIds.length ? (await Promise.all(chunks(scheduleIds, 200).map((ids) => db().from("commission_schedule_band").select("id, schedule_id, age_min, age_max, rate_bp").in("schedule_id", ids)))).flatMap((r: Loose) => r.data ?? []) : [];
 
   // Settings: the agency's own value for each field, else the platform's.
   const trigger = new Map<string, { trigger: Trigger | null; lagDays: number | null }>();
@@ -81,11 +84,17 @@ async function inputs(tenantId: string, carrierId?: string) {
 }
 
 /** Insured ages (from the linked client's date of birth, at the effective date) and first-draft days. */
-async function perPolicy(tenantId: string, policies: Loose[]) {
+async function dobOf(tenantId: string, policies: Loose[]) {
   const contactIds = [...new Set(policies.map((p) => p.contact_id).filter(Boolean))] as string[];
   const contacts = contactIds.length ? (await Promise.all(chunks(contactIds, 200).map((ids) => db().from("contacts").select("id, dob").eq("tenant_id", tenantId).in("id", ids)))).flatMap((r: Loose) => r.data ?? []) : [];
-  const dob = new Map<string, string | null>(contacts.map((c: Loose) => [c.id, c.dob]));
-  const changes = await everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", tenantId).eq("field_name", "paid_to_date").order("to_snapshot_date").order("detected_at").order("id"));
+  return new Map<string, string | null>(contacts.map((c: Loose) => [c.id, c.dob]));
+}
+async function perPolicy(tenantId: string, policies: Loose[]) {
+  // The two reads need nothing of each other: together.
+  const [dob, changes] = await Promise.all([
+    dobOf(tenantId, policies),
+    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", tenantId).eq("field_name", "paid_to_date").order("to_snapshot_date").order("detected_at").order("id")),
+  ]);
   const byPolicy = new Map<string, Array<{ oldValue: string | null; newValue: string | null; toSnapshotDate: string }>>();
   for (const c of changes.rows) byPolicy.set(`${c.carrier_id}|${c.policy_number}`, [...(byPolicy.get(`${c.carrier_id}|${c.policy_number}`) ?? []), { oldValue: c.old_value, newValue: c.new_value, toSnapshotDate: c.to_snapshot_date }]);
   return { dob, byPolicy };
@@ -141,9 +150,10 @@ export type RateCardCarrier = {
 
 /** The rate card screen: per carrier in the book, what is set, what is missing, and how much of the book that leaves unpriced. */
 export async function loadRateCard(tenantId: string) {
-  const data = await inputs(tenantId);
-  if (!data) return { available: false as const };
-  const [carriers, products, ownFamilies, expected, contracts, rules] = await Promise.all([
+  // The screen's own reads (and the agency's day) need none of the calculation's inputs: read beside
+  // them. The no-op catch only stops a failure counting as unhandled when there are no inputs to use
+  // them with; they are awaited (and throw) below, after the inputs, as before.
+  const screen = Promise.all([
     db().from("carriers").select("id, name"),
     db().from("products").select("code, name").eq("is_active", true).order("sort_order"),
     db().from("carrier_product_family").select("carrier_id, carrier_product_code").eq("tenant_id", tenantId),
@@ -151,13 +161,20 @@ export async function loadRateCard(tenantId: string) {
     db().from("tenant_carriers").select("carrier_id, writing_number, effective_from").eq("tenant_id", tenantId).eq("is_active", true),
     db().from("advance_rules").select("carrier_id, product_code, advance_months, advance_pct_bp, clawback_months, clawback_type, effective_from").eq("tenant_id", tenantId).order("effective_from", { ascending: false }),
   ]);
+  const dayRead = agencyToday(tenantId);
+  screen.catch(() => undefined);
+  dayRead.catch(() => undefined);
+  const data = await inputs(tenantId);
+  if (!data) return { available: false as const };
+  const [carriers, products, ownFamilies, expected, contracts, rules] = await screen;
   const writing = new Map<string, string>();
   for (const row of [...(contracts.data ?? [])].sort((a: Loose, b: Loose) => String(a.effective_from).localeCompare(String(b.effective_from)))) writing.set(row.carrier_id, row.writing_number);
-  const { dob } = await perPolicy(tenantId, data.policies);
+  // Only the dates of birth are used here (the first-draft days are the writer's, computeExpected).
+  const dob = await dobOf(tenantId, data.policies);
   const carrierName = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [c.id, c.name]));
   const productName = new Map<string, string>((products.data ?? []).map((p: Loose) => [p.code, p.name]));
   const own = new Set((ownFamilies.data ?? []).map((f: Loose) => `${f.carrier_id}|${f.carrier_product_code}`));
-  const today = await agencyToday(tenantId);
+  const today = await dayRead;
   const byCarrier = new Map<string, RateCardCarrier>();
   const priced: Array<{ carrierId: string; monthlyCents: number; priced: boolean }> = [];
   for (const p of data.policies) {

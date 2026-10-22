@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ReconciliationBoard } from "@/components/app/agency/reconciliation-board";
@@ -7,6 +7,6 @@ import { ReconciliationBoard } from "@/components/app/agency/reconciliation-boar
 export default async function ProducerReconciliationPage() {
   const guard = await guardPage("producer_payouts");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Producer reconciliation" description="Expected, reported and received, per producer." />;
-  if (!["owner", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="Producer reconciliation" detail="The owner, admins and the bookkeeper reconcile producer pay." />;
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Producer reconciliation" detail="The owner, admins and the bookkeeper reconcile producer pay." />;
   return <ReconciliationBoard canReview={guard.entitlement.access !== "read_only"} />;
 }

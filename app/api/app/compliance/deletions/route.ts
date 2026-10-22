@@ -20,7 +20,8 @@ const body = z.object({
   // The channel it came from (caller ID or the sender's address): identity is matched on this.
   requester_contact: z.string().trim().max(254).nullable().optional(),
   received_via: z.enum(DELETION_VIA),
-  received_at: z.string().datetime({ offset: true }).nullable().optional(),
+  // The hold counts from this day, so it cannot be one that has not come yet (a day of slack for zones).
+  received_at: z.string().datetime({ offset: true }).refine((v) => Date.parse(v) <= Date.now() + 86_400_000, "The request can't have arrived in the future.").nullable().optional(),
 }).strict();
 
 const fail = (error: unknown) => {
@@ -30,7 +31,7 @@ const fail = (error: unknown) => {
 };
 
 export async function GET() {
-  const auth = await requireFeatureRole("tcpa_checker", ROLES);
+  const auth = await requireFeatureRole("tcpa_checker", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
   if (refused) return refused;

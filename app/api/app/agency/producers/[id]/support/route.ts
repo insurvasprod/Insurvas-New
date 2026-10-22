@@ -24,7 +24,7 @@ async function producerUser(tenantId: string, producerId: string): Promise<strin
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("team_hierarchy", ["owner"]);
+  const auth = await requireFeatureRole("team_hierarchy", ["owner"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NOT_FOUND;

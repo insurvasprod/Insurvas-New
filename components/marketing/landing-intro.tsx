@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 import { ISOTYPE_SLASHES, ISOTYPE_VIEWBOX, ISOTYPE_WAVES } from "@/components/marketing/isotype-paths";
 import { LandingIntroGate } from "@/components/marketing/landing-intro-gate";
+import { INTRO_WAIT, INTRO_WAIT_FORCED } from "@/components/marketing/intro-timing";
 import { LandingIntroHighway } from "@/components/marketing/landing-intro-highway";
 import styles from "@/components/marketing/landing.module.css";
 
@@ -23,15 +24,19 @@ import styles from "@/components/marketing/landing.module.css";
  * Under reduced motion it is never shown. The hero waits for it through --intro-delay.
  *
  * This CSS shot is the fallback for the 3D "Data Highway" shot (LandingIntroHighway): eight lanes of
- * light the camera rides and then rises above, until they read as the mark — 2.5 s, no signs. It
- * takes over when its scene is ready within 0.7 s of the first paint; `/?intro=3d` forces it.
+ * light the camera rides and then rises above, until they read as the mark — 2.5 s, no cards. The
+ * 3D shot is the one meant to play (owner, 2026-10-22: "make that moving lines into the logo"), so
+ * the intro starts held on its blank first frame (html.intro-wait) while the scene loads, for at most
+ * INTRO_WAIT ms; the 3D shot then plays from its start. Only if it is not ready by then (a slow
+ * device, no WebGL) does this CSS shot play instead. `/?intro=3d` replays it and waits longer.
  */
 // Plays once per tab session, from the top of the page (html.intro-play). It measures where the mark
 // sits and where the nav logo's isotype is, for the flight (--fly-x/y/s, re-measured on resize), and
-// retires the overlay at 2.6 s (the 3D shot retires it itself as its mark lands; this steps in at
-// 4.1 s only as a last resort). `?intro=3d` replays the 3D shot for review; then
-// LandingIntroHighway retires the overlay itself, since it restarts the shot once the scene is ready.
-const SEEN = `try{window.__insurvasIntro=true;var h=document.documentElement;var f=/[?&]intro=3d/.test(location.search);if(!f&&sessionStorage.getItem("insurvas-intro")){h.classList.add("intro-seen")}else{sessionStorage.setItem("insurvas-intro","1");h.classList.add("intro-play");if("scrollRestoration" in history)history.scrollRestoration="manual";scrollTo(0,0);function fly(){var l=document.querySelector('header a[href="/"] .insurvas-logo'),m=document.querySelector("[data-intro-stage]");if(!l||!m)return false;var b=l.getBoundingClientRect(),r=m.getBoundingClientRect(),k=Math.min(b.width/931.86,b.height/217.52),x=b.left+(b.width-931.86*k)/2,y=b.top+(b.height-217.52*k)/2+(412.35-433.47)*k,z=259.77*k;h.style.setProperty("--fly-x",(x+z/2-(r.left+r.width/2))+"px");h.style.setProperty("--fly-y",(y+z/2-(r.top+r.height/2))+"px");h.style.setProperty("--fly-s",String(z/r.width));return true}var n=0;(function t(){if(!fly()&&n++<120)requestAnimationFrame(t)})();addEventListener("resize",fly);if(!f)setTimeout(function(){if(h.classList.contains("intro-3d")){setTimeout(function(){h.classList.add("intro-done")},1500)}else{h.classList.add("intro-done")}},2600)}}catch(e){}`;
+// holds the intro on its first frame (html.intro-wait) until the 3D shot takes over. If that has not
+// happened by the wait's end, it lets the CSS shot play and retires the overlay 2.6 s later; the 3D
+// shot retires it itself as its mark lands, and this steps in 4.2 s after the wait only as a last
+// resort. `?intro=3d` replays the shot for review.
+const SEEN = `try{window.__insurvasIntro=true;var h=document.documentElement;var f=/[?&]intro=3d/.test(location.search);if(!f&&sessionStorage.getItem("insurvas-intro")||matchMedia("(prefers-reduced-motion: reduce)").matches){h.classList.add("intro-seen")}else{sessionStorage.setItem("insurvas-intro","1");h.classList.add("intro-play");if("scrollRestoration" in history)history.scrollRestoration="manual";scrollTo(0,0);function fly(){var l=document.querySelector('header a[href="/"] .insurvas-logo'),m=document.querySelector("[data-intro-stage]");if(!l||!m)return false;var b=l.getBoundingClientRect(),r=m.getBoundingClientRect(),k=Math.min(b.width/931.86,b.height/217.52),x=b.left+(b.width-931.86*k)/2,y=b.top+(b.height-217.52*k)/2+(412.35-433.47)*k,z=259.77*k;h.style.setProperty("--fly-x",(x+z/2-(r.left+r.width/2))+"px");h.style.setProperty("--fly-y",(y+z/2-(r.top+r.height/2))+"px");h.style.setProperty("--fly-s",String(z/r.width));return true}var n=0;(function t(){if(!fly()&&n++<120)requestAnimationFrame(t)})();addEventListener("resize",fly);h.classList.add("intro-wait");var w=f?${INTRO_WAIT_FORCED}:${INTRO_WAIT};setTimeout(function(){if(h.classList.contains("intro-3d")||h.classList.contains("intro-done"))return;h.classList.remove("intro-wait");setTimeout(function(){h.classList.add("intro-done")},2600)},w);setTimeout(function(){h.classList.add("intro-done")},w+4200)}}catch(e){}`;
 type Depth = "far" | "mid" | "near";
 
 // Nine ribbons. Each crosses the whole screen through its centre, where the mark forms; about half

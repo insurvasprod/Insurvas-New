@@ -17,12 +17,13 @@ import { productLineLabel } from "@/lib/format/productLine";
 import { oldestOpenLabel } from "@/lib/format/age";
 import { dayMonth, viewerTimeZone } from "@/lib/format/dates";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
-import { PARTNER_LANES, type PartnerLaneCounts } from "@/lib/partnerLeads/lanes";
-import type { PartnerLeadRow } from "@/lib/partnerLeads/types";
+import type { PartnerLaneCounts } from "@/lib/partnerLeads/lanes";
+import type { PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import { durationLabel } from "@/lib/partnerTeamReview/pulse";
 
 type PipelineSummary = {
   rows: PartnerLeadRow[];
+  stages: PartnerPipelineStage[];
   laneCounts?: PartnerLaneCounts | null;
   counters: { submittedToday: number; claimed: number; converted: number; stillOpen: number };
   oldestOpenAt?: string | null;
@@ -110,15 +111,11 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
   const counters = pipeline?.counters;
   const figure = (value: number | null | undefined) => (loading || value == null ? "—" : value);
   const recentRows = pipeline?.rows ?? [];
-  // The partner's stages are the board's lanes (lib/partnerLeads/lanes.ts), not the agency's own
-  // pipeline stages: those are the agency's configuration, and partnerStageLabel folds most of them
-  // into "Submitted" anyway. Closed is everything the board no longer shows.
-  const lanes = pipeline?.laneCounts ?? null;
-  const onBoard = lanes ? PARTNER_LANES.reduce((sum, lane) => sum + lanes[lane.key], 0) : null;
-  const stages = [
-    ...PARTNER_LANES.map((lane) => ({ key: lane.key, label: lane.label, footnote: lane.footnote, count: lanes ? lanes[lane.key] : null, href: PIPELINE })),
-    { key: "closed", label: "Closed", footnote: "finished, expired or older sales", count: onBoard == null || !pipeline ? null : Math.max(0, pipeline.total - onBoard), href: `${PIPELINE}?view=table` },
-  ];
+  // LA-1.17: the partner's own pipeline stages, the board's columns (lib/partnerLeads/board.ts), each
+  // opening the rows on it. Another pipeline's stages appear only while they hold this partner's leads.
+  const pipelineStages = pipeline?.stages ?? [];
+  const manyPipelines = new Set(pipelineStages.map((stage) => stage.pipelineId)).size > 1;
+  const stages = pipelineStages.map((stage) => ({ key: stage.id, label: stage.name, footnote: manyPipelines ? stage.pipelineName : "", count: stage.leadCount, href: `${PIPELINE}?stage_id=${encodeURIComponent(stage.id)}&view=table` }));
   const pulse = extras?.pulse;
   const team = extras?.team;
   const nextAction = canSubmit
@@ -186,7 +183,7 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
             {recentRows.map((row) => <TableRow key={row.id}>
               <TableCell className="font-medium">{row.customer}</TableCell>
               <TableCell className="text-muted-foreground">{productLineLabel(row.product)}</TableCell>
-              <TableCell><StatusChip tone={row.outcome ? "good" : "info"}>{row.stageName}</StatusChip>{row.outcome && row.outcome !== row.stageName && <span className="ml-2 text-xs text-muted-foreground">{row.outcome}</span>}</TableCell>
+              <TableCell><StatusChip tone={row.stageType === "won" ? "good" : row.stageType === "lost" ? "danger" : "neutral"}>{row.stageName}</StatusChip>{row.outcome && row.outcome !== row.stageName && <span className="ml-2 text-xs text-muted-foreground">{row.outcome}</span>}</TableCell>
               {isAdmin && <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>}
               <TableCell className="text-muted-foreground tabular-nums">{formatDate(row.submittedAt)}</TableCell>
               <TableCell className="text-right"><Button asChild variant="outline" size="sm"><a href={`${PIPELINE}?lead=${encodeURIComponent(row.id)}&view=table`} aria-label={`View ${row.customer}`}>View</a></Button></TableCell>

@@ -20,6 +20,8 @@ export type CheckoutViewProps = {
   trialEnds: string;
   /** Sent back from the return page with an unfinished payment. */
   pending: boolean;
+  /** CHECKOUT_PAYMENT_MODE=none: the button starts the plan at once; no card, no provider. */
+  noPayment?: boolean;
 };
 
 /** Label over value, the pair both cards on this page are built from. */
@@ -83,7 +85,7 @@ function renewalTerms({ cycle, price, setupFee, trialDays, trialEnds }: Pick<Che
   );
 }
 
-export function CheckoutView({ planName, planLine, cycle, price, setupFee = null, trialDays, trialEnds, pending }: CheckoutViewProps) {
+export function CheckoutView({ planName, planLine, cycle, price, setupFee = null, trialDays, trialEnds, pending, noPayment = false }: CheckoutViewProps) {
   return (
     <div className="portal-agent flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] px-4 py-10 sm:p-10">
       {/* Not a direct `main` child: the shell's `.portal-agent > main` reserves 264px for a sidebar. */}
@@ -92,7 +94,9 @@ export function CheckoutView({ planName, planLine, cycle, price, setupFee = null
           <p className="text-center text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">Step 3 of 3</p>
           <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">Your workspace is ready</h1>
           <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            Confirm what you are buying. The card is entered on the provider’s page and never touches Insurvas servers.
+            {noPayment
+              ? "Confirm your plan. No payment is taken: your workspace opens as soon as you continue."
+              : "Confirm what you are buying. The card is entered on the provider’s page and never touches Insurvas servers."}
           </p>
 
           <ol className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-card px-5 py-3.5 sm:flex-row sm:items-center sm:gap-0" aria-label="Signup progress">
@@ -112,11 +116,16 @@ export function CheckoutView({ planName, planLine, cycle, price, setupFee = null
                   <Fact label="Trial">{trialDays} days</Fact>
                   <Fact label="Cancel by">{trialEnds}</Fact>
                   <Fact label="Today">$0.00</Fact>
-                  <Fact label="After the trial">{price && cycle ? `${price} / ${PER[cycle]}` : "—"}</Fact>
+                  <Fact label="After the trial">{noPayment ? "No charge set up" : price && cycle ? `${price} / ${PER[cycle]}` : "—"}</Fact>
                 </dl>
               </section>
 
-              <CheckoutStart disclosure={renewalTerms({ cycle, price, setupFee, trialDays, trialEnds })} />
+              <CheckoutStart
+                noPayment={noPayment}
+                disclosure={noPayment
+                  ? <>No card is needed and nothing is charged. Your plan starts now{trialDays > 0 ? <> with a {trialDays}-day trial</> : null}, and no billing is set up for it.</>
+                  : renewalTerms({ cycle, price, setupFee, trialDays, trialEnds })}
+              />
 
               {/* Not on the board, kept on purpose: it is the only way back to pricing from here, and
                   a buyer who picked the wrong plan must not be stuck paying for it. */}
@@ -133,14 +142,14 @@ export function CheckoutView({ planName, planLine, cycle, price, setupFee = null
                   <Fact label="Billing">{cycle ? BILLING_CYCLE_LABELS[cycle] : "—"}</Fact>
                   <Fact label="Price">{price ?? "—"}</Fact>
                   <Fact label="Today">$0.00</Fact>
-                  <Fact label="Next charge">{trialEnds}</Fact>
+                  <Fact label="Next charge">{noPayment ? "None scheduled" : trialEnds}</Fact>
                   <Fact label="Renews">{cycle ? `Every ${PER[cycle]}, until cancelled` : "Until cancelled"}</Fact>
                 </dl>
               </section>
 
               {/* An abandoned checkout reuses the same open session, and the return page sends an
                   unfinished payment back here with ?pending=1 — a calm notice, never an error. */}
-              <div className="mt-4 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
+              {!noPayment && <div className="mt-4 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
                 <p className="font-semibold text-[var(--info-ink)]">Coming back later is fine</p>
                 <p className="mt-1.5 text-[var(--body)]">
                   {pending
@@ -149,7 +158,7 @@ export function CheckoutView({ planName, planLine, cycle, price, setupFee = null
                       "We could not confirm a payment yet. If you have already paid, do not pay again — your plan unlocks on its own once the provider records it. If you have not, continue to secure checkout and you will pick up the same session."
                     : "If you leave before paying, come back here and you will return to the same checkout."}
                 </p>
-              </div>
+              </div>}
             </aside>
           </div>
         </main>

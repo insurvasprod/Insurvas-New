@@ -55,7 +55,7 @@ export function ProducerSupportCard({ producerId, producerName }: { producerId: 
       ) : undefined}
     >
       {error ? <ErrorState detail={error} /> : loading ? <SectionLoading rows={2} columns={3} label="Loading who works for this producer" /> : assigned.length === 0 ? (
-        <EmptyState title="Nobody yet" hint={people.length ? "Add an assistant to see his work, or a setter to book onto his calendar." : "Invite an assistant or a setter from Team first."} />
+        <EmptyState title="Nobody yet" hint={people.length ? "Add an assistant to see their work, or a setter to book onto their calendar." : "Invite an assistant or a setter from Team first."} />
       ) : (
         <Table>
           <TableBody>

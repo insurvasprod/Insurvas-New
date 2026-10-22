@@ -64,7 +64,7 @@ function toMinuteWindow(window: z.infer<typeof windowSchema>): MinuteWindow | nu
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", READ_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", READ_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const [settings, scope] = await Promise.all([getCallingWindows(auth.context.tenantId), scopeFor(auth.context)]);

@@ -21,7 +21,7 @@ export function BillingTabs() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Billing workspace" className="flex gap-6 overflow-x-auto border-b border-[var(--border)]">
+    <nav aria-label="Billing workspace" className="flex gap-6 overflow-x-auto  border-[var(--border)]">
       {tabs.map(([href, label]) => {
         const active = pathname === href || (href === "/admin/invoices" && pathname.startsWith("/admin/invoices/"));
         return (

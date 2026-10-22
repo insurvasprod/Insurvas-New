@@ -1,6 +1,6 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { PERIODS, type Period } from "@/lib/retention/effectiveness";
-import { loadEffectiveness } from "@/lib/retention/effectivenessStore";
+import { loadEffectiveness, readEffectiveness } from "@/lib/retention/effectivenessStore";
 import { loadRadarConfig } from "@/lib/retention/radarStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -25,8 +25,12 @@ export default async function RetentionResultsPage({ searchParams }: { searchPar
   }
   const { period: periodParam } = await searchParams;
   const period: Period = periodParam && periodParam in PERIODS ? (periodParam as Period) : "quarter";
+  // The figures need no settings to be read, so they are read beside the config (one round trip, not two);
+  // the no-op catch only stops a failure counting as unhandled when there is no config to use them.
+  const reads = readEffectiveness(guard.context.tenantId);
+  reads.catch(() => undefined);
   const config = await loadRadarConfig(guard.context.tenantId);
-  const data = config ? await loadEffectiveness(guard.context.tenantId, period, config.settings) : null;
+  const data = config ? await loadEffectiveness(guard.context.tenantId, period, config.settings, reads) : null;
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">

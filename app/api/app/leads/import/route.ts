@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit, auditMany } from "@/lib/audit/log";
-import { importAgentLeads, getAgentTemplate } from "@/lib/agentTemplates/service";
+import { importAgentLeads, getAgentTemplate, PRODUCT_CODE } from "@/lib/agentTemplates/service";
 import { recordImportFailure } from "@/lib/agentTemplates/errors";
 import { MAX_LEAD_IMPORT_ROWS } from "@/lib/agentTemplates/csv";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -21,15 +21,28 @@ type LooseQuery = PromiseLike<{ data: unknown; error: { message: string; code?: 
 
 // `write`: the import itself refuses a read-only (paused, suspended or cancelled) account; reading the
 // template does not (LA-8.5).
+// The read (the GET, `write` false) also takes the outbound limit snapshot, in the same round trip as the
+// reads below and from the entitlement the auth step already read, instead of after them with a second read.
 async function context(write = false) {
-  const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write });
+  // prefetchScope: the refusal below asks scopeFor, which is then the read already made in the auth round trip.
+  const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write, prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Lead import");
   if (refused) return refused;
-  // Independent tenant-scoped reads, so one round trip rather than two.
-  const [template, pipelines] = await Promise.all([
+  const db = getSupabaseServiceClient() as unknown as { from(table: string): LooseQuery };
+  // getAgentTemplate resolves the PRODUCT_CODE copy (its product_code is that code), so the saved maps
+  // need not wait for it.
+  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).eq("product_code", PRODUCT_CODE).order("updated_at", { ascending: false });
+  // Independent tenant-scoped reads, so one round trip.
+  const [template, pipelines, campaigns, vendors, withDateOrder, limits] = await Promise.all([
     getAgentTemplate(auth.context.tenantId, auth.context.userId),
     listPipelines(auth.context.tenantId),
+    // Drafts too: "New campaign" on Vendors & campaigns creates a draft, and a tenant who just made
+    // one to import into must find it here. The screen says a draft is not dialled until activated.
+    db.from("tenant_campaigns").select("id, vendor_id, name, status").eq("tenant_id", auth.context.tenantId).in("status", ["draft", "active", "paused"]),
+    db.from("tenant_lead_vendors").select("id, name, lead_type, status").eq("tenant_id", auth.context.tenantId).order("name"),
+    readMappings("id, vendor_id, product_code, mapping, updated_at, date_order"),
+    !write ? outboundLimitSnapshot(auth.context.tenantId, auth.entitlement) : Promise.resolve(null),
   ]);
   // Manual list imports are agent-owned leads, so they enter the default marketing pipeline. A
   // single pipeline also keeps a friendly stage name unambiguous when publisher/affiliate
@@ -37,18 +50,9 @@ async function context(write = false) {
   // The default pipeline with no partner type, when the tenant has one, is where leads with no
   // partner enter (Settings → Pipelines); otherwise the default marketing pipeline, as before.
   const pipeline = pipelines.find((item) => item.partner_type === null && item.is_default) ?? pipelines.find((item) => item.partner_type === "marketing" && item.is_default) ?? pipelines.find((item) => item.is_default) ?? pipelines[0];
-  const db = getSupabaseServiceClient() as unknown as { from(table: string): LooseQuery };
-  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).eq("product_code", template.template.product_code).order("updated_at", { ascending: false });
-  const [campaigns, vendors, withDateOrder] = await Promise.all([
-    // Drafts too: "New campaign" on Vendors & campaigns creates a draft, and a tenant who just made
-    // one to import into must find it here. The screen says a draft is not dialled until activated.
-    db.from("tenant_campaigns").select("id, vendor_id, name, status").eq("tenant_id", auth.context.tenantId).in("status", ["draft", "active", "paused"]),
-    db.from("tenant_lead_vendors").select("id, name, lead_type, status").eq("tenant_id", auth.context.tenantId).order("name"),
-    readMappings("id, vendor_id, product_code, mapping, updated_at, date_order"),
-  ]);
   // `date_order` arrives with 20260924343000. Before it, the saved maps are read as they always were.
   const mappings = withDateOrder.error && isMissingColumn(withDateOrder.error) ? await readMappings("id, vendor_id, product_code, mapping, updated_at") : withDateOrder;
-  return { auth, template, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: mappings.error ? [] : mappings.data as MappingOption[] };
+  return { auth, template, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: mappings.error ? [] : mappings.data as MappingOption[], limits };
 }
 
 export async function GET() {
@@ -67,7 +71,7 @@ export async function GET() {
     canCreateCampaigns: result.auth.context.role === "owner" || result.auth.context.role === "producer",
     vendors: result.vendors as VendorOption[],
     mappings: result.mappings as MappingOption[],
-    limits: await outboundLimitSnapshot(result.auth.context.tenantId),
+    limits: result.limits,
     // Served from the parser's own constant rather than repeated here, so the screen can never
     // advertise a limit the parser does not enforce.
     maxRows: MAX_LEAD_IMPORT_ROWS,

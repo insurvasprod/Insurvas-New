@@ -60,7 +60,7 @@ function AccountDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           <label className="flex flex-col gap-1 text-sm">Name<input className={toolbarControl} required maxLength={80} value={f.nickname} onChange={(e) => setF({ ...f, nickname: e.target.value })} placeholder="e.g. Operating account" /></label>
           <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-sm">Bank<input className={toolbarControl} maxLength={120} value={f.bank} onChange={(e) => setF({ ...f, bank: e.target.value })} /></label>
-            <label className="flex flex-col gap-1 text-sm">Last four<input className={toolbarControl} inputMode="numeric" maxLength={4} value={f.last} onChange={(e) => setF({ ...f, last: e.target.value.replace(/\D/g, "") })} /></label>
+            <label className="flex flex-col gap-1 text-sm">Last four<input className={toolbarControl} inputMode="numeric" maxLength={4} pattern="\d{4}" title="Exactly four digits" value={f.last} onChange={(e) => setF({ ...f, last: e.target.value.replace(/\D/g, "") })} /></label>
           </div>
           {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
           <DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit">Add account</Button></DialogFooter>

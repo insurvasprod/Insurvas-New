@@ -385,6 +385,55 @@ export type QueueItemRow = {
   choices: { contacts?: Array<{ id: string; name: string; dob: string | null }>; deals?: Array<{ id: string; name: string; date: string }>; policies?: Array<{ carrierId: string; policyNumber: string; label: string }>; applications?: Array<{ id: string; label: string }> };
 };
 
+/** How many choice reads run at once: enough to overlap the round trips, few enough to be kind to a small database. */
+const CHOICE_READS = 6;
+
+async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      out[index] = await fn(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let start = 0; start < items.length; start += size) out.push(items.slice(start, start + size));
+  return out;
+}
+
+/** The contact choices for each last name: up to ten unmerged, confirmed contacts with it, any case. */
+async function contactsByLastName(tenantId: string, lastNames: unknown[]): Promise<Map<unknown, Loose[]>> {
+  const key = (name: unknown) => String(name).replace(/[%_]/g, "");
+  const one = async (name: unknown) => {
+    const { data } = await db().from("contacts").select("id, first_name, last_name, dob").eq("tenant_id", tenantId).is("merged_into_id", null).eq("provisional", false).ilike("last_name", key(name)).limit(10);
+    return [name, (data ?? []) as Loose[]] as const;
+  };
+  // Twenty-five names to a read (an `or` of the same case-insensitive matches), then the first ten per
+  // name, instead of one read per name — 343 of them on the demo book, ~17 s. A read that comes back at
+  // PostgREST's 1,000-row cap may be missing rows, so its names are asked one by one, as before.
+  const quoted = (name: unknown) => `last_name.ilike."${key(name).replace(/["\\]/g, (c) => `\\${c}`)}"`;
+  const batches = chunk(lastNames, 25);
+  const pages = await mapLimit(batches, CHOICE_READS, async (names) => {
+    const { data, error } = await db().from("contacts").select("id, first_name, last_name, dob").eq("tenant_id", tenantId).is("merged_into_id", null).eq("provisional", false).or(names.map(quoted).join(","));
+    if (error || (data ?? []).length >= 1000) return mapLimit(names, CHOICE_READS, one);
+    const byName = new Map<string, Loose[]>();
+    for (const contact of (data ?? []) as Loose[]) {
+      const lower = String(contact.last_name ?? "").toLowerCase();
+      const list = byName.get(lower) ?? [];
+      if (list.length < 10) list.push(contact);
+      byName.set(lower, list);
+    }
+    return names.map((name) => [name, byName.get(key(name).toLowerCase()) ?? []] as const);
+  });
+  return new Map<unknown, Loose[]>(pages.flat());
+}
+
 export async function loadQueues(scope: QueueScope) {
   let open = db().from("queue_item").select("*").eq("tenant_id", scope.tenantId).eq("status", "open").in("queue_type", [...QUEUE_TYPES]).order("age_from").limit(500);
   let closed = db().from("queue_item").select("*").eq("tenant_id", scope.tenantId).neq("status", "open").gte("resolved_at", new Date(Date.now() - 30 * 86_400_000).toISOString()).order("resolved_at", { ascending: false }).limit(100);
@@ -404,35 +453,61 @@ export async function loadQueues(scope: QueueScope) {
   const userIds = [...new Set([...items.map((i) => i.assigned_to_user_id), ...items.map((i) => i.resolved_by).filter(Boolean), ...(members.data ?? []).map((m: Loose) => m.user_id)])];
   const contactIds = [...new Set(items.flatMap((i) => [i.contact_id, i.related_contact_id]).filter(Boolean))];
   const dealIds = [...new Set(items.map((i) => i.deal_id).filter(Boolean))];
+  // In chunks of 150 ids: a few hundred open items put ~900 ids in one request line, which the gateway
+  // refuses outright ("fetch failed" after ~9 s, 2026-10-20) — every contact name on the page was then blank.
+  const byIds = async (ids: string[], read: (part: string[]) => PromiseLike<{ data: unknown }>) =>
+    ({ data: (await mapLimit(chunk(ids, 150), CHOICE_READS, async (part) => ((await read(part)).data ?? []) as Loose[])).flat() });
   const [users, contacts, deals] = await Promise.all([
-    userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
-    contactIds.length ? db().from("contacts").select("id, first_name, last_name, provisional").eq("tenant_id", scope.tenantId).in("id", contactIds) : { data: [] },
-    dealIds.length ? db().from("deal_flow").select("id, lead_id, insured_name, local_date, monthly_premium_cents, carrier").eq("tenant_id", scope.tenantId).in("id", dealIds) : { data: [] },
+    userIds.length ? byIds(userIds, (part) => db().from("users").select("id, name, email").in("id", part)) : { data: [] },
+    contactIds.length ? byIds(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, provisional").eq("tenant_id", scope.tenantId).in("id", part)) : { data: [] },
+    dealIds.length ? byIds(dealIds, (part) => db().from("deal_flow").select("id, lead_id, insured_name, local_date, monthly_premium_cents, carrier").eq("tenant_id", scope.tenantId).in("id", part)) : { data: [] },
   ]);
   const userName = new Map<string, string>((users.data ?? []).map((u: Loose) => [u.id, u.name || u.email || u.id]));
   const contact = new Map<string, Loose>((contacts.data ?? []).map((c: Loose) => [c.id, { id: c.id, name: `${c.first_name} ${c.last_name}`, provisional: Boolean(c.provisional) }]));
   const deal = new Map<string, Loose>((deals.data ?? []).map((d: Loose) => [d.id, { id: d.id, insuredName: d.insured_name, date: d.local_date, premiumCents: d.monthly_premium_cents, carrier: d.carrier, leadId: d.lead_id }]));
 
   // The choices each open item's actions need, kept small.
+  //
+  // Read once per distinct key rather than once per item: the recent submitted deals are the same list for
+  // every no-sale item, the policies for every item of one carrier, the contacts for every item with one
+  // last name, and the attempts come back for all the leads in one paged read. The same rows as when each
+  // item asked for its own, one after another — which was two round trips per open item (up to 500 items).
   const openItems = (openRes.data ?? []) as Loose[];
+  const noDeal = openItems.filter((item) => item.queue_type === "no_deal_flow");
+  const noPolicy = openItems.filter((item) => item.queue_type === "no_policy");
+  const lastNames = [...new Set(noDeal.map((item) => item.payload?.insured?.last_name ?? "").filter(Boolean))] as unknown[];
+  const carrierKeys = [...new Set(noPolicy.map((item) => item.carrier_id))] as unknown[];
+  const leadIds = [...new Set(noPolicy.map((item) => deal.get(item.deal_id)?.leadId).filter(Boolean))] as string[];
+  const [recentDeals, contactsByName, policiesByCarrier, attempts] = await Promise.all([
+    noDeal.length
+      ? db().from("deal_flow").select("id, insured_name, local_date").eq("tenant_id", scope.tenantId).eq("call_result", "application_submitted").gte("local_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("local_date", { ascending: false }).limit(25).then((r: { data: Loose[] | null }) => r.data ?? [])
+      : Promise.resolve([] as Loose[]),
+    contactsByLastName(scope.tenantId, lastNames),
+    mapLimit(carrierKeys, CHOICE_READS, async (carrierId) => {
+      const { data } = await db().from("policy_current").select("carrier_id, policy_number, status_normalized").eq("tenant_id", scope.tenantId).eq("carrier_id", carrierId).limit(200);
+      return [carrierId, (data ?? []) as Loose[]] as const;
+    }).then((pairs) => new Map<unknown, Loose[]>(pairs)),
+    mapLimit(chunk(leadIds, 150), CHOICE_READS, async (ids) => {
+      const { data } = await db().from("tenant_applications").select("id, lead_id, carrier_id, attempt_no, status").eq("tenant_id", scope.tenantId).in("lead_id", ids).order("attempt_no");
+      return (data ?? []) as Loose[];
+    }).then((pages) => pages.flat()),
+  ]);
+  const attemptsByLead = new Map<string, Loose[]>();
+  for (const a of [...attempts].sort((x, y) => Number(x.attempt_no) - Number(y.attempt_no))) attemptsByLead.set(a.lead_id, [...(attemptsByLead.get(a.lead_id) ?? []), a]);
+
   const choices = new Map<string, QueueItemRow["choices"]>();
   for (const item of openItems) {
     if (item.queue_type === "no_deal_flow") {
       const lastName = item.payload?.insured?.last_name ?? "";
-      const [{ data: cs }, { data: ds }] = await Promise.all([
-        lastName ? db().from("contacts").select("id, first_name, last_name, dob").eq("tenant_id", scope.tenantId).is("merged_into_id", null).eq("provisional", false).ilike("last_name", String(lastName).replace(/[%_]/g, "")).limit(10) : { data: [] },
-        db().from("deal_flow").select("id, insured_name, local_date").eq("tenant_id", scope.tenantId).eq("call_result", "application_submitted").gte("local_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("local_date", { ascending: false }).limit(25),
-      ]);
-      choices.set(item.id, { contacts: (cs ?? []).map((c: Loose) => ({ id: c.id, name: `${c.first_name} ${c.last_name}`, dob: c.dob })), deals: (ds ?? []).map((d: Loose) => ({ id: d.id, name: d.insured_name ?? "—", date: d.local_date })) });
+      const cs = lastName ? contactsByName.get(lastName) ?? [] : [];
+      choices.set(item.id, { contacts: cs.map((c: Loose) => ({ id: c.id, name: `${c.first_name} ${c.last_name}`, dob: c.dob })), deals: recentDeals.map((d: Loose) => ({ id: d.id, name: d.insured_name ?? "—", date: d.local_date })) });
     } else if (item.queue_type === "no_policy") {
       const d = deal.get(item.deal_id);
-      const [{ data: ps }, { data: apps }] = await Promise.all([
-        db().from("policy_current").select("carrier_id, policy_number, status_normalized").eq("tenant_id", scope.tenantId).eq("carrier_id", item.carrier_id).limit(200),
-        d ? db().from("tenant_applications").select("id, carrier_id, attempt_no, status").eq("tenant_id", scope.tenantId).eq("lead_id", d.leadId).order("attempt_no") : { data: [] },
-      ]);
+      const ps = policiesByCarrier.get(item.carrier_id) ?? [];
+      const apps = d?.leadId ? attemptsByLead.get(d.leadId) ?? [] : [];
       choices.set(item.id, {
-        policies: (ps ?? []).map((p: Loose) => ({ carrierId: p.carrier_id, policyNumber: p.policy_number, label: `${p.policy_number} · ${p.status_normalized ?? "—"}` })),
-        applications: (apps ?? []).map((a: Loose) => ({ id: a.id, label: `Attempt ${a.attempt_no} · ${carrierName.get(a.carrier_id) ?? "no carrier"} · ${a.status}` })),
+        policies: ps.map((p: Loose) => ({ carrierId: p.carrier_id, policyNumber: p.policy_number, label: `${p.policy_number} · ${p.status_normalized ?? "—"}` })),
+        applications: apps.map((a: Loose) => ({ id: a.id, label: `Attempt ${a.attempt_no} · ${carrierName.get(a.carrier_id) ?? "no carrier"} · ${a.status}` })),
       });
     }
   }

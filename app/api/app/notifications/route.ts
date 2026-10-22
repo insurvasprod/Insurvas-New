@@ -30,6 +30,8 @@ const settingsSchema = z
   })
   .strict();
 
+const ALERT_SCOPE_MAX_AGE_MS = 30_000;
+
 export async function GET() {
   // Polled every 2.5s per tab. The alert read is keyed by the verified session JWT (the same
   // tenant/user requireTenant resolves), so it can start alongside the membership check instead of
@@ -41,8 +43,9 @@ export async function GET() {
   const [auth, feedSettled] = await Promise.all([
     requireTenant(),
     // AG-0.5: the scope is the verified session's (the same tenant and user requireTenant resolves), so
-    // in an agency an alert about another producer's lead is left out. Null scope: the feed as before.
-    scopeFor({ tenantId: session.tenantId, userId: session.sub }).then((scope) => listAgentAlerts(session.tenantId, session.sub, scope)).then(
+    // in an agency an alert about another producer's lead is left out. Null scope: the feed as before. The
+    // scope is re-read at most every 30s per person, not on every 2.5s poll (see scopeFor).
+    scopeFor({ tenantId: session.tenantId, userId: session.sub }, { maxAgeMs: ALERT_SCOPE_MAX_AGE_MS }).then((scope) => listAgentAlerts(session.tenantId, session.sub, scope)).then(
       (value) => ({ ok: true as const, value }),
       (error: unknown) => ({ ok: false as const, error }),
     ),

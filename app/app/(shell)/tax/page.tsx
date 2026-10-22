@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { categoryMap, categoryTotals, contractors, TaxError, taxSettings } from "@/lib/accounting/taxStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -16,7 +16,7 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Tax summaries" description="What the accountant asks for, from your records." />;
   }
-  if (!["owner", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Tax summaries" detail="Only owners and bookkeepers can see the agency's tax figures." />;
   }
   const q = await searchParams;

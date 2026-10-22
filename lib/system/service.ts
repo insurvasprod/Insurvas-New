@@ -282,7 +282,9 @@ export async function getActiveAnnouncements(
         .order("starts_at", { ascending: false }),
       supabase
         .from("subscriptions")
-        .select("plans(plan_type)")
+        // Named FK: subscriptions has two FKs to plans (plan_id, pending_plan_id), so a bare
+        // plans(...) embed is ambiguous and PostgREST answers HTTP 300 with no data.
+        .select("plans:plans!subscriptions_plan_id_fkey(plan_type)")
         .eq("tenant_id", tenantId)
         .neq("status", "cancelled")
         .order("started_at", { ascending: false })

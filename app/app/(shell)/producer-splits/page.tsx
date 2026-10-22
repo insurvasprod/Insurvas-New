@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { ProducerError, producersOverview, syncProducerLedger } from "@/lib/accounting/producerStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -17,7 +17,7 @@ export default async function ProducerSplitsPage() {
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Producer splits" description="What each producer is owed, and what they owe back." />;
   }
-  if (!["owner", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Producer splits" detail="Only owners and bookkeepers can see every producer's balance." />;
   }
   let data: Awaited<ReturnType<typeof producersOverview>> | null = null;

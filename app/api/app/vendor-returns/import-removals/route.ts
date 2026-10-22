@@ -16,7 +16,7 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
  * evidence half of a claim, and it carries what each row cost.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
   if (refused) return refused;

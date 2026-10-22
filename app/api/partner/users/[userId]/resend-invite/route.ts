@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendExistingPartnerInvitationEmail, sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { sendPartnerInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { resendPartnerInvite } from "@/lib/partnerUsers/service";
 
@@ -27,20 +27,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       expiresAt: expiresAt.toISOString(),
     });
     const inviteUrl = result.has_existing_password ? buildExistingPartnerInviteUrl(token, origin) : buildPartnerInviteUrl(token, origin);
-    const { delivered } = result.has_existing_password ? await sendExistingPartnerInvitationEmail({
+    const { delivered } = await sendPartnerInvitationEmail({
       to: result.email,
       name: result.name,
       inviteUrl,
       expiresAt,
       userId: result.user_id,
       tenantId: auth.context.tenantId,
-    }) : await sendInvitationEmail({
-      to: result.email,
-      name: result.name,
-      inviteUrl,
-      expiresAt,
-      userId: result.user_id,
-      tenantId: auth.context.tenantId,
+      partnerId: auth.context.partnerId,
+      existingAccount: result.has_existing_password,
     });
     await audit({
       actorType: "tenant",

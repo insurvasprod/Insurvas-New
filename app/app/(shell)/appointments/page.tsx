@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { CarrierAppointmentsPage } from "@/components/app/carrier-appointments-page";
@@ -14,7 +14,7 @@ export default async function AppointmentsPage() {
       />
     );
   }
-  if (guard.role !== "owner" && guard.role !== "producer") {
+  if (!actAsPage(guard, ["owner", "producer"])) {
     return (
       <RoleGateNotice
         featureLabel="Appointments"

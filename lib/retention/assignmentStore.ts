@@ -56,21 +56,40 @@ export async function ownerRoleFor(tenantId: string, queue: La5Queue): Promise<L
   return role && (LA5_OWNER_ROLES as readonly string[]).includes(role) ? (role as La5OwnerRole) : DEFAULT_OWNER_ROLE[queue];
 }
 
+const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+
+/**
+ * The three reads ensureOwners decides from — the queue's open rows, the team, the owner role — fetched
+ * together. Never rejects (each read is settled), so a loader can start it at the top, beside its own
+ * reads, and hand it to ensureOwners later; nothing the loaders read before resolving writes these.
+ */
+export function readOwnerInputs(tenantId: string, queue: La5Queue) {
+  return Promise.all([
+    settle(everyRow(() => db().from("retention_assignment").select("id, carrier_id, policy_number, assigned_to_user_id, assigned_role, assigned_at, escalated_at").eq("tenant_id", tenantId).eq("queue_type", queue).is("closed_at", null).order("id"))),
+    settle(loadMembers(tenantId)),
+    settle(ownerRoleFor(tenantId, queue)),
+  ]);
+}
+export type OwnerInputs = ReturnType<typeof readOwnerInputs>;
+
 /**
  * Resolve, persist and return the owner of every card. `keep` = every card still in the queue's
  * universe (held or cooling down included): an open row for any other card is closed, because that
- * card left for good. Without `keep` nothing is closed.
+ * card left for good. Without `keep` nothing is closed. `inputs`: readOwnerInputs started earlier.
  * Returns null before the migration (no table): the queue then has no owners, as before LA-5.8.
  */
-export async function ensureOwners(tenantId: string, queue: La5Queue, items: AssignItem[], settings: RetentionSettings, options: { keep?: Set<string> } = {}): Promise<Map<string, Owner> | null> {
-  let open: Loose[];
-  try {
-    open = await everyRow(() => db().from("retention_assignment").select("id, carrier_id, policy_number, assigned_to_user_id, assigned_role, assigned_at, escalated_at").eq("tenant_id", tenantId).eq("queue_type", queue).is("closed_at", null).order("id"));
-  } catch (error) {
-    if (isSchemaGap(error as Loose)) return null;
-    throw error;
+export async function ensureOwners(tenantId: string, queue: La5Queue, items: AssignItem[], settings: RetentionSettings, options: { keep?: Set<string>; inputs?: OwnerInputs } = {}): Promise<Map<string, Owner> | null> {
+  // Decided in the order they used to be read: the open rows (a schema gap = no owners), the team, the rule.
+  const [openRead, membersRead, roleRead] = await (options.inputs ?? readOwnerInputs(tenantId, queue));
+  if (!openRead.ok) {
+    if (isSchemaGap(openRead.error as Loose)) return null;
+    throw openRead.error;
   }
-  const [members, ownerRole] = await Promise.all([loadMembers(tenantId), ownerRoleFor(tenantId, queue)]);
+  if (!membersRead.ok) throw membersRead.error;
+  if (!roleRead.ok) throw roleRead.error;
+  const open = openRead.value;
+  const members = membersRead.value;
+  const ownerRole = roleRead.value;
   const rowOf = new Map<string, Loose>(open.map((r) => [keyOf(r), r]));
   const existing = new Map<string, Existing>(open.map((r) => [keyOf(r), { userId: r.assigned_to_user_id, role: r.assigned_role, assignedAt: r.assigned_at, escalated: Boolean(r.escalated_at) }]));
   const assigned = assignOwners(items, existing, members, {

@@ -9,11 +9,11 @@ import styles from "@/components/marketing/landing.module.css";
  * The Data Highway intro's conductor (2026-10-13, docs/design/landing-intro-prompt-v2.md; smoothness
  * pass the same day).
  *
- * The CSS intro (LandingIntro) always starts first, from the very first paint. This loads the 3D
- * scene, compiles it, and if that is all done within 900 ms of the intro starting, crossfades into it
- * — `html.intro-3d` stretches the overlay to five seconds and moves the hero's entrance. If it is not
- * (slow device, no WebGL), the CSS intro simply plays on. `?intro=3d` forces the 3D shot from the
- * start, for review.
+ * The intro starts held on its blank first frame (html.intro-wait, set by LandingIntro's page script)
+ * while this loads the 3D scene and compiles it. If that is done while the intro still waits, this
+ * takes over and plays the shot from its start — `html.intro-3d` moves the overlay's safety fade and
+ * the hero's entrance. If the wait runs out first (slow device, no WebGL), the CSS shot plays
+ * instead and this stands down. `?intro=3d` replays it for review.
  *
  * Smoothness: once it takes over, this owns the clock. Time advances by each frame's real length but
  * never by more than 50 ms, so a hitch on the main thread (the page is still loading around it)
@@ -28,7 +28,6 @@ import styles from "@/components/marketing/landing.module.css";
  * copy lands on it, then fades in underneath; the copy is removed only once the logo is fully there,
  * so the hand-over is invisible.
  */
-const READY_BY = 700;
 const MAX_STEP = 50; // ms of intro time a single frame may advance
 const FLIGHT = 430;
 const FLIGHT_EASE = "cubic-bezier(.65,0,.35,1)";
@@ -65,7 +64,6 @@ export function LandingIntroHighway() {
 
   useEffect(() => {
     const root = document.documentElement;
-    const forced = /[?&]intro=3d/.test(window.location.search);
     if (root.classList.contains("intro-seen") || root.classList.contains("intro-done")) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const overlay = document.querySelector<HTMLElement>("[data-landing-intro-root]");
@@ -87,9 +85,8 @@ export function LandingIntroHighway() {
     const cleanups: Array<() => void> = [];
     // Hand every paused animation back to CSS at the time it has reached.
     const release = () => { driven.forEach((animation) => { try { animation.play(); } catch { /* finished or removed */ } }); driven = []; };
-    // Review mode sets no retirement timer in the page script; if the 3D cannot start, retire the
-    // CSS shot on its own schedule.
-    const fallback = forced ? window.setTimeout(() => { if (!root.classList.contains("intro-3d")) root.classList.add("intro-done"); }, 3300) : 0;
+    // Too late once the wait is over: the CSS shot (or a skip) already has the stage.
+    const waiting = () => root.classList.contains("intro-wait") && !root.classList.contains("intro-done");
 
     (async () => {
       let scene: typeof import("@/components/marketing/three/highway");
@@ -98,7 +95,7 @@ export function LandingIntroHighway() {
         const loaded = await (early ?? import("@/components/marketing/three/highway"));
         if (!loaded) return;
         scene = loaded;
-        if (cancelled || (!forced && cssTime() > READY_BY)) return;
+        if (cancelled || !waiting()) return;
         const style = getComputedStyle(root);
         highway = await scene.createHighway(host, {
           markSize: () => flyRef.current?.offsetWidth ?? 168,
@@ -114,16 +111,17 @@ export function LandingIntroHighway() {
         return; // the CSS intro carries on
       }
       if (cancelled || !highway) return;
-      if (!forced && cssTime() > READY_BY) { highway.dispose(); dispose = null; return; } // too late to take over cleanly
+      if (!waiting()) { highway.dispose(); dispose = null; return; }
       const shot = highway;
       const { HIGHWAY } = scene;
 
-      // Take over. First pause every CSS animation of the intro and the hero at the current time —
-      // from here this owns the clock — then switch modes, so the CSS shot's crossfade-out (which the
-      // switch starts) runs on its own and is not caught by the paused clock.
+      // Take over, from the start. First pause every CSS animation of the intro and the hero (still held
+      // at their first frame) — from here this owns the clock — then end the wait and switch modes, so
+      // the CSS shot's crossfade-out (which the switch starts) runs on its own.
       driven = [...overlay.getAnimations({ subtree: true }), ...(hero?.getAnimations({ subtree: true }) ?? [])].filter((animation) => animation.timeline === document.timeline);
-      let time = forced ? 0 : cssTime();
+      let time = 0;
       driven.forEach((animation) => { animation.pause(); animation.currentTime = time; });
+      root.classList.remove("intro-wait");
       root.classList.add("intro-3d");
       // The nav logo stays hidden until the flying copy lands exactly on it, then fades in beneath it.
       const navLogo = document.querySelector<HTMLElement>('header a[href="/"] .insurvas-logo');
@@ -227,7 +225,6 @@ export function LandingIntroHighway() {
       cancelled = true;
       cancelAnimationFrame(frame);
       window.clearInterval(watchdog);
-      window.clearTimeout(fallback);
       cleanups.forEach((cleanup) => cleanup());
       release();
       dispose?.();

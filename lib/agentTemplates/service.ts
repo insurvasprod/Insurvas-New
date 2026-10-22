@@ -140,29 +140,35 @@ export async function visibleLeadIds(tenantId: string, scope: readonly string[])
   const db = getSupabaseServiceClient() as unknown as QueueDb;
   const candidates = new Set<string>();
   const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const page = await scopeQuery(db.from("lead_queue").select("lead_id").eq("tenant_id", tenantId), "owner_user_id", scope)
-      .order("queued_at", { ascending: false })
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (page.error) throw new Error(`Could not load your leads: ${page.error.message}`);
-    for (const row of page.data ?? []) if (row.lead_id) candidates.add(row.lead_id);
-    if (!page.data || page.data.length < PAGE) break;
-  }
+  // The two reads are independent, so they run side by side; each still pages in order (offset paging over an unknown total).
+  const readQueue = async () => {
+    for (let from = 0; ; from += PAGE) {
+      const page = await scopeQuery(db.from("lead_queue").select("lead_id").eq("tenant_id", tenantId), "owner_user_id", scope)
+        .order("queued_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (page.error) throw new Error(`Could not load your leads: ${page.error.message}`);
+      for (const row of page.data ?? []) if (row.lead_id) candidates.add(row.lead_id);
+      if (!page.data || page.data.length < PAGE) break;
+    }
+  };
   // A lead with NO queue row — typed in by hand, or a manual deal — belongs to whoever created it
   // (agent_leads.created_by, D1's "the user column the row already has"); once it has a queue row, the queue
   // decides. Read along agent_leads_tenant_created_id_idx, tenant first.
   const created = new Set<string>();
   const leadsDb = getSupabaseServiceClient() as unknown as CreatedDb;
-  for (let from = 0; ; from += PAGE) {
-    const page = await scopeQuery(leadsDb.from("agent_leads").select("id").eq("tenant_id", tenantId), "created_by", scope)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (page.error) throw new Error(`Could not load your leads: ${page.error.message}`);
-    for (const row of page.data ?? []) if (row.id) created.add(row.id);
-    if (!page.data || page.data.length < PAGE) break;
-  }
+  const readCreated = async () => {
+    for (let from = 0; ; from += PAGE) {
+      const page = await scopeQuery(leadsDb.from("agent_leads").select("id").eq("tenant_id", tenantId), "created_by", scope)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (page.error) throw new Error(`Could not load your leads: ${page.error.message}`);
+      for (const row of page.data ?? []) if (row.id) created.add(row.id);
+      if (!page.data || page.data.length < PAGE) break;
+    }
+  };
+  await Promise.all([readQueue(), readCreated()]);
   const all = new Set([...candidates, ...created]);
   if (!all.size) return [];
   const owners = await latestLeadOwners(tenantId, [...all]);
@@ -500,7 +506,14 @@ export async function getAgentTemplateForProduct(
     if (!source)
       throw new Error(`No active ${productCode} template is available`);
     await assertAllowedProduct(tenantId, source.product_code);
-    await applyTemplate(tenantId, userId, source.id, source.version);
+    try {
+      await applyTemplate(tenantId, userId, source.id, source.version);
+    } catch (error) {
+      // A new workspace's first screen asks twice at once (List import does), and both requests find
+      // no copy. The one that loses the race hits the copy's unique key — the copy it wanted now
+      // exists, so it reads that one rather than answering 500 (QA 2026-10-22).
+      if (!/tenant_templates_tenant_id_template_id_template_version_key|duplicate key/i.test(error instanceof Error ? error.message : String(error))) throw error;
+    }
     copy = await loadCopy(tenantId, productCode);
     if (!copy) throw new Error("Could not resolve the tenant template copy");
   }
@@ -2067,6 +2080,10 @@ function normalizeFormValues(
         values: {},
         error: `${field.label} must be a valid ${field.type === "currency" ? "integer-cent amount" : "number"}`,
       };
+    // A money field is never below zero (coverage, premium, income). Verification accepted a
+    // coverage correction of -5 before 2026-10-22: the templates carry no minimum.
+    if (field.type === "currency" && typeof value === "number" && value < 0)
+      return { values: {}, error: `${field.label} can't be negative` };
     if (field.type === "boolean") {
       if (value === "Yes") value = true;
       else if (value === "No") value = false;

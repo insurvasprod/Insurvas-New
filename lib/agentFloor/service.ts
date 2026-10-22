@@ -144,7 +144,15 @@ function customerName(values: Record<string, unknown>) {
  * Every open floor re-reads on each realtime change, so a lead's values are read once a minute at most. Language and
  * phone are read here rather than by list_transfer_inbox, whose definition other work owns.
  */
-async function leadFacts(tenantId: string, leadIds: string[]): Promise<Map<string, LeadFacts>> {
+const LEAD_FACTS_READ_CAP = 200;
+
+/**
+ * `budget`: how many uncached leads this call may read (the floor's one read is capped at 200). The floor
+ * reads in two parts — the leads it knows after the first wave, then the last-call leads — and the second
+ * part gets what the first left, so together they read exactly the leads one call over both lists would.
+ * `read` is how many uncached leads this call asked for.
+ */
+async function leadFacts(tenantId: string, leadIds: string[], budget = LEAD_FACTS_READ_CAP): Promise<{ facts: Map<string, LeadFacts>; read: number }> {
   const now = Date.now();
   const out = new Map<string, LeadFacts>();
   const missing: string[] = [];
@@ -153,8 +161,9 @@ async function leadFacts(tenantId: string, leadIds: string[]): Promise<Map<strin
     if (hit && now - hit.at < LEAD_FACTS_TTL_MS) out.set(id, hit.facts);
     else missing.push(id);
   }
-  if (missing.length) {
-    const result = (await loose().from("agent_leads").select("id, values").eq("tenant_id", tenantId).in("id", missing.slice(0, 200))) as LooseResult;
+  const asked = missing.slice(0, Math.max(0, budget));
+  if (asked.length) {
+    const result = (await loose().from("agent_leads").select("id, values").eq("tenant_id", tenantId).in("id", asked)) as LooseResult;
     // A failed read leaves the facts unknown ("Not recorded"), never the floor down.
     if (result.error) console.error("[agentFloor] could not read lead facts", result.error.message);
     for (const row of (result.error ? [] : (result.data ?? [])) as Array<{ id: string; values: unknown }>) {
@@ -167,7 +176,7 @@ async function leadFacts(tenantId: string, leadIds: string[]): Promise<Map<strin
       for (const [key, value] of leadFactsCache) if (now - value.at >= LEAD_FACTS_TTL_MS) leadFactsCache.delete(key);
     }
   }
-  return out;
+  return { facts: out, read: asked.length };
 }
 
 /* ── the slower half: closed transfers and last calls, cached per tenant ── */
@@ -301,17 +310,23 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
   if (memberRows.error) throw new Error(`Could not load floor members: ${memberRows.error.message}`);
 
   const openCalls = (calls ?? []).filter((call) => seesMember(call.user_id));
-  const [slow, extras] = await Promise.all([
-    readSlowFloor(tenantId, openCalls.map((call) => call.id).sort().join(","), scope),
-    readFloorExtras(tenantId, openCalls.map((call) => call.work_item_id), currentRole === "assistant" ? [] : inbox.handoffs.map((handoff) => handoff.verificationSessionId), inbox.items.filter((item) => item.status === "la_active").map((item) => item.id)),
-  ]);
   const byId = new Map(inbox.items.map((item) => [item.id, item]));
   const waitingItems = inbox.items.filter((item) => item.status === "unclaimed");
-  const facts = await leadFacts(tenantId, [
+  // The waiting callers' and the open calls' leads are known now, so their facts are read beside the
+  // second wave; only the last-call leads wait for readSlowFloor, and get what is left of the one cap.
+  const knownLeads = [
     ...waitingItems.map((item) => item.leadId),
     ...openCalls.filter((call) => !byId.has(call.work_item_id)).map((call) => call.lead_id),
-    ...[...slow.lastCallByUser.entries()].filter(([userId]) => seesMember(userId)).map(([, call]) => call.leadId),
+  ];
+  const [slow, extras, knownFacts] = await Promise.all([
+    readSlowFloor(tenantId, openCalls.map((call) => call.id).sort().join(","), scope),
+    readFloorExtras(tenantId, openCalls.map((call) => call.work_item_id), currentRole === "assistant" ? [] : inbox.handoffs.map((handoff) => handoff.verificationSessionId), inbox.items.filter((item) => item.status === "la_active").map((item) => item.id)),
+    leadFacts(tenantId, knownLeads),
   ]);
+  const known = new Set(knownLeads);
+  const lastCallLeads = [...slow.lastCallByUser.entries()].filter(([userId]) => seesMember(userId)).map(([, call]) => call.leadId).filter((leadId) => !known.has(leadId));
+  const lastCallFacts = lastCallLeads.length ? (await leadFacts(tenantId, lastCallLeads, LEAD_FACTS_READ_CAP - knownFacts.read)).facts : new Map<string, LeadFacts>();
+  const facts = new Map([...knownFacts.facts, ...lastCallFacts]);
 
   // Same filter the separate users read applied: only active accounts appear on the floor.
   const users = new Map(

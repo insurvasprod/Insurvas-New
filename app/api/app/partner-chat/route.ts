@@ -33,7 +33,7 @@ async function readInput(request: NextRequest) {
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("inbound_transfers", roles);
+  const auth = await requireFeatureRole("inbound_transfers", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     // AG-0.5: in an agency a producer keeps the chat itself (messages people wrote, and the transfer

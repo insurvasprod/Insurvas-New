@@ -9,7 +9,7 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
  * can say what its credit would move it to. `cost` is null when the report cannot answer.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
   if (refused) return refused;

@@ -13,7 +13,7 @@ const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
  * the directory. `?view=directory` returns only the directory, for search and paging.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES);
+  const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const params = request.nextUrl.searchParams;
   const options = { q: params.get("q") ?? "", page: Number(params.get("page") ?? 0) || 0, pageSize: Number(params.get("pageSize") ?? 25) || 25 };

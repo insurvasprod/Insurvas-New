@@ -11,7 +11,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
  * record instead of a roster).
  */
 export async function GET() {
-  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"]);
+  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const roster = await readRoster(auth.context);

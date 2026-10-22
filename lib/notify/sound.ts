@@ -1,6 +1,6 @@
 "use client";
 
-import { AUDIBLE, AUDIBLE_BY_DEFAULT, type Treatment } from "./treatments.ts";
+import { ALWAYS_AUDIBLE, AUDIBLE, AUDIBLE_BY_DEFAULT, type Treatment } from "./treatments.ts";
 
 /**
  * The sound layer. Step 1 shipped this silent; step 2 fills it in.
@@ -21,8 +21,9 @@ import { AUDIBLE, AUDIBLE_BY_DEFAULT, type Treatment } from "./treatments.ts";
  *   Silent during a live call, except `block`.   See setCallInProgress.
  *   Personal only.                               A sale chimes for the person who made it, not the
  *                                                floor. Team-wide is a later opt-in, not a default.
- *   `win`, `arrive` and `block` by default.       Only `warn` is opt-in.
- *   `done` and `fail` never sound.               Routine success and infrastructure faults.
+ *   Every switchable treatment on by default.    `warn` joined 2026-10-22; each can be switched off.
+ *   `fail` always sounds, softly.                 2026-10-22: no per-treatment switch; mute silences it.
+ *   `done` never sounds.                         Routine success.
  *   One sound per 2 seconds, at most.            A bulk action must not machine-gun.
  *   Never before the first interaction.          Browsers refuse autoplay; an unprimed context
  *                                                swallows the first sound and surprises with the
@@ -31,7 +32,7 @@ import { AUDIBLE, AUDIBLE_BY_DEFAULT, type Treatment } from "./treatments.ts";
 
 // Re-exported rather than redeclared: the vocabulary is now also a database constraint and a
 // server-side default, so it has exactly one home and this is not it.
-export { AUDIBLE, AUDIBLE_BY_DEFAULT };
+export { ALWAYS_AUDIBLE, AUDIBLE, AUDIBLE_BY_DEFAULT };
 export type { Treatment };
 
 /** No more than one sound in this many milliseconds. */
@@ -102,13 +103,15 @@ export type SoundContext = {
  * swallow a compliance `block` two hundred milliseconds later.
  */
 export function decideSound(treatment: Treatment, ctx: SoundContext): SoundDecision {
-  if (!AUDIBLE.includes(treatment)) return "not-audible";
+  const alwaysOn = ALWAYS_AUDIBLE.includes(treatment);
+  if (!AUDIBLE.includes(treatment) && !alwaysOn) return "not-audible";
   // The rule that matters most. `block` is the exception because it is the only class that means
   // the agent should stop the conversation they are having.
   if (ctx.callOpen && treatment !== "block") return "in-call";
   if (!ctx.primed) return "unprimed";
   if (ctx.muted) return "muted";
-  if (!ctx.enabled) return "disabled";
+  // An always-audible treatment has no per-treatment switch to consult; the master mute above still wins.
+  if (!ctx.enabled && !alwaysOn) return "disabled";
   if (ctx.volume <= 0) return "silent";
   if (ctx.msSinceLast < MIN_GAP_MS) return "rate-limited";
   return "play";
@@ -281,7 +284,7 @@ type Strike = {
  * sound in the product that is allowed to feel like a reward. Everything else is deliberately
  * plainer than it, so that it stays the one that makes someone look up.
  */
-const VOICES: Record<"win" | "arrive" | "warn" | "block", Strike[]> = {
+const VOICES: Record<"win" | "arrive" | "warn" | "block" | "fail", Strike[]> = {
   // Two bell strikes, up a fourth. Bright, short, unmistakably a till.
   win: [
     { hz: 1318.51, at: 0, decay: 0.34, type: "sine", level: 1, partial: 2.76 },
@@ -302,6 +305,12 @@ const VOICES: Record<"win" | "arrive" | "warn" | "block", Strike[]> = {
   block: [
     { hz: 261.63, at: 0, decay: 0.2, type: "triangle", level: 0.95 },
     { hz: 196.0, at: 0.15, decay: 0.38, type: "triangle", level: 0.95 },
+  ],
+  // 2026-10-22. Soft, round and short: two low sine notes a third apart, quieter than `block`, so it
+  // says "that did not go through" without sounding like a refusal or an alarm.
+  fail: [
+    { hz: 349.23, at: 0, decay: 0.14, type: "sine", level: 0.6 },
+    { hz: 293.66, at: 0.11, decay: 0.26, type: "sine", level: 0.6 },
   ],
 };
 

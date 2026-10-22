@@ -300,16 +300,24 @@ export async function createHighway(host: HTMLElement, options: { markSize: () =
     renderer.render(scene, camera);
   };
 
+  // A compile still in flight polls the materials it was given; freeing them under it makes three.js
+  // throw on every poll. So the canvas goes at once and the GPU side once the compile has settled.
+  let compiling: Promise<unknown> = Promise.resolve();
+  let disposed = false;
   const dispose = () => {
-    scene.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      mesh.geometry?.dispose?.();
-      const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-      (Array.isArray(material) ? material : material ? [material] : []).forEach((item) => item.dispose());
-    });
-    renderer.dispose();
-    renderer.forceContextLoss();
+    if (disposed) return;
+    disposed = true;
     renderer.domElement.remove();
+    void compiling.finally(() => {
+      scene.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        (Array.isArray(material) ? material : material ? [material] : []).forEach((item) => item.dispose());
+      });
+      renderer.dispose();
+      renderer.forceContextLoss();
+    });
   };
 
   // Compile every shader and upload every buffer and texture before the shot starts, so the first
@@ -317,9 +325,10 @@ export async function createHighway(host: HTMLElement, options: { markSize: () =
   const warm = async () => {
     // Compile in the background first (parallel shader compile where the GPU driver offers it), then
     // draw one frame to upload the geometry and the sign textures.
-    try { await renderer.compileAsync(scene, camera); } catch { /* compiled by the first render instead */ }
+    compiling = renderer.compileAsync(scene, camera).catch(() => { /* compiled by the first render instead */ });
+    await compiling;
     await breathe();
-    render(0);
+    if (!disposed) render(0);
   };
 
   return { render, warm, resize, dispose };

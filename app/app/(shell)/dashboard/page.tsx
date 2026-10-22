@@ -7,11 +7,12 @@ import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { visibleDashboardTiles } from "@/lib/dashboard/tiles";
 import { setupChecklistForState } from "@/lib/dashboard/checklist";
-import { loadSetupProfile, loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
+import { loadSetupGuideState, loadSetupProfile, loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
 import { resolveRoleHome, splitHomeSections, type HomeSectionKey, type ResolvedHome } from "@/lib/dashboard/roleHome";
 import { greeting, longDate } from "@/lib/dashboard/todayMath";
 import { SetupChecklist } from "@/components/app/setup-checklist";
+import { SetupCelebration } from "@/components/app/setup/setup-celebration";
 import { Card } from "@/components/ui/card";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { scopeFor, type ProducerScope } from "@/lib/agency/visibility";
@@ -186,12 +187,14 @@ export default async function AgentDashboardPage() {
   // for a criterion ("loads in under 1 second") with no room to spare. The greeting's two reads
   // (the agency's zone, the reader's first name) ride in the same round trip.
   // AG-0.5: the producer scope rides in the same round trip (cached per request; free for a solo tenant).
-  const [entitlement, onboardingState, switches, setupProgress, setupProfile, workspaceZone, firstName, scope] = await Promise.all([
+  const [entitlement, onboardingState, switches, setupProgress, setupProfile, setupGuide, workspaceZone, firstName, scope] = await Promise.all([
     getEntitlement(context.tenantId),
     getDashboardOnboardingState(context.tenantId),
     loadFeatureSwitches(),
     loadSetupProgress(context.tenantId),
     loadSetupProfile(context.tenantId),
+    // The reader's own skips and "Hide" (tenant_setup_guide; empty marks on any failure).
+    loadSetupGuideState(context.tenantId, context.userId),
     getWorkspaceTimezone(context.tenantId).catch(() => null),
     readFirstName(context.userId),
     scopeFor(context),
@@ -199,7 +202,7 @@ export default async function AgentDashboardPage() {
   const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
   const tiles = visibleDashboardTiles(available, context.role);
   // Only the steps this plan can do (and the business profile asked for), so every plan can finish.
-  const checklist = setupChecklistForState(onboardingState, setupProgress, { features: available, profile: setupProfile });
+  const checklist = setupChecklistForState(onboardingState, setupProgress, { features: available, profile: setupProfile, seats: entitlement.limits.max_seats, marks: setupGuide });
   // LA-0.3: the first render that finds every step done stamps it, so the checklist never returns.
   // After the response, so the stamp never holds up the page.
   if (checklist.complete && !setupProgress.finished) afterResponse(() => recordSetupFinished(context.tenantId));
@@ -279,7 +282,7 @@ export default async function AgentDashboardPage() {
           : <EmptyState title="No dashboard shortcuts for your role yet" hint="Use the sidebar to reach your screens." />}
       </Card>
     ),
-    setup: shown.has("setup") ? <SetupChecklist checklist={checklist} /> : null,
+    setup: shown.has("setup") ? <SetupChecklist checklist={checklist} hidden={setupGuide.hiddenAt !== null} /> : null,
   };
 
   // The "Your day" header: a greeting in the agency's clock, the date, the live next callback, and
@@ -292,6 +295,8 @@ export default async function AgentDashboardPage() {
   return (
     <DashboardStage>
     <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
+      {/* The finish moment, when the last step was done somewhere other than the guide bar: this render stamps it. */}
+      {shown.has("setup") && checklist.total > 0 && checklist.complete && !setupProgress.finished ? <SetupCelebration steps={checklist.total} done={checklist.completed} audience="owner" /> : null}
       <PageHeader
         size="hero"
         title={`${greeting(serverNow, zone)}${name}`}
@@ -312,7 +317,7 @@ export default async function AgentDashboardPage() {
         }
       />
 
-      <Run keys={before} slots={slots} setupOpen={shown.has("setup") && !checklist.complete} />
+      <Run keys={before} slots={slots} setupOpen={shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null} />
 
       {today && streamed.length > 0 && (
         <Suspense fallback={<DashboardTodaySkeleton strip={streamed.includes("figures")} panels={streamed.includes("activity")} />}>
@@ -320,7 +325,7 @@ export default async function AgentDashboardPage() {
         </Suspense>
       )}
 
-      <Run keys={after} slots={slots} setupOpen={shown.has("setup") && !checklist.complete} />
+      <Run keys={after} slots={slots} setupOpen={shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null} />
     </div>
     </DashboardStage>
   );

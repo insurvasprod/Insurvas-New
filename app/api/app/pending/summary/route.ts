@@ -11,7 +11,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * /app/pending, so the card and the page never disagree.
  */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("applications", ["owner", "producer"]);
+  const auth = await requireFeatureRole("applications", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   try {

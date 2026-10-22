@@ -68,7 +68,7 @@ export function SplitsBoard({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Commission splits" description="Policies two producers share. The split divides the writer's pool after the override." actions={canEdit ? <Button onClick={start} disabled={producers.length < 2}>New split</Button> : undefined} />
+      <PageHeader title="Commission splits" description="Policies two producers share, split from the writer's pool after the override." actions={canEdit ? <Button onClick={start} disabled={producers.length < 2}>New split</Button> : undefined} />
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row lg:items-stretch">
         <TableCard className="min-w-0 flex-1" toolbar={
           <DataToolbar actions={<RefreshButton onClick={splits.reload} refreshing={splits.refreshing} />}>

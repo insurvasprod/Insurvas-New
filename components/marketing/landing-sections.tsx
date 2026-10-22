@@ -106,12 +106,21 @@ function monthlyNumber(plan: PublicPlan) {
   return Number.isFinite(n) && n > 0 ? n : Number.POSITIVE_INFINITY;
 }
 
+/** "2499.00" → "$2,499.00", the way /pricing shows the same plan (QA 2026-10-22: the teaser had no currency). */
+function dollars(price: string) {
+  const n = Number(price.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : price;
+}
+
 /**
  * The plans as a ladder (2026-10-13): each step names the modules it adds to the one below, read
  * from the catalog — so the teaser can never promise a module a plan does not grant.
  */
 export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
-  const ladder = [...plans].sort((a, b) => monthlyNumber(a) - monthlyNumber(b));
+  // The ladder is the individual-agent plans; agencies get one line under it, to their own view of
+  // /pricing (2026-10-22: the agency seat bands are a different purchase, not a fourth rung).
+  const ladder = plans.filter((plan) => plan.audience === "individual").sort((a, b) => monthlyNumber(a) - monthlyNumber(b));
+  const agencyFrom = plans.filter((plan) => plan.audience === "agency").sort((a, b) => monthlyNumber(a) - monthlyNumber(b))[0] ?? null;
   const trialDays = ladder.find((plan) => plan.trial_days > 0)?.trial_days ?? null;
   return (
     <section className="bg-background px-4 pb-24 pt-14 sm:px-6 lg:px-16 lg:pb-32 lg:pt-16">
@@ -133,7 +142,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
                     {plan.is_default && <span className="absolute -top-3 left-7 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-semibold text-[var(--on-primary)]">Recommended</span>}
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="text-title-sm font-semibold text-foreground">{plan.name}</span>
-                      {plan.price_monthly && <span className="text-title-md font-semibold tabular-nums tracking-[-0.02em] text-foreground">{plan.price_monthly}<span className="text-sm font-normal text-muted-foreground">/mo</span></span>}
+                      {plan.price_monthly && <span className="text-title-md font-semibold tabular-nums tracking-[-0.02em] text-foreground">{dollars(plan.price_monthly)}<span className="text-sm font-normal text-muted-foreground">/mo</span></span>}
                     </div>
                     {plan.blurb && <p className="mt-2 text-sm leading-normal text-muted-foreground">{plan.blurb}</p>}
                     <p className="mt-5 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">{index === 0 ? "Includes" : `Everything in ${ladder[index - 1].name}, plus`}</p>
@@ -151,7 +160,16 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
           </div>
         )}
 
-        <div className="mt-10 flex justify-center">
+        {agencyFrom && (
+          <p className="mt-8 text-center text-base text-muted-foreground">
+            Running an agency? One flat price for the whole team, from{" "}
+            <span className="font-semibold text-foreground">{agencyFrom.price_monthly ? `${dollars(agencyFrom.price_monthly)}/month` : "a flat band"}</span>
+            {agencyFrom.max_seats ? ` for up to ${agencyFrom.max_seats} seats` : ""}.{" "}
+            <Link href="/pricing?for=agency" className="font-semibold text-[var(--accent-ink)]">See agency pricing</Link>
+          </p>
+        )}
+
+        <div className="mt-8 flex justify-center">
           <Button asChild variant="outline" className="h-11 rounded-full px-6"><Link href="/pricing">See every plan, module by module<ArrowRight className="size-4" aria-hidden="true" /></Link></Button>
         </div>
       </div>

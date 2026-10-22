@@ -5,7 +5,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "True CPA");
   if (refused) return refused;

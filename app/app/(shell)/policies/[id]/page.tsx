@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
+import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { hasFeature } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
@@ -58,7 +59,7 @@ const STATUS = { active: { label: "Active", tone: "good" }, pending: { label: "P
 export default async function PolicyPage({ params }: { params: Promise<{ id: string }> }) {
   const guard = await guardPage("book_of_business");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Book of business" description="Your policies, premiums and carriers in one place." />;
-  if (!["owner", "producer", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
+  if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
   const { id } = await params;
   if (!isRecordId(id)) notFound();
   const tenantId = guard.context.tenantId;
@@ -71,7 +72,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
 
   const today = new Date().toISOString().slice(0, 10);
   const statementsOn = hasFeature(guard.entitlement, "statement_ingestion") || hasFeature(guard.entitlement, "commission_ledger");
-  const seesDiscrepancies = hasFeature(guard.entitlement, "discrepancy_report") && ["owner", "bookkeeper"].includes(guard.role);
+  const seesDiscrepancies = hasFeature(guard.entitlement, "discrepancy_report") && holdsAnyRole(guard.roles, ["owner", "bookkeeper"]);
   // Everything below is read for THIS policy only (LA-4.9): its lines, its findings, its source.
   let discrepanciesFailed = false;
   const [library, statements, discrepancies, leadSource] = await Promise.all([

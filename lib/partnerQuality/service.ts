@@ -92,15 +92,18 @@ async function loadTeamMetrics(tenantId: string, report: Pick<PartnerQualityRepo
   const partnerIds = report.rows.map((row) => row.partner_id);
   if (!partnerIds.length) return [];
   const db = getSupabaseServiceClient();
-  const memberships = await db.from("partner_users").select("id, user_id, partner_id, role, status, invited_at, accepted_at, deactivated_at, partner_admin_user_id").eq("tenant_id", tenantId).in("partner_id", partnerIds).order("invited_at", { ascending: true });
-  if (memberships.error) throw new Error(`Could not load partner hierarchy: ${memberships.error.message}`);
-  const memberRows = (memberships.data ?? []) as TeamMembership[];
-  const userIds = [...new Set(memberRows.map((member) => member.user_id))];
-  const users = userIds.length ? await db.from("users").select("id, name, email").in("id", userIds) : { data: [], error: null };
-  if (users.error) throw new Error(`Could not load partner hierarchy users: ${users.error.message}`);
-  const userById = new Map((users.data ?? []).map((user) => [user.id, user]));
   const allLeadIds = [...new Set([...current, ...previous].map((row) => row.lead_id))];
-  const owners = allLeadIds.length ? await db.from("agent_leads").select("id, created_by").eq("tenant_id", tenantId).in("id", allLeadIds) : { data: [], error: null };
+  // The lead owners do not depend on the memberships, so both go out together; the member's account
+  // (name, email) rides along through partner_users_user_id_fkey instead of a dependent users read
+  // (partner_users has a second FK to users, invited_by, hence the named constraint).
+  const [memberships, owners] = await Promise.all([
+    db.from("partner_users").select("id, user_id, partner_id, role, status, invited_at, accepted_at, deactivated_at, partner_admin_user_id, account:users!partner_users_user_id_fkey(id, name, email)").eq("tenant_id", tenantId).in("partner_id", partnerIds).order("invited_at", { ascending: true }),
+    allLeadIds.length ? db.from("agent_leads").select("id, created_by").eq("tenant_id", tenantId).in("id", allLeadIds) : Promise.resolve({ data: [] as Array<{ id: string; created_by: string | null }>, error: null }),
+  ]);
+  if (memberships.error) throw new Error(`Could not load partner hierarchy: ${memberships.error.message}`);
+  const embedded = (memberships.data ?? []) as unknown as Array<TeamMembership & { account: { id: string; name: string; email: string } | null }>;
+  const memberRows: TeamMembership[] = embedded.map(({ account: _account, ...member }) => member as TeamMembership); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const userById = new Map(embedded.flatMap((member) => (member.account ? [[member.account.id, member.account] as const] : [])));
   if (owners.error) throw new Error(`Could not load partner hierarchy lead ownership: ${owners.error.message}`);
   const ownerByLeadId = new Map((owners.data ?? []).map((lead) => [lead.id, lead.created_by as string | null]));
   const groups = new Map(report.rows.map((row) => [row.partner_id, { partner_id: row.partner_id, partner_name: row.partner_name, admins: [], users: [], unassigned: [] } as PartnerQualityTeamGroup]));

@@ -13,7 +13,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 const roles = ["owner", "producer", "bookkeeper"] as const;
 
 export async function GET() {
-  const auth = await requireFeatureRole("cohort_persistency", roles);
+  const auth = await requireFeatureRole("cohort_persistency", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const report = await getPersistencyReport({

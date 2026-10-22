@@ -3,13 +3,16 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isMissingFunction, isMissingSchema } from "./schemaGap";
 import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
+import { outcomesByStage } from "./outcomeResolution";
+import { listPipelineOutcomeStages } from "./outcomeStages";
 
 /**
  * What the four pipeline views (Stages · Board · Table · List) need beyond the leads themselves,
  * and the one path a lead takes between stages from any of them.
  *
- * The rule the screens enforce: **a stage change is a disposition**. The disposition's stage — one
- * per outcome, agency-wide (stage_dispositions) — is where the lead goes, the outcome is stamped on
+ * The rule the screens enforce: **a stage change is a disposition**. The disposition's stage — the
+ * lead's pipeline's own stage for it (pipeline_disposition_stages, 20261022200000), else the one
+ * agency-wide stage (stage_dispositions) — is where the lead goes, the outcome is stamped on
  * the work item, and the move is written to tenant_lead_stage_events. A stage with no disposition
  * mapped to it cannot be entered from these screens.
  *
@@ -44,7 +47,7 @@ export type StageEvent = {
 export type MoveResult = { leadId: string; fromStageId: string | null; toPipelineId: string; toStageId: string; recorded: boolean };
 
 type Row = Record<string, unknown>;
-type Result = { data: unknown; error: { message: string; code?: string } | null };
+type Result = { data: unknown; error: { message: string; code?: string } | null; count?: number | null };
 type Query = PromiseLike<Result> & {
   select(columns: string, options?: { count?: "exact"; head?: boolean }): Query;
   eq(column: string, value: unknown): Query;
@@ -53,6 +56,7 @@ type Query = PromiseLike<Result> & {
   gte(column: string, value: unknown): Query;
   order(column: string, options?: { ascending?: boolean }): Query;
   limit(count: number): Query;
+  range(from: number, to: number): Query;
   update(values: Row): Query;
 };
 type Db = { from(table: string): Query; rpc(name: string, args: Row): PromiseLike<Result> };
@@ -71,14 +75,38 @@ export const CALL_PATH_ONLY: Record<string, string> = {
  * items (lead_queue.owner_user_id) in the unmapped-outcome uses and the stage drift. Null — the default —
  * counts the whole agency, as before. Stages, rules and mappings are the agency's configuration, not rows.
  */
+const DRIFT_SAMPLE = 5000;
+const DRIFT_PAGE = 1000;
+
+/**
+ * Every work item's (lead, stage) for the drift count, or `tooMany` past DRIFT_SAMPLE. The API answers at most
+ * 1,000 rows a request (a .limit(5000) used to stop at 1,000 and count drift on a fifth of the queue), so the
+ * first page also asks for the total and the rest are read in parallel, ordered along
+ * lead_queue_tenant_status_queued_idx with lead_id (unique) as the tail so pages neither overlap nor skip.
+ */
+async function queueStageRows(client: Db, tenantId: string, scope: ProducerScope): Promise<Result & { tooMany: boolean }> {
+  const page = (from: number) =>
+    scopeQuery(client.from("lead_queue").select("lead_id, stage_id", from === 0 ? { count: "exact" } : undefined).eq("tenant_id", tenantId), "owner_user_id", scope)
+      .order("status").order("queued_at").order("lead_id").range(from, from + DRIFT_PAGE - 1);
+  const first = await page(0);
+  if (first.error) return { ...first, tooMany: false };
+  const total = first.count ?? rows(first).length;
+  if (total >= DRIFT_SAMPLE) return { data: [], error: null, tooMany: true };
+  const rest = await Promise.all(Array.from({ length: Math.max(0, Math.ceil(total / DRIFT_PAGE) - 1) }, (_, i) => page((i + 1) * DRIFT_PAGE)));
+  const failed = rest.find((r) => r.error);
+  if (failed) return { ...failed, tooMany: false };
+  return { data: [first, ...rest].flatMap(rows), error: null, tooMany: false };
+}
+
 export async function pipelineViewContext(tenantId: string, scope: ProducerScope = null): Promise<PipelineViewContext> {
   const client = db();
-  const [stagesWithRules, pipelines, mappings, dispositions, queueStages] = await Promise.all([
+  const [stagesWithRules, pipelines, mappings, dispositions, queueStages, own] = await Promise.all([
     client.from("tenant_pipeline_stages").select("id, pipeline_id, time_allowed_minutes, counts_as_worked, tenant_pipelines!inner(tenant_id)").eq("tenant_pipelines.tenant_id", tenantId),
     client.from("tenant_pipelines").select("id, status").eq("tenant_id", tenantId),
     client.from("stage_dispositions").select("stage_id, disposition_key").eq("tenant_id", tenantId),
     client.from("dispositions").select("disposition_key, label, is_active, next_action, next_action_minutes, sort_order").eq("tenant_id", tenantId).order("sort_order"),
-    scopeQuery(client.from("lead_queue").select("lead_id, stage_id").eq("tenant_id", tenantId), "owner_user_id", scope).limit(5000),
+    queueStageRows(client, tenantId, scope),
+    listPipelineOutcomeStages(tenantId),
   ]);
   const schemaReady = !isMissingSchema(stagesWithRules.error) && !isMissingSchema(pipelines.error);
 
@@ -104,43 +132,51 @@ export async function pipelineViewContext(tenantId: string, scope: ProducerScope
   const active = new Map(dispositionRows.filter((row) => row.is_active !== false).map((row) => [text(row.disposition_key), row]));
   const dispositionsByStage: Record<string, MappedDisposition[]> = {};
   const mappedKeys = new Set<string>();
-  for (const mapping of rows(mappings)) {
-    const key = text(mapping.disposition_key);
-    const row = active.get(key);
-    if (!row) continue;
-    mappedKeys.add(key);
-    const stageId = text(mapping.stage_id);
-    (dispositionsByStage[stageId] ??= []).push({
-      key,
-      label: text(row.label) || key,
-      nextAction: row.next_action == null ? null : text(row.next_action),
-      nextActionMinutes: row.next_action_minutes == null ? null : Number(row.next_action_minutes),
-    });
+  // A stage offers its pipeline's own outcomes (20261022200000) and the agency-wide ones that pipeline
+  // has not replaced: recording any of them from that stage's board lands the lead on it.
+  const pipelineOfStage = new Map(rows(stagesWithRules).map((row) => [text(row.id), text(row.pipeline_id)]));
+  const agencyWide = rows(mappings).map((row) => ({ stage_id: text(row.stage_id), disposition_key: text(row.disposition_key) }));
+  for (const [stageId, keys] of outcomesByStage(agencyWide, own.rows, (id) => pipelineOfStage.get(id))) {
+    for (const key of keys) {
+      const row = active.get(key);
+      if (!row) continue;
+      mappedKeys.add(key);
+      (dispositionsByStage[stageId] ??= []).push({
+        key,
+        label: text(row.label) || key,
+        nextAction: row.next_action == null ? null : text(row.next_action),
+        nextActionMinutes: row.next_action_minutes == null ? null : Number(row.next_action_minutes),
+      });
+    }
   }
 
   // How often each unmapped outcome was recorded, off the work item both the dialer and the
   // outcome wizard stamp. Counted only for the unmapped ones, so the read stays small.
   const unmappedKeys = [...active.keys()].filter((key) => !mappedKeys.has(key));
-  const uses = await Promise.all(
+  const usesRead = Promise.all(
     unmappedKeys.map(async (key) => {
       const result = await scopeQuery(client.from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("disposition", key), "owner_user_id", scope);
       return [key, (result as unknown as { count: number | null }).count ?? 0] as const;
     }),
   );
-  const useCount = new Map(uses);
 
   // Drift: a lead's stage is stored on its own row and on its work item; count the disagreements.
-  let stageDrift: number | null = null;
+  // The lead pages are read side by side, and beside the use counts above: none needs another's answer.
+  // (They were one after another — up to seven round trips for a 1,000-row queue.)
   const queueRows = rows(queueStages);
-  if (!queueStages.error && queueRows.length > 0 && queueRows.length < 5000) {
+  const driftRead = (async (): Promise<number | null> => {
+    if (queueStages.error || queueStages.tooMany || queueRows.length === 0) return null;
     const ids = queueRows.map((row) => text(row.lead_id));
     const leadStage = new Map<string, string>();
-    for (let start = 0; start < ids.length; start += 150) {
-      const page = await client.from("agent_leads").select("id, stage_id").eq("tenant_id", tenantId).in("id", ids.slice(start, start + 150));
+    const pages: string[][] = [];
+    for (let start = 0; start < ids.length; start += 150) pages.push(ids.slice(start, start + 150));
+    for (const page of await Promise.all(pages.map((chunk) => client.from("agent_leads").select("id, stage_id").eq("tenant_id", tenantId).in("id", chunk)))) {
       for (const row of rows(page)) leadStage.set(text(row.id), text(row.stage_id));
     }
-    stageDrift = queueRows.filter((row) => leadStage.has(text(row.lead_id)) && leadStage.get(text(row.lead_id)) !== text(row.stage_id)).length;
-  }
+    return queueRows.filter((row) => leadStage.has(text(row.lead_id)) && leadStage.get(text(row.lead_id)) !== text(row.stage_id)).length;
+  })();
+  const [uses, stageDrift] = await Promise.all([usesRead, driftRead]);
+  const useCount = new Map(uses);
 
   return {
     schemaReady,

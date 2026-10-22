@@ -24,7 +24,7 @@ const SOURCES: EvidenceSource[] = ["partner", "vendor", "direct"];
 const EXPORT_CAP = 10_000;
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("consent_locker", ROLES);
+  const auth = await requireFeatureRole("consent_locker", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "The consent locker");
   if (refused) return refused;

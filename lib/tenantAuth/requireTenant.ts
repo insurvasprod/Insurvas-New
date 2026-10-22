@@ -10,6 +10,9 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsPartnerMembership } from "@/lib/auth/planeSeparation";
 import { isTenantSuspended, TENANT_SUSPENDED_CODE, TENANT_SUSPENDED_MESSAGE } from "@/lib/tenants/suspension";
 import { checkTenantSession, type SessionCheck } from "./sessionStore";
+import { actingRole, CUSTOM_TEAM_ACCESS_FEATURE, memberRoles, UNHIDEABLE_PAGES } from "./teamAccess";
+import { getEntitlement } from "@/lib/entitlements/get";
+import { hasFeature } from "@/lib/entitlements/types";
 
 /** The verified cookie only — identity, no authorisation. Use resolveTenantContext for the role. */
 export async function getTenantSession(): Promise<TenantSessionPayload | null> {
@@ -40,7 +43,34 @@ export type TenantContext = {
   sessionId?: string | null;
   /** When this session passed the second factor; null when it did not. */
   twoFactorAt?: string | null;
+  /**
+   * Custom team access · every role the member holds, main role first; extras only while the tenant holds the
+   * add-on. A gate that admits one of them hands on a context whose `role` is that role (actingRole), so code
+   * after the gate never meets a role it was not written for. Absent = [role].
+   */
+  roles?: TenantRole[];
+  /** Custom team access · the main role as stored, whatever role a gate acts as. */
+  mainRole?: TenantRole;
+  /** Custom team access · menu keys the owner hid for this member (view only: hiding never grants). */
+  hiddenPages?: string[];
 };
+
+/** The roles a context holds, main role first. */
+export function contextRoles(context: TenantContext): TenantRole[] {
+  return context.roles?.length ? context.roles : [context.role];
+}
+
+/**
+ * The context a gate admitting `allowed` hands on: unchanged when the main role is allowed; when only an extra role
+ * is, the same context acting as that role (its title belongs to the main role, so it is dropped). Null: refused.
+ */
+export function actAs(context: TenantContext, allowed: readonly TenantRole[]): TenantContext | null {
+  const roles = contextRoles(context);
+  const acting = actingRole(roles, allowed);
+  if (!acting) return null;
+  if (acting === context.role) return context;
+  return { ...context, role: acting, agencyTitle: null, memberRole: acting, mainRole: context.mainRole ?? roles[0] };
+}
 
 /**
  * Resolves the caller's *current* role and account state from the database rather than from the
@@ -98,6 +128,10 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
   if (isTenantSuspended(tenant.status)) return { context: null, suspended: true };
 
   const agencyTitle = isAgencyTitle(membership.agency_role) ? membership.agency_role : null;
+  // Extra roles and hidden pages count only while the agency holds the add-on. Most members have neither, and
+  // then the entitlement is not read here at all.
+  const customised = membership.extra_roles.length > 0 || membership.hidden_pages.length > 0;
+  const addOn = customised ? await holdsCustomTeamAccess(session.tenantId) : false;
   return {
     context: {
       userId: session.sub,
@@ -107,35 +141,59 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
       memberRole: memberRoleOf(membership.role, agencyTitle),
       sessionId: session.sid ?? null,
       twoFactorAt: live.twoFactorAt,
+      roles: memberRoles(membership.role, membership.extra_roles, addOn),
+      mainRole: membership.role,
+      hiddenPages: addOn ? membership.hidden_pages.filter((key) => !UNHIDEABLE_PAGES.has(key)) : [],
     },
     suspended: false,
   };
 });
+
+async function holdsCustomTeamAccess(tenantId: string): Promise<boolean> {
+  try {
+    return hasFeature(await getEntitlement(tenantId), CUSTOM_TEAM_ACCESS_FEATURE);
+  } catch {
+    return false; // an unreadable entitlement grants nothing extra; the main role still works
+  }
+}
 
 /**
  * The membership row with its AG-0.2 agency title. Until migration 20261018110000 is applied the column
  * does not exist, and asking for it would fail EVERY session; so an undefined-column answer retries
  * without it and the person simply has no title.
  */
-async function readMembership(userId: string, tenantId: string): Promise<{ role: string; agency_role: string | null } | null> {
+type Membership = { role: TenantRole; agency_role: string | null; extra_roles: string[]; hidden_pages: string[] };
+
+async function readMembership(userId: string, tenantId: string): Promise<Membership | null> {
   const supabase = getSupabaseServiceClient();
   // Newest schema first; each fallback drops the column a not-yet-applied migration adds
-  // (20261018150000 access_blocked_at, 20261018110000 agency_role), so a missing column never ends sessions.
-  for (const columns of ["role, agency_role, access_blocked_at", "role, agency_role", "role"]) {
+  // (20261020500000 extra_roles + hidden_pages, 20261018150000 access_blocked_at, 20261018110000 agency_role),
+  // so a missing column never ends sessions.
+  for (const columns of [
+    "role, agency_role, access_blocked_at, extra_roles, hidden_pages",
+    "role, agency_role, access_blocked_at",
+    "role, agency_role",
+    "role",
+  ]) {
     const read = await supabase
       .from("tenant_users")
       .select(columns)
       .eq("user_id", userId)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{ role: string; agency_role?: string | null; access_blocked_at?: string | null }>();
+      .maybeSingle<{ role: string; agency_role?: string | null; access_blocked_at?: string | null; extra_roles?: string[] | null; hidden_pages?: string[] | null }>();
     if (read.error) {
-      if (read.error.code === "42703" || /agency_role|access_blocked_at/.test(read.error.message ?? "")) continue;
+      if (read.error.code === "42703" || /agency_role|access_blocked_at|extra_roles|hidden_pages/.test(read.error.message ?? "")) continue;
       return null;
     }
-    if (!read.data) return null;
+    if (!read.data || !isTenantRole(read.data.role)) return null;
     // AG-0.7: a suspended or offboarded producer's membership is blocked — in THIS agency only.
     if (read.data.access_blocked_at) return null;
-    return { role: read.data.role, agency_role: read.data.agency_role ?? null };
+    return {
+      role: read.data.role,
+      agency_role: read.data.agency_role ?? null,
+      extra_roles: read.data.extra_roles ?? [],
+      hidden_pages: read.data.hidden_pages ?? [],
+    };
   }
   return null;
 }
@@ -177,9 +235,11 @@ export async function requireTenant(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (allowedRoles && !allowedRoles.includes(context.role)) {
+  if (!allowedRoles) return { context };
+  const acting = actAs(context, allowedRoles);
+  if (!acting) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  return { context };
+  return { context: acting };
 }

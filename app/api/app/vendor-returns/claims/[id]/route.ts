@@ -7,7 +7,7 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: Context) {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
   if (refused) return refused;

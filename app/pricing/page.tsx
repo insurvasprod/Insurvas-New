@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
  * and no client call to the rate-limited /api/public/plans (signup still uses it). A failed plan
  * read shows the page's error state; a failed add-on read just leaves the add-on section out.
  */
-export default async function PublicPricingPage() {
+export default async function PublicPricingPage({ searchParams }: { searchParams: Promise<{ for?: string }> }) {
+  const query = await searchParams;
   const [plansResult, addonsResult] = await Promise.allSettled([fetchPublicPlans(), fetchPublicAddons()]);
   const plans = plansResult.status === "fulfilled" ? plansResult.value : [];
   const addons = addonsResult.status === "fulfilled" ? addonsResult.value : [];
@@ -27,7 +28,7 @@ export default async function PublicPricingPage() {
   return (
     <div className="min-h-screen bg-[var(--color-page-bg)]">
       <SiteHeader current="pricing" />
-      <PricingPage plans={plans} addons={addons} loadError={plansResult.status === "rejected" ? "Pricing is temporarily unavailable. Please try again shortly." : null} />
+      <PricingPage plans={plans} addons={addons} initialAudience={query.for === "agency" ? "agency" : "individual"} loadError={plansResult.status === "rejected" ? "Pricing is temporarily unavailable. Please try again shortly." : null} />
       <SiteFooter />
     </div>
   );

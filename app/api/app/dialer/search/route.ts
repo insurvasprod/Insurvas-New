@@ -12,7 +12,7 @@ const querySchema = z.object({
 
 /** LA-2.8: opening a search result is read-only and never serves or claims a lead. */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", ["owner", "producer"]);
+  const auth = await requireFeatureRole("outbound_dialing", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const parsed = querySchema.safeParse({ q: request.nextUrl.searchParams.get("q") ?? "", limit: request.nextUrl.searchParams.get("limit") ?? "40" });
   if (!parsed.success) return NextResponse.json({ error: "Enter at least two characters to search leads" }, { status: 400 });

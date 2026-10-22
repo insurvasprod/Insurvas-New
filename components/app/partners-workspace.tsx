@@ -275,6 +275,7 @@ export function PartnersWorkspace({
   const [partnerProducts, setPartnerProducts] = useState<
     Record<string, PartnerProduct[]>
   >({});
+  const [productsVersion, setProductsVersion] = useState(0);
   const [limits, setLimits] = useState<CapacityLimits>({
     max_publishers: null,
     max_marketing_partners: null,
@@ -354,20 +355,12 @@ export function PartnersWorkspace({
       if (canManageProductConfig && productResponse) {
         const productBody = await productResponse.json().catch(() => null);
         if (productResponse.ok) setProducts(productBody.products ?? []);
-        const configs = await Promise.all(
-          loadedPartners.map(async (partner: Partner) => {
-            const result = await fetch(
-              `/api/app/partners/${partner.id}/products`,
-              { cache: "no-store" },
-            );
-            const resultBody = await result.json().catch(() => null);
-            return [
-              partner.id,
-              result.ok ? (resultBody.products ?? []) : [],
-            ] as const;
-          }),
-        );
-        setPartnerProducts(Object.fromEntries(configs));
+        // Each partner's approved products are read when that partner is opened (the effect below),
+        // not all at once here: the fan-out was one request per partner — 30-odd on a real book —
+        // and the directory waited for every one before it drew. A reload forgets them, so the
+        // open partner re-reads its own after every write.
+        setPartnerProducts({});
+        setProductsVersion((version) => version + 1);
       }
     } catch (reason) {
       notify.fail(
@@ -394,6 +387,23 @@ export function PartnersWorkspace({
       // The panel already re-read its own rows; stale seat figures correct on the next page load.
     }
   }, []);
+
+  // The open partner's approved products: read on opening, and again after each reload.
+  useEffect(() => {
+    if (!canManageProductConfig || !selectedId || productsVersion === 0) return;
+    let cancelled = false;
+    void fetch(`/api/app/partners/${selectedId}/products`, { cache: "no-store" })
+      .then(async (result) => ({ result, body: await result.json().catch(() => null) }))
+      .then(({ result, body }) => {
+        if (!cancelled) setPartnerProducts((current) => ({ ...current, [selectedId]: result.ok ? (body?.products ?? []) : [] }));
+      })
+      .catch(() => {
+        if (!cancelled) setPartnerProducts((current) => ({ ...current, [selectedId]: [] }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageProductConfig, selectedId, productsVersion]);
 
   // The API is the source of truth; refresh after every write so status and effective terms are
   // visible immediately without requiring a re-login or a full page refresh.
@@ -646,7 +656,7 @@ export function PartnersWorkspace({
                   middle-click and "Save link as" work, and a large directory does not have to be
                   held in memory first. Same pattern as the deal-flow export. */}
               <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
-              <Button type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
+              <Button data-guide="publisher-add" type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus aria-hidden="true" />
                 Add partner
               </Button>
@@ -735,7 +745,7 @@ export function PartnersWorkspace({
           footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="partners" onPage={setListPage} suffix={`${partners.length} partner records in all`} />}
         >
             {partners.length === 0 && !listFiltered ? (
-              <EmptyState title="No partners yet" hint="Add the publishers and affiliates who send you leads." action={readOnly ? undefined : <Button type="button" onClick={openCreate}><Plus aria-hidden="true" />Add partner</Button>} />
+              <EmptyState title="No partners yet" hint="Add the publishers, marketing companies and affiliates who send you leads." action={readOnly ? undefined : <Button type="button" onClick={openCreate}><Plus aria-hidden="true" />Add partner</Button>} />
             ) : filteredPartners.length === 0 ? (
               <NoMatches noun="partners" onClear={clearListFilters} />
             ) : (
@@ -747,7 +757,10 @@ export function PartnersWorkspace({
                     {!selectedPartner && <th>Type</th>}
                     {!selectedPartner && <th>Approved for</th>}
                     {!selectedPartner && <th>Status</th>}
-                    {!selectedPartner && <th className="text-right" title="Transfers this month">Transfers (month)</th>}
+                    {/* A live transfer is the publisher's word; marketing and affiliate partners send leads. */}
+                    {!selectedPartner && (typeFilter === "publisher"
+                      ? <th className="text-right" title="Transfers this month">Transfers (month)</th>
+                      : <th className="text-right" title="Leads received this month">Leads (month)</th>)}
                     {!selectedPartner && <th className="text-right" title="Completed this month">Completed</th>}
                     {!selectedPartner && <th className="text-right" title="Dropped this month">Dropped</th>}
                     {!selectedPartner && <th>Last submission</th>}

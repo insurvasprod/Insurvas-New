@@ -11,6 +11,7 @@ import { DataToolbar, RefreshButton, ToolbarCheckbox, ToolbarSearch, toolbarCont
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
+import { Pager, paginate } from "@/components/ui/pager";
 import { dollars } from "@/lib/agency/constants";
 import { BasisChip, Level, Money } from "./money";
 import { ManagerDialog } from "./producer-dialogs";
@@ -33,12 +34,14 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
   const [carrier, setCarrier] = useState("");
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [moving, setMoving] = useState<Row | null>(null);
+  const [page, setPage] = useState(1);
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const carriers = useMemo(() => [...new Map(rows.map((r) => [r.carrierId, r.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [rows]);
   const filtered = rows.filter((r) =>
     (!carrier || r.carrierId === carrier) &&
     (!issuesOnly || r.producerLevelBps === null || (r.spreadBps !== null && r.spreadBps < 0)) &&
     (!search.trim() || `${r.producerName} ${r.carrierName}`.toLowerCase().includes(search.trim().toLowerCase())));
+  const { rows: pageRows, current } = paginate(filtered, page, 15);
   const total = rows.reduce((s, r) => s + (r.overrideCents ?? 0), 0);
   const missing = rows.filter((r) => r.producerLevelBps === null).length;
   const negative = rows.filter((r) => r.spreadBps !== null && r.spreadBps < 0).length;
@@ -56,14 +59,14 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
       )}
       <TableCard toolbar={
         <DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />}>
-          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search producer or carrier" label="Search" />
-          <select aria-label="Carrier" className={toolbarControl} value={carrier} onChange={(e) => setCarrier(e.target.value)}>
+          <ToolbarSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search producer or carrier" label="Search" />
+          <select aria-label="Carrier" className={toolbarControl} value={carrier} onChange={(e) => { setCarrier(e.target.value); setPage(1); }}>
             <option value="">All carriers</option>
             {carriers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </select>
-          <ToolbarCheckbox checked={issuesOnly} onChange={setIssuesOnly} label="Issues only" />
+          <ToolbarCheckbox checked={issuesOnly} onChange={(v) => { setIssuesOnly(v); setPage(1); }} label="Issues only" />
         </DataToolbar>
-      }>
+      } footer={filtered.length > 15 ? <Pager page={current} total={filtered.length} noun="rows" onPage={setPage} pageSize={15} /> : undefined}>
         {error ? <ErrorState detail={error} /> : loading ? <SectionLoading rows={5} columns={8} label="Loading overrides" /> : rows.length === 0 ? (
           <EmptyState title="Nothing to show yet" hint="Add your carrier contracts on the rate card and your producers' levels on each producer's Carriers tab." />
         ) : filtered.length === 0 ? <NoMatches noun="rows" onClear={() => { setSearch(""); setCarrier(""); setIssuesOnly(false); }} /> : (
@@ -81,7 +84,7 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((r) => {
+              {pageRows.map((r) => {
                 const negativeSpread = r.spreadBps !== null && r.spreadBps < 0;
                 return (
                   <TableRow key={`${r.producerId}-${r.carrierId}`} className={negativeSpread ? "bg-[var(--error-surface)]" : r.producerLevelBps === null ? "bg-[var(--warning-surface)]" : undefined}>
@@ -95,7 +98,7 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
                     <TableCell className="text-right">
                       {negativeSpread ? <StatusChip tone="danger">Pays out more than received</StatusChip>
                         : r.producerLevelBps === null && canEdit ? <Button asChild size="sm" variant="outline"><Link href={`/app/producers/${r.producerId}`}>Set level</Link></Button>
-                        : canEdit ? <Button size="sm" variant="ghost" onClick={() => setMoving(r)}>Change manager</Button> : null}
+                        : canEdit ? <Button size="sm" variant="outline" onClick={() => setMoving(r)}>Change manager</Button> : null}
                     </TableCell>
                   </TableRow>
                 );

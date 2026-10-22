@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { mapLimit } from "@/lib/retention/batch";
 
 import { isKeptField } from "./layout";
 import { columnTrace, unmatchedFields, type ColumnTrace, type MapEntryView, type RawColumnView } from "./trace";
@@ -168,8 +169,10 @@ export async function entrySources(tenantId: string, ids: string[]): Promise<Map
   const out = new Map<string, { fileId: string; rowNumber: number | null; fileName: string | null; type: string; amountCents: number }>();
   // commission_entry reaches its file through its raw row (no direct key to embed), so the names are read apart.
   const rows: Loose[] = [];
-  for (let at = 0; at < unique.length; at += 200) {
-    const { data, error } = await db().from("commission_entry").select("id, file_id, row_number, entry_type, amount_cents").eq("tenant_id", tenantId).in("id", unique.slice(at, at + 200));
+  // Chunks a few at a time, combined in chunk order.
+  const starts = Array.from({ length: Math.ceil(unique.length / 200) }, (_, n) => n * 200);
+  const parts = await mapLimit(starts, 6, (at) => db().from("commission_entry").select("id, file_id, row_number, entry_type, amount_cents").eq("tenant_id", tenantId).in("id", unique.slice(at, at + 200)));
+  for (const { data, error } of parts as Loose[]) {
     if (error) throw new Error(`Could not read the ledger lines: ${error.message}`);
     rows.push(...(data ?? []));
   }

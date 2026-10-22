@@ -351,14 +351,23 @@ export async function bookGapScan(viewer: Viewer, range: EvidenceRange, opts: { 
   // Summarised in the database (20261015180000): per-number rows for a whole book run past the
   // API's 1,000-row cap, and a truncated scan is worse than none.
   const claim = JSON.parse(CLAIM_HOURS);
-  const [summary, enabled] = await Promise.all([
-    db().rpc("compliance_gap_summary", { p_tenant_id: viewer.tenantId, p_from: range.from ?? null, p_to: range.to ?? null, p_claim_hours: claim }),
+  // The numbers behind each line are the whole book's: the owner's to see, not a producer's.
+  const wantNumbers = opts.numbers !== false && viewer.role === "owner";
+  // An owner's scan is one call (compliance_gap_book, 20261020220000): the summary and every line's numbers
+  // from a single compliance_gaps run, instead of the summary plus one full re-run per line with numbers.
+  const [book, enabled] = await Promise.all([
+    wantNumbers ? gapBook(viewer.tenantId, range, claim) : Promise.resolve(null),
     enabledChecks(viewer.tenantId),
   ]);
-  if (summary.error) {
-    rpcFailure(summary.error);
+  let rows: Loose[];
+  if (book) rows = book.summary;
+  else {
+    const summary = await db().rpc("compliance_gap_summary", { p_tenant_id: viewer.tenantId, p_from: range.from ?? null, p_to: range.to ?? null, p_claim_hours: claim });
+    if (summary.error) {
+      rpcFailure(summary.error);
+    }
+    rows = (summary.data ?? []) as Loose[];
   }
-  const rows = (summary.data ?? []) as Loose[];
   const lines: BookGapLine[] = GAP_CATEGORIES.map((c) => {
     if (!enabled.has(c.key)) return { category: c.key, label: c.label, severity: c.severity, numbers: 0, count: 0, undeterminedNumbers: 0, undeterminedCount: 0, undeterminedReason: "Switched off in compliance settings." };
     const gap = rows.find((r) => r.category === c.key && r.status === "gap");
@@ -370,13 +379,32 @@ export async function bookGapScan(viewer: Viewer, range: EvidenceRange, opts: { 
     };
   });
   const numbersByCategory: BookScan["numbersByCategory"] = {};
-  // The numbers behind each line are the whole book's: the owner's to see, not a producer's.
-  if (opts.numbers !== false && viewer.role === "owner") {
+  const toNumbers = (data: Loose[] | null | undefined) => (data ?? []).map((r) => ({ phone: r.phone_digits as string, count: Number(r.calls), firstAt: r.first_at ?? null, lastAt: r.last_at ?? null }));
+  if (book) {
+    for (const l of lines.filter((x) => x.numbers > 0)) numbersByCategory[l.category] = toNumbers(book.numbers[l.category]);
+  } else if (wantNumbers) {
     await Promise.all(lines.filter((l) => l.numbers > 0).map(async (l) => {
       const { data } = await db().rpc("compliance_gap_numbers", { p_tenant_id: viewer.tenantId, p_category: l.category, p_from: range.from ?? null, p_to: range.to ?? null, p_claim_hours: claim, p_limit: 300 });
-      numbersByCategory[l.category] = ((data ?? []) as Loose[]).map((r) => ({ phone: r.phone_digits as string, count: Number(r.calls), firstAt: r.first_at ?? null, lastAt: r.last_at ?? null }));
+      numbersByCategory[l.category] = toNumbers(data);
     }));
   }
   if (opts.log !== false) await log(viewer, { scopeType: range.from || range.to ? "date_range" : "book_scan", scopeValue: null, range, output: "screen", eventCount: null, gapCount: lines.filter((l) => l.numbers > 0).length });
   return { generatedAt: new Date().toISOString(), range, lines, numbersByCategory };
+}
+
+let gapBookMissingAt = -Infinity;
+
+/** compliance_gap_book's summary rows and per-category numbers; null while it is not applied (the caller then reads them apart). */
+async function gapBook(tenantId: string, range: EvidenceRange, claim: unknown): Promise<{ summary: Loose[]; numbers: Record<string, Loose[]> } | null> {
+  if (Date.now() - gapBookMissingAt < 5 * 60_000) return null;
+  const { data, error } = await db().rpc("compliance_gap_book", { p_tenant_id: tenantId, p_from: range.from ?? null, p_to: range.to ?? null, p_claim_hours: claim, p_limit: 300 });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883" || /could not find the function/i.test(error.message)) {
+      gapBookMissingAt = Date.now();
+      return null;
+    }
+    rpcFailure(error);
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return { summary: Array.isArray(data.summary) ? data.summary : [], numbers: data.numbers && typeof data.numbers === "object" ? data.numbers : {} };
 }

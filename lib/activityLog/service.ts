@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { csvCell as sharedCsvCell } from "@/lib/csv/cell";
 import { keepVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
+import { mapLimit } from "@/lib/retention/batch";
 import {
   blockedForPage,
   mayReviewZeroClick,
@@ -64,66 +65,23 @@ export async function getActivityReport(tenantId: string, actorId: string, actor
   if (scope === null) return activityReport(tenantId, actorId, actorRole, filters, null);
   const requested = optionalUuid(filters.agentId, "agent");
   const agents = requested ? (scope.includes(requested) ? [requested] : []) : [...new Set(scope)];
-  // A setter's report is pinned to itself in SQL as well; the scope says the same.
+  // One agent (or a setter, pinned to itself in SQL as well): the report's own agent filter. Several (a manager,
+  // an assistant or setter to more than one producer): the report's p_agent_user_ids list, so the page, total,
+  // scorecard and recycle counts are all taken in SQL over exactly those agents.
   if (agents.length <= 1) return activityReport(tenantId, actorId, actorRole, { ...filters, agentId: agents[0] ?? null }, agents);
-  return scopedMultiAgentReport(tenantId, actorId, actorRole, filters, agents);
+  return activityReport(tenantId, actorId, actorRole, { ...filters, agentId: null }, agents);
 }
 
 /**
- * Several agents (a manager, or an assistant to more than one producer): the report takes one agent, so
- * each agent's rows are read whole (export mode), merged into the report's order and paged here; totals,
- * scorecard and recycle counts are summed over those agents only.
+ * Several agents in scope are asked for by list (p_agent_user_ids, migration 20261019410000). Before that
+ * migration the report does not take the list and nothing else is safe to read (it would cover every agent).
  */
-async function scopedMultiAgentReport(tenantId: string, actorId: string, actorRole: string, filters: ActivityFilters, agents: readonly string[]): Promise<ActivityReport> {
-  const page = Number.isInteger(filters.page) ? Math.max(1, filters.page as number) : 1;
-  const pageSize = Number.isInteger(filters.pageSize) ? Math.min(Math.max(1, filters.pageSize as number), 500) : 50;
-  const parts = await Promise.all(agents.map((agentId) => activityReport(tenantId, actorId, actorRole, { ...filters, agentId, exportAll: true, page: 1, includeBlocked: false }, [agentId])));
-  const all = parts.flatMap((part) => part.rows).sort((a, b) => b.served_at.localeCompare(a.served_at) || b.id.localeCompare(a.id));
-  const recycle = new Map<string, RecyclePerformanceRow>();
-  for (const row of parts.flatMap((part) => part.recycle_performance)) {
-    const seen = recycle.get(row.source_type) ?? { source_type: row.source_type, served: 0, clicked: 0, contacts: 0, contact_rate_percent: null };
-    seen.served += Number(row.served) || 0;
-    seen.clicked += Number(row.clicked) || 0;
-    seen.contacts += Number(row.contacts) || 0;
-    seen.contact_rate_percent = seen.clicked > 0 ? Math.round((1000 * seen.contacts) / seen.clicked) / 10 : null;
-    recycle.set(row.source_type, seen);
-  }
-  const rows = filters.exportAll ? all : all.slice((page - 1) * pageSize, page * pageSize);
+export const SCOPED_ACTIVITY_PENDING = "The team activity log needs database update 20261019410000, which has not been applied yet.";
 
-  let blocked: BlockedDialRow[] | null = null;
-  let blockedTotal: number | null = null;
-  const from = boundary(filters.from, "from date");
-  const to = boundary(filters.to, "to date");
-  const flag: ActivityFlagFilter | null = filters.flag ?? (filters.integrityOnly ? "any" : null);
-  const disposition = filters.disposition?.trim() || null;
-  if (filters.includeBlocked !== false && !flag && !disposition && from && to) {
-    const search = filters.search?.trim().toLowerCase().slice(0, 100) || "";
-    const refusals = await readBlockedDials(tenantId, actorId, actorRole, { agentId: null, campaignId: optionalUuid(filters.campaignId, "campaign"), search, from, to }, agents);
-    if (refusals) {
-      blockedTotal = refusals.length;
-      if (!filters.exportAll) {
-        const previousLast = page > 1 ? all[(page - 1) * pageSize - 1]?.served_at ?? null : null;
-        const lastPage = page * pageSize >= all.length;
-        blocked = all.length === 0
-          ? (page === 1 ? refusals : [])
-          : rows.length === 0 ? [] : blockedForPage(refusals, { windowFrom: from, windowTo: to, upper: page === 1 ? to : previousLast ?? rows[0].served_at, lower: rows[rows.length - 1].served_at, lastPage });
-      }
-    }
-  }
-  return {
-    rows,
-    total: all.length,
-    page,
-    page_size: pageSize,
-    export: Boolean(filters.exportAll),
-    scorecard: parts.flatMap((part) => part.scorecard),
-    recycle_performance: [...recycle.values()].sort((a, b) => a.source_type.localeCompare(b.source_type)),
-    blocked,
-    blocked_total: blockedTotal,
-  };
-}
-
-/** The report as it was, for one agent filter. `agents` (a narrowed scope's, at most one here) also trims what SQL returns. */
+/**
+ * The report. `agents`: null — no scope, today's call exactly; one — pinned through the agent filter; several —
+ * sent as p_agent_user_ids. Either way the scope also trims what this reads beside the report.
+ */
 async function activityReport(tenantId: string, actorId: string, actorRole: string, filters: ActivityFilters, agents: readonly string[] | null): Promise<ActivityReport> {
   if (agents !== null && agents.length === 0) {
     const page = Number.isInteger(filters.page) ? Math.max(1, filters.page as number) : 1;
@@ -140,7 +98,8 @@ async function activityReport(tenantId: string, actorId: string, actorRole: stri
   const flag: ActivityFlagFilter | null = filters.flag ?? (filters.integrityOnly ? "any" : null);
   if (flag === "zero_click_disposition" && !mayReviewZeroClick(actorRole)) throw new ActivityForbiddenError("Only owners and producers can review outcomes logged without a dial.");
   const disposition = filters.disposition?.trim() || null;
-  const args = { p_tenant_id: tenantId, p_actor_user_id: actorId, p_actor_role: actorRole, p_agent_user_id: agentId, p_campaign_id: campaignId, p_disposition: disposition, p_from_at: from, p_to_at: to };
+  const agentList = agents !== null && agents.length > 1 ? agents : null;
+  const args = { p_tenant_id: tenantId, p_actor_user_id: actorId, p_actor_role: actorRole, p_agent_user_id: agentId, p_campaign_id: campaignId, p_disposition: disposition, p_from_at: from, p_to_at: to, ...(agentList ? { p_agent_user_ids: agentList } : {}) };
   const search = filters.search?.trim().toLowerCase().slice(0, 100) || "";
 
   // The flag is filtered in SQL when the report takes p_flag (20260925705100). Search still narrows
@@ -151,9 +110,26 @@ async function activityReport(tenantId: string, actorId: string, actorRole: stri
     p_export: Boolean(filters.exportAll) || Boolean(search) || (Boolean(flag) && !withFlag),
     ...(withFlag && flag ? { p_flag: flag } : {}),
   });
+  // Reads that need nothing the report returns start beside it (they used to wait for it, one after
+  // another): which outcomes count as work, the refused dials when this view shows them, and — on a
+  // later unfiltered page — where the previous page ended. Settled, so a failure surfaces exactly where
+  // it did when they ran after the report, never ahead of the report's own error.
+  const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+  const take = async <T,>(settled: Promise<{ ok: true; value: T } | { ok: false; error: unknown }>): Promise<T> => {
+    const outcome = await settled;
+    if (!outcome.ok) throw outcome.error;
+    return outcome.value;
+  };
+  const showsBlocked = filters.includeBlocked !== false && !flag && !disposition && Boolean(from && to);
+  const workingRead = settle(readWorking(tenantId));
+  const blockedRead = showsBlocked ? settle(readBlockedDials(tenantId, actorId, actorRole, { agentId, campaignId, search, from: from as string, to: to as string }, agents)) : null;
+  const offsetRead = showsBlocked && !filters.exportAll && !search && page > 1
+    ? settle(servedAtOffset(tenantId, actorId, actorRole, { agentId, agents: agentList, campaignId, from: from as string, to: to as string }, (page - 1) * pageSize - 1))
+    : null;
   const [first, recycle] = await Promise.all([report(true), rpc().rpc("tenant_recycle_performance", args)]);
   let result = first;
   let flaggedInSql = Boolean(flag);
+  if (agentList && ((result.error && isMissingSignature(result.error)) || (recycle.error && isMissingSignature(recycle.error)))) throw new Error(SCOPED_ACTIVITY_PENDING);
   if (result.error && flag && isMissingSignature(result.error)) {
     result = await report(false);
     flaggedInSql = false;
@@ -183,12 +159,12 @@ async function activityReport(tenantId: string, actorId: string, actorRole: stri
   // flagged outcome), not an outcome filter (a refusal has none), not the export.
   let blocked: BlockedDialRow[] | null = null;
   let blockedTotal: number | null = null;
-  if (filters.includeBlocked !== false && !flag && !disposition && from && to) {
-    const refusals = await readBlockedDials(tenantId, actorId, actorRole, { agentId, campaignId, search, from, to });
+  if (blockedRead && from && to) {
+    const refusals = await take(blockedRead);
     if (refusals) {
       blockedTotal = refusals.length;
       if (!filters.exportAll) {
-        if (!narrowed && page > 1 && rows.length > 0) previousLast = await servedAtOffset(tenantId, actorId, actorRole, { agentId, campaignId, from, to }, (page - 1) * pageSize - 1);
+        if (!narrowed && page > 1 && rows.length > 0 && offsetRead) previousLast = await take(offsetRead);
         const lastPage = page * pageSize >= total;
         blocked = total === 0
           ? (page === 1 ? refusals : [])
@@ -200,7 +176,7 @@ async function activityReport(tenantId: string, actorId: string, actorRole: stri
   // With an agent pinned the report's scorecard is that agent's already; kept to the scope in case a line
   // for anyone else is ever returned.
   const scorecard = agents === null ? data.scorecard as ScorecardRow[] : keepVisible(agents, data.scorecard as ScorecardRow[], (row) => row.agent_user_id);
-  return { rows, total, page, page_size: pageSize, export: Boolean(filters.exportAll), scorecard: await withWorked(tenantId, scorecard), recycle_performance: recycle.data as RecyclePerformanceRow[], blocked, blocked_total: blockedTotal };
+  return { rows, total, page, page_size: pageSize, export: Boolean(filters.exportAll), scorecard: await withWorked(tenantId, scorecard, await take(workingRead)), recycle_performance: recycle.data as RecyclePerformanceRow[], blocked, blocked_total: blockedTotal };
 }
 
 /**
@@ -217,7 +193,7 @@ export function countWorked(breakdown: Record<string, number> | null | undefined
   return worked;
 }
 
-async function withWorked(tenantId: string, scorecard: ScorecardRow[]): Promise<ScorecardRow[]> {
+async function readWorking(tenantId: string): Promise<Set<string>> {
   const { data, error } = await getSupabaseServiceClient().from("dispositions").select("disposition_key, label, counts_as_work_completed").eq("tenant_id", tenantId);
   if (error) throw new Error(`Could not load which outcomes count as work: ${error.message}`);
   const working = new Set<string>();
@@ -226,7 +202,13 @@ async function withWorked(tenantId: string, scorecard: ScorecardRow[]): Promise<
     working.add(row.disposition_key.toLowerCase());
     working.add(row.label.trim().toLowerCase());
   }
-  return scorecard.map((row) => ({ ...row, worked: countWorked(row.disposition_breakdown, working) }));
+  return working;
+}
+
+/** `working`: the set readWorking already read for this request; read here when not given. */
+async function withWorked(tenantId: string, scorecard: ScorecardRow[], working?: Set<string>): Promise<ScorecardRow[]> {
+  const counted = working ?? await readWorking(tenantId);
+  return scorecard.map((row) => ({ ...row, worked: countWorked(row.disposition_breakdown, counted) }));
 }
 
 function text(value: unknown) {
@@ -252,14 +234,13 @@ async function withLeadNames(tenantId: string, rows: ActivityRow[]): Promise<Act
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = getSupabaseServiceClient() as any;
   const names = new Map<string, string>();
-  for (let i = 0; i < missing.length; i += 200) {
-    const { data, error } = await db
-      .from("agent_leads")
-      .select("id, values")
-      .eq("tenant_id", tenantId)
-      .in("id", missing.slice(i, i + 200));
+  const chunks: string[][] = [];
+  for (let i = 0; i < missing.length; i += 200) chunks.push(missing.slice(i, i + 200));
+  // Six chunks at a time rather than one after another; any failed chunk still leaves every name as it was.
+  const pages = await mapLimit(chunks, 6, (ids) => db.from("agent_leads").select("id, values").eq("tenant_id", tenantId).in("id", ids)) as { data: { id: string; values: Record<string, unknown> | null }[] | null; error: unknown }[];
+  for (const { data, error } of pages) {
     if (error) return rows;
-    for (const lead of (data ?? []) as { id: string; values: Record<string, unknown> | null }[]) {
+    for (const lead of data ?? []) {
       const name = leadName(lead.values ?? {});
       if (name) names.set(lead.id, name);
     }
@@ -308,7 +289,7 @@ async function withAttempts(tenantId: string, rows: ActivityRow[]): Promise<Acti
  * agent, campaign, window, a setter's own rows). Only asked for the unfiltered activity view,
  * where the report's rows are exactly these.
  */
-async function servedAtOffset(tenantId: string, actorId: string, actorRole: string, f: { agentId: string | null; campaignId: string | null; from: string; to: string }, offset: number): Promise<string | null> {
+async function servedAtOffset(tenantId: string, actorId: string, actorRole: string, f: { agentId: string | null; agents: readonly string[] | null; campaignId: string | null; from: string; to: string }, offset: number): Promise<string | null> {
   if (offset < 0) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (getSupabaseServiceClient() as any)
@@ -319,6 +300,7 @@ async function servedAtOffset(tenantId: string, actorId: string, actorRole: stri
     .lt("served_at", f.to);
   const agent = actorRole === "setter" ? actorId : f.agentId;
   if (agent) query = query.eq("agent_user_id", agent);
+  if (f.agents) query = query.in("agent_user_id", f.agents);
   if (f.campaignId) query = query.eq("campaign_id", f.campaignId);
   const { data, error } = await query.order("served_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset);
   if (error) return null;
@@ -360,8 +342,10 @@ async function readBlockedDials(
 
   const leadIds = [...new Set(events.map((row) => String(row.target_id)))];
   const leads = new Map<string, { values: Record<string, unknown>; campaign_id: string | null }>();
-  for (let i = 0; i < leadIds.length; i += 200) {
-    const { data, error } = await db.from("agent_leads").select("id, values, campaign_id").eq("tenant_id", tenantId).in("id", leadIds.slice(i, i + 200));
+  // Chunks read a few at a time, then taken in chunk order; any failed chunk still means null.
+  const starts = Array.from({ length: Math.ceil(leadIds.length / 200) }, (_, n) => n * 200);
+  const parts = await mapLimit(starts, 6, (i) => db.from("agent_leads").select("id, values, campaign_id").eq("tenant_id", tenantId).in("id", leadIds.slice(i, i + 200)));
+  for (const { data, error } of parts as { data: unknown; error: unknown }[]) {
     if (error) return null;
     for (const lead of (data ?? []) as { id: string; values: Record<string, unknown> | null; campaign_id: string | null }[]) leads.set(lead.id, { values: lead.values ?? {}, campaign_id: lead.campaign_id });
   }

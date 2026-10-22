@@ -29,10 +29,11 @@ export type OverrideRow = {
 };
 
 export async function readOverrides(context: { tenantId: string; userId: string }, period: { from: string; to: string }): Promise<OverrideRow[]> {
-  const scope = await scopeFor(context);
   const today = new Date().toISOString().slice(0, 10);
   const t = context.tenantId;
-  const [producers, hierarchy, levels, agencyLevels, posted] = await Promise.all([
+  // the scope is read beside the rest (it filters in code below, it narrows no query)
+  const [scope, producers, hierarchy, levels, agencyLevels, posted] = await Promise.all([
+    scopeFor(context),
     db().from("producer").select("id, user_id, display_name, status").eq("tenant_id", t).neq("status", "invited").neq("status", "offboarded"),
     db().from("producer_hierarchy").select("producer_id, parent_producer_id, effective_from, effective_to").eq("tenant_id", t),
     db().from("producer_contract_level").select("producer_id, carrier_id, level_bps, effective_from, effective_to").eq("tenant_id", t),

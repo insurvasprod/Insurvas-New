@@ -9,7 +9,8 @@ import { agencyToday } from "./agencyDay";
 import { settingsFromRow, type RetentionSettings } from "./constants";
 import { canMove, caseOrder, compare, daysRemaining, estimateOwed, OPEN_CASE_STATUSES, urgencyOf, type CaseStatus, type Comparison, type Urgency } from "./reinstatement";
 import { ownsCard } from "./assignment";
-import { ensureOwners, ownerOf, type Owner } from "./assignmentStore";
+import { ensureOwners, ownerOf, readOwnerInputs, type Owner } from "./assignmentStore";
+import { mapLimit, READ_CONCURRENCY } from "./batch";
 
 /**
  * LA-5.6 (Notion sprint) · reinstatement cases, server side. sync_reinstatement_cases (the database)
@@ -50,14 +51,21 @@ async function everyRow(build: () => Loose, max = 50_000): Promise<Loose[]> {
   return rows;
 }
 const keyOf = (r: { carrier_id: string; policy_number: string }) => `${r.carrier_id}|${r.policy_number}`;
+// A few chunks at a time (mapLimit), results in chunk order; the first failed chunk (in order) throws.
 const inChunks = async (ids: string[], read: (part: string[]) => Loose) => {
+  const parts = Array.from({ length: Math.ceil(ids.length / CHUNK) }, (_, i) => ids.slice(i * CHUNK, i * CHUNK + CHUNK));
+  const results = await mapLimit<string[], Loose>(parts, READ_CONCURRENCY, read);
   const out: Loose[] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const r = await read(ids.slice(i, i + CHUNK));
+  for (const r of results) {
     if (r.error) throw r.error;
     out.push(...(r.data ?? []));
   }
   return out;
+};
+const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+const unwrap = <T,>(read: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+  if (!read.ok) throw read.error;
+  return read.value;
 };
 
 export type CaseRow = {
@@ -118,6 +126,11 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
     console.error("[reinstatement] the sync could not run", error);
   }
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+  // Read beside the cases, after the sync (which writes only the cases): the agency's day, the owners'
+  // inputs and the carriers' names need none of them. Settled, so none can fail unhandled meanwhile.
+  const dayRead = settle(agencyToday(viewer.tenantId));
+  const ownerInputs = readOwnerInputs(viewer.tenantId, "reinstatement");
+  const carriersRead = settle(Promise.resolve(db().from("carriers").select("id, name")));
   let cases: Loose[];
   let settingsRow: Loose;
   try {
@@ -137,30 +150,34 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
     .filter((p: Loose) => cases.some((c) => keyOf(c) === keyOf(p)));
   const policyOf = new Map<string, Loose>(policies.map((p: Loose) => [keyOf(p), p]));
   // The agency's day — the same one the banner and the database's expiry count from.
-  const today = await agencyToday(viewer.tenantId);
+  const today = unwrap(await dayRead);
   // LA-5.8: every open case has an owner, resolved across the agency before anyone filters. The
   // advance at risk is read for all of them (the "by exposure" strategy places by it).
   const allOpen = cases.filter((c) => OPEN_CASE_STATUSES.includes(c.status));
+  // Whom the page may show, before owners: a retention rep's cases are narrowed to their own below, once
+  // the owners are known. The names are read for this wider set beside the advance and the owners (a
+  // lookup, so the extra rows change nothing on screen).
+  const inScope = (viewer.role === "producer"
+    ? cases.filter((c) => policyOf.get(keyOf(c))?.agent_user_id === viewer.userId)
+    : viewer.role === "retention"
+      ? cases.filter((c) => OPEN_CASE_STATUSES.includes(c.status))
+      : cases)
+    .filter((c) => rowVisible(viewer.scope ?? null, policyOf.get(keyOf(c))?.agent_user_id));
+  const contactIds = [...new Set(inScope.map((c) => c.contact_id ?? policyOf.get(keyOf(c))?.contact_id).filter(Boolean))] as string[];
+  const userIds = [...new Set(inScope.flatMap((c) => [c.worked_by, policyOf.get(keyOf(c))?.agent_user_id]).filter(Boolean))] as string[];
+  const namesRead = settle(Promise.all([
+    inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, primary_phone, dob").eq("tenant_id", viewer.tenantId).in("id", part)),
+    userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
+  ]));
   const advanceMap = await advanceAtRisk(viewer.tenantId, allOpen.map((c) => policyOf.get(keyOf(c))).filter(Boolean));
   const owners = await ensureOwners(viewer.tenantId, "reinstatement", allOpen.map((c) => ({
     key: keyOf(c), carrierId: c.carrier_id, writingAgentId: policyOf.get(keyOf(c))?.agent_user_id ?? null, exposureCents: advanceMap.get(keyOf(c)) ?? null, daysToDeadline: daysRemaining(c.deadline, today),
-  })), settings, { keep: new Set(allOpen.map(keyOf)) }).catch((error) => {
+  })), settings, { keep: new Set(allOpen.map(keyOf)), inputs: ownerInputs }).catch((error) => {
     console.error("[reinstatement] owners could not be resolved", error);
     return null;
   });
-  const visible = (viewer.role === "producer"
-    ? cases.filter((c) => policyOf.get(keyOf(c))?.agent_user_id === viewer.userId)
-    : viewer.role === "retention"
-      ? cases.filter((c) => OPEN_CASE_STATUSES.includes(c.status) && owners?.get(keyOf(c))?.userId === viewer.userId)
-      : cases)
-    .filter((c) => rowVisible(viewer.scope ?? null, policyOf.get(keyOf(c))?.agent_user_id));
-  const contactIds = [...new Set(visible.map((c) => c.contact_id ?? policyOf.get(keyOf(c))?.contact_id).filter(Boolean))] as string[];
-  const userIds = [...new Set(visible.flatMap((c) => [c.worked_by, policyOf.get(keyOf(c))?.agent_user_id]).filter(Boolean))] as string[];
-  const [contacts, users, carriers] = await Promise.all([
-    inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, primary_phone, dob").eq("tenant_id", viewer.tenantId).in("id", part)),
-    userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
-    db().from("carriers").select("id, name"),
-  ]);
+  const visible = viewer.role === "retention" ? inScope.filter((c) => owners?.get(keyOf(c))?.userId === viewer.userId) : inScope;
+  const [[contacts, users], carriers] = [unwrap(await namesRead), unwrap(await carriersRead)];
   const contactOf = new Map<string, Loose>(contacts.map((c: Loose) => [c.id, c]));
   const userName = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
@@ -273,14 +290,15 @@ export async function updateCase(viewer: Viewer, id: string, patch: CasePatch) {
 
 /** Open cases whose window closes inside the pin threshold (for the pinned line on the save queue). */
 export async function closingSoon(viewer: Viewer): Promise<number | null> {
-  const [cases, settings] = await Promise.all([
+  const [cases, settings, day] = await Promise.all([
     db().from("reinstatement_case").select("deadline, carrier_id, policy_number").eq("tenant_id", viewer.tenantId).in("status", [...OPEN_CASE_STATUSES]).not("deadline", "is", null).limit(1000),
     db().from("retention_settings").select("*").eq("tenant_id", viewer.tenantId).maybeSingle(),
+    settle(agencyToday(viewer.tenantId)),
   ]);
   // Before the migration, or on any read failure, the pinned line is simply not shown.
   if (cases.error) return null;
   const pin = settingsFromRow(settings.data).reinstatementPinDays;
-  const today = await agencyToday(viewer.tenantId);
+  const today = unwrap(day);
   let rows = (cases.data ?? []) as Loose[];
   if (viewer.role === "producer" && rows.length) {
     const mine = await inChunks([...new Set(rows.map((r) => r.policy_number))], (part) => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("agent_user_id", viewer.userId).in("policy_number", part));

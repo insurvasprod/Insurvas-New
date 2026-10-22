@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { listRuns, PayoutError } from "@/lib/accounting/payoutStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -16,7 +16,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Payout runs" description="What each partner is owed, from the ledger." />;
   }
-  if (!["owner", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Payout runs" detail="Only owners and bookkeepers can see what partners are paid." />;
   }
   const { open } = await searchParams;

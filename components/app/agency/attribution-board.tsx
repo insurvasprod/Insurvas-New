@@ -40,6 +40,12 @@ export function AttributionBoard({ canResolve }: { canResolve: boolean }) {
   const rows = all.filter((i) => (tab === "resolved" ? i.status === "resolved" : i.status === "open" && i.kind === tab));
   const count = (k: "disagreement" | "unattributed") => all.filter((i) => i.status === "open" && i.kind === k).length;
 
+  function pick(i: (typeof all)[number]) {
+    setOpen(i);
+    setChoice(i.writingNumberUserId ?? i.applicationUserId ?? "");
+    setReason("");
+  }
+
   async function resolve() {
     if (!open) return;
     setBusy(true);
@@ -62,24 +68,25 @@ export function AttributionBoard({ canResolve }: { canResolve: boolean }) {
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row lg:items-stretch">
         <TableCard className="min-w-0 flex-1" toolbar={<DataToolbar actions={<RefreshButton onClick={items.reload} refreshing={items.refreshing} />} />}>
           {items.error ? <ErrorState detail={items.error} /> : items.loading ? <SectionLoading rows={4} columns={5} label="Loading the queue" /> : rows.length === 0 ? (
-            <EmptyState title={tab === "resolved" ? "Nothing resolved yet" : "Nothing waiting"} hint={tab === "resolved" ? "Rows you decide appear here with who decided and why." : "Every statement row resolved to one producer by its writing number or its application."} />
+            <EmptyState title={tab === "resolved" ? "Nothing resolved yet" : "Nothing waiting"} hint={tab === "resolved" ? "Rows you decide appear here with who decided and why." : tab === "disagreement" ? "No row has a writing number and an application naming different producers." : "Every statement row matched one producer by its writing number or its application."} />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>File · row</TableHead><TableHead>Carrier</TableHead><TableHead>Writing no. says</TableHead><TableHead>Application says</TableHead>
-                  <TableHead className="text-right">Amount <BasisChip basis="reported" /></TableHead>{tab === "resolved" && <TableHead>Given to</TableHead>}
+                  <TableHead className="text-right">Amount <BasisChip basis="reported" /></TableHead>{tab === "resolved" && <TableHead>Given to</TableHead>}{tab !== "resolved" && canResolve && <TableHead className="text-right"><span className="sr-only">Open</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((i) => (
-                  <TableRow key={i.id} className={open?.id === i.id ? "bg-[var(--primary-soft)]" : canResolve && i.status === "open" ? "cursor-pointer" : undefined} onClick={() => { if (canResolve && i.status === "open") { setOpen(i); setChoice(i.writingNumberUserId ?? i.applicationUserId ?? ""); setReason(""); } }}>
-                    <TableCell className="font-medium">{i.fileName ?? "File"} · {i.rowNumber ?? "—"}</TableCell>
+                  <TableRow key={i.id} className={open?.id === i.id ? "bg-[var(--primary-soft)]" : canResolve && i.status === "open" ? "cursor-pointer" : undefined} onClick={() => { if (canResolve && i.status === "open") pick(i); }}>
+                    <TableCell className="max-w-[16rem] truncate font-medium" title={i.fileName ?? undefined}>{i.fileName ?? "File"} · {i.rowNumber ?? "—"}</TableCell>
                     <TableCell>{i.carrierName ?? "—"}</TableCell>
                     <TableCell>{i.writingNumberUserId ? name.get(i.writingNumberUserId) ?? "A producer" : <span className="text-[var(--muted)]">{i.agentIdentifier ? `${i.agentIdentifier} — not mapped` : "No number"}</span>}</TableCell>
                     <TableCell>{i.applicationUserId ? name.get(i.applicationUserId) ?? "A producer" : <span className="text-[var(--muted)]">No application</span>}</TableCell>
                     <TableCell className="text-right"><Money cents={i.amountCents} /></TableCell>
                     {tab === "resolved" && <TableCell>{i.resolvedUserId ? name.get(i.resolvedUserId) ?? "A producer" : "—"}<div className="text-xs text-[var(--muted)]">{i.reason}</div></TableCell>}
+                    {tab !== "resolved" && canResolve && <TableCell className="text-right"><Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); pick(i); }}>Open</Button></TableCell>}
                   </TableRow>
                 ))}
               </TableBody>

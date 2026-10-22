@@ -11,9 +11,10 @@ import { listSecurityEvents } from "@/lib/users/securityEvents";
 export async function GET() {
   const auth = await requireTenant();
   if (auth instanceof NextResponse) return auth;
-  const { data: user } = await getSupabaseServiceClient().from("users").select("email").eq("id", auth.context.userId).maybeSingle<{ email: string }>();
+  // The address is read beside the log, not before it (listSecurityEvents waits for it only where it needs it).
+  const email = getSupabaseServiceClient().from("users").select("email").eq("id", auth.context.userId).maybeSingle<{ email: string }>().then(({ data: user }) => user?.email ?? "");
   try {
-    const events = await listSecurityEvents(auth.context.userId, user?.email ?? "");
+    const events = await listSecurityEvents(auth.context.userId, email);
     return NextResponse.json({ events, available: events !== null }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[profile/security-events]", error instanceof Error ? error.message : error);

@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { TemplateField } from "@/lib/templates/constants";
-import { getAgentTemplate, latestLeadOwners, readByLeadIds, visibleLeadIds } from "@/lib/agentTemplates/service";
+import { getAgentTemplate, latestLeadOwners, readByLeadIds } from "@/lib/agentTemplates/service";
 import { keepVisible, type ProducerScope } from "@/lib/agency/visibility";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { csvContactLine, csvHeaderLine } from "./csv";
@@ -34,6 +34,9 @@ export class ContactConflictError extends Error {}
 const CONTACT_COLUMNS = "id, tenant_id, household_id, first_name, last_name, dob, primary_phone, state, custom_fields, merged_into_id, created_at, updated_at";
 type ContactBase = Omit<ContactRow, "phones" | "emails" | "address_line1" | "city" | "postal_code">;
 
+/** Keys that are columns on the contact itself, so never custom fields (the lead form names some of them differently). */
+const CONTACT_CORE_KEYS = new Set(["first_name", "last_name", "dob", "date_of_birth", "phone", "primary_phone", "email", "state", "address_line1", "address", "city", "postal_code", "zip"]);
+
 export async function fieldSchemaForTenant(tenantId: string, userId?: string): Promise<FieldSchemaRow[]> {
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("field_schema").select("id, tenant_id, entity, field_key, label, type, options, is_required, sort_order, created_at, updated_at").eq("tenant_id", tenantId).order("sort_order").order("field_key");
@@ -46,7 +49,13 @@ export async function fieldSchemaForTenant(tenantId: string, userId?: string): P
   let template;
   try { template = await getAgentTemplate(tenantId, userId); } catch { return rows; }
   const createdAt = new Date(0).toISOString();
-  const templateFields = template.template.fields.map((field: TemplateField, index) => ({ id: `template:${template.tenant_template_id}:${field.field_key}`, tenant_id: tenantId, entity: "contact" as const, field_key: field.field_key, label: field.label, type: field.type, options: field.options, is_required: field.is_required, sort_order: index, created_at: createdAt, updated_at: createdAt }));
+  // A vocabulary, not a rule set (QA 2026-10-22): the lead form's identity fields are a contact's own
+  // columns, and its "required" flags are about an application. Carried over as they were, they made
+  // first_name a required *custom* field — every Add contact on a new workspace failed with "First
+  // name is required" however the form was filled.
+  const templateFields = template.template.fields
+    .filter((field: TemplateField) => !CONTACT_CORE_KEYS.has(field.field_key))
+    .map((field: TemplateField, index) => ({ id: `template:${template.tenant_template_id}:${field.field_key}`, tenant_id: tenantId, entity: "contact" as const, field_key: field.field_key, label: field.label, type: field.type, options: field.options, is_required: false, sort_order: index, created_at: createdAt, updated_at: createdAt }));
   return [...templateFields, ...rows.filter((row) => row.entity !== "contact")];
 }
 
@@ -112,14 +121,14 @@ async function hydrate(tenantId: string, contacts: ContactBase[]): Promise<Array
   const supabase = getSupabaseServiceClient();
   const ids = contacts.map((row) => row.id);
   const householdIds = [...new Set(contacts.map((row) => row.household_id).filter(Boolean))] as string[];
-  // LA-4.9: which of these were built from a carrier file and not yet confirmed (none before 20261008180000).
-  const provisionalRead = await (supabase as unknown as { from: (t: string) => any }).from("contacts").select("id").eq("tenant_id", tenantId).eq("provisional", true).in("id", ids); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const provisional = new Set<string>(provisionalRead.error ? [] : ((provisionalRead.data ?? []) as Array<{ id: string }>).map((row) => row.id));
-  const [households, phones, emails] = await Promise.all([
+  const [provisionalRead, households, phones, emails] = await Promise.all([
+    // LA-4.9: which of these were built from a carrier file and not yet confirmed (none before 20261008180000).
+    (supabase as unknown as { from: (t: string) => any }).from("contacts").select("id").eq("tenant_id", tenantId).eq("provisional", true).in("id", ids), // eslint-disable-line @typescript-eslint/no-explicit-any
     householdIds.length ? supabase.from("households").select("id, address_line1, city, state, postal_code").eq("tenant_id", tenantId).in("id", householdIds) : Promise.resolve({ data: [], error: null }),
     supabase.from("contact_phones").select("contact_id, phone, type, is_primary").eq("tenant_id", tenantId).in("contact_id", ids).order("is_primary", { ascending: false }),
     supabase.from("contact_emails").select("contact_id, email, is_primary").eq("tenant_id", tenantId).in("contact_id", ids).order("is_primary", { ascending: false }),
   ]);
+  const provisional = new Set<string>(provisionalRead.error ? [] : ((provisionalRead.data ?? []) as Array<{ id: string }>).map((row) => row.id));
   const errorMessage = [households.error, phones.error, emails.error].find(Boolean)?.message;
   if (errorMessage) throw new Error(`Could not load contact details: ${errorMessage}`);
   const householdMap = new Map(((households.data ?? []) as Array<{ id: string; address_line1: string | null; city: string | null; state: string | null; postal_code: string | null }>).map((row) => [row.id, row]));
@@ -153,15 +162,14 @@ function householdLabel(row: { household_id: string | null; last_name: string; c
  * its leads (agent_leads.contact_id) is — and a lead is its latest work item's owner's (decision D1). A
  * contact with no lead is unattributed and visible to the all-seeing roles only.
  *
- * The contacts a scope may see, each with how many of its VISIBLE leads point at it (the directory's
- * lead count, which must not count another producer's leads).
+ * The directory, its tiles and the export of a narrowed session ask SQL for that set (migration
+ * 20261019420000: agency_scope_contact_leads, the same rule as visibleLeadIds). Before the migration nothing
+ * else is safe to read — the old directory function cannot be told which contacts to keep — so they refuse.
  */
-async function visibleContactLeadCounts(tenantId: string, scope: readonly string[]): Promise<Map<string, number>> {
-  const leadIds = await visibleLeadIds(tenantId, scope);
-  const rows = await readByLeadIds<{ id: string; contact_id: string | null }>(leadIds, (chunk) => loose().from("agent_leads").select("id, contact_id").eq("tenant_id", tenantId).in("id", chunk).not("contact_id", "is", null), "contacts");
-  const counts = new Map<string, number>();
-  for (const row of rows) if (row.contact_id) counts.set(row.contact_id, (counts.get(row.contact_id) ?? 0) + 1);
-  return counts;
+export const SCOPED_CONTACTS_PENDING = "The team contact directory needs database update 20261019420000, which has not been applied yet.";
+
+function scopedRpcError(error: DbError, what: string): Error {
+  return isMissingSchema(error) ? new Error(SCOPED_CONTACTS_PENDING) : new Error(`Could not load ${what}: ${error?.message}`);
 }
 
 /** Which of these contacts a scope may see — all of them for a null scope, with no read. */
@@ -179,8 +187,9 @@ export async function visibleAmongContacts(tenantId: string, scope: ProducerScop
 
 /**
  * `scope` (AG-0.5, from scopeFor(auth.context)): null — the default — pages the whole directory as before.
- * A narrowed agency session pages only the contacts it may see (visibleContactLeadCounts), with the total
- * and each lead count taken over that set, so neither a row nor a number is another producer's.
+ * A narrowed agency session pages only the contacts it may see — contact_directory_page's p_scope, so the
+ * search, page, total and each lead count are SQL's, over that set; neither a row nor a number is another
+ * producer's. Its open_review stays null: the duplicate-review queue is not a narrowed session's to work.
  */
 export async function getContactDirectory(tenantId: string, options: { q?: string; page?: number; pageSize?: number } = {}, scope: ProducerScope = null): Promise<ContactDirectory> {
   const query = (options.q ?? "").trim().slice(0, 120);
@@ -189,7 +198,7 @@ export async function getContactDirectory(tenantId: string, options: { q?: strin
   const nameQuery = normalizeText(query) || null;
   const digitsOnly = query.replace(/\D/g, "");
   const digits = digitsOnly.length >= 3 ? digitsOnly : null;
-  if (scope !== null) return scopedDirectory(tenantId, scope, { query, nameQuery, digits, page, pageSize });
+  if (scope !== null && !scope.length) return { rows: [], total: 0, page: 0, pageSize, query };
 
   const rpc = await loose().rpc("contact_directory_page", {
     p_tenant_id: tenantId,
@@ -198,10 +207,12 @@ export async function getContactDirectory(tenantId: string, options: { q?: strin
     p_digits: digits,
     p_limit: pageSize,
     p_offset: page * pageSize,
+    ...(scope !== null ? { p_scope: scope } : {}),
   });
+  if (rpc.error && scope !== null) throw scopedRpcError(rpc.error, "contacts");
   if (!rpc.error) {
     const rows = (rpc.data ?? []) as Array<{ contact_id: string; lead_count: number | string; open_review: boolean; total_count: number | string; household_state: string | null; created_at: string }>;
-    if (!rows.length && page > 0) return getContactDirectory(tenantId, { ...options, page: 0 });
+    if (!rows.length && page > 0) return getContactDirectory(tenantId, { ...options, page: 0 }, scope);
     const base = await getSupabaseServiceClient().from("contacts").select(CONTACT_COLUMNS).eq("tenant_id", tenantId).in("id", rows.map((row) => row.contact_id));
     if (base.error) throw new Error(`Could not load contacts: ${base.error.message}`);
     const byId = new Map(((base.data ?? []) as unknown as ContactBase[]).map((row) => [row.id, row]));
@@ -209,7 +220,7 @@ export async function getContactDirectory(tenantId: string, options: { q?: strin
     const hydrated = await hydrate(tenantId, ordered);
     const extra = new Map(rows.map((row) => [row.contact_id, row]));
     return {
-      rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: Number(extra.get(row.id)?.lead_count ?? 0), open_review: Boolean(extra.get(row.id)?.open_review) })),
+      rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: Number(extra.get(row.id)?.lead_count ?? 0), open_review: scope !== null ? null : Boolean(extra.get(row.id)?.open_review) })),
       total: Number(rows[0]?.total_count ?? 0),
       page,
       pageSize,
@@ -230,31 +241,6 @@ export async function getContactDirectory(tenantId: string, options: { q?: strin
   if (!(fallback.data ?? []).length && page > 0) return getContactDirectory(tenantId, { ...options, page: 0 });
   const hydrated = await hydrate(tenantId, (fallback.data ?? []) as unknown as ContactBase[]);
   return { rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: null, open_review: null })), total: fallback.count ?? hydrated.length, page, pageSize, query };
-}
-
-/**
- * The directory of a narrowed session. contact_directory_page cannot be told which contacts to keep, so
- * the visible set is read (by id, in chunks), searched the way the PostgREST fallback searches — names and
- * phones — and paged here; the total is the size of the visible matching set.
- */
-async function scopedDirectory(tenantId: string, scope: readonly string[], q: { query: string; nameQuery: string | null; digits: string | null; page: number; pageSize: number }): Promise<ContactDirectory> {
-  const { query, nameQuery, digits, pageSize } = q;
-  if (query && !nameQuery && !digits) return { rows: [], total: 0, page: 0, pageSize, query };
-  const counts = await visibleContactLeadCounts(tenantId, scope);
-  const contacts = await readByLeadIds<ContactBase & { name_search: string | null }>([...counts.keys()], (chunk) => loose().from("contacts").select(`${CONTACT_COLUMNS}, name_search`).eq("tenant_id", tenantId).is("merged_into_id", null).in("id", chunk), "contacts");
-  const name = nameQuery?.toLowerCase() ?? null;
-  const matching = contacts
-    .filter((row) => !query || (name !== null && (row.name_search ?? "").toLowerCase().includes(name)) || (digits !== null && (row.primary_phone ?? "").replace(/\D/g, "").includes(digits)))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
-  const page = q.page * pageSize < matching.length ? q.page : 0;
-  const slice = matching.slice(page * pageSize, page * pageSize + pageSize).map((row) => {
-    const base: Partial<typeof row> = { ...row };
-    delete base.name_search;
-    return base as ContactBase;
-  });
-  const hydrated = await hydrate(tenantId, slice);
-  // open_review is the duplicate-review queue's, which a narrowed session does not work (its routes refuse).
-  return { rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: counts.get(row.id) ?? 0, open_review: null })), total: matching.length, page, pageSize, query };
 }
 
 /* ── stats ───────────────────────────────────────────────────────────────── */
@@ -407,9 +393,19 @@ export async function getContactWorkspace(tenantId: string, userId: string | und
 
 /** Active contacts and their distinct households, over the contacts a narrowed session may see. */
 async function scopedContactTotals(tenantId: string, scope: readonly string[]): Promise<{ contacts: number; households: number }> {
-  const counts = await visibleContactLeadCounts(tenantId, scope);
-  const rows = await readByLeadIds<{ id: string; household_id: string | null }>([...counts.keys()], (chunk) => loose().from("contacts").select("id, household_id").eq("tenant_id", tenantId).is("merged_into_id", null).in("id", chunk), "contacts");
-  return { contacts: rows.length, households: new Set(rows.map((row) => row.household_id).filter(Boolean)).size };
+  if (!scope.length) return { contacts: 0, households: 0 };
+  const { data, error } = await loose().rpc("contact_scope_totals", { p_tenant_id: tenantId, p_scope: scope });
+  if (error) throw scopedRpcError(error, "contact totals");
+  const row = ((data ?? []) as Array<{ contacts: number | string; households: number | string }>)[0];
+  return { contacts: Number(row?.contacts ?? 0), households: Number(row?.households ?? 0) };
+}
+
+/** The active contacts a narrowed session may see, sorted by id (the export's walk). */
+async function scopedContactIds(tenantId: string, scope: readonly string[]): Promise<string[]> {
+  if (!scope.length) return [];
+  const { data, error } = await loose().rpc("contact_scope_ids", { p_tenant_id: tenantId, p_scope: scope });
+  if (error) throw scopedRpcError(error, "contacts");
+  return Array.isArray(data) ? (data as string[]) : [];
 }
 
 /* ── export ──────────────────────────────────────────────────────────────── */
@@ -433,7 +429,7 @@ export function streamContactsCsv(tenantId: string, schemaFields: FieldSchemaRow
       try {
         let select = getSupabaseServiceClient().from("contacts").select(CONTACT_COLUMNS).eq("tenant_id", tenantId).is("merged_into_id", null).order("id").limit(BATCH);
         if (scope !== null) {
-          visibleIds ??= [...(await visibleContactLeadCounts(tenantId, scope)).keys()].sort();
+          visibleIds ??= await scopedContactIds(tenantId, scope);
           // The cursor walks the visible ids, not the rows returned: a batch of merged contacts returns
           // no row and must neither end the export early nor leave this pull without output.
           for (;;) {

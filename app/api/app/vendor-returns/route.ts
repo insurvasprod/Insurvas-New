@@ -9,7 +9,7 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
  * first import — vendor_returns_candidates_summary) and the undialable share per vendor.
  */
 export async function GET() {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
   if (refused) return refused;

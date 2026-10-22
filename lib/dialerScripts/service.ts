@@ -17,6 +17,8 @@ import { checkCallbackInCallingWindow } from "@/lib/dispositions/callbackWindow"
 import { dialerVocabulary, type DialerVocabulary, type DispositionVocabularyRow } from "./outcomes";
 import { isPlaceholderDisclosure } from "./disclosureStatus";
 import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
+import { isAgencyTenant } from "../agency/audience";
+import { assignedTo, keptAssignedReason, refusedLeadHandBack } from "./refusedLead";
 
 type Row = Record<string, unknown>;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -1088,12 +1090,14 @@ const MAX_REFUSED_PER_SERVE = 4;
 /**
  * Puts a lead the dialer refused back exactly as the queue would find it: unclaimed, and in the
  * lead_state it was served from — `fresh` if it has never been dialled, whatever tier served it.
+ * AG-0.10: in an agency a lead assigned to this agent stays assigned to him instead, and `why` (the
+ * refusal's sentence) goes into its assignment history (refusedLead.ts).
  *
  * first_dial_at: since 20260925711500 it is stamped at the first Dial click, not at serve, so a
  * refused lead has none. Until that migration is applied, serve_next_lead still stamps it on claim;
  * a stamp equal to this serve's claim time is that, and is cleared.
  */
-async function returnRefusedLead(db: Db, tenantId: string, agentId: string, served: Row) {
+async function returnRefusedLead(db: Db, tenantId: string, agentId: string, served: Row, why?: string) {
   const workItemId = text(served.work_item_id);
   const leadId = text(served.lead_id);
   const [queue, lead] = await Promise.all([
@@ -1104,14 +1108,39 @@ async function returnRefusedLead(db: Db, tenantId: string, agentId: string, serv
   const firstDialAt = text(lead.data?.first_dial_at);
   const stampedByThisServe = Boolean(claimedAt && firstDialAt && new Date(claimedAt).getTime() === new Date(firstDialAt).getTime());
   const neverDialled = Number(lead.data?.attempts_made ?? 0) === 0;
+  // AG-0.10: in an agency a lead the owner assigned to this producer stays his (refusedLead.ts). Asked only in an
+  // agency, so a solo tenant makes exactly the reads and the hand-back it always did.
+  const agency = await isAgencyTenant(tenantId).catch(() => false);
+  const latest = agency
+    ? await db.from("lead_assignment_events").select("event_type, to_user_id, contact_key").eq("tenant_id", tenantId).eq("work_item_id", workItemId).order("created_at", { ascending: false }).limit(1).maybeSingle<Row>()
+    : null;
+  const handBack = refusedLeadHandBack({ agency, assignedToAgent: assignedTo(latest?.data, agentId) });
+  const now = new Date().toISOString();
   const released = await db
     .from("lead_queue")
-    .update({ status: "unclaimed", claimed_by: null, owner_user_id: null, locked_until: null, updated_at: new Date().toISOString() })
+    .update(handBack === "keep_assigned"
+      // Back to how an assigned lead sits between calls: claimed and owned by him, unlocked (serve_next_lead's own path).
+      ? { locked_until: null, updated_at: now }
+      : { status: "unclaimed", claimed_by: null, owner_user_id: null, locked_until: null, updated_at: now })
     .eq("tenant_id", tenantId)
     .eq("id", workItemId)
     .eq("claimed_by", agentId)
-    .eq("status", "claimed");
+    .eq("status", "claimed")
+    .select("id");
   if (released.error) console.error(`[dialer] could not return a refused lead to the queue: ${released.error.message}`);
+  if (handBack === "keep_assigned" && !released.error && ((released.data as Row[] | null) ?? []).length > 0) {
+    const noted = await db.from("lead_assignment_events").insert({
+      tenant_id: tenantId,
+      work_item_id: workItemId,
+      lead_id: leadId,
+      contact_key: text(latest?.data?.contact_key),
+      from_user_id: agentId,
+      to_user_id: agentId,
+      event_type: "reassigned",
+      reason: keptAssignedReason(why),
+    });
+    if (noted.error) console.error(`[dialer] could not record why a refused lead stayed assigned: ${noted.error.message}`);
+  }
   const restoredState = neverDialled ? "fresh" : leadStateBeforeServe(Number(served.tier ?? 0));
   const leadPatch: Row = {};
   if (restoredState) leadPatch.lead_state = restoredState;
@@ -1153,9 +1182,13 @@ async function readOpenLeadLoad(db: Db, tenantId: string, agentId: string): Prom
  * here: one the agent may not sell to is handed straight back to the queue and the next is tried,
  * up to MAX_REFUSED_PER_SERVE. The refused leads are released only after the loop, so the loop
  * cannot be handed the same lead twice.
+ *
+ * AG-0.10: one path for every session. In an agency a narrowed session (producer, manager, assistant, setter)
+ * is closed out of the unassigned pool by agent_can_take_pool_lead (20261019100000), so serve_next_lead's
+ * weighted campaign draw, cohorts and scoring run over the leads assigned to him alone — the same quality
+ * of serving a solo agent gets, and never a pool lead (20261019300000 keeps that from scanning the pool).
  */
-export async function serveNextLead(input: { tenantId: string; agentId: string; scope?: ProducerScope }): Promise<ServeResult & { emptyReason?: string | null }> {
-  if (input.scope) return serveNextAssignedLead({ tenantId: input.tenantId, agentId: input.agentId, scope: input.scope });
+export async function serveNextLead(input: { tenantId: string; agentId: string }): Promise<ServeResult> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const refused: Array<{ row: Row; state: string | null; message: string }> = [];
   let licence: LicenceContext | null = null;
@@ -1195,7 +1228,7 @@ export async function serveNextLead(input: { tenantId: string; agentId: string; 
       if (attempt === MAX_REFUSED_PER_SERVE) break;
     }
   } finally {
-    for (const item of refused) await returnRefusedLead(db, input.tenantId, input.agentId, item.row);
+    for (const item of refused) await returnRefusedLead(db, input.tenantId, input.agentId, item.row, item.message);
   }
   let atCapacity: ServeResult["atCapacity"] = null;
   if (!chosen) {
@@ -1205,38 +1238,8 @@ export async function serveNextLead(input: { tenantId: string; agentId: string; 
   return { served: chosen ? servedView(chosen) : null, refused: refused.map(({ state, message }) => ({ state, message })), atCapacity };
 }
 
-/** How far down the queue list an agency producer's Serve next looks for the leads assigned to him. */
+/** How far down the queue list the agency producer's queue preview looks for the leads assigned to him. */
 const ASSIGNED_SERVE_WINDOW = 100;
-
-/**
- * AG-0.5 / AG-0.10 · Serve next for a narrow session in an agency.
- *
- * In an agency the leads are the agency's and the owner routes them: a producer works the leads assigned
- * to him and does not take from the unassigned pool (lib/agency/routing.ts). serve_next_lead claims from
- * that pool whenever a pool lead ranks first, and its body is the database's (no DDL here), so for a
- * scoped session the serve goes through the same two functions the queue list and the pick use: the
- * queue preview (every gate — window, suppression, licence, campaign, tier — already applied, in tier
- * order) narrowed to the rows assigned to this agent, then serve_lead_by_id on the first of them, which
- * re-checks every gate and locks it. What this gives up against serve_next_lead is the weighted campaign
- * draw and the score among the agent's own leads: they are served in tier order, newest first. An
- * individual-plan tenant and the all-seeing roles never come here.
- */
-async function serveNextAssignedLead(input: { tenantId: string; agentId: string; scope: ProducerScope }): Promise<ServeResult & { emptyReason?: string | null }> {
-  const preview = await getQueuePreview({ tenantId: input.tenantId, agentId: input.agentId, tiers: null, limit: ASSIGNED_SERVE_WINDOW, scope: input.scope });
-  const refused: ServeResult["refused"] = [];
-  if (preview.available) {
-    for (const row of preview.rows.slice(0, MAX_REFUSED_PER_SERVE + 1)) {
-      const result = await serveLeadById({ tenantId: input.tenantId, agentId: input.agentId, workItemId: row.workItemId, scope: input.scope });
-      if (result.served) return { served: result.served, refused, atCapacity: null };
-      // A licence refusal is handed back and reported, exactly as Serve next reports it; a lead that
-      // went to someone else in the meantime is simply skipped.
-      if (result.refusal.code === "not_licensed") refused.push({ state: row.state, message: result.refusal.message });
-    }
-  }
-  // Nothing served: the empty queue explains itself from this agent's own assigned work.
-  const emptyReason = refused.length ? null : (await diagnoseAssignedQueue(input.tenantId, input.agentId).catch(() => null))?.message ?? null;
-  return { served: null, refused, atCapacity: null, emptyReason };
-}
 
 export type PickResult =
   | { served: ReturnType<typeof servedView>; refusal: null }
@@ -1295,7 +1298,7 @@ export async function serveLeadById(input: { tenantId: string; agentId: string; 
   const state = stateFromLeadValues(((lead.data?.values ?? {}) as Row));
   const decision = licenceFor(licence, state);
   if (!decision.allowed) {
-    await returnRefusedLead(db, input.tenantId, input.agentId, row);
+    await returnRefusedLead(db, input.tenantId, input.agentId, row, decision.message);
     return { served: null, refusal: { code: "not_licensed", message: decision.message } };
   }
   return { served: servedView(row), refusal: null };

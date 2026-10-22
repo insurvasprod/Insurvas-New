@@ -72,11 +72,11 @@ async function policies(tenantId: string): Promise<{ rows: ScorePolicy[]; today:
 }
 
 export async function loadPnl(tenantId: string, input: { kind: PeriodKind; range: Range; basis: Basis }) {
-  const settings = await reportingSettings(tenantId);
   const { previous, lastYear } = comparisons(input.kind, input.range);
   // The six months ending with the period: the direction is the signal, not one month's level.
   const trendFrom = addMonths(`${input.range.to.slice(0, 7)}-01`, -6);
-  const [cur, prev, ly, trend, received, book] = await Promise.all([
+  const [settings, cur, prev, ly, trend, received, book] = await Promise.all([
+    reportingSettings(tenantId),
     lines(tenantId, input.range, input.basis),
     lines(tenantId, previous, input.basis),
     lines(tenantId, lastYear, input.basis),
@@ -152,8 +152,9 @@ export async function drill(tenantId: string, d: DrillRequest) {
   if (d.entryType === "reversal" && (d.section === "in" || d.section === "held") && rows.length) {
     const corrects = new Map<string, string | null>();
     const ids = rows.map((r) => r.entryId);
-    for (const table of ["commission_entry", "commission_account_entry"]) {
-      const { data, error } = await db().from(table).select("id, corrects_type").in("id", ids);
+    // Both tables at once; checked in the old order.
+    const reads = await Promise.all(["commission_entry", "commission_account_entry"].map((table) => db().from(table).select("id, corrects_type").in("id", ids)));
+    for (const { data, error } of reads as Loose[]) {
       if (error) fail(error);
       for (const c of (data ?? []) as Loose[]) corrects.set(c.id as string, (c.corrects_type as string | null) ?? null);
     }

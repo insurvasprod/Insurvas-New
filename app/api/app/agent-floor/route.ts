@@ -20,7 +20,7 @@ const bodySchema = z.discriminatedUnion("action", [
 ]);
 
 export async function GET() {
-  const auth = await requireFeatureRole("inbound_transfers", roles);
+  const auth = await requireFeatureRole("inbound_transfers", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     // AG-0.5: the floor is a team view. In an agency a producer, manager or assistant sees only itself

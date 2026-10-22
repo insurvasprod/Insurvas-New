@@ -37,7 +37,7 @@ const fail = (error: unknown) => {
 };
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("tcpa_checker", ["owner", "producer"]);
+  const auth = await requireFeatureRole("tcpa_checker", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
   if (refused) return refused;

@@ -23,6 +23,8 @@ import { lastSeenCell } from "@/lib/tenantTeam/lastSeen";
 import { dayMonth } from "@/lib/format/dates";
 import { useViewerTimeZone } from "@/components/app/use-viewer-time-zone";
 import { MemberAccountPanel } from "@/components/app/team-member-account";
+import { TeamAccessPanel, type AccessDraft } from "@/components/app/team-access-panel";
+import type { TeamAccessSnapshot } from "@/lib/tenantTeam/access";
 
 type MemberStatus = "active" | "invited" | "expired" | "suspended" | "deactivated" | "other";
 const STATUS_FILTERS: { key: Exclude<MemberStatus, "other" | "expired">; label: string }[] = [
@@ -266,7 +268,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
             actions={
               <>
                 {/* LA-8.6: at the limit the button is off with its reason, never a refusal on submit. */}
-                <Button type="button" onClick={() => setInviteOpen(true)} disabled={atSeatLimit} title={atSeatLimit ? `All ${seats.max} seats are in use, pending invitations included. Free one or upgrade.` : undefined}>
+                <Button data-guide="team-invite" type="button" onClick={() => setInviteOpen(true)} disabled={atSeatLimit} title={atSeatLimit ? `All ${seats.max} seats are in use, pending invitations included. Free one or upgrade.` : undefined}>
                   <UserPlus aria-hidden="true" />
                   Invite someone
                 </Button>
@@ -334,6 +336,13 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                   </td>
                   <td className={st.td}>
                     <StatusChip dot={false} tone={pillTone(role === "owner" ? "brand" : "neutral")}>{TENANT_ROLE_LABELS[role]}</StatusChip>
+                    {/* Custom team access: extra roles and hidden pages count only while the add-on is held. */}
+                    {snapshot.teamAccess?.available && (member.extraRoles ?? []).filter((extra) => extra !== role).map((extra) => (
+                      <StatusChip key={extra} dot={false} tone={pillTone("neutral")} className="ml-1">+ {TENANT_ROLE_LABELS[extra]}</StatusChip>
+                    ))}
+                    {snapshot.teamAccess?.available && (member.hiddenPages?.length ?? 0) > 0 && (
+                      <span className={st.sub}>{member.hiddenPages?.length} {member.hiddenPages?.length === 1 ? "page" : "pages"} hidden</span>
+                    )}
                   </td>
                   <td className={st.td}>
                     {role === "setter" ? (
@@ -393,6 +402,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
           bufferSeats={snapshot.bufferSeats}
           atSeatLimit={atSeatLimit}
           setterSeats={setterAtLimit && setterSeats ? { used: setterSeats.usage, max: setterSeats.limit ?? 0 } : null}
+          access={snapshot.teamAccess}
           onInvited={async () => {
             setInviteOpen(false);
             await refresh();
@@ -408,6 +418,9 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
           statesAvailable={snapshot.licensedStatesAvailable !== false}
           revoking={rowBusy === managing.id}
           onRevoke={() => void revoke(managing)}
+          access={snapshot.teamAccess}
+          isViewer={managing.id === viewerId}
+          onAccessSaved={async () => { await refresh(); }}
           account={managing.acceptedAt && managing.id !== viewerId ? <MemberAccountPanel member={managing} members={snapshot.members} onChanged={async () => { setManaging(null); await refresh(); }} /> : null}
           onClose={() => setManaging(null)}
           onApply={(change) => {
@@ -452,15 +465,18 @@ function InviteDialog({
   bufferSeats,
   atSeatLimit,
   setterSeats,
+  access,
 }: {
   onClose: () => void;
   onInvited: () => Promise<void>;
+  access?: TeamAccessSnapshot;
   bufferAtLimit: boolean;
   bufferSeats: TeamSnapshot["bufferSeats"];
   atSeatLimit: boolean;
   /** Set only when the plan's setter seats are all in use. */
   setterSeats: { used: number; max: number } | null;
 }) {
+  const [draft, setDraft] = useState<AccessDraft>({ extraRoles: [], hiddenPages: [] });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<TenantRole>("assistant");
@@ -477,6 +493,18 @@ function InviteDialog({
     if (!response.ok) {
       setError(body?.error ?? "Could not invite this teammate");
       return;
+    }
+    // Custom team access: the person arrives with the right access on day one.
+    const memberId: string | undefined = body?.member?.id;
+    const extras = draft.extraRoles.filter((extra) => extra !== role);
+    if (access?.available && memberId && (extras.length || draft.hiddenPages.length)) {
+      const set = await fetch(`/api/app/team/${memberId}/access`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ extraRoles: extras, hiddenPages: draft.hiddenPages }) });
+      if (!set.ok) {
+        const refused = await set.json().catch(() => null);
+        notify.fail(`Invited, but their extra roles and pages were not saved: ${refused?.error ?? "try again from Manage"}`);
+        await onInvited();
+        return;
+      }
     }
     notify.done(body.invite?.delivered ? "Invitation sent" : "Teammate invited — copy the link from the server log if email is not configured");
     await onInvited();
@@ -499,6 +527,17 @@ function InviteDialog({
             ))}
           </select>
         </Field>
+        {access && (
+          <div className="sm:col-span-2">
+            <TeamAccessPanel
+              access={access}
+              mainRole={role}
+              value={draft}
+              onChange={setDraft}
+              onPreset={(preset) => { if (preset !== "owner" && preset !== "admin" && preset !== "manager") setRole(preset); }}
+            />
+          </div>
+        )}
         {role === "assistant" && bufferAtLimit && (
           <p className="text-sm text-[var(--error-ink)] sm:col-span-2" role="alert">
             Your plan has reached <code>max_buffer_seats</code> ({bufferSeats.used} of {bufferSeats.max}). Upgrade to invite another buffer agent.
@@ -536,7 +575,13 @@ function ManageDialog({
   account,
   onClose,
   onApply,
+  access,
+  isViewer,
+  onAccessSaved,
 }: {
+  access?: TeamAccessSnapshot;
+  isViewer?: boolean;
+  onAccessSaved?: () => Promise<void>;
   member: TeamMember;
   role: TenantRole;
   states: string[];
@@ -550,12 +595,25 @@ function ManageDialog({
   onApply: (change: { role: TenantRole; states: string[]; expiries: Record<string, string | null> }) => void;
 }) {
   const [role, setRole] = useState(initialRole);
+  const [draft, setDraft] = useState<AccessDraft>({ extraRoles: member.extraRoles ?? [], hiddenPages: member.hiddenPages ?? [] });
+  const [savingAccess, setSavingAccess] = useState(false);
   const [states, setStates] = useState<Set<string>>(new Set(initialStates));
   const [expiries, setExpiries] = useState<Record<string, string | null>>(initialExpiries);
   const stateNames = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
   const [stateQuery, setStateQuery] = useState("");
   const invited = !member.acceptedAt;
   const licensed = LICENSED_ROLES.includes(role);
+  const billingOwner = member.role === "owner" && !member.agencyTitle;
+
+  async function saveAccess() {
+    setSavingAccess(true);
+    const response = await fetch(`/api/app/team/${member.id}/access`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ extraRoles: draft.extraRoles.filter((extra) => extra !== member.role), hiddenPages: draft.hiddenPages }) });
+    const body = await response.json().catch(() => null);
+    setSavingAccess(false);
+    if (!response.ok) { notify.fail(body?.error ?? "Could not save their access"); return; }
+    notify.done(`${member.name}'s access saved. It applies on their next page.`);
+    await onAccessSaved?.();
+  }
   const visibleStates = US_STATES.filter(([code, name]) => !stateQuery.trim() || name.toLowerCase().includes(stateQuery.trim().toLowerCase()) || code === stateQuery.trim().toUpperCase());
 
   return (
@@ -568,6 +626,17 @@ function ManageDialog({
             ))}
           </select>
         </Field>
+        {access && (
+          <TeamAccessPanel
+            access={access}
+            mainRole={member.agencyTitle === "admin" || member.agencyTitle === "manager" ? member.agencyTitle : member.role}
+            value={draft}
+            onChange={setDraft}
+            onSave={() => void saveAccess()}
+            saving={savingAccess}
+            blockedReason={billingOwner ? "The account owner always has every role and page." : isViewer ? "You cannot change your own access. Another admin or the owner can." : null}
+          />
+        )}
         <fieldset disabled={!licensed || !statesAvailable} className="min-w-0">
           <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Licensed in</legend>
           <span className="mt-1 block text-xs leading-[1.5] text-[var(--muted)]">

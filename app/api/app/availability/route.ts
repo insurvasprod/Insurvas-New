@@ -60,7 +60,7 @@ const saveSchema = z.object({
 }).strict();
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const [{ members: everyone, schema, agency }, scope] = await Promise.all([getCalendarSettings(auth.context.tenantId), scopeFor(auth.context)]);

@@ -19,7 +19,7 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 const roles = ["owner", "producer"] as const;
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", roles);
+  const auth = await requireFeatureRole("outbound_dialing", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Vendors");
   if (refused) return refused;

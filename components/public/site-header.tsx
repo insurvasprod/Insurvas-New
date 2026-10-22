@@ -54,7 +54,7 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
           </ViewTransition>
         </Link>
 
-        <nav aria-label="Primary" className="mx-auto hidden max-w-2xl flex-1 items-center justify-evenly gap-2 md:flex lg:gap-4">
+        <nav aria-label="Primary" className="mx-auto hidden max-w-2xl flex-1 items-center justify-evenly gap-2 xl:flex xl:gap-4">
           {NAV.map((item) => {
             const active = item.key && current === item.key;
             return (
@@ -62,7 +62,7 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`whitespace-nowrap rounded-full px-3 py-2 text-sm lg:px-4 font-semibold tracking-[-0.01em] no-underline transition-colors ${active ? "bg-[var(--surface-alt)] text-foreground" : "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--surface-alt)_80%,transparent)] hover:text-foreground"}`}
+                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold tracking-[-0.01em] no-underline transition-colors ${active ? "bg-[var(--surface-alt)] text-foreground" : "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--surface-alt)_80%,transparent)] hover:text-foreground"}`}
               >
                 {item.label}
               </Link>
@@ -70,17 +70,19 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
           })}
         </nav>
 
-        <span className="flex-1 md:hidden" />
+        <span className="flex-1 xl:hidden" />
 
         <div className="flex shrink-0 items-center gap-2">
-          <ThemeSwitch />
+          {/* Off below sm: logo + switch + trial + menu is wider than a 375px phone, which clipped the
+              menu button off the edge (QA 2026-10-22). The phone follows the system theme. */}
+          <span className="hidden sm:contents"><ThemeSwitch /></span>
           <Button asChild variant="ghost" className="hidden h-10 rounded-full px-4 sm:inline-flex">
             <Link href="/app/login">Sign in</Link>
           </Button>
           <Button asChild className="h-10 rounded-full px-4 text-sm sm:px-5">
             <Link href="/signup"><span className="sm:hidden">Try free</span><span className="hidden sm:inline">Start free trial</span></Link>
           </Button>
-          <details className="relative md:hidden">
+          <details className="relative xl:hidden">
             <summary aria-label="Menu" className="flex size-10 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border-strong)] text-foreground [&::-webkit-details-marker]:hidden">
               <Menu className="size-4" aria-hidden="true" />
             </summary>

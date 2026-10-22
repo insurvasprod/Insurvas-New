@@ -31,8 +31,10 @@ export async function syncLedger(tenantId: string): Promise<number> {
 }
 
 export async function readBalances(context: { tenantId: string; userId: string }, asOf?: string): Promise<{ rows: BalanceRow[]; scope: ProducerScope }> {
-  const scope = await scopeFor(context);
-  const raw = await agencyRpc<Array<Record<string, unknown>>>("agency_producer_balances", { p_tenant_id: context.tenantId, p_as_of: asOf ?? new Date().toISOString().slice(0, 10) });
+  const [scope, raw] = await Promise.all([
+    scopeFor(context),
+    agencyRpc<Array<Record<string, unknown>>>("agency_producer_balances", { p_tenant_id: context.tenantId, p_as_of: asOf ?? new Date().toISOString().slice(0, 10) }),
+  ]);
   const rows = (raw ?? [])
     .map((r) => ({
       producerUserId: r.producer_user_id as string,
@@ -122,34 +124,39 @@ export async function readProducerEntries(tenantId: string, producerUserId: stri
   const rows = (data ?? []) as Array<Record<string, unknown>>;
   // producer_ledger_entry has no foreign key to carriers (LA-7.5), so PostgREST cannot embed the name: read it apart.
   const carrierIds = [...new Set(rows.map((r) => r.carrier_id as string | null).filter(Boolean))] as string[];
-  const carrierName = new Map<string, string>();
-  if (carrierIds.length) {
-    const { data: carriers } = await db().from("carriers").select("id, name").in("id", carrierIds);
-    for (const c of (carriers ?? []) as Array<{ id: string; name: string }>) carrierName.set(c.id, c.name);
-  }
   const policies = [...new Set(rows.map((r) => r.policy_number as string | null).filter(Boolean))] as string[];
+  // carrier names and the policies are read together: neither needs the other
+  const [{ data: carriers }, { data: pcs }] = await Promise.all([
+    carrierIds.length ? db().from("carriers").select("id, name").in("id", carrierIds) : { data: [] },
+    policies.length
+      ? db().from("policy_current").select("carrier_id, policy_number, premium_cents, premium_mode, effective_date, extra").eq("tenant_id", tenantId).in("policy_number", policies)
+      : { data: [] },
+  ]);
+  const carrierName = new Map<string, string>();
+  for (const c of (carriers ?? []) as Array<{ id: string; name: string }>) carrierName.set(c.id, c.name);
   const policyInfo = new Map<string, { client: string | null; premium: number | null; mode: string | null; effective: string | null; carrier: string }>();
-  if (policies.length) {
-    const { data: pcs } = await db()
-      .from("policy_current")
-      .select("carrier_id, policy_number, premium_cents, premium_mode, effective_date, extra")
-      .eq("tenant_id", tenantId)
-      .in("policy_number", policies);
-    for (const pc of (pcs ?? []) as Array<Record<string, unknown>>) {
-      const extra = (pc.extra ?? {}) as Record<string, unknown>;
-      const client = [extra.insured_first_name ?? extra.first_name, extra.insured_last_name ?? extra.last_name].filter((v) => typeof v === "string" && v).join(" ") || null;
-      policyInfo.set(`${pc.carrier_id}:${pc.policy_number}`, { client, premium: pc.premium_cents == null ? null : Number(pc.premium_cents), mode: (pc.premium_mode as string | null) ?? null, effective: (pc.effective_date as string | null) ?? null, carrier: pc.carrier_id as string });
-    }
+  for (const pc of (pcs ?? []) as Array<Record<string, unknown>>) {
+    const extra = (pc.extra ?? {}) as Record<string, unknown>;
+    const client = [extra.insured_first_name ?? extra.first_name, extra.insured_last_name ?? extra.last_name].filter((v) => typeof v === "string" && v).join(" ") || null;
+    policyInfo.set(`${pc.carrier_id}:${pc.policy_number}`, { client, premium: pc.premium_cents == null ? null : Number(pc.premium_cents), mode: (pc.premium_mode as string | null) ?? null, effective: (pc.effective_date as string | null) ?? null, carrier: pc.carrier_id as string });
   }
-  const levels = new Map<string, number | null>();
+  // one level per carrier and policy, as of its first row; asked six at a time instead of one after another
+  const asked = new Map<string, { carrierId: string; asOf: string }>();
   for (const r of rows) {
     const key = `${r.carrier_id}:${r.policy_number}`;
-    if (!r.carrier_id || levels.has(key)) continue;
-    const effective = policyInfo.get(key)?.effective ?? (r.occurred_on as string);
-    const { data: level } = await (getSupabaseServiceClient() as unknown as { rpc(n: string, a: Record<string, unknown>): PromiseLike<{ data: number | null }> })
-      .rpc("producer_level_bps_as_of", { p_tenant_id: tenantId, p_producer_user_id: producerUserId, p_carrier_id: r.carrier_id, p_as_of: effective });
-    levels.set(key, level ?? null);
+    if (!r.carrier_id || asked.has(key)) continue;
+    asked.set(key, { carrierId: r.carrier_id as string, asOf: policyInfo.get(key)?.effective ?? (r.occurred_on as string) });
   }
+  const levels = new Map<string, number | null>();
+  const pending = [...asked];
+  await Promise.all(Array.from({ length: Math.min(6, pending.length) }, async () => {
+    for (let next = pending.shift(); next; next = pending.shift()) {
+      const [key, { carrierId, asOf }] = next;
+      const { data: level } = await (getSupabaseServiceClient() as unknown as { rpc(n: string, a: Record<string, unknown>): PromiseLike<{ data: number | null }> })
+        .rpc("producer_level_bps_as_of", { p_tenant_id: tenantId, p_producer_user_id: producerUserId, p_carrier_id: carrierId, p_as_of: asOf });
+      levels.set(key, level ?? null);
+    }
+  }));
   return rows
     .filter((r) => !range?.runId || r.payout_run_id === range.runId || r.payout_run_id === null)
     .map((r) => {

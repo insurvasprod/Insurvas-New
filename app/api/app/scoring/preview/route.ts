@@ -22,7 +22,7 @@ const SCORING_ROLES = ["owner", "producer"] as const;
 const querySchema = z.object({ agent: z.string().uuid().optional() });
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Queue scoring");
   if (refused) return refused;

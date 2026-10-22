@@ -21,7 +21,7 @@ const querySchema = z.object({ priority: z.enum(["all", "high", "medium", "low"]
  * next is unaffected by it. Read-only accounts may look, since looking changes nothing.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", DIALER_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", DIALER_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const parsed = querySchema.safeParse({ priority: request.nextUrl.searchParams.get("priority") ?? undefined });
   if (!parsed.success) return NextResponse.json({ error: "Choose All, High, Medium or Low" }, { status: 400 });

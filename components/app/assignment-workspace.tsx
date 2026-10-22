@@ -33,11 +33,11 @@ import { ViewTabs, fullHeightCard } from "@/components/app/lead-ops-view-tabs";
 
 /** The conditions a draft publishes: none on a fallback, which matches everything. */
 
-export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
+export function AssignmentWorkspace({ canManage, title = "Lead assignment" }: { canManage: boolean; title?: string }) {
   const { workspace, loading, busy, preview, drafts, setDrafts, openKey, setOpenKey, dragKey, setDragKey, publishError, moveNotice, campaignFilter, setCampaignFilter, editingMember, setEditingMember, memberForm, setMemberForm, memberError, setMemberError, editingRest, setEditingRest, restForm, setRestForm, restError, restCardRef, restInputRef, workItemId, setWorkItemId, returnReason, setReturnReason, reassignWorkItemId, setReassignWorkItemId, reassignTargetUserId, setReassignTargetUserId, reassignReason, setReassignReason, adopt, loadPreview, refresh, members, memberById, publishedOrder, dirty, problems, sinceLabel, post, publish, saveMember, saveRest, saveAutoRoute, openRestEditor, updateDraft, moveDraft, dropOn, handleKeys, addCondition, restore, licensedMembers, setters, agencyReach, atCeiling, routedFor, topCapacitySkip, ruleSkipLine, personSkipLine, warnable, ceilingChip, valueChip, assigneeSummary } = useAssignmentWorkspace(canManage);
 
   // One title; the page actions sit on the tab row (2026-10-06 redesign).
-  const header = <PageHeader title="Lead assignment" />;
+  const header = <PageHeader title={title} />;
   const [tab, setTab] = useState<"rules" | "capacity" | "preview" | "settings">("rules");
   const [poolOpen, setPoolOpen] = useState(false);
   /** Rest days live on their own tab: bring it forward, then open the editor once it has rendered. */
@@ -94,7 +94,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
           <>
             <Button type="button" variant="outline" onClick={() => setPoolOpen(true)} disabled={!workspace}>Pool actions</Button>
             <Button type="button" variant="outline" onClick={openRest} disabled={!workspace}>Rest days</Button>
-            <Button type="button" disabled={!workspace || busy === "action"} onClick={() => void post({ action: "assign" }, "Next eligible lead assigned")}>Assign next eligible lead</Button>
+            <Button data-guide="assignments-assign" type="button" disabled={!workspace || busy === "action"} onClick={() => void post({ action: "assign" }, "Next eligible lead assigned")}>Assign next eligible lead</Button>
           </>
         )}
       />

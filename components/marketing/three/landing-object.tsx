@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import type { LandingObjectKind } from "./three-object";
 
@@ -12,13 +12,27 @@ import type { LandingObjectKind } from "./three-object";
  *
  * Each object is only created once its box comes within a screen of the viewport (2026-10-13): the
  * globe, the shield and the card used to build their scenes — two of them with an environment map —
- * all at page load, which froze the landing intro for over half a second.
+ * all at page load, which froze the landing intro for over half a second. Nor while the intro plays
+ * (html.intro-play until intro-done, 2026-10-22): the hero's ribbon is in view from the start, and
+ * creating its WebGL context 0.2 s into the 3D shot stalled it for 200 ms.
  */
 const ThreeObject = dynamic(() => import("./three-object"), { ssr: false, loading: () => null });
+
+// Whether the landing intro is out of the way, read from <html>'s classes.
+const introOver = () => {
+  const classes = document.documentElement.classList;
+  return !classes.contains("intro-play") || classes.contains("intro-done");
+};
+const watchIntro = (onChange: () => void) => {
+  const watcher = new MutationObserver(onChange);
+  watcher.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  return () => watcher.disconnect();
+};
 
 export function LandingObject({ kind, className }: { kind: LandingObjectKind; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
+  const clear = useSyncExternalStore(watchIntro, introOver, () => false);
   useEffect(() => {
     const node = ref.current;
     if (!node || near) return;
@@ -34,7 +48,7 @@ export function LandingObject({ kind, className }: { kind: LandingObjectKind; cl
   }, [near]);
   return (
     <div ref={ref} aria-hidden="true" className={className}>
-      {near && <ThreeObject kind={kind} />}
+      {near && clear && <ThreeObject kind={kind} />}
     </div>
   );
 }

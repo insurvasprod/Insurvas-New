@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
+import { mapLimit } from "@/lib/retention/batch";
 
 import { ENTRY_LABELS, type EntryType } from "./commissionLedger";
 import { loadPolicyMoney } from "./commissionLedgerStore";
@@ -144,16 +145,19 @@ const HAND_STATUS: Record<string, string> = { active: "active", pending: "submit
  * filter choice. A producer sees the ones they recorded, as the carrier rows credited to them.
  */
 export async function loadHandPolicies(viewer: Viewer): Promise<BookRow[]> {
-  const read = await everyRow(() => {
-    let query = db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, source").eq("tenant_id", viewer.tenantId);
-    if (viewer.role === "producer") query = query.eq("created_by", viewer.userId);
-    return inScope(viewer, query, "created_by").order("id");
-  });
+  const [read, carrierRead] = await Promise.all([
+    everyRow(() => {
+      let query = db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, source").eq("tenant_id", viewer.tenantId);
+      if (viewer.role === "producer") query = query.eq("created_by", viewer.userId);
+      return inScope(viewer, query, "created_by").order("id");
+    }),
+    db().from("carriers").select("id, name"),
+  ]);
   if (read.error) {
     if (isSchemaGap(read.error)) return [];
     throw new Error(`Could not load the policies entered by hand: ${read.error.message}`);
   }
-  const carriers = ((await db().from("carriers").select("id, name")).data ?? []) as Loose[];
+  const carriers = (carrierRead.data ?? []) as Loose[];
   const byName = new Map<string, Loose>(carriers.map((c) => [String(c.name).trim().toLowerCase(), c]));
   return read.rows.map((p: Loose): BookRow => {
     const carrier = byName.get(String(p.carrier ?? "").trim().toLowerCase());
@@ -184,26 +188,32 @@ export type AwaitingSale = { carrierId: string | null; carrierName: string; poli
  * over the moment its file arrives. A producer sees the sales they worked.
  */
 async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policyNumber: string }): Promise<AwaitingSale[]> {
-  let query = db().from("tenant_issued_policies").select("lead_id, deal_id, carrier, policy_number, issued_at, product_line").eq("tenant_id", viewer.tenantId).eq("status", "issued").not("policy_number", "is", null);
-  if (only) query = query.eq("policy_number", only.policyNumber);
-  const { data, error } = await query.limit(5000);
+  // Every page (the API answers 1,000 rows a request; a .limit(5000) used to stop there without saying so), ordered
+  // along tenant_issued_policies_number_idx with carrier as the tail (tenant, carrier, number is unique).
+  const query = () => {
+    const q = db().from("tenant_issued_policies").select("lead_id, deal_id, carrier, policy_number, issued_at, product_line").eq("tenant_id", viewer.tenantId).eq("status", "issued").not("policy_number", "is", null);
+    return (only ? q.eq("policy_number", only.policyNumber) : q).order("policy_number").order("carrier");
+  };
+  const [{ rows: data, error }, carrierRead] = await Promise.all([everyRow(query), db().from("carriers").select("id, name, code")]);
   if (error) {
     if (isSchemaGap(error)) return [];
     throw new Error(`Could not load the recorded sales: ${error.message}`);
   }
   if (!data?.length) return [];
-  const carriers = ((await db().from("carriers").select("id, name, code")).data ?? []) as Loose[];
+  const carriers = (carrierRead.data ?? []) as Loose[];
   const sales = (data as Loose[]).map((row) => ({ row, carrier: carrierByText(carriers, row.carrier) })).filter(({ carrier }) => !only || carrier?.id === only.carrierId);
   if (!sales.length) return [];
-  // Already in the book: the carrier's own row is the truth from then on.
+  // Already in the book: the carrier's own row is the truth from then on. Every (carrier, chunk) read is independent, so a few run at once.
   const known = new Set<string>();
+  const lookups: Array<{ carrierId: string; numbers: string[] }> = [];
   for (const carrierId of [...new Set(sales.map(({ carrier }) => carrier?.id).filter(Boolean))] as string[]) {
     const numbers = sales.filter(({ carrier }) => carrier?.id === carrierId).map(({ row }) => row.policy_number);
-    for (let start = 0; start < numbers.length; start += 500) {
-      const { data: current } = await db().from("policy_current").select("policy_number").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).in("policy_number", numbers.slice(start, start + 500));
-      for (const row of current ?? []) known.add(`${carrierId}|${row.policy_number}`);
-    }
+    for (let start = 0; start < numbers.length; start += 500) lookups.push({ carrierId, numbers: numbers.slice(start, start + 500) });
   }
+  await mapLimit(lookups, 6, async ({ carrierId, numbers }) => {
+    const { data: current } = await db().from("policy_current").select("policy_number").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).in("policy_number", numbers);
+    for (const row of current ?? []) known.add(`${carrierId}|${row.policy_number}`);
+  });
   const waiting = sales.filter(({ row, carrier }) => !carrier || !known.has(`${carrier.id}|${row.policy_number}`));
   const [deals, leads] = await Promise.all([
     byIds("deal_flow", "id, worked_by, insured_name, monthly_premium_cents, face_amount_cents, product_type", waiting.map(({ row }) => row.deal_id), viewer.tenantId),
@@ -249,6 +259,13 @@ export async function loadIssuedAwaitingOne(viewer: Viewer, carrierId: string, p
 
 export async function loadBook(viewer: Viewer) {
   const scoped = viewer.role === "producer";
+  // The reads that need no policy rows start beside the book read; a failure among them surfaces below, after it.
+  const side = Promise.all([
+    annotations(viewer.tenantId), savedFilters(viewer),
+    // LA-4.13: policies whose pay trigger has occurred but which no rate can price.
+    everyRow(() => db().from("expected_commission").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("confidence", "no_rate_card").order("carrier_id").order("policy_number").order("policy_year")),
+  ]);
+  side.catch(() => {});
   const read = await everyRow(() => {
     // Ordered along the primary key (tenant first), so each page is an index range, not a scan.
     let query = db().from("policy_current").select(CURRENT_COLUMNS).eq("tenant_id", viewer.tenantId);
@@ -259,10 +276,8 @@ export async function loadBook(viewer: Viewer) {
     if (isSchemaGap(read.error)) return { available: false as const };
     throw new Error(`Could not load the policies: ${read.error.message}`);
   }
-  const [names, notes, filters, unpricedRead, sales] = await Promise.all([
-    namesFor(viewer.tenantId, read.rows), annotations(viewer.tenantId), savedFilters(viewer),
-    // LA-4.13: policies whose pay trigger has occurred but which no rate can price.
-    everyRow(() => db().from("expected_commission").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("confidence", "no_rate_card").order("carrier_id").order("policy_number").order("policy_year")),
+  const [names, [notes, filters, unpricedRead], sales] = await Promise.all([
+    namesFor(viewer.tenantId, read.rows), side,
     saleNames(viewer.tenantId, read.rows),
   ]);
   const rows: BookRow[] = read.rows.map((row: Loose): BookRow => {
@@ -361,7 +376,7 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
   const row = await currentRow(viewer, carrierId, policyNumber);
   if (!row) return null;
   const t = viewer.tenantId;
-  const [names, snapshot, changes, events, note, application, contactPolicies, householdPolicies, ledger, expected] = await Promise.all([
+  const [names, snapshot, changes, events, note, application, contactPolicies, householdPolicies, ledger, expected, ownSnapshotRead, submissionRead] = await Promise.all([
     namesFor(t, [row]),
     db().from("policy_snapshot").select("id, file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("id", row.snapshot_id).maybeSingle(),
     db().from("policy_change").select("field_name, old_value, new_value, to_snapshot_date, to_file_id, detected_at").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("to_snapshot_date").order("detected_at").limit(500),
@@ -374,28 +389,35 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     // LA-4.12: every money line the carriers reported for this policy, and the unearned advance.
     loadPolicyMoney(t, carrierId, policyNumber, { monthsPaid: row.months_paid, productCode: row.product_code, asOf: row.as_of }),
     loadPolicyExpected(t, carrierId, policyNumber),
+    // LA-4.20: this policy's snapshot in each file, with its raw row, so a change names the row that made it.
+    db().from("policy_snapshot").select("file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("snapshot_date").limit(500),
+    row.application_id ? db().from("tenant_application_submissions").select("submitted_at, submitted_via, attempt_no").eq("tenant_id", t).eq("application_id", row.application_id).order("submitted_at") : { data: [] },
   ]);
+  const ownSnapshots = (ownSnapshotRead.data ?? []) as Loose[];
+  const submissions = (submissionRead.data ?? []) as Loose[];
 
-  // The files behind the snapshot, the changes and the first sighting, for names and dates.
+  // The files behind the snapshot, the changes and the first sighting, for names and dates. The second
+  // round of reads each need only the first round, so they go together.
   const fileIds = [snapshot.data?.file_id, ...(changes.data ?? []).map((c: Loose) => c.to_file_id), ...(events.data ?? []).map((e: Loose) => e.file_id)].filter(Boolean);
-  const files = new Map<string, Loose>((await byIds("file_registry", "id, original_filename, file_date, source, received_at", fileIds, t)).map((file: Loose) => [file.id, file]));
-  const rawRow = snapshot.data?.raw_row_id
-    ? (await db().from("raw_rows").select("row_number, payload").eq("tenant_id", t).eq("file_id", snapshot.data.file_id).eq("id", snapshot.data.raw_row_id).maybeSingle()).data
-    : null;
-  // LA-4.20: this policy's snapshot in each file, with its raw row, so a change names the row that made it.
-  const ownSnapshots = ((await db().from("policy_snapshot").select("file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("snapshot_date").limit(500)).data ?? []) as Loose[];
-  const rowNumbers = new Map<string, number>(((await byIds("raw_rows", "id, row_number", ownSnapshots.map((s) => s.raw_row_id), t)) as Loose[]).map((r) => [r.id, r.row_number]));
+  const householdContactIds = [...new Set((householdPolicies.data ?? []).map((p: Loose) => p.contact_id).filter(Boolean))] as string[];
+  const [fileRows, rawRowRead, rowNumberRows, saleLeadRead, householdRows] = await Promise.all([
+    byIds("file_registry", "id, original_filename, file_date, source, received_at", fileIds, t),
+    snapshot.data?.raw_row_id ? db().from("raw_rows").select("row_number, payload").eq("tenant_id", t).eq("file_id", snapshot.data.file_id).eq("id", snapshot.data.raw_row_id).maybeSingle() : { data: null },
+    byIds("raw_rows", "id, row_number", ownSnapshots.map((s) => s.raw_row_id), t),
+    // The sale this policy is linked to (LA-3), named after its lead's person.
+    application.data?.lead_id ? db().from("agent_leads").select("values").eq("tenant_id", t).eq("id", application.data.lead_id).maybeSingle() : { data: null },
+    byIds("contacts", "id, first_name, last_name", householdContactIds, t),
+  ]);
+  const files = new Map<string, Loose>(fileRows.map((file: Loose) => [file.id, file]));
+  const rawRow = rawRowRead.data;
+  const rowNumbers = new Map<string, number>((rowNumberRows as Loose[]).map((r) => [r.id, r.row_number]));
+  const saleLead = saleLeadRead.data;
+  const householdPeople = new Map<string, Loose>(householdRows.map((c: Loose) => [c.id, c]));
   const refIn = (fileId: string | null | undefined): SourceRef | null => {
     if (!fileId) return null;
     const s = ownSnapshots.find((x) => x.file_id === fileId);
     return { fileId, fileName: files.get(fileId)?.original_filename ?? null, rowNumber: s?.raw_row_id ? rowNumbers.get(s.raw_row_id) ?? null : null, snapshotDate: s?.snapshot_date ?? "" };
   };
-  const submissions = row.application_id ? (await db().from("tenant_application_submissions").select("submitted_at, submitted_via, attempt_no").eq("tenant_id", t).eq("application_id", row.application_id).order("submitted_at")).data ?? [] : [];
-  // The sale this policy is linked to (LA-3), named after its lead's person.
-  const saleLead = application.data?.lead_id ? (await db().from("agent_leads").select("values").eq("tenant_id", t).eq("id", application.data.lead_id).maybeSingle()).data : null;
-
-  const householdContactIds = [...new Set((householdPolicies.data ?? []).map((p: Loose) => p.contact_id).filter(Boolean))] as string[];
-  const householdPeople = new Map<string, Loose>((await byIds("contacts", "id, first_name, last_name", householdContactIds, t)).map((c: Loose) => [c.id, c]));
   const contact = row.contact_id ? names.contact.get(row.contact_id) ?? null : null;
   const fileName = (id: string | null | undefined) => (id ? files.get(id)?.original_filename ?? null : null);
   // The timeline names the line each item was read from, as a link to it.
@@ -495,7 +517,8 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
       : null,
     lead: {
       name: leadSourceName(names, overridden ? leadVendor : row.vendor_id, overridden ? leadCampaign : row.campaign_id),
-      costPerLeadCents: (campaign?.effective_cost_per_record_cents ?? null) as number | null,
+      // AG-0.2: inside an agency a producer does not see lead costs; a narrowed scope means exactly that session.
+      costPerLeadCents: viewer.scope ? null : ((campaign?.effective_cost_per_record_cents ?? null) as number | null),
       fromSale: !overridden && Boolean(row.vendor_id || row.campaign_id),
       vendorId: overridden ? leadVendor : null,
       campaignId: overridden ? leadCampaign : null,

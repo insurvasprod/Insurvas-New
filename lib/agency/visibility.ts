@@ -26,11 +26,18 @@ type LooseRpc = { rpc<T>(name: string, args: Record<string, unknown>): PromiseLi
 export const visibleProducerUserIds = cache(async (tenantId: string, userId: string): Promise<ProducerScope> => {
   // Solo agents pay nothing: a tenant known (within the last minute) to be on an individual plan skips the
   // database. A plan change is rare and a minute of staleness only ever errs toward the old plan's rule.
-  if ((await audienceCached(tenantId)) !== "agency") return null;
-  const { data, error } = await (getSupabaseServiceClient() as unknown as LooseRpc).rpc<string[] | null>("agency_visible_user_ids", {
+  // When the plan is not known in this process yet, the scope is asked for beside it rather than after it
+  // (one trip instead of two): the function itself answers null for a non-agency plan, and the plan check
+  // still decides, exactly as before.
+  const known = audienceSeen.get(tenantId);
+  const fresh = known && Date.now() - known.at < AUDIENCE_TTL_MS;
+  if (fresh && known.audience !== "agency") return null;
+  const askScope = () => (getSupabaseServiceClient() as unknown as LooseRpc).rpc<string[] | null>("agency_visible_user_ids", {
     p_tenant_id: tenantId,
     p_user_id: userId,
   });
+  const [audience, { data, error }] = await Promise.all([fresh ? known.audience : audienceCached(tenantId), askScope()]);
+  if (audience !== "agency") return null;
   if (error) {
     const missing = error.code === "PGRST202" || error.code === "42883" || /could not find the function/i.test(error.message ?? "");
     if (missing) return null;
@@ -52,9 +59,40 @@ async function audienceCached(tenantId: string): Promise<string | null> {
   return audience;
 }
 
-export async function scopeFor(context: { tenantId: string; userId: string }): Promise<ProducerScope> {
-  return visibleProducerUserIds(context.tenantId, context.userId);
+/**
+ * `maxAgeMs`, for a route polled every few seconds (the alert bell): reuse this person's scope read within
+ * that age instead of asking the database on every poll. The scope it may serve is at most that old — a
+ * manager who just lost a report keeps seeing alerts about that report's leads for up to `maxAgeMs`. Every
+ * other caller omits it and reads the scope fresh, as before.
+ */
+export async function scopeFor(context: { tenantId: string; userId: string }, options: { maxAgeMs?: number } = {}): Promise<ProducerScope> {
+  const maxAge = options.maxAgeMs ?? 0;
+  if (maxAge <= 0) {
+    // Read in this request's auth round trip (requireFeature `prefetchScope`): the same read, just earlier.
+    const early = requestScope.get(context);
+    if (early !== undefined) return early === null ? null : [...early];
+    return visibleProducerUserIds(context.tenantId, context.userId);
+  }
+  const key = `${context.tenantId}:${context.userId}`;
+  const hit = scopeSeen.get(key);
+  if (hit && Date.now() - hit.at < maxAge) return hit.scope === null ? null : [...hit.scope];
+  const scope = await visibleProducerUserIds(context.tenantId, context.userId);
+  if (scopeSeen.size >= SCOPE_CACHE_LIMIT) scopeSeen.clear();
+  scopeSeen.set(key, { scope: scope === null ? null : [...scope], at: Date.now() });
+  return scope;
 }
+
+/**
+ * The scope requireFeature read for one request, keyed by that request's own context object — so it lives
+ * exactly as long as the request does and can never be served to another request or session.
+ */
+const requestScope = new WeakMap<object, ProducerScope>();
+export function rememberScope(context: object, scope: ProducerScope) {
+  requestScope.set(context, scope === null ? null : [...scope]);
+}
+
+const SCOPE_CACHE_LIMIT = 5000;
+const scopeSeen = new Map<string, { scope: ProducerScope; at: number }>();
 
 /**
  * Narrows a PostgREST query to the visible producers' rows. `column` is the table's producer column

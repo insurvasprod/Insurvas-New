@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { acquisitionDefaults, ExpenseError, generateRecurring, listExpenses } from "@/lib/accounting/expenseStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -16,7 +16,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Expenses" description="Tools, insurance and fees, so cost per policy is honest." />;
   }
-  if (!["owner", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Expenses" detail="Only owners and bookkeepers can see what the agency spends." />;
   }
   const { open } = await searchParams;

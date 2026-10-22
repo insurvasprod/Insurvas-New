@@ -142,7 +142,7 @@ function VendorFields({ draft, onChange, idPrefix, allowInactive }: { draft: Dra
   const set = (key: keyof Draft) => (event: { target: { value: string } }) => onChange({ ...draft, [key]: event.target.value });
   const id = (key: string) => `${idPrefix}-${key}`;
   return <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
-    <Field label="Name" htmlFor={id("name")}><input id={id("name")} className={control} value={draft.name} onChange={set("name")} placeholder="Apex Data" /></Field>
+    <Field label="Name" htmlFor={id("name")}><input id={id("name")} className={control} value={draft.name} onChange={set("name")} maxLength={160} placeholder="Apex Data" /></Field>
     <Field label="Category" htmlFor={id("category")}><input id={id("category")} className={control} value={draft.category} onChange={set("category")} maxLength={80} placeholder="Aged & ping-post" /></Field>
     <Field label="Lead type" htmlFor={id("type")}><select id={id("type")} className={control} value={draft.lead_type} onChange={set("lead_type")}><option value="list">List — a spreadsheet</option><option value="realtime">Real-time — posted by API</option><option value="aged">Aged — old and cheap</option></select></Field>
     <Field label="Status" htmlFor={id("status")}><select id={id("status")} className={control} value={draft.status} onChange={set("status")}>
@@ -155,7 +155,7 @@ function VendorFields({ draft, onChange, idPrefix, allowInactive }: { draft: Dra
     <Field label="Contact name" htmlFor={id("contact")}><input id={id("contact")} className={control} value={draft.contact_name} onChange={set("contact_name")} maxLength={120} placeholder="Tom Reilly" /></Field>
     <Field label="Contact email" htmlFor={id("email")}><input id={id("email")} className={control} type="email" value={draft.contact_email} onChange={set("contact_email")} maxLength={200} placeholder="accounts@apexdata.io" /></Field>
     <Field label="Contact phone" htmlFor={id("phone")}><input id={id("phone")} className={control} type="tel" value={draft.contact_phone} onChange={set("contact_phone")} maxLength={40} /></Field>
-    <Field label="Terms" htmlFor={id("terms")} className="col-span-full"><input id={id("terms")} className={control} value={draft.terms} onChange={set("terms")} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
+    <Field label="Terms" htmlFor={id("terms")} className="col-span-full"><input id={id("terms")} className={control} value={draft.terms} onChange={set("terms")} maxLength={2000} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
   </div>;
 }
 

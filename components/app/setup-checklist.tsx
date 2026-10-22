@@ -1,49 +1,18 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Ring } from "@/components/ui/ring";
-import type { SetupChecklist as SetupChecklistData } from "@/lib/dashboard/checklist";
+import { guideHref, type SetupChecklist as SetupChecklistData } from "@/lib/dashboard/checklist";
+import { markSetupStep } from "@/components/app/setup/setup-step-list";
 
-/**
- * "Hide" is per browser, for now: a localStorage flag. Storage can be missing or throw (private
- * windows, blocked site data), and then the card simply stays — it never fails to render.
- */
-const HIDDEN_KEY = "insurvas.dashboard.setup-checklist.hidden";
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  window.addEventListener("storage", listener);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", listener);
-  };
-}
-
-function readHidden(): boolean {
-  try {
-    return window.localStorage.getItem(HIDDEN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** The server cannot see the flag, so it renders the card; the browser drops it after hydration. */
-const serverHidden = () => false;
-
-function hide() {
-  try {
-    window.localStorage.setItem(HIDDEN_KEY, "1");
-  } catch {
-    return;
-  }
-  listeners.forEach((listener) => listener());
-}
+/** The card lists this many open steps; the rest are on the setup page. */
+const SHOWN_STEPS = 5;
 
 /**
  * "Finish setting up" — the artboard shape.
@@ -56,12 +25,29 @@ function hide() {
  * but a 100px target on a 560px row is a target people miss. The first undone row is the next
  * step, so it leads: its label is set heavier and its action is drawn as the primary button.
  * Finished rows stay listed, muted, so the reader sees what is behind them as well as ahead.
+ *
+ * 2026-10-21 walkthrough: the card is the summary of Get set up. It lists the open steps up to
+ * SHOWN_STEPS (skipped ones wait on the setup page), each row opens its screen with the guide bar on,
+ * and "Hide" is saved for this person (tenant_setup_guide) instead of in one browser.
  */
-export function SetupChecklist({ checklist }: { checklist: SetupChecklistData }) {
-  const hidden = useSyncExternalStore(subscribe, readHidden, serverHidden);
-  if (checklist.complete || hidden) return null;
+export function SetupChecklist({ checklist, hidden: hiddenOnServer = false }: { checklist: SetupChecklistData; hidden?: boolean }) {
+  const router = useRouter();
+  const [hiddenHere, setHiddenHere] = useState(false);
+  if (checklist.complete || hiddenOnServer || hiddenHere) return null;
 
-  const nextKey = checklist.steps.find((step) => !step.complete)?.key;
+  const hide = () => {
+    setHiddenHere(true);
+    void markSetupStep("hide").then((ok) => {
+      if (ok) router.refresh();
+      else setHiddenHere(false);
+    });
+  };
+
+  const nextKey = checklist.steps.find((step) => !step.complete && !step.skipped)?.key;
+  const open = checklist.steps.filter((step) => !step.complete && !step.skipped);
+  // A short list stays whole (done rows muted, as before); a long one shows what is next.
+  const rows = checklist.total <= SHOWN_STEPS + 1 ? checklist.steps : open.slice(0, SHOWN_STEPS);
+  const more = checklist.total - rows.length;
 
   return (
     <Card className="portal-dashboard-setup m-card" data-setup-checklist="">
@@ -84,12 +70,12 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
         </div>
 
         <ol className="block">
-          {checklist.steps.map((step) => {
+          {rows.map((step) => {
             const isNext = step.key === nextKey;
             return (
               <li key={step.key} className="block border-t border-border">
                 <Link
-                  href={step.path}
+                  href={guideHref(step)}
                   aria-label={`${step.label}${step.complete ? " (done)" : isNext ? " (next step)" : ""} — ${step.action.toLowerCase()}`}
                   aria-current={isNext ? "step" : undefined}
                   className="group flex items-center gap-3 py-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -138,6 +124,14 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
             );
           })}
         </ol>
+
+        {more > 0 ? (
+          <div className="flex justify-end border-t border-border pt-3">
+            <Link href="/app/setup" className={buttonVariants({ variant: "outline" })}>
+              See all {checklist.total} steps
+            </Link>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

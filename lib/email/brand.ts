@@ -11,6 +11,17 @@ export const EMAIL_BRAND = {
   body: "#2f343c",
   muted: "#59606b",
   rule: "#d5dbe3",
+  /** Brand-coloured TEXT (eyebrows, the accent word, links): the guide's green fails as text on white. */
+  accentInk: "#00735a",
+  /** The page ground behind the card, as on the landing page. */
+  canvas: "#f1f3f7",
+  /** The card's hairline and the facts panel's ground. */
+  band: "#e4e8ee",
+  soft: "#dcfaf0",
+  /** The olive footer band, as the landing page's closing section and site footer. */
+  navInk: "#eaf6f2",
+  navMuted: "#9fc4b8",
+  navLine: "#1d5649",
   fontStack: "Montserrat,Segoe UI,Helvetica,Arial,sans-serif",
 } as const;
 

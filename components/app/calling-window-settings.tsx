@@ -458,7 +458,7 @@ export function CallingWindowSettingsPanel() {
       {loaded.canEdit && (
         <SettingsSaveBar visible={dirty} note="Unsaved changes to your agency’s hours">
           <Button type="button" variant="outline" onClick={() => { if (baseline) setDraft(baseline); setSaveError(""); }} disabled={busy}>Discard</Button>
-          <Button type="button" onClick={() => void saveAgency()} disabled={busy || Boolean(check.problem)}>{busy ? "Saving…" : "Save changes"}</Button>
+          <Button data-guide="calling-windows-save" type="button" onClick={() => void saveAgency()} disabled={busy || Boolean(check.problem)}>{busy ? "Saving…" : "Save changes"}</Button>
         </SettingsSaveBar>
       )}
     </SettingsStack>

@@ -13,7 +13,7 @@ export function InvoiceDetailTabs({ tabs }: { tabs: Array<{ id: string; label: s
   const current = tabs.find((tab) => tab.id === active) ?? tabs[0];
   return (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-      <div role="tablist" aria-label="Invoice" className="flex gap-6 overflow-x-auto border-b border-[var(--border)] px-4">
+      <div role="tablist" aria-label="Invoice" className="flex gap-6 overflow-x-auto  border-[var(--border)] px-4">
         {tabs.map((tab) => (
           <button
             key={tab.id}

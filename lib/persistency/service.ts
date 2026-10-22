@@ -98,9 +98,12 @@ export async function leadSourceOf(tenantId: string, policyNumber: string): Prom
   }
   const issued = (candidates.data ?? []).find((row) => row.policy_number && sourceKey(row.policy_number) === key);
   if (!issued) return UNATTRIBUTED;
-  for (const [table, id] of [["tenant_lead_vendors", issued.vendor_id], ["tenant_campaigns", issued.campaign_id]] as const) {
+  // The vendor and the campaign are read together, then taken in that order (the vendor's name wins).
+  const sources = [["tenant_lead_vendors", issued.vendor_id], ["tenant_campaigns", issued.campaign_id]] as const;
+  const reads = await Promise.all(sources.map(([table, id]) => (id ? narrow.from(table).select("name").eq("tenant_id", tenantId).eq("id", id).maybeSingle() : null)));
+  for (const [index, [table, id]] of sources.entries()) {
     if (!id) continue;
-    const named = await narrow.from(table).select("name").eq("tenant_id", tenantId).eq("id", id).maybeSingle();
+    const named = reads[index]!;
     if (named.error && !isSchemaGap(named.error)) { console.error(`[persistency] could not read ${table}`, named.error); return SOURCE_UNAVAILABLE; }
     if (named.data?.name) return named.data.name;
   }

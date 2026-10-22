@@ -44,10 +44,10 @@ export async function readAttribution(tenantId: string): Promise<AttributionItem
   const files = [...new Set(rows.map((r) => r.file_id as string | null).filter(Boolean))] as string[];
   const [carrierRows, fileRows] = await Promise.all([
     carriers.length ? db().from("carriers").select("id, name").in("id", carriers) : { data: [] },
-    files.length ? db().from("file_registry").select("id, file_name").in("id", files) : { data: [] },
+    files.length ? db().from("file_registry").select("id, original_filename").in("id", files) : { data: [] },
   ]);
   const carrierName = new Map(((carrierRows.data ?? []) as Array<{ id: string; name: string }>).map((c) => [c.id, c.name]));
-  const fileName = new Map(((fileRows.data ?? []) as Array<{ id: string; file_name: string }>).map((f) => [f.id, f.file_name]));
+  const fileName = new Map(((fileRows.data ?? []) as Array<{ id: string; original_filename: string }>).map((f) => [f.id, f.original_filename]));
   return rows.map((r) => ({
     id: r.id as string,
     kind: r.kind as AttributionItem["kind"],
@@ -121,14 +121,18 @@ export type VarianceItem = { id: string; producerUserId: string; kind: "expected
 
 export async function readThreeTruths(tenantId: string, from: string, to: string, thresholdCents: number): Promise<{ rows: TruthRow[]; reviews: VarianceItem[] }> {
   await agencyRpc<number>("agency_ledger_sync", { p_tenant_id: tenantId });
-  await agencyRpc<number>("agency_reconcile", { p_tenant_id: tenantId, p_from: from, p_to: to, p_threshold_cents: thresholdCents });
-  const truths = await agencyRpc<Array<Record<string, unknown>>>("agency_three_truths", { p_tenant_id: tenantId, p_from: from, p_to: to });
-  const { data } = await db()
-    .from("agency_variance_review")
-    .select("id, producer_user_id, kind, variance_cents, status, note, period_start, period_end")
-    .eq("tenant_id", tenantId)
-    .eq("period_start", from)
-    .eq("period_end", to);
+  // The truths read only the synced ledger, never the review rows agency_reconcile writes, so they are read beside
+  // it; the reviews are read once it has written them.
+  const [truths, { data }] = await Promise.all([
+    agencyRpc<Array<Record<string, unknown>>>("agency_three_truths", { p_tenant_id: tenantId, p_from: from, p_to: to }),
+    agencyRpc<number>("agency_reconcile", { p_tenant_id: tenantId, p_from: from, p_to: to, p_threshold_cents: thresholdCents }).then(() =>
+      db()
+        .from("agency_variance_review")
+        .select("id, producer_user_id, kind, variance_cents, status, note, period_start, period_end")
+        .eq("tenant_id", tenantId)
+        .eq("period_start", from)
+        .eq("period_end", to)),
+  ]);
   return {
     rows: (truths ?? []).map((r) => ({
       producerUserId: r.producer_user_id as string,

@@ -11,7 +11,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * first-year commission (integer cents), so it is a money route: no assistant, no setter.
  */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("sales_report", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("sales_report", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   const parsed = salesReportQuery.safeParse(queryObject(new URL(request.url).searchParams));

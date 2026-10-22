@@ -53,9 +53,16 @@ export async function recordSecurityEvent(input: { userId: string; tenantId: str
 export type SecurityEventRow = { id: string; type: SecurityEventType | "failed_logins"; label: string; at: string; ip: string | null; device: string | null; detail: Record<string, unknown> };
 
 /** This person's own events, newest first, with failed-login bursts from the last 90 days among them. */
-export async function listSecurityEvents(userId: string, email: string): Promise<SecurityEventRow[] | null> {
+export async function listSecurityEvents(userId: string, emailOrRead: string | PromiseLike<string>): Promise<SecurityEventRow[] | null> {
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
-  const events = await db().from("user_security_event").select("id, event_type, detail, ip, user_agent, occurred_at").eq("user_id", userId).order("occurred_at", { ascending: false }).limit(200);
+  const columns = "id, ts, ip, user_id, email";
+  // The event log, the failed sign-ins by user id and the address do not depend on one another: one
+  // round trip. Only the by-address read waits, for the address and the former ones in the log.
+  const [events, byUser, email] = await Promise.all([
+    db().from("user_security_event").select("id, event_type, detail, ip, user_agent, occurred_at").eq("user_id", userId).order("occurred_at", { ascending: false }).limit(200),
+    db().from("login_events").select(columns).eq("actor_type", "user").eq("user_id", userId).eq("success", false).gte("ts", since).order("ts", { ascending: false }).limit(500),
+    emailOrRead,
+  ]);
   if (events.error) {
     if (isPendingSchema(events.error)) return null;
     throw new Error(`Could not read the security log: ${events.error.message}`);
@@ -66,11 +73,7 @@ export async function listSecurityEvents(userId: string, email: string): Promise
     const from = e.event_type === "email_changed" && typeof e.detail?.from === "string" ? e.detail.from.toLowerCase() : null;
     if (from && from !== email.toLowerCase() && (!formerEmails.has(from) || (formerEmails.get(from) as string) < e.occurred_at)) formerEmails.set(from, e.occurred_at);
   }
-  const columns = "id, ts, ip, user_id, email";
-  const [byUser, byEmail] = await Promise.all([
-    db().from("login_events").select(columns).eq("actor_type", "user").eq("user_id", userId).eq("success", false).gte("ts", since).order("ts", { ascending: false }).limit(500),
-    db().from("login_events").select(columns).eq("actor_type", "user").in("email", [email.toLowerCase(), ...formerEmails.keys()]).is("user_id", null).eq("success", false).gte("ts", since).order("ts", { ascending: false }).limit(500),
-  ]);
+  const byEmail = await db().from("login_events").select(columns).eq("actor_type", "user").in("email", [email.toLowerCase(), ...formerEmails.keys()]).is("user_id", null).eq("success", false).gte("ts", since).order("ts", { ascending: false }).limit(500);
   const failures = { data: ownFailedLogins([...((byUser.data ?? []) as LoginEventRow[]), ...((byEmail.data ?? []) as LoginEventRow[])], userId, email, formerEmails) };
   const rows: SecurityEventRow[] = ((events.data ?? []) as Record<string, unknown>[]).map((e) => ({
     id: e.id as string,

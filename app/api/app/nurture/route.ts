@@ -14,7 +14,7 @@ const startSchema = z.object({ action: z.literal("start_batch"), campaign_id: z.
 const chunkSchema = z.object({ action: z.literal("screen_chunk"), batch_id: z.string().uuid() });
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Nurture");
   if (refused) return refused;

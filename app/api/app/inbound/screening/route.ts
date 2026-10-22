@@ -8,7 +8,7 @@ import { guardWorkItem } from "@/lib/transferInbox/scope";
 
 /** One transfer's screening ladder, for the inbox drawer. Read-only. */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const id = z.string().uuid().safeParse(new URL(request.url).searchParams.get("work_item_id"));
   if (!id.success) return NextResponse.json({ error: "Choose a transfer" }, { status: 400 });

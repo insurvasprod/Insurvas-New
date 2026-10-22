@@ -91,6 +91,21 @@ export async function POST(request: NextRequest) {
   // past finish(): an exception here used to leave the idempotency claim at "pending" forever and a
   // retry answered "already subscribed" with no audit row.
   const warnings: string[] = [];
+
+  // A self-signup that staff plan by hand (a comp, a manual invoice) never passes checkout, which is
+  // what normally sets the tenant active and its onboarding completed. Without this the owner, profile
+  // already done, was sent back to checkout for the plan they chose at signup (QA 2026-10-22). Only
+  // the post-profile states move: a tenant still on its business profile finishes that first.
+  const { error: activateError } = await supabase
+    .from("tenants")
+    .update({ status: "active", onboarding_state: "completed" })
+    .eq("id", tenant_id)
+    .in("onboarding_state", ["ready_for_checkout", "awaiting_payment"]);
+  if (activateError) {
+    console.error("[subscriptions] could not complete onboarding after assign", activateError);
+    warnings.push("The plan is assigned, but the tenant's signup could not be marked complete; they may still see checkout.");
+  }
+
   let autoOfferId: string | null = null;
   try {
     autoOfferId = await applyAutoOffer(id);

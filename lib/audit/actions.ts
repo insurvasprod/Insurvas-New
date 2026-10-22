@@ -170,6 +170,8 @@ export const AUDIT_ACTIONS = [
   "tenant.pipeline_reordered",
   "tenant.stage_disposition_mapped",
   "tenant.stage_disposition_removed",
+  "tenant.pipeline_outcome_stage_set",
+  "tenant.pipeline_outcome_stage_removed",
   "tenant.lead_stage_changed",
   "tenant.lead_preflight_rechecked",
   "tenant.lead_note_created",
@@ -510,6 +512,9 @@ export const AUDIT_ACTIONS = [
   "agency.checklist_item_completed",
   "agency.application_reviewed",
   "agency.variance_reviewed",
+  "tenant.member_access_changed",
+  "tenant.access_preset_saved",
+  "tenant.access_preset_deleted",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -674,6 +679,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.pipeline_reordered": "Pipeline reordered",
   "tenant.stage_disposition_mapped": "Stage disposition mapped",
   "tenant.stage_disposition_removed": "Stage disposition removed",
+  "tenant.pipeline_outcome_stage_set": "Pipeline outcome stage set",
+  "tenant.pipeline_outcome_stage_removed": "Pipeline outcome stage removed",
   "tenant.lead_stage_changed": "Lead stage changed",
   "tenant.lead_preflight_rechecked": "Existing-customer pre-flight rechecked",
   "tenant.lead_note_created": "Lead note created",
@@ -978,4 +985,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "agency.checklist_item_completed": "Producer onboarding item completed",
   "agency.application_reviewed": "Application reviewed",
   "agency.variance_reviewed": "Producer reconciliation variance reviewed",
+  "tenant.member_access_changed": "Team member extra roles or hidden pages changed",
+  "tenant.access_preset_saved": "Team access preset saved",
+  "tenant.access_preset_deleted": "Team access preset deleted",
 };

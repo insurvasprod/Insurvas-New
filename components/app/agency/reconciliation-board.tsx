@@ -11,6 +11,7 @@ import { DataToolbar, RefreshButton, ToolbarCheckbox } from "@/components/ui/dat
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { BasisChip, Money } from "./money";
 import { sendJson, useAgencyData } from "./use-agency-data";
 
@@ -56,7 +57,7 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
         <DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />}>
           <ToolbarCheckbox checked={overOnly} onChange={setOverOnly} label="Over the threshold only" />
         </DataToolbar>
-      } description={data ? `A difference over $${(data.threshold / 100).toFixed(0)} opens a review item.` : undefined}>
+      }>
         {error ? <ErrorState detail={error} /> : loading || !data ? <SectionLoading rows={4} columns={6} label="Reconciling" /> : rows.length === 0 ? (
           <EmptyState title={overOnly ? "Nothing over the threshold" : "No producers yet"} hint="Each producer's three numbers appear once statements are posted." />
         ) : (
@@ -64,12 +65,12 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Producer</TableHead>
-                <TableHead className="text-right">Expected <BasisChip basis="expected" /></TableHead>
-                <TableHead className="text-right">Reported <BasisChip basis="reported" /></TableHead>
-                <TableHead className="text-right">Received <BasisChip basis="received" /></TableHead>
+                <TableHead className="text-right"><BasisChip basis="expected" /></TableHead>
+                <TableHead className="text-right"><BasisChip basis="reported" /></TableHead>
+                <TableHead className="text-right"><BasisChip basis="received" /></TableHead>
                 <TableHead className="text-right">Expected → reported</TableHead>
                 <TableHead className="text-right">Reported → received</TableHead>
-                <TableHead>Review</TableHead>
+                <TableHead>Review <InfoTip label="About review items">{`A difference over $${(data.threshold / 100).toFixed(0)} opens a review item.`}</InfoTip></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -77,7 +78,7 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
                 const items = openFor(r.producerUserId);
                 return (
                   <TableRow key={r.producerUserId} className={items.length ? "bg-[var(--warning-surface)] align-top" : "align-top"}>
-                    <TableCell className="font-medium">{name.get(r.producerUserId) ?? "Producer"}{r.expectedMissingLevels > 0 && <div className="text-xs text-[var(--warning-ink)]">{r.expectedMissingLevels} policies with no level — not in expected</div>}</TableCell>
+                    <TableCell className="font-medium">{name.get(r.producerUserId) ?? "Producer"}{r.expectedMissingLevels > 0 && <div className="text-xs text-[var(--warning-ink)]">{r.expectedMissingLevels} {r.expectedMissingLevels === 1 ? "policy" : "policies"} with no level — not in expected</div>}</TableCell>
                     <TableCell className="text-right"><Money cents={r.expectedCents} /></TableCell>
                     <TableCell className="text-right"><Money cents={r.reportedCents} /></TableCell>
                     <TableCell className="text-right"><Money cents={r.receivedCents} /></TableCell>
@@ -85,9 +86,9 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
                     <TableCell className="text-right"><Money cents={r.receivedCents - r.reportedCents} /></TableCell>
                     <TableCell>
                       {items.length === 0 ? <StatusChip tone="good">Within threshold</StatusChip> : items.map((i) => (
-                        <div key={i.id} className="flex flex-wrap items-center gap-2">
+                        <div key={i.id} className="flex items-center gap-2 py-0.5">
                           <StatusChip tone="warning">{i.kind === "expected_reported" ? "Expected vs reported" : "Reported vs received"}</StatusChip>
-                          {canReview && <><input id={`note-${i.id}`} aria-label="What you found" placeholder="What you found" className="h-8 rounded-md border border-input px-2 text-sm" /><Button size="sm" variant="outline" onClick={() => markReviewed(i)}>Mark reviewed</Button></>}
+                          {canReview && <><input id={`note-${i.id}`} aria-label="What you found" placeholder="What you found" className="h-8 w-40 rounded-md border border-input px-2 text-sm" /><Button size="sm" variant="outline" onClick={() => markReviewed(i)}>Mark reviewed</Button></>}
                         </div>
                       ))}
                     </TableCell>

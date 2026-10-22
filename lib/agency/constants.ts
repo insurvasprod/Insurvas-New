@@ -27,9 +27,17 @@ export const PRODUCER_STATUS_LABELS: Record<ProducerStatus, string> = {
   offboarded: "Offboarded",
 };
 
-/** AG-0.6: active and suspended producers hold a seat; invited and offboarded do not. */
-export function holdsAgencySeat(status: ProducerStatus): boolean {
-  return status === "active" || status === "suspended";
+/**
+ * AG-0.6 / module doc §6: a seat is held by every person working in the agency — producers AND the people who are
+ * not producers (assistants, bookkeepers, setters, retention, the owner). Exactly the rule tenant_seats_used applies:
+ * the member has accepted, the account is active or suspended, and he either has no producer row or a working one
+ * (an offboarded producer keeps his seat only until the period ends). Invited members hold none.
+ */
+export function holdsAgencySeat(member: { accepted: boolean; accountStatus: "active" | "suspended" | "invited" | "deactivated" | string; producerStatus: ProducerStatus | null; seatReleasedOn?: string | null; today?: string }): boolean {
+  if (!member.accepted || (member.accountStatus !== "active" && member.accountStatus !== "suspended")) return false;
+  if (member.producerStatus === null) return true;
+  if (member.producerStatus === "onboarding" || member.producerStatus === "active" || member.producerStatus === "suspended") return true;
+  return member.producerStatus === "offboarded" && Boolean(member.seatReleasedOn) && (member.seatReleasedOn as string) >= (member.today ?? new Date().toISOString().slice(0, 10));
 }
 
 /**

@@ -33,7 +33,7 @@ function failure(error: unknown) {
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", OUTCOME_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", OUTCOME_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     // AG-0.5: in an agency a producer closes out only his own (or, a manager, his reports') appointments.

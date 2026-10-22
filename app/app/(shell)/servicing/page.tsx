@@ -1,5 +1,5 @@
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { CAMPAIGN_PENDING_MESSAGE, loadCampaign } from "@/lib/retention/campaignStore";
 import { loadServicing, SERVICING_PENDING_MESSAGE } from "@/lib/retention/servicingStore";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -24,7 +24,7 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Servicing" description="Changes asked of the carrier, tracked until the next carrier file proves them." />;
   }
-  if (!["owner", "producer", "retention"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer", "retention"])) {
     return <RoleGateNotice featureLabel="Servicing" detail="Only owners, producers and retention reps can open servicing requests." />;
   }
   const { status, view } = await searchParams;

@@ -9,7 +9,7 @@ import { NO_STORE } from "@/lib/agency/http";
 
 /** AG-1.11 · LA-3's own check results for one sampled application — the same verdict the submission gate uses. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("team_qa", ["owner", "producer"]);
+  const auth = await requireFeatureRole("team_qa", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That review could not be found." }, { status: 404 });

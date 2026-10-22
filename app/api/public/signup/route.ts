@@ -4,6 +4,7 @@ import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds,
 
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { fetchPlans } from "@/lib/plans/queries";
+import { audienceForPlanType } from "@/lib/agency/constants";
 import { publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
@@ -135,6 +136,8 @@ export async function POST(request: NextRequest) {
     name: input.fullName,
     verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
+    audience: audienceForPlanType(plan.plan_type),
+    planName: plan.name,
   });
 
   // Signup issues a session, which is a sign-in. Without this, last_login_at stays null for a user

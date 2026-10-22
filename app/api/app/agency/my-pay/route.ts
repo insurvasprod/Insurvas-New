@@ -8,7 +8,7 @@ import { NO_STORE } from "@/lib/agency/http";
 
 /** AG-1.5 / AG-1.8 · a producer's own pay: his balance by basis, every entry, every statement. */
 export async function GET() {
-  const auth = await requireFeatureRole("producer_payouts", ["producer"]);
+  const auth = await requireFeatureRole("producer_payouts", ["producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   await syncLedger(auth.context.tenantId).catch(() => 0);
   const scope = await scopeFor(auth.context);

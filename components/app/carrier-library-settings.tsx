@@ -150,7 +150,7 @@ export function CarrierLibrarySettings() {
             actions={
               <>
                 <Button type="button" variant="outline" asChild><Link href="/app/rate-card">Rates and advance rules</Link></Button>
-                <Button type="button" onClick={openAdd}>
+                <Button data-guide="carrier-library-add" type="button" onClick={openAdd}>
                   <Plus aria-hidden="true" />
                   Add a contract
                 </Button>
@@ -268,7 +268,10 @@ function ContractDialog({
 
   function saveContract(event: FormEvent) {
     event.preventDefault();
-    return run("contract", "/api/app/carrier-library/tenant-carriers", { carrier_id: carrierId, contract_level_bp: parseBps(contractLevel) ?? contractLevel, writing_number: writingNumber, effective_from: contractEffective }, "Carrier contract saved");
+    const level = parseBps(contractLevel);
+    // The raw text used to go to the server, which answered "expected number, received NaN".
+    if (level === null) { const message = "Enter the contract level in basis points, up to 100,000 (11,000 = 110%)."; setError(message); notify.block(message); return; }
+    return run("contract", "/api/app/carrier-library/tenant-carriers", { carrier_id: carrierId, contract_level_bp: level, writing_number: writingNumber, effective_from: contractEffective }, "Carrier contract saved");
   }
   /** Saved on change: it is one fact about the carrier's contract, not part of a dated row. */
   async function saveRequiresEo(next: boolean) {

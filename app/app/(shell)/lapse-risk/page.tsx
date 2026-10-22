@@ -1,5 +1,5 @@
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { getLapseRisk, LAPSE_SCHEMA_PENDING_MESSAGE } from "@/lib/lapseRisk/service";
 import { loadBoard, loadSaveRates } from "@/lib/ingestion/retentionStore";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -32,7 +32,7 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
     );
   }
 
-  if (!["owner", "producer", "retention"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer", "retention"])) {
     return <RoleGateNotice featureLabel="Lapse risk" detail="Only owners, producers and retention reps can view retention risk and the advance at risk." />;
   }
 

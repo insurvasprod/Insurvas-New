@@ -816,7 +816,18 @@ export async function setSubmissionReference(actor: Actor, applicationId: string
   if (error) fail(error, "Could not save the reference");
   // A policy number added later: if a carrier file already listed it, the policy moves to this sale now (LA-4.8 step 2).
   const policyNumber = typeof patch.policy_number === "string" ? patch.policy_number : patch.reference_kind === "policy_no" && typeof patch.carrier_reference === "string" ? patch.carrier_reference : null;
-  if (policyNumber) await answerWithSale(actor.tenantId, head.carrier_id, policyNumber);
+  if (!policyNumber) return { saved: true };
+  // Issued without a number (it waits on Missing reference): the number now joins the sale to the
+  // book, as it would have at issue (STATUS-MODEL §3). Before 2026-10-22 only answerWithSale ran, so
+  // the sale never reached tenant_issued_policies unless a carrier file listed it.
+  if (head.status === "closed") {
+    const closed = await db().from("tenant_applications").select("outcome, closed_at").eq("tenant_id", actor.tenantId).eq("id", applicationId).maybeSingle();
+    if (closed.data?.outcome === "issued") {
+      const link = await linkIssuedPolicy(actor, applicationId, policyNumber, typeof closed.data.closed_at === "string" ? closed.data.closed_at.slice(0, 10) : null);
+      return { saved: true, policy: link };
+    }
+  }
+  await answerWithSale(actor.tenantId, head.carrier_id, policyNumber);
   return { saved: true };
 }
 

@@ -297,6 +297,12 @@ export function CampaignWorkspace() {
 
   async function createCampaign() {
     if (!newCampaign || creating) return;
+    // Checked before anything is created: "abc" in Total spend used to save the campaign at $0.00
+    // without a word, and the cost of a lead is the number this product is for (QA 2026-10-22).
+    const spendText = newCampaign.total_spend.replace(/[$,\s]/g, "");
+    const purchasedText = newCampaign.records_purchased.replace(/[,\s]/g, "");
+    if (spendText && !/^\d+(\.\d{1,2})?$/.test(spendText)) { notify.block("Total spend must be an amount in dollars, like 1750.00."); return; }
+    if (purchasedText && !/^\d+$/.test(purchasedText)) { notify.block("Records purchased must be a whole number."); return; }
     setCreating(true);
     try {
       const created = await fetch("/api/app/campaigns", {
@@ -317,8 +323,8 @@ export function CampaignWorkspace() {
       // The money is a second call, because `POST /campaigns` deliberately does not take it — the
       // cost fields belong to the same PATCH that the cost editor uses, so there is one place where
       // spend changes and one place that re-derives cost per record.
-      const spend = Math.round(Number(newCampaign.total_spend) * 100);
-      const purchased = Number(newCampaign.records_purchased);
+      const spend = Math.round(Number(spendText || 0) * 100);
+      const purchased = Number(purchasedText || 0);
       const weight = Number(newCampaign.mixing_weight) || 1;
       if (Number.isFinite(spend) && spend >= 0 && Number.isInteger(purchased) && purchased >= 0) {
         await fetch(`/api/app/campaigns/${body.campaign.id}`, {

@@ -70,7 +70,17 @@ export async function listSettingsAudit(tenantId: string, filter: SettingsAuditF
 
 /** The newest change in a section: the "last changed by X on Y" line. Null when there is none. */
 export async function lastSettingsChange(tenantId: string, sectionKey: string): Promise<SettingsAuditEntry | null> {
-  const result = await db().from("settings_audit").select(COLUMNS).eq("tenant_id", tenantId).eq("section_key", sectionKey).order("occurred_at", { ascending: false }).limit(1);
+  const newest = (columns: string) => db().from("settings_audit").select(columns).eq("tenant_id", tenantId).eq("section_key", sectionKey).order("occurred_at", { ascending: false }).limit(1);
+  // The actor's name rides along (settings_audit_actor_user_id_fkey) rather than a second, dependent
+  // users read. Should the embed be refused, the two reads below run exactly as before.
+  const embedded = await newest(`${COLUMNS}, actor:users!settings_audit_actor_user_id_fkey(name)`);
+  if (!embedded.error) {
+    const hit = ((embedded.data ?? []) as Array<Row & { actor: { name: string | null } | null }>)[0];
+    if (!hit) return null;
+    const { actor, ...row } = hit;
+    return toEntry(row, new Map(row.actor_user_id && actor?.name ? [[row.actor_user_id, actor.name]] : []));
+  }
+  const result = await newest(COLUMNS);
   if (result.error) {
     if (isMissing(result.error)) return null;
     throw new Error(`Could not read the settings history: ${result.error.message}`);

@@ -64,7 +64,7 @@ async function openRequirements(tenantId: string, scope: ProducerScope = null): 
   throw new ApplicationError("APPLICATION_UNAVAILABLE", withBy.error.message, 500);
 }
 
-export async function loadPending(tenantId: string, now = Date.now(), scope: ProducerScope = null): Promise<PendingData> {
+export async function loadPending(tenantId: string, now = Date.now(), scope: ProducerScope = null, options: { summaryOnly?: boolean } = {}): Promise<PendingData> {
   const client = db();
   const [requirements, counterQ, awaitingQ, ageingDays] = await Promise.all([
     openRequirements(tenantId, scope),
@@ -83,21 +83,27 @@ export async function loadPending(tenantId: string, now = Date.now(), scope: Pro
   // Every attempt any of the three lists points at.
   const knownIds = new Set(candidates.map((a) => a.id));
   const extraIds = [...new Set([...requirements.map((r) => r.application_id), ...counters.map((o) => o.application_id)])].filter((id) => !knownIds.has(id));
-  const extra = await inChunks<Attempt>(extraIds, (chunk) => client.from("tenant_applications").select("id, case_id, lead_id, insured_role, attempt_no, carrier_id, carrier_product_id, product_code, quote_id, status, outcome, updated_at, submitted_at").eq("tenant_id", tenantId).in("id", chunk));
+  // The submissions need only the candidates, so they are read beside the extra attempts rather than after.
+  const [extra, submissions] = await Promise.all([
+    inChunks<Attempt>(extraIds, (chunk) => client.from("tenant_applications").select("id, case_id, lead_id, insured_role, attempt_no, carrier_id, carrier_product_id, product_code, quote_id, status, outcome, updated_at, submitted_at").eq("tenant_id", tenantId).in("id", chunk)),
+    inChunks<{ application_id: string; carrier_reference: string | null; policy_number: string | null; submitted_at: string }>(candidates.map((a) => a.id), (chunk) =>
+      client.from("tenant_application_submissions").select("application_id, carrier_reference, policy_number, submitted_at").eq("tenant_id", tenantId).in("application_id", chunk)),
+  ]);
   const attempts = [...candidates, ...extra];
   const attemptBy = new Map(attempts.map((a) => [a.id, a]));
 
   const chaserIds = requirements.map((r) => r.last_chased_by).filter((x): x is string => Boolean(x));
-  const [names, carriers, products, quotes, submissions, chasers] = await Promise.all([
-    insuredNames(tenantId, attempts),
-    inChunks<{ id: string; name: string }>(attempts.map((a) => a.carrier_id).filter((x): x is string => Boolean(x)), (chunk) => client.from("carriers").select("id, name").in("id", chunk)),
-    inChunks<{ id: string; name: string }>(attempts.map((a) => a.carrier_product_id).filter((x): x is string => Boolean(x)), (chunk) => client.from("carrier_products").select("id, name").in("id", chunk)),
-    inChunks<{ id: string; tier: string | null; assumed_health_class: string | null; face_amount_cents: number; monthly_premium_cents: number }>(attempts.map((a) => a.quote_id).filter((x): x is string => Boolean(x)), (chunk) =>
-      client.from("tenant_quotes").select("id, tier, assumed_health_class, face_amount_cents, monthly_premium_cents").eq("tenant_id", tenantId).in("id", chunk)),
-    inChunks<{ application_id: string; carrier_reference: string | null; policy_number: string | null; submitted_at: string }>(candidates.map((a) => a.id), (chunk) =>
-      client.from("tenant_application_submissions").select("application_id, carrier_reference, policy_number, submitted_at").eq("tenant_id", tenantId).in("application_id", chunk)),
+  // The dashboard card (summaryOnly) counts rows and never shows a name, carrier, product, quote or
+  // chaser, so it skips those five lookups: the same rows are counted, the labels are just not read.
+  const labels = !options.summaryOnly;
+  const [names, carriers, products, quotes, chasers] = await Promise.all([
+    labels ? insuredNames(tenantId, attempts) : { nameFor: () => "", stateFor: () => null, leadName: () => "" },
+    labels ? inChunks<{ id: string; name: string }>(attempts.map((a) => a.carrier_id).filter((x): x is string => Boolean(x)), (chunk) => client.from("carriers").select("id, name").in("id", chunk)) : [],
+    labels ? inChunks<{ id: string; name: string }>(attempts.map((a) => a.carrier_product_id).filter((x): x is string => Boolean(x)), (chunk) => client.from("carrier_products").select("id, name").in("id", chunk)) : [],
+    labels ? inChunks<{ id: string; tier: string | null; assumed_health_class: string | null; face_amount_cents: number; monthly_premium_cents: number }>(attempts.map((a) => a.quote_id).filter((x): x is string => Boolean(x)), (chunk) =>
+      client.from("tenant_quotes").select("id, tier, assumed_health_class, face_amount_cents, monthly_premium_cents").eq("tenant_id", tenantId).in("id", chunk)) : [],
     // users has no tenant_id; these ids came from this tenant's own rows.
-    inChunks<{ id: string; name: string | null }>(chaserIds, (chunk) => client.from("users").select("id, name").in("id", chunk)),
+    labels ? inChunks<{ id: string; name: string | null }>(chaserIds, (chunk) => client.from("users").select("id, name").in("id", chunk)) : [],
   ]);
   const carrierBy = new Map(carriers.map((c) => [c.id, c.name]));
   const productBy = new Map(products.map((p) => [p.id, p.name]));
@@ -155,7 +161,7 @@ export async function loadPending(tenantId: string, now = Date.now(), scope: Pro
 
 /** The dashboard's three figures. The same rows as the page, so the two never disagree. */
 export async function pendingSummary(tenantId: string, scope: ProducerScope = null): Promise<PendingSummary> {
-  return (await loadPending(tenantId, Date.now(), scope)).summary;
+  return (await loadPending(tenantId, Date.now(), scope, { summaryOnly: true })).summary;
 }
 
 // ── Log a chase (LA-3.18) ────────────────────────────────────────────────────

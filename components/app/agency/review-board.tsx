@@ -61,7 +61,7 @@ export function ReviewBoard({ canSetRates }: { canSetRates: boolean }) {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow><TableHead>Producer</TableHead><TableHead>Carrier</TableHead><TableHead>Sampled</TableHead><TableHead>Status</TableHead><TableHead>Errors</TableHead></TableRow>
+                <TableRow><TableHead>Producer</TableHead><TableHead>Carrier</TableHead><TableHead>Sampled</TableHead><TableHead>Status</TableHead><TableHead>Errors</TableHead><TableHead className="text-right"><span className="sr-only">Open</span></TableHead></TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
@@ -71,6 +71,7 @@ export function ReviewBoard({ canSetRates }: { canSetRates: boolean }) {
                     <TableCell className="tabular-nums">{day(r.sampledAt)} · {r.sampleBps / 100}%</TableCell>
                     <TableCell><StatusChip tone={STATUS_TONE[r.status]}>{REVIEW_STATUS_LABELS[r.status]}</StatusChip></TableCell>
                     <TableCell className="text-sm">{r.errorTypes.map((t) => REVIEW_ERROR_LABELS[t]).join(", ") || "—"}</TableCell>
+                    <TableCell className="text-right"><Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setOpen(r); }}>{r.status === "queued" && data.canReview ? "Review" : "Open"}</Button></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -95,7 +96,7 @@ function ReviewPanel({ review, producer, canReview, onClose, onSaved }: { review
     const { error } = await sendJson("/api/app/agency/review", "POST", { reviewId: review.id, status, errorTypes: status === "passed" ? [] : types, note: note.trim() || null });
     setBusy(false);
     if (error) { notify.fail(error); return; }
-    notify.done(status === "passed" ? `Passed. ${producer} sees it on his reviews.` : `${REVIEW_STATUS_LABELS[status]}. ${producer} sees your note.`);
+    notify.done(status === "passed" ? `Passed. ${producer} sees it in their reviews.` : `${REVIEW_STATUS_LABELS[status]}. ${producer} sees your note.`);
     onSaved();
   }
   const needsDetail = types.length === 0 || !note.trim();
@@ -144,7 +145,7 @@ function ReviewPanel({ review, producer, canReview, onClose, onSaved }: { review
 function TallyTable({ producers, reviews, tally, canSetRates, onSaved }: { producers: Producer[]; reviews: Review[]; tally: Map<string, Array<[string, number]>>; canSetRates: boolean; onSaved: () => void }) {
   const [rates, setRates] = useState<Record<string, string>>({});
   const latestRate = (id: string) => reviews.find((r) => r.producerUserId === id)?.sampleBps;
-  if (producers.length === 0) return <EmptyState title="No producers yet" hint="Each producer's tally appears once his applications are sampled." />;
+  if (producers.length === 0) return <EmptyState title="No producers yet" hint="Each producer's tally appears once their applications are sampled." />;
 
   async function save(userId: string) {
     const percent = Number(rates[userId]);

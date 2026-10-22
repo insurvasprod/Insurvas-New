@@ -24,6 +24,8 @@ const CHECKS: { label: string; codes: string[] }[] = [
   { label: "quote selected", codes: ["QA_NO_QUOTE"] },
   { label: "required fields present", codes: ["QA_REQUIRED_FIELD"] },
   { label: "Social Security number valid", codes: ["QA_SSN_INVALID"] },
+  { label: "ZIP valid", codes: ["QA_ZIP_INVALID"] },
+  { label: "height and weight plausible", codes: ["QA_BUILD_IMPLAUSIBLE"] },
   { label: "primary share total", codes: ["BENEFICIARY_PRIMARY_TOTAL", "BENEFICIARY_NO_PRIMARY"] },
   { label: "contingent has a primary", codes: ["BENEFICIARY_CONTINGENT_TOTAL"] },
   { label: "beneficiary details", codes: ["BENEFICIARY_NAME", "BENEFICIARY_RELATIONSHIP", "BENEFICIARY_RELATIONSHIP_OTHER"] },
@@ -65,6 +67,8 @@ const DETAIL: Record<string, string> = {
   QA_FE_AGE: "Allowed — most final expense clients are 50 to 85.",
   QA_KNOCKOUT: "Most carriers treat this as a decline or a graded rating. Check the carrier's guide.",
   QA_PREFILL_UNREVIEWED: "It was filled in from what we already had. Confirm it with the client.",
+  QA_ZIP_INVALID: "A US ZIP is five digits, or nine with the +4. The carrier's address check rejects anything else.",
+  QA_BUILD_IMPLAUSIBLE: "Height and weight are read against the carrier's build chart. Check them with the client.",
 };
 
 export type QaSettings = {
@@ -132,6 +136,16 @@ export function runQa(input: {
     const plain = typeof ssn.value === "string" || typeof ssn.value === "number" ? String(ssn.value) : null;
     const serialZero = typeof ssn.masked === "string" && digitsOnly(ssn.masked).endsWith("0000");
     if ((plain !== null && !isPlausibleSsn(plain)) || serialZero || input.ssnValid === false) add(blocking, "QA_SSN_INVALID", "The Social Security number is not a valid one.", "insured.ssn");
+  }
+
+  // Formats a blank-only check let through (QA pass 2026-10-22: a ZIP of "12ab" and a height of 999
+  // inches raised nothing).
+  const zip = v("addr.zip");
+  if (zip && typeof zip.value === "string" && zip.value.trim() !== "" && !/^\d{5}(-?\d{4})?$/.test(zip.value.trim())) add(blocking, "QA_ZIP_INVALID", "The ZIP is not a valid one.", "addr.zip");
+  const height = Number(v("insured.height_in")?.value);
+  const weight = Number(v("insured.weight_lb")?.value);
+  if ((has("insured.height_in") && !(height >= 36 && height <= 96)) || (has("insured.weight_lb") && !(weight >= 50 && weight <= 700))) {
+    add(warnings, "QA_BUILD_IMPLAUSIBLE", "The height or weight looks wrong.", has("insured.height_in") && !(height >= 36 && height <= 96) ? "insured.height_in" : "insured.weight_lb");
   }
 
   for (const issue of checkBeneficiaries(attempt.beneficiaries, today)) {

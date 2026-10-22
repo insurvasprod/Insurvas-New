@@ -308,16 +308,20 @@ async function enrichCards<T extends MessageRow>(supabase: ReturnType<typeof get
  * producers' — lib/transferInbox/scope.ts); a card about another producer's transfer is left out of the
  * thread and of the unread count. Omitted / null = every message, as before.
  */
-async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, allowArchived = false, accessVerified = false, scope: ProducerScope = null) {
+type PreloadedChat = { messages: Array<MessageRow & Record<string, unknown>>; readAt: string | null };
+
+async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, allowArchived = false, accessVerified = false, scope: ProducerScope = null, preloaded?: PreloadedChat) {
   const tenantId = channel.tenant_id;
   if (!accessVerified) await assertChannelAccess(supabase, channel, userId, allowArchived);
   else if (!allowArchived && channel.status !== "active") throw new Error("Chat channel is archived");
-  const [messages, read] = await Promise.all([
-    // Newest 200, flipped back to chronological below: ascending + limit returned the OLDEST
-    // 200, so a channel past 200 messages never showed anything new.
-    supabase.from("partner_messages").select("id, channel_id, partner_id, work_item_id, message, message_kind, card_type, card_payload, created_by, created_at, event_key").eq("tenant_id", tenantId).eq("channel_id", channel.id).order("created_at", { ascending: false }).limit(200),
-    supabase.from("partner_message_reads").select("read_at").eq("tenant_id", tenantId).eq("channel_id", channel.id).eq("user_id", userId).maybeSingle(),
-  ]);
+  const [messages, read] = preloaded
+    ? [{ data: preloaded.messages, error: null }, { data: preloaded.readAt ? { read_at: preloaded.readAt } : null }]
+    : await Promise.all([
+      // Newest 200, flipped back to chronological below: ascending + limit returned the OLDEST
+      // 200, so a channel past 200 messages never showed anything new.
+      supabase.from("partner_messages").select("id, channel_id, partner_id, work_item_id, message, message_kind, card_type, card_payload, created_by, created_at, event_key").eq("tenant_id", tenantId).eq("channel_id", channel.id).order("created_at", { ascending: false }).limit(200),
+      supabase.from("partner_message_reads").select("read_at").eq("tenant_id", tenantId).eq("channel_id", channel.id).eq("user_id", userId).maybeSingle(),
+    ]);
   if (messages.error) throw new Error(`Could not load chat: ${messages.error.message}`);
   // "nobody_claimed → Ray only" (LA-1.16-4): cards posted to a partner channel before the writer
   // routed them to the owners stay stored, but the channel no longer shows them to anyone.
@@ -461,12 +465,15 @@ export async function createAgentChannel(input: { tenantId: string; userId: stri
 
 export async function getAgentChatDirectory(tenantId: string) {
   const supabase = getSupabaseServiceClient();
-  const tenantUsers = await supabase.from("tenant_users").select("user_id, role, users!inner(id, name, email, status)").eq("tenant_id", tenantId);
-  // The embed names its foreign key. public.partner_users has TWO relationships to public.users --
-  // user_id and the organizations-era invited_by -- so a bare users!inner is ambiguous and PostgREST
-  // refuses it with PGRST201, which the route turned into a blanket 503. Naming the constraint is
-  // the documented disambiguation and says which person is meant: the member, not the inviter.
-  const partnerUsers = await supabase.from("partner_users").select("user_id, role, partner_id, users!partner_users_user_id_fkey!inner(id, name, email, status), partners!inner(name)").eq("tenant_id", tenantId).eq("status", "active");
+  // Independent reads: one round trip.
+  const [tenantUsers, partnerUsers] = await Promise.all([
+    supabase.from("tenant_users").select("user_id, role, users!inner(id, name, email, status)").eq("tenant_id", tenantId),
+    // The embed names its foreign key. public.partner_users has TWO relationships to public.users --
+    // user_id and the organizations-era invited_by -- so a bare users!inner is ambiguous and PostgREST
+    // refuses it with PGRST201, which the route turned into a blanket 503. Naming the constraint is
+    // the documented disambiguation and says which person is meant: the member, not the inviter.
+    supabase.from("partner_users").select("user_id, role, partner_id, users!partner_users_user_id_fkey!inner(id, name, email, status), partners!inner(name)").eq("tenant_id", tenantId).eq("status", "active"),
+  ]);
   if (tenantUsers.error || partnerUsers.error) throw new Error(`Could not load chat directory: ${tenantUsers.error?.message ?? partnerUsers.error?.message}`);
   return { tenantUsers: tenantUsers.data ?? [], partnerUsers: partnerUsers.data ?? [] };
 }
@@ -512,8 +519,29 @@ export async function getAgentChatChannels(tenantId: string, userId: string, sco
   // which resolved their tenant_users membership for this tenant — exactly what isChannelMember
   // accepts for a partner channel — and an internal channel is in `visible` only because
   // `memberIds` holds this user's partner_channel_members row for it.
-  const results = await Promise.all(visible.map(async (channel) => { try { return await chatForLoadedChannel(supabase, channel, userId, true, true, scope); } catch { return null; } }));
+  const latest = await latestMessagesByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id));
+  const results = await Promise.all(visible.map(async (channel) => { try { return await chatForLoadedChannel(supabase, channel, userId, true, true, scope, latest?.get(channel.id)); } catch { return null; } }));
   return results.filter(Boolean);
+}
+
+let latestMessagesMissingAt = -Infinity;
+
+/**
+ * Every visible channel's newest 200 messages and this user's read mark in one call
+ * (partner_chat_latest_messages, 20261020230000) instead of two reads per channel (66 on the demo tenant).
+ * Null — each channel then reads its own, as before — while the function is not applied or the call fails.
+ */
+async function latestMessagesByChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, userId: string, channelIds: string[]): Promise<Map<string, PreloadedChat> | null> {
+  if (!channelIds.length || Date.now() - latestMessagesMissingAt < 5 * 60_000) return null;
+  type LooseRpc = { rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }> };
+  const { data, error } = await (supabase as unknown as LooseRpc).rpc("partner_chat_latest_messages", { p_tenant_id: tenantId, p_user_id: userId, p_channel_ids: channelIds, p_limit: 200 });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883" || /could not find the function/i.test(error.message)) latestMessagesMissingAt = Date.now();
+    return null;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const byChannel = data as Record<string, { messages?: PreloadedChat["messages"]; read_at?: string | null }>;
+  return new Map(channelIds.map((id) => [id, { messages: byChannel[id]?.messages ?? [], readAt: byChannel[id]?.read_at ?? null }]));
 }
 
 /** AG-0.5: with a `scope`, an attachment on a message about a transfer the session may not see is "not found". */

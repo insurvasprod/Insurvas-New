@@ -336,6 +336,10 @@ export function describeEmptyQueue(input: { campaigns: CampaignServingState[]; a
   if (!servable.length) {
     if (heldSentence) return `Nothing can be served yet: ${heldSentence}. Only a scrubbed campaign is dialled.`;
     if (paused.length) return `Every campaign is paused, draft or exhausted — ${namesOf(paused)} ${paused.length === 1 ? "is" : "are"} paused.`;
+    // The first thing a new account meets after its first import: the campaign it imported into is a
+    // draft. Say which, and where to activate it (QA 2026-10-22).
+    const drafts = input.campaigns.filter((row) => row.status === "draft");
+    if (drafts.length) return `Nothing is dialled yet: ${namesOf(drafts)} ${drafts.length === 1 ? "is" : "are"} still a draft. Activate it and run the scrub in Leads › Vendors & campaigns.`;
     return "Every campaign is paused, draft or exhausted.";
   }
   const base = input.anyUnclaimed ? EMPTY_QUEUE_NORMAL : "Every lead has been worked or is with another agent.";
@@ -444,7 +448,7 @@ export function explainEmptyQueue(facts: EmptyQueueFacts): { code: EmptyQueueCod
   const held = described.includes(" Held back until their scrub passes: ") ? ` Held back until their scrub passes: ${described.split(" Held back until their scrub passes: ")[1]}` : "";
   if (!facts.anyUnclaimed) return { code: "nothing_waiting", message: `Every lead has been worked or is with another agent.${held}` };
   if (facts.workableStates && facts.workableStates.length === 0)
-    return { code: "no_licence", message: "You are not licensed in any state the agency holds a live licence for, so no lead can be served to you. An owner adds your states on Settings › Team & access, and the agency's on Settings › States & licences." };
+    return { code: "no_licence", message: "You are not licensed in any state the agency holds a live licence for, so no lead can be served to you. Add the agency's licences on Settings › States & licences; on a team plan, an owner also sets each person's states on Settings › Team & access." };
   if (facts.windows.some((row) => row.reason === "rules_stale"))
     return { code: "rules_stale", message: "The calling rules are out of date, so no one is dialled until they are refreshed." };
 

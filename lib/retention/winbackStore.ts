@@ -7,6 +7,7 @@ import { resolveRuntimeStage } from "@/lib/pipelines/service";
 import { rowVisible, scopeFor, scopeQuery } from "@/lib/agency/visibility";
 
 import { isDue, leadNote, type Category, type ReasonSource, type WinbackBand } from "./winback";
+import { mapLimit, READ_CONCURRENCY } from "./batch";
 
 /**
  * LA-5.7 (Notion sprint) · win-back, server side.
@@ -49,14 +50,21 @@ async function everyRow(build: () => Loose, max = 50_000): Promise<Loose[]> {
   }
   return rows;
 }
+// A few chunks at a time (mapLimit), results in chunk order; the first failed chunk (in order) throws.
 const inChunks = async (ids: string[], read: (part: string[]) => Loose) => {
+  const parts = Array.from({ length: Math.ceil(ids.length / CHUNK) }, (_, i) => ids.slice(i * CHUNK, i * CHUNK + CHUNK));
+  const results = await mapLimit<string[], Loose>(parts, READ_CONCURRENCY, read);
   const out: Loose[] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const r = await read(ids.slice(i, i + CHUNK));
+  for (const r of results) {
     if (r.error) throw r.error;
     out.push(...(r.data ?? []));
   }
   return out;
+};
+const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+const unwrap = <T,>(read: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+  if (!read.ok) throw read.error;
+  return read.value;
 };
 const phoneDigits = (raw: string | null | undefined) => {
   const d = (raw ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
@@ -236,6 +244,17 @@ export async function loadWinback(viewer: Viewer, options: { release: boolean } 
   } catch (error) {
     console.error("[winback] the sync or release could not run", error);
   }
+  // Read beside the candidates (after the sync and the release, which write those): who this viewer may
+  // see, the carriers' names, and the list's id then its scrub status. Settled, so none fails unhandled.
+  const ownersRead = settle(winbackOwners(viewer));
+  const sideRead = settle(Promise.all([
+    db().from("carriers").select("id, name"),
+    Promise.resolve(db().from("retention_settings").select("winback_campaign_id").eq("tenant_id", viewer.tenantId).maybeSingle()).then(async (settings: Loose) => {
+      const listId = (settings.data as Loose)?.winback_campaign_id ?? null;
+      const list = listId ? await db().from("tenant_campaigns").select("scrub_status").eq("tenant_id", viewer.tenantId).eq("id", listId).maybeSingle() : { data: null };
+      return { listId, list };
+    }),
+  ]));
   let rows: Loose[];
   let claims: Loose[];
   try {
@@ -249,7 +268,7 @@ export async function loadWinback(viewer: Viewer, options: { release: boolean } 
   }
   // AG-0.5: who this viewer may see the policies of (policy_current.agent_user_id, D1). A narrowed agency
   // session: its scope (a manager's reports included). Otherwise a producer: his own, as before. Null: all.
-  const owners = await winbackOwners(viewer);
+  const owners = unwrap(await ownersRead);
   if (owners !== null) {
     const numbers = [...new Set([...rows.map((r) => r.source_policy_number), ...claims.map((c) => c.policy_number)])];
     const mine = new Set((await inChunks(numbers, (part) => scopeQuery(db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId), "agent_user_id", owners).in("policy_number", part))).map((p: Loose) => `${p.carrier_id}|${p.policy_number}`));
@@ -257,13 +276,8 @@ export async function loadWinback(viewer: Viewer, options: { release: boolean } 
     claims = claims.filter((c) => mine.has(`${c.carrier_id}|${c.policy_number}`));
   }
   const contactIds = [...new Set([...rows.map((r) => r.contact_id), ...claims.map((c) => c.contact_id)].filter(Boolean))] as string[];
-  const [contacts, carriers, settings] = await Promise.all([
-    inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name").eq("tenant_id", viewer.tenantId).in("id", part)),
-    db().from("carriers").select("id, name"),
-    db().from("retention_settings").select("winback_campaign_id").eq("tenant_id", viewer.tenantId).maybeSingle(),
-  ]);
-  const listId = (settings.data as Loose)?.winback_campaign_id ?? null;
-  const list = listId ? await db().from("tenant_campaigns").select("scrub_status").eq("tenant_id", viewer.tenantId).eq("id", listId).maybeSingle() : { data: null };
+  const contacts = await inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name").eq("tenant_id", viewer.tenantId).in("id", part));
+  const [carriers, { listId, list }] = unwrap(await sideRead);
   const nameOf = new Map<string, string>(contacts.map((c: Loose) => [c.id, [c.first_name, c.last_name].filter(Boolean).join(" ")]));
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
   return {

@@ -77,10 +77,13 @@ async function disputes(tenantId: string, runId: string): Promise<RunDispute[]> 
 }
 
 export async function getRun(tenantId: string, id: string) {
+  // Items and disputes (this tenant's, this run's) start beside the run read; their failure surfaces after the run's checks.
+  const lines = Promise.all([items(tenantId, id), disputes(tenantId, id)]);
+  lines.catch(() => {});
   const { data: r, error } = await db().from("payout_run").select(RUN_COLUMNS).eq("tenant_id", tenantId).eq("id", id).maybeSingle();
   if (error) fail(error);
   if (!r) throw new PayoutError("That run isn't in this agency.", 404);
-  const [its, ds, partner] = await Promise.all([items(tenantId, id), disputes(tenantId, id), db().from("partners").select("name").eq("id", r.partner_id).maybeSingle()]);
+  const [[its, ds], partner] = await Promise.all([lines, db().from("partners").select("name").eq("id", r.partner_id).maybeSingle()]);
   return {
     ...toHeader(r), partnerName: partner.data?.name ?? "Partner", paidMethod: r.paid_method as PaidMethod | null, paymentReference: r.payment_reference as string | null,
     voidReason: r.void_reason as string | null, terms: r.terms_snapshot_json as { id: string; payout_model: string; rate_cents: number | null; rate_pct_bp: number | null; effective_from: string }[],

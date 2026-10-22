@@ -17,7 +17,7 @@ function filters(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     // AG-0.5: a narrowed agency session sees the activity of the agents in its scope only (scope from the session).

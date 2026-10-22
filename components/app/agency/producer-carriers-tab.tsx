@@ -78,7 +78,7 @@ export function ProducerCarriersTab({ producerId, canEdit }: { producerId: strin
             <TableHeader>
               <TableRow>
                 <TableHead>Carrier</TableHead>
-                <TableHead className="text-right">His level</TableHead>
+                <TableHead className="text-right">Producer level</TableHead>
                 <TableHead className="text-right">Agency level</TableHead>
                 <TableHead className="text-right">Spread</TableHead>
                 <TableHead>Writing no.</TableHead>
@@ -108,7 +108,7 @@ export function ProducerCarriersTab({ producerId, canEdit }: { producerId: strin
         <DetailPanel mode="split" title={editing.carrierName} subtitle="A change starts on its date; earlier rows are never edited." onClose={() => setEditing(null)}
           footer={<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditing(null)}>Close</Button><Button onClick={saveCarrier} disabled={busy || (!level.trim() && (!number.trim() || number.trim() === editing.writingNumber))}>{busy ? "Saving…" : "Save level and number"}</Button></div>}>
           <div className="grid gap-3 text-sm">
-            <label className="grid gap-1 font-medium">His contract level (%)<input inputMode="decimal" placeholder={editing.producerLevelBps === null ? "e.g. 90" : `now ${editing.producerLevelBps / 100}`} className={toolbarControl} value={level} onChange={(e) => setLevel(e.target.value)} /></label>
+            <label className="grid gap-1 font-medium">Producer contract level (%)<input inputMode="decimal" placeholder={editing.producerLevelBps === null ? "e.g. 90" : `now ${editing.producerLevelBps / 100}`} className={toolbarControl} value={level} onChange={(e) => setLevel(e.target.value)} /></label>
             <label className="grid gap-1 font-medium">Writing number<input className={`${toolbarControl} font-mono`} value={number} onChange={(e) => setNumber(e.target.value)} /></label>
             <label className="grid gap-1 font-medium">Effective from<input type="date" className={toolbarControl} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
             {problem && <p role="alert" className="rounded-md border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-2 text-[var(--error-ink)]">{problem}</p>}

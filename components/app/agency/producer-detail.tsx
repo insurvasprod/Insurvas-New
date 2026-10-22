@@ -74,7 +74,7 @@ export function ProducerDetail({ producerId, viewer }: { producerId: string; vie
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader
         title={data.displayName}
-        description={`${data.role ? MEMBER_ROLE_LABELS[data.role as MemberRole] ?? data.role : "Producer"} · reports to ${data.managerName}${data.hiredOn ? ` · hired ${data.hiredOn}` : ""}`}
+        description={`${data.role ? MEMBER_ROLE_LABELS[data.role as MemberRole] ?? data.role : "Producer"} · reports to ${data.managerName === "Owner" ? "the owner" : data.managerName}${data.hiredOn ? ` · hired ${data.hiredOn}` : ""}`}
         actions={actions}
       />
       <ViewTabs label="Producer" tabs={tabs} value={tab} onChange={setTab} idPrefix="producer-tab" />
@@ -97,7 +97,7 @@ export function ProducerDetail({ producerId, viewer }: { producerId: string; vie
               <TableRow><TableCell>Can submit</TableCell><TableCell className="text-right">{data.canSubmit ? <StatusChip tone="good">Yes</StatusChip> : <StatusChip tone="warning">{data.canSubmitReason ?? "Not yet"}</StatusChip>}</TableCell></TableRow>
               <TableRow><TableCell>Manager</TableCell><TableCell className="text-right">{data.managerName}</TableCell></TableRow>
               <TableRow><TableCell>NPN</TableCell><TableCell className="text-right font-mono text-xs">{data.npn ?? "—"}</TableCell></TableRow>
-              <TableRow><TableCell>Email</TableCell><TableCell className="text-right">{data.email ?? "—"}</TableCell></TableRow>
+              <TableRow><TableCell>Email</TableCell><TableCell className="whitespace-normal text-right break-all">{data.email ?? "—"}</TableCell></TableRow>
               {data.status === "offboarded" && <TableRow><TableCell>Frozen balance</TableCell><TableCell className="text-right"><Money cents={data.frozenBalanceCents} /></TableCell></TableRow>}
               {data.status === "offboarded" && <TableRow><TableCell>Offboarded</TableCell><TableCell className="text-right tabular-nums">{data.offboardedOn}{data.reactivatableUntil ? ` · undo until ${data.reactivatableUntil}` : ""}</TableCell></TableRow>}
             </TableBody></Table>
@@ -108,9 +108,9 @@ export function ProducerDetail({ producerId, viewer }: { producerId: string; vie
       {tab === "carriers" && <ProducerCarriersTab producerId={producerId} canEdit={viewer.isOwner} />}
       {tab === "onboarding" && <ProducerOnboardingTab producerId={producerId} isOwner={viewer.isOwner} isSelf={data.isSelf} />}
       {tab === "production" && (
-        <TableCard title="Production" description="His policies live in the book; this is the book filtered to him.">
+        <TableCard title="Production" description="Their policies live in the book; this opens it filtered to them.">
           <div className="flex flex-wrap items-center gap-3 p-4 text-sm">
-            <Button asChild><Link href={`/app/policies?agent=${data.userId}`}>Open his policies</Link></Button>
+            <Button asChild><Link href={`/app/policies?agent=${data.userId}`}>Open their policies</Link></Button>
             <Button asChild variant="outline"><Link href="/app/producer-scorecards">Compare on the scorecards</Link></Button>
           </div>
         </TableCard>

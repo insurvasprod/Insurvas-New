@@ -35,8 +35,13 @@ import type {
  *   the default / delete it, and edit its stages in the stage manager (the same PipelineStageManager,
  *   PipelineCreateDialog and DispositionLibrary the lead workspace used to open, fed the same data).
  * - Disposition → stage: the section's draft. Each disposition routes a lead to one stage, in any
- *   pipeline; the save bar writes every changed row.
+ *   pipeline; the save bar writes every changed row. "Applies to" switches the table to one pipeline:
+ *   that pipeline's own stage for an outcome wins for its leads (20261022200000) — how marketing and
+ *   affiliate leads stay in their own pipelines — and "agency-wide" hands the outcome back.
  */
+
+type PipelineOutcome = { id: string; pipeline_id: string; stage_id: string; disposition_key: string };
+const ownKey = (pipelineId: string, key: string) => `${pipelineId}:${key}`;
 
 const typeLabel: Record<PartnerPipelineType, string> = { publisher: "Publisher / transfer", marketing: "Marketing", affiliate: "Affiliate" };
 /** "" in a form means no partner type; the API takes it as null. */
@@ -76,6 +81,12 @@ export function PipelineSettings() {
 
   // The disposition → stage map is the section's draft: edits are held here and written by Save.
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // Each pipeline's own stage per outcome, keyed `${pipelineId}:${key}` ("" = use the agency-wide one).
+  const [ownRows, setOwnRows] = useState<PipelineOutcome[]>([]);
+  const [ownReady, setOwnReady] = useState(true);
+  const [ownDraft, setOwnDraft] = useState<Record<string, string>>({});
+  // "" = the agency-wide table; a pipeline id = that pipeline's own stages.
+  const [scopePipelineId, setScopePipelineId] = useState("");
   const [saving, setSaving] = useState(false);
   const [mappingError, setMappingError] = useState<string | null>(null);
   const [freeKey, setFreeKey] = useState({ disposition_key: "", stage_id: "" });
@@ -97,6 +108,7 @@ export function PipelineSettings() {
   const [stageEntries, setStageEntries] = useState<Record<string, Array<string | null>>>({});
 
   const savedMap = useMemo(() => Object.fromEntries(mappings.map((mapping) => [mapping.disposition_key, mapping.stage_id])), [mappings]);
+  const savedOwn = useMemo(() => Object.fromEntries(ownRows.map((row) => [ownKey(row.pipeline_id, row.disposition_key), row.stage_id])), [ownRows]);
 
   // A promise chain so every setState lands in a callback, not synchronously inside the effect.
   const load = useCallback(
@@ -124,6 +136,10 @@ export function PipelineSettings() {
           setDescriptionsReady(pipelineBody.descriptionsReady !== false);
           setContext(contextBody as PipelineViewContext | null);
           setDraft(Object.fromEntries(maps.map((mapping) => [mapping.disposition_key, mapping.stage_id])));
+          const own: PipelineOutcome[] = mappingBody.pipelineOutcomes?.rows ?? [];
+          setOwnRows(own);
+          setOwnReady(mappingBody.pipelineOutcomes?.ready !== false);
+          setOwnDraft(Object.fromEntries(own.map((row) => [ownKey(row.pipeline_id, row.disposition_key), row.stage_id])));
           setLoadError(null);
         })
         .catch((cause: unknown) => setLoadError(cause instanceof Error ? cause.message : "Could not load pipelines"))
@@ -163,7 +179,11 @@ export function PipelineSettings() {
 
   const unmappedCount = rows.filter((row) => (row.entry ? row.entry.isActive : true) && !draft[row.key]).length;
   const changedKeys = rows.map((row) => row.key).filter((key) => (draft[key] ?? "") !== (savedMap[key] ?? ""));
-  const dirty = changedKeys.length > 0;
+  const changedOwn = [...new Set([...Object.keys(ownDraft), ...Object.keys(savedOwn)])].filter((id) => (ownDraft[id] ?? "") !== (savedOwn[id] ?? ""));
+  const changedCount = changedKeys.length + changedOwn.length;
+  const dirty = changedCount > 0;
+  const scopePipeline = pipelines.find((pipeline) => pipeline.id === scopePipelineId) ?? null;
+  const ownCount = (pipelineId: string) => ownRows.filter((row) => row.pipeline_id === pipelineId).length;
 
   const pipelineNeedle = pipelineQuery.trim().toLowerCase();
   const shownPipelines = pipelines.filter((pipeline) => !pipelineNeedle || pipeline.name.toLowerCase().includes(pipelineNeedle) || pipeline.stages.some((stage) => !stage.is_archived && stage.name.toLowerCase().includes(pipelineNeedle)));
@@ -177,6 +197,7 @@ export function PipelineSettings() {
 
   function discardMappings() {
     setDraft(savedMap);
+    setOwnDraft(savedOwn);
     setMappingError(null);
   }
 
@@ -200,7 +221,16 @@ export function PipelineSettings() {
           if (mapping) await request("/api/app/pipelines/dispositions", "DELETE", { id: mapping.id });
         }
       }
-      notify.done(changedKeys.length === 1 ? "Mapping saved" : `${changedKeys.length} mappings saved`);
+      for (const id of changedOwn) {
+        const [pipelineId, key] = id.split(":");
+        const stageId = ownDraft[id] ?? "";
+        if (stageId) await request("/api/app/pipelines/dispositions", "POST", { pipeline_id: pipelineId, stage_id: stageId, disposition_key: key });
+        else {
+          const row = ownRows.find((item) => item.pipeline_id === pipelineId && item.disposition_key === key);
+          if (row) await request("/api/app/pipelines/dispositions", "DELETE", { id: row.id, scope: "pipeline" });
+        }
+      }
+      notify.done(changedCount === 1 ? "Mapping saved" : `${changedCount} mappings saved`);
       await load();
     } catch (cause) {
       // Some rows may have saved before the failure; reloading shows exactly which.
@@ -321,6 +351,21 @@ export function PipelineSettings() {
     </>
   );
 
+  /** One pipeline's own choice: its live stages, after "use the agency-wide stage". */
+  const ownStageOptions = (pipeline: Pipeline, key: string, current: string) => {
+    const agency = draft[key] ? stageById.get(draft[key]) : undefined;
+    const live = allStages.filter((stage) => stage.pipeline_id === pipeline.id);
+    return (
+      <>
+        <option value="">{agency ? `Agency-wide: ${agency.name} · ${agency.pipelineName}` : "Agency-wide: not mapped, stays where it is"}</option>
+        {live.map((stage) => <option key={stage.id} value={stage.id}>{stageLabel(stage)}</option>)}
+        {current && !live.some((stage) => stage.id === current) && (
+          <option value={current}>{stageById.get(current) ? `${stageById.get(current)?.name} (archived)` : "Archived stage"}</option>
+        )}
+      </>
+    );
+  };
+
   const outcomes = unmapped?.outcomes ?? 0;
   const leadsInPipelines = Object.values(counts.pipelines).reduce((sum, value) => sum + (value ?? 0), 0);
 
@@ -430,7 +475,7 @@ export function PipelineSettings() {
           <DataToolbar
             actions={
               <>
-                <Button type="button" variant="outline" onClick={() => setLibraryOpen(true)}>
+                <Button data-guide="pipeline-outcomes" type="button" variant="outline" onClick={() => setLibraryOpen(true)}>
                   <BookOpen aria-hidden="true" />
                   Disposition library
                 </Button>
@@ -439,6 +484,14 @@ export function PipelineSettings() {
             }
           >
             <ToolbarSearch value={mappingQuery} onChange={setMappingQuery} placeholder="Search dispositions" />
+            <select aria-label="Applies to" className={toolbarControl} value={scopePipelineId} onChange={(event) => setScopePipelineId(event.target.value)}>
+              <option value="">Every pipeline (agency-wide)</option>
+              {pipelines.map((pipeline) => (
+                <option key={pipeline.id} value={pipeline.id} disabled={!ownReady}>
+                  {pipeline.name}{ownCount(pipeline.id) > 0 ? ` (${ownCount(pipeline.id)} own)` : ""}
+                </option>
+              ))}
+            </select>
             <select aria-label="Filter dispositions" className={toolbarControl} value={mappingFilter} onChange={(event) => setMappingFilter(event.target.value as MappingFilter)}>
               <option value="all">All dispositions</option>
               <option value="unmapped">Unmapped only ({unmappedCount})</option>
@@ -459,6 +512,7 @@ export function PipelineSettings() {
         }
       >
         {mappingError && <p role="alert" className="m-0 border-b border-[var(--border)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{mappingError}</p>}
+        {!ownReady && <p className="m-0 border-b border-[var(--border)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">Stages for one pipeline need a database update that has not been applied yet; the agency-wide mapping works as before.</p>}
         {rows.length === 0 ? (
           <EmptyState title="No dispositions yet" hint="Add them under Dispositions, or map a key below." />
         ) : shownRows.length === 0 ? (
@@ -468,18 +522,21 @@ export function PipelineSettings() {
             <thead>
               <tr className={st.headRow}>
                 <th scope="col" className={st.th}>Disposition</th>
-                <th scope="col" className={cn(st.th, "w-[280px]")}>Moves to a stage in any pipeline</th>
+                <th scope="col" className={cn(st.th, "w-[280px]")}>{scopePipeline ? `Moves to, for leads in ${scopePipeline.name}` : "Moves to a stage in any pipeline"}</th>
               </tr>
             </thead>
             <tbody>
               {shownRows.map(({ key, entry }) => {
                 const value = draft[key] ?? "";
                 const id = `mapping-${key}`;
+                const own = scopePipeline ? ownKey(scopePipeline.id, key) : "";
+                const ownValue = own ? ownDraft[own] ?? "" : "";
+                const unsaved = scopePipeline ? ownValue !== (savedOwn[own] ?? "") : value !== (savedMap[key] ?? "");
                 return (
                   <tr key={key}>
                     <td className={st.td}>
                       <label htmlFor={id} className="text-[var(--body)]">{entry?.label ?? key}</label>
-                      {(draft[key] ?? "") !== (savedMap[key] ?? "") && <StatusChip dot={false} tone="warning" className="ml-2">Unsaved</StatusChip>}
+                      {unsaved && <StatusChip dot={false} tone="warning" className="ml-2">Unsaved</StatusChip>}
                       <span className={st.sub}>
                         <code className="font-mono text-xs">{key}</code>
                         {entry && !entry.isActive ? " · inactive" : ""}
@@ -487,14 +544,25 @@ export function PipelineSettings() {
                       </span>
                     </td>
                     <td className={st.td}>
-                      <select
-                        id={id}
-                        className={cn(smallControl, !value && "text-[var(--warning-ink)]")}
-                        value={value}
-                        onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))}
-                      >
-                        {stageOptions(value)}
-                      </select>
+                      {scopePipeline ? (
+                        <select
+                          id={id}
+                          className={cn(smallControl, !ownValue && !value && "text-[var(--warning-ink)]")}
+                          value={ownValue}
+                          onChange={(event) => setOwnDraft((current) => ({ ...current, [own]: event.target.value }))}
+                        >
+                          {ownStageOptions(scopePipeline, key, ownValue)}
+                        </select>
+                      ) : (
+                        <select
+                          id={id}
+                          className={cn(smallControl, !value && "text-[var(--warning-ink)]")}
+                          value={value}
+                          onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))}
+                        >
+                          {stageOptions(value)}
+                        </select>
+                      )}
                     </td>
                   </tr>
                 );
@@ -504,7 +572,7 @@ export function PipelineSettings() {
         )}
       </TableCard>
 
-      <SettingsSaveBar visible={dirty} note={`${changedKeys.length} unsaved ${changedKeys.length === 1 ? "mapping" : "mappings"}`}>
+      <SettingsSaveBar visible={dirty} note={`${changedCount} unsaved ${changedCount === 1 ? "mapping" : "mappings"}`}>
         <Button type="button" variant="outline" onClick={discardMappings} disabled={saving}>Discard</Button>
         <Button type="button" onClick={() => void saveMappings()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>
       </SettingsSaveBar>

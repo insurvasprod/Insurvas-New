@@ -5,6 +5,7 @@ import { refuseAdminOnThisHost } from "@/lib/adminAuth/adminHost";
 import { configuredHosts, CROSS_SITE_REFUSED, refuseCrossSite } from "@/lib/security/originCheck";
 import { TENANT_SESSION_COOKIE, verifyTenantSessionToken } from "@/lib/tenantAuth/session";
 import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken } from "@/lib/partnerAuth/session";
+import { APP_PATH_HEADER } from "@/lib/tenantAuth/teamAccess";
 // --- maintenance gate (SA-4.9) ---
 import { maintenanceGateResponse } from "@/lib/system/maintenanceGate";
 // --- end maintenance gate ---
@@ -93,7 +94,12 @@ export async function proxy(request: NextRequest) {
     // the partner portal and also owns a tenant). Prefer the explicitly requested tenant
     // plane whenever its session is valid; otherwise the partner fallback below used to
     // hijack every /app request and made a successful LA login appear to fail.
-    if (session) return NextResponse.next();
+    if (session) {
+      // The page guard reads the path to honour pages the owner hid for this member (custom team access).
+      const headers = new Headers(request.headers);
+      headers.set(APP_PATH_HEADER, pathname);
+      return NextResponse.next({ request: { headers } });
+    }
 
     const partnerToken = request.cookies.get(PARTNER_SESSION_COOKIE)?.value;
     if (partnerToken && await verifyPartnerSessionToken(partnerToken)) return redirectTo(request, "/partner");

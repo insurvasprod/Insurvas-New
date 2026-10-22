@@ -57,7 +57,7 @@ const body = z.discriminatedUnion("action", [
 ]);
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("payment_repair", ROLES);
+  const auth = await requireFeatureRole("payment_repair", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const carrierId = request.nextUrl.searchParams.get("carrier_id") ?? "";
   const policyNumber = request.nextUrl.searchParams.get("policy_number") ?? "";

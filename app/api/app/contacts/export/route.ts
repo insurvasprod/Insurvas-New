@@ -7,7 +7,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 
 /** Every active contact, streamed (the directory's page size does not apply). */
 export async function GET() {
-  const auth = await requireFeatureRole("duplicate_detection", ["owner", "producer", "assistant"] as const);
+  const auth = await requireFeatureRole("duplicate_detection", ["owner", "producer", "assistant"] as const, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     // Read before the stream starts, so a failure here is still an ordinary error response.

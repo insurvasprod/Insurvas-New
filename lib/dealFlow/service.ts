@@ -347,60 +347,35 @@ function summaryOfRows(rows: DealFlowRow[], partners: Map<string, string>): Deal
   );
 }
 
-/** The report's own order: local date, then created, then id — all newest first. */
-function reportOrder(a: DealFlowRow, b: DealFlowRow) {
-  return b.local_date.localeCompare(a.local_date) || b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
-}
-
-/** Every row the given agents worked under the filters, in the report's order (the export walk, per agent). */
-async function rowsForAgents(tenantId: string, filters: DealFlowListFilters, agents: readonly string[]): Promise<DealFlowRow[]> {
-  const rows: DealFlowRow[] = [];
-  for (const agentId of agents) {
-    for await (const page of dealFlowExportPages(tenantId, { ...filters, agentId, focusLeadId: undefined, page: 1 })) rows.push(...page);
-  }
-  return rows.sort(reportOrder);
-}
+/**
+ * A narrowed session whose scope holds several agents asks the report for them by list (p_agent_ids,
+ * migration 20261019400000). Before that migration the function does not take the list, and there is no
+ * safe fallback — the older paths would read agents outside the scope — so the view refuses with this.
+ */
+export const SCOPED_DEAL_FLOW_PENDING = "The team deal-flow view needs database update 20261019400000, which has not been applied yet.";
 
 /**
- * The report for a narrowed session. One agent (a producer, a setter, or a manager filtering to one
- * report): the report itself, with its agent filter pinned to him — paged, counted and totalled in SQL.
- * Several (a manager, an assistant to more than one producer): every row they worked under the filters is
- * read through the export walk and the page, total, KPIs and summary are counted here over those rows only.
- * Either way a focused deal outside the scope is answered as "not in this view", never pinned.
+ * The report for a narrowed session, paged, counted and totalled in SQL either way. One agent (a producer, a
+ * setter, or a manager filtering to one report): the report with its agent filter pinned to him. Several (a
+ * manager, an assistant to more than one producer): the report with p_agent_ids set to them. A focused deal
+ * outside the scope is answered as "not in this view", never pinned.
  */
 async function scopedDealFlow(tenantId: string, filters: DealFlowListFilters, scope: readonly string[]): Promise<DealFlowReport> {
   const agentId = filters.agentId ? assertUuid(filters.agentId, "agent") : undefined;
   const agents = scopedAgents(scope, agentId);
-  const pageSize = Math.min(10000, Math.max(1, Number.isInteger(filters.pageSize) ? (filters.pageSize as number) : 100));
-  const focusLeadId = typeof filters.focusLeadId === "string" && UUID.test(filters.focusLeadId) ? filters.focusLeadId : null;
-  const requestedPage = filters.page === null ? null : Number.isInteger(filters.page) && (filters.page ?? 1) > 0 ? (filters.page as number) : 1;
-  if (!agents.length) return emptyReport(narrowOptions(await lookups(tenantId), scope), requestedPage ?? 1, pageSize, focusLeadId);
-
-  if (agents.length === 1) {
-    const report = await listDealFlow(tenantId, { ...filters, agentId: agents[0] });
-    const focus = report.focus && report.focus.row && !rowVisible(scope, report.focus.row.worked_by)
-      ? { ...report.focus, position: null, inFilter: false, row: null }
-      : report.focus;
-    return { ...report, focus, options: narrowOptions(report.options, scope) };
+  if (!agents.length) {
+    const pageSize = Math.min(10000, Math.max(1, Number.isInteger(filters.pageSize) ? (filters.pageSize as number) : 100));
+    const focusLeadId = typeof filters.focusLeadId === "string" && UUID.test(filters.focusLeadId) ? filters.focusLeadId : null;
+    const requestedPage = filters.page === null ? null : Number.isInteger(filters.page) && (filters.page ?? 1) > 0 ? (filters.page as number) : 1;
+    return emptyReport(narrowOptions(await lookups(tenantId), scope), requestedPage ?? 1, pageSize, focusLeadId);
   }
-
-  const options = narrowOptions(await lookups(tenantId), scope);
-  const partners = new Map(options.partners.map((partner) => [partner.id, partner.name]));
-  const all = await rowsForAgents(tenantId, filters, agents);
-  const position = focusLeadId ? all.findIndex((row) => row.lead_id === focusLeadId) + 1 || null : null;
-  const page = requestedPage ?? (position ? Math.ceil(position / pageSize) : 1);
-  return {
-    rows: all.slice((page - 1) * pageSize, page * pageSize),
-    total: all.length,
-    page,
-    pageSize,
-    kpis: kpisFor(all),
-    summary: summaryOfRows(all, partners),
-    options,
-    focus: focusLeadId ? { leadId: focusLeadId, position, inFilter: !!position, row: null } : null,
-    schemaPending: false,
-    capped: false,
-  };
+  const report = agents.length === 1
+    ? await dealFlowReport(tenantId, { ...filters, agentId: agents[0] }, null)
+    : await dealFlowReport(tenantId, { ...filters, agentId: undefined }, agents);
+  const focus = report.focus && report.focus.row && !rowVisible(scope, report.focus.row.worked_by)
+    ? { ...report.focus, position: null, inFilter: false, row: null }
+    : report.focus;
+  return { ...report, focus, options: narrowOptions(report.options, scope) };
 }
 
 /** The agent a deal-flow row is credited to, for the one-row guard; null when there is no such row. */
@@ -416,6 +391,14 @@ export async function dealFlowProducer(tenantId: string, dealId: string): Promis
  */
 export async function listDealFlow(tenantId: string, filters: DealFlowListFilters, scope: ProducerScope = null): Promise<DealFlowReport> {
   if (scope !== null) return scopedDealFlow(tenantId, filters, scope);
+  return dealFlowReport(tenantId, filters, null);
+}
+
+/**
+ * The report. `agentIds` (a narrowed scope of several agents, never from the request) is sent as p_agent_ids;
+ * null sends exactly the call the report has always had.
+ */
+async function dealFlowReport(tenantId: string, filters: DealFlowListFilters, agentIds: readonly string[] | null): Promise<DealFlowReport> {
   const requestedPage = filters.page === null ? null : Number.isInteger(filters.page) && (filters.page ?? 1) > 0 ? (filters.page as number) : 1;
   const pageSize = Math.min(10000, Math.max(1, Number.isInteger(filters.pageSize) ? (filters.pageSize as number) : 100));
   const service = getSupabaseServiceClient();
@@ -437,8 +420,11 @@ export async function listDealFlow(tenantId: string, filters: DealFlowListFilter
     p_tenant_id: tenantId, p_from_date: fromDate, p_to_date: toDate, p_partner_id: partnerId, p_product_line: productLine,
     p_agent_id: agentId, p_status: selectedStatus, p_page: page, p_page_size: pageSize,
     p_search: search, p_stage_type: stageType, p_focus_lead_id: focusLeadId,
+    ...(agentIds ? { p_agent_ids: agentIds } : {}),
   });
   if (next.error && !schemaMissing(next.error)) throw new Error(`Could not load daily deal flow: ${next.error.message}`);
+  // The legacy path below reads every agent: never for a scoped list.
+  if (next.error && agentIds) throw new Error(SCOPED_DEAL_FLOW_PENDING);
 
   if (!next.error) {
     const report = (next.data && typeof next.data === "object" && !Array.isArray(next.data) ? next.data : {}) as RawRow;
@@ -605,16 +591,18 @@ function exportCursor(raw: unknown): ExportCursor | null {
  */
 export async function* dealFlowExportPages(tenantId: string, filters: DealFlowListFilters, scope: ProducerScope = null): AsyncGenerator<DealFlowRow[]> {
   // AG-0.5: a narrowed session exports the rows credited to its scope's agents — one agent streams through
-  // the report's own agent filter; several are read, merged into the report's order and yielded in pages.
+  // the export's own agent filter; several through its p_agent_ids list, walked by the same cursor.
   if (scope !== null) {
     const agents = scopedAgents(scope, filters.agentId ? assertUuid(filters.agentId, "agent") : undefined);
-    if (agents.length === 1) yield* dealFlowExportPages(tenantId, { ...filters, agentId: agents[0] });
-    else if (agents.length > 1) {
-      const rows = await rowsForAgents(tenantId, filters, agents);
-      for (let at = 0; at < rows.length; at += DEAL_FLOW_EXPORT_PAGE_SIZE) yield rows.slice(at, at + DEAL_FLOW_EXPORT_PAGE_SIZE);
-    }
+    if (agents.length === 1) yield* exportPages(tenantId, { ...filters, agentId: agents[0] }, null);
+    else if (agents.length > 1) yield* exportPages(tenantId, { ...filters, agentId: undefined }, agents);
     return;
   }
+  yield* exportPages(tenantId, filters, null);
+}
+
+/** The export walk. `agentIds` as dealFlowReport: sent as p_agent_ids, and null sends exactly the old call. */
+async function* exportPages(tenantId: string, filters: DealFlowListFilters, agentIds: readonly string[] | null): AsyncGenerator<DealFlowRow[]> {
   const db = getSupabaseServiceClient() as unknown as UntypedDb;
   const args = {
     p_tenant_id: tenantId,
@@ -627,6 +615,7 @@ export async function* dealFlowExportPages(tenantId: string, filters: DealFlowLi
     p_search: cleanSearch(filters.search),
     p_stage_type: filters.stageType ?? null,
     p_limit: DEAL_FLOW_EXPORT_PAGE_SIZE,
+    ...(agentIds ? { p_agent_ids: agentIds } : {}),
   };
   if (filters.stageType && !isStageType(filters.stageType)) throw new Error("Choose a valid status");
 
@@ -635,6 +624,8 @@ export async function* dealFlowExportPages(tenantId: string, filters: DealFlowLi
   for (let read = 0; read < DEAL_FLOW_EXPORT_MAX_PAGES; read += 1) {
     const result = await db.rpc("list_deal_flow_export", { ...args, p_after_local_date: cursor?.local_date ?? null, p_after_created_at: cursor?.created_at ?? null, p_after_id: cursor?.id ?? null });
     if (result.error && read === 0 && schemaMissing(result.error)) {
+      // reportPages reads every agent: never for a scoped list.
+      if (agentIds) throw new Error(SCOPED_DEAL_FLOW_PENDING);
       yield* reportPages(tenantId, filters);
       return;
     }

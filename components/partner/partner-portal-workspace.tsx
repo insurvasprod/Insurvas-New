@@ -206,9 +206,10 @@ function PartnerField({
         .join("");
       return onChange(formatted);
     }
-    return onChange(
-      ["number", "currency"].includes(field.type) ? Number(raw) : raw,
-    );
+    // A currency field is stored in cents, as every agent screen reads it, and typed in dollars:
+    // before 2026-10-22 the typed number was stored as cents, so "250000" became $2,500.00.
+    if (field.type === "currency") return onChange(Math.round(Number(raw) * 100));
+    return onChange(field.type === "number" ? Number(raw) : raw);
   };
   return (
     <Input id={id}
@@ -219,12 +220,12 @@ function PartnerField({
       readOnly={readOnly}
       step={
         field.type === "currency"
-          ? 1
+          ? 0.01
           : field.type === "number"
             ? "any"
             : undefined
       }
-      value={value === undefined ? "" : String(value)}
+      value={value === undefined ? "" : field.type === "currency" && typeof value === "number" ? String(value / 100) : String(value)}
       placeholder={field.validation?.placeholder ?? undefined}
       onChange={(event) => updateInput(event.target.value)}
       onInput={
@@ -364,6 +365,10 @@ export function PartnerLeadForm({
   useEffect(() => {
     if (preview) return;
     let cancelled = false;
+    // A refresh starts when the window regains focus, which a click into the phone field can do; on
+    // a slow server its answer lands after the partner has typed. Answers typed since it started win
+    // (QA pass 2026-10-22: the screened number was wiped and the draft saved "0 answers").
+    const startedAtRevision = editRevision.current;
     void Promise.all([
       fetch(`/api/partner/forms/${encodeURIComponent(productCode)}`, {
         cache: "no-store",
@@ -382,6 +387,7 @@ export function PartnerLeadForm({
       }))
       .then(({ form, draft, formResponse, draftResponse }) => {
         if (cancelled) return;
+        if (formRefresh > 0 && editRevision.current !== startedAtRevision) return;
         if (!formResponse.ok) {
           setStatus(form?.error ?? "This product form is unavailable");
           onFormVersion?.(null);
@@ -597,7 +603,7 @@ export function PartnerLeadForm({
         !Number.isFinite(value) ||
         (field.type === "currency" && !Number.isInteger(value)))
     )
-      return `${field.label} must be a valid ${field.type === "currency" ? "integer-cent amount" : "number"}`;
+      return `${field.label} must be a valid ${field.type === "currency" ? "dollar amount" : "number"}`;
     if (field.type === "email" && !/^\S+@\S+\.\S+$/.test(value as string))
       return `${field.label} must be a valid email address`;
     if (

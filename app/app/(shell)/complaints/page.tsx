@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { ComplaintError, deadlineSetup, listComplaints, loadThresholds } from "@/lib/compliance/complaintStore";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -18,11 +18,11 @@ export default async function ComplaintsPage({ searchParams }: { searchParams: P
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Complaints" description="Every complaint with an owner, a deadline and a countdown." />;
   }
-  if (!["owner", "producer"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer"])) {
     return <RoleGateNotice featureLabel="Complaints" detail="Only owners and producers can see consumer complaints." />;
   }
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
-  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Complaints" detail="In an agency, the owner and admins handle complaints." />;
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Complaints" detail="In an agency, the owner and admins handle complaints." />;
   const { q, open } = await searchParams;
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
   let loaded: { complaints: Awaited<ReturnType<typeof listComplaints>>; setup: Awaited<ReturnType<typeof deadlineSetup>>; thresholds: Awaited<ReturnType<typeof loadThresholds>>; team: { id: string; name: string; role: string }[]; partners: { id: string; name: string }[] } | null = null;

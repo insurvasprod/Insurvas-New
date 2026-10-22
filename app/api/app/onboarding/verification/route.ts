@@ -8,6 +8,7 @@ import { verificationActionSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getSetting } from "@/lib/settings/queries";
+import { getPlanAudience } from "@/lib/agency/audience";
 
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
     name: context.name,
     verificationUrl: buildVerificationUrl(verification.token),
     verificationId: refreshed.verification_id,
+    audience: await getPlanAudience(context.tenantId),
   });
   if (!delivery.delivered) {
     return NextResponse.json(

@@ -16,30 +16,31 @@ const db = () => getSupabaseServiceClient() as any;
  * A producer opens his own; a manager his reports'; owner, admin and bookkeeper anyone's.
  */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"]);
+  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That producer could not be found." }, { status: 404 });
   const hidden = await guardProducer(auth.context, id);
   if (hidden) return hidden;
-  const { data: p, error } = await db()
-    .from("producer")
-    .select("id, user_id, display_name, npn, status, hired_on, offboarded_on, can_submit, can_submit_reason, frozen_balance_cents, reactivatable_until, seat_released_on, users!producer_user_id_fkey(email, phone)")
-    .eq("tenant_id", auth.context.tenantId)
-    .eq("id", id)
-    .maybeSingle();
-  if (error || !p) return NextResponse.json({ error: "That producer could not be found." }, { status: 404 });
   const today = new Date().toISOString().slice(0, 10);
-  const [membership, hierarchy] = await Promise.all([
-    db().from("tenant_users").select("role, agency_role").eq("tenant_id", auth.context.tenantId).eq("user_id", p.user_id).maybeSingle(),
+  // the hierarchy is keyed by the producer id alone, so it is read beside the record; the membership and the
+  // manager's name then go together
+  const [{ data: p, error }, hierarchy] = await Promise.all([
+    db()
+      .from("producer")
+      .select("id, user_id, display_name, npn, status, hired_on, offboarded_on, can_submit, can_submit_reason, frozen_balance_cents, reactivatable_until, seat_released_on, users!producer_user_id_fkey(email, phone)")
+      .eq("tenant_id", auth.context.tenantId)
+      .eq("id", id)
+      .maybeSingle(),
     db().from("producer_hierarchy").select("parent_producer_id, effective_from, effective_to").eq("tenant_id", auth.context.tenantId).eq("producer_id", id).lte("effective_from", today),
   ]);
+  if (error || !p) return NextResponse.json({ error: "That producer could not be found." }, { status: 404 });
   const current = ((hierarchy.data ?? []) as Array<{ parent_producer_id: string | null; effective_from: string; effective_to: string | null }>).find((h) => !h.effective_to || today <= h.effective_to);
-  let managerName = "Owner";
-  if (current?.parent_producer_id) {
-    const { data: m } = await db().from("producer").select("display_name").eq("id", current.parent_producer_id).maybeSingle();
-    managerName = m?.display_name ?? "Manager";
-  }
+  const [membership, manager] = await Promise.all([
+    db().from("tenant_users").select("role, agency_role").eq("tenant_id", auth.context.tenantId).eq("user_id", p.user_id).maybeSingle(),
+    current?.parent_producer_id ? db().from("producer").select("display_name").eq("id", current.parent_producer_id).maybeSingle() : null,
+  ]);
+  const managerName = manager ? manager.data?.display_name ?? "Manager" : "Owner";
   return NextResponse.json({
     id: p.id,
     userId: p.user_id,

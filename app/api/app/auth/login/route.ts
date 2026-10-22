@@ -18,6 +18,7 @@ import { requiresTwoFactor } from "@/lib/tenantAuth/securityRules";
 import { partnerSessionCookieOptions, PARTNER_SESSION_COOKIE } from "@/lib/partnerAuth/session";
 import { recordLastLogin, recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
 import { signupDestination } from "@/lib/signup/context";
+import { firstLoginLanding } from "@/lib/dashboard/setupViewer";
 import { getMaintenanceStatus } from "@/lib/system/service";
 import {
   checkLoginAllowed,
@@ -176,8 +177,10 @@ export async function POST(request: NextRequest) {
   const enrolled = await hasTwoFactor(user.id).catch(() => false);
   // A role that can reveal an SSN or bank details, without two-factor, is sent to set it up — prompted,
   // not locked out: everything but those reveals keeps working (lib/tenantAuth/twoFactor.ts).
+  // An invited member's first sign-in opens their walkthrough (Get set up, 2026-10-21); null for the owner.
+  const landing = (await firstLoginLanding(membership.tenant_id, user.id, membership.role)) ?? "/app/dashboard";
   const redirectTo = signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state })
-    ?? (!enrolled && requiresTwoFactor(membership.role) ? "/app/profile?two_factor=required#security" : "/app/dashboard");
+    ?? (!enrolled && requiresTwoFactor(membership.role) ? "/app/profile?two_factor=required#security" : landing);
   if (enrolled) {
     await clearLoginFailures("user", email, request);
     const pending = await signTenantPending2faToken({ sub: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, redirectTo });

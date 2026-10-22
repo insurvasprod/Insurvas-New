@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 
 import { guardCase } from "@/lib/agency/guards";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ApplicationWorkspace } from "@/components/app/applications/workspace/application-workspace";
@@ -21,7 +21,7 @@ import { getViewerTimezone } from "@/lib/users/viewerTimezone";
 export default async function ApplicationWorkspacePage({ params, searchParams }: { params: Promise<{ caseId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("applications");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Applications" description="Take a sale from the health interview to the carrier's policy number in one place." />;
-  if (guard.role !== "owner" && guard.role !== "producer") return <RoleGateNotice featureLabel="Applications" detail="Owners and producers work applications." />;
+  if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Applications" detail="Owners and producers work applications." />;
   const [{ caseId }, query] = await Promise.all([params, searchParams]);
 
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") {

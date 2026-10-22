@@ -399,8 +399,10 @@ export function LicenceDialog({
             type="date"
             className={control}
             value={form.expires_at}
-            onChange={(event) => setForm((current) => ({ ...current, expires_at: event.currentTarget.value }))}
-            onInput={(event) => setForm((current) => ({ ...current, expires_at: event.currentTarget.value }))}
+            onChange={(event) => { const expiresAt = event.currentTarget.value; setForm((current) => ({ ...current, expires_at: expiresAt })); }}
+            // Read before the updater runs: React clears currentTarget once the handler returns, and the
+            // updater runs later — reading it there crashed the page (QA 2026-10-22).
+            onInput={(event) => { const expiresAt = event.currentTarget.value; setForm((current) => ({ ...current, expires_at: expiresAt })); }}
             required
           />
         </Field>

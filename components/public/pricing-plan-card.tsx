@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { Check, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ModuleIcon, RollingValue } from "@/components/public/pricing-motion";
@@ -57,7 +57,7 @@ function ModuleBlock({ group }: { group: ModuleGroup }) {
  * One plan (2026-10-13 pricing): no tilt, no glare. The default plan carries a slow rotating
  * gradient border and a breathing glow; the picker's answer gets a ring that settles in.
  */
-export function PricingPlanCard({ plan, increment, cycle, price, recommended, pickTurn }: { plan: PublicPlan; increment: PlanIncrement; cycle: BillingCycle; price: CardPrice; recommended: boolean; pickTurn: number }) {
+export function PricingPlanCard({ plan, increment, cycle, price, recommended, pickTurn, seats = null }: { plan: PublicPlan; increment: PlanIncrement; cycle: BillingCycle; price: CardPrice; recommended: boolean; pickTurn: number; /** An agency band's seat range ("Up to 50 seats"), shown under the price. */ seats?: string | null }) {
   const featured = plan.is_default;
   const signupHref = `/signup?plan=${encodeURIComponent(plan.code)}&cycle=${cycle}`;
   const moduleCount = increment.modules.length;
@@ -98,6 +98,14 @@ export function PricingPlanCard({ plan, increment, cycle, price, recommended, pi
                 {price.saving ? ` · save ${price.saving}%` : ""}
               </div>
             </>
+          )}
+
+          {seats && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm font-semibold text-foreground">
+              <Users className="size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />
+              {seats}
+              <span className="font-normal text-muted-foreground">· one flat price</span>
+            </div>
           )}
 
           <div className="mt-5">

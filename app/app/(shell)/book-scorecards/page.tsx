@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { addMonths } from "@/lib/ledger/compute";
 import {
   BUCKETS, DIMENSIONS, chargebacks, drillRows, everyWeek, historyStart, netByWeek, persistencyAll, placement, readDrill, scorecards, slices,
@@ -30,7 +30,7 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Book scorecards" description="Persistency, placement, chargebacks and net commission from your carrier files, by carrier, product, agent and lead source." />;
   }
-  if (!["owner", "producer", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Book scorecards" detail="Scorecards are read by the account owner, producers (their own book) and bookkeepers." />;
   }
 

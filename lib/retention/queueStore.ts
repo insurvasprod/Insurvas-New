@@ -9,13 +9,13 @@ import { mapLimit, READ_CONCURRENCY } from "./batch";
 import { RADAR_PENDING_MESSAGE, type ActionTaken, type Band, type ClientReason, type ContactOutcome, type HoldKind, type RetentionSettings } from "./constants";
 import { recommendFixes, type Fix } from "./fixes";
 import { buildQueue, daysUntilNextDraft, isEmergency, isHeld, reachesQueue, type QueueCandidate, type QueueSort } from "./queue";
-import { ensureRadarFresh, loadRadarConfig } from "./radarStore";
+import { ensureRadarFresh, loadRadarConfig, type RadarConfig } from "./radarStore";
 import type { Contribution, RiskScore } from "./score";
 import type { SignalRow } from "./signals";
 import type { RequestStatus, RequestType } from "./servicing";
 import { requestsByPolicy } from "./servicingStore";
 import { ownsCard } from "./assignment";
-import { ensureOwners, ownerOf, type Owner } from "./assignmentStore";
+import { ensureOwners, ownerOf, readOwnerInputs, type Owner } from "./assignmentStore";
 import { openHoldoutKeys } from "./effectivenessStore";
 
 /**
@@ -125,24 +125,40 @@ export type SaveQueue = {
   computedAt: string | null;
 };
 
+const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+const unwrap = <T,>(read: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+  if (!read.ok) throw read.error;
+  return read.value;
+};
+
+/**
+ * Reads a caller may start before candidates() runs, because nothing between (the radar refresh) writes
+ * them: the config (retention_settings, risk_weight_set) and the LA-4.16 board (policy_current and friends).
+ */
+type Early = { config?: Promise<RadarConfig | null>; board?: Promise<Awaited<ReturnType<typeof loadBoard>>> };
+
 /** Everything the cards need, for every scored policy this viewer may see (a producer: their own). */
-async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumber: string }) {
-  const config = await loadRadarConfig(viewer.tenantId);
+async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumber: string }, early: Early = {}) {
+  // The board needs none of the scores or policies, so it is read beside them (it used to wait for both).
+  const boardRead = settle(early.board ?? loadBoard(viewer, only));
+  const [config, scoresRead] = await Promise.all([
+    early.config ?? loadRadarConfig(viewer.tenantId),
+    settle(everyRow(() => {
+      let q = db().from("policy_risk_score").select("carrier_id, policy_number, score, band, confidence, signals_available, contributions_json, explanation, weight_set_version, computed_at, as_of").eq("tenant_id", viewer.tenantId);
+      if (only) q = q.eq("carrier_id", only.carrierId).eq("policy_number", only.policyNumber);
+      return q.order("band").order("score", { ascending: false });
+    })),
+  ]);
   if (!config) return null;
-  const scores = await everyRow(() => {
-    let q = db().from("policy_risk_score").select("carrier_id, policy_number, score, band, confidence, signals_available, contributions_json, explanation, weight_set_version, computed_at, as_of").eq("tenant_id", viewer.tenantId);
-    if (only) q = q.eq("carrier_id", only.carrierId).eq("policy_number", only.policyNumber);
-    return q.order("band").order("score", { ascending: false });
-  });
+  const scores = unwrap(scoresRead);
   const keys = new Set(scores.map(keyOf));
   if (!keys.size) return { config, rows: [] as SaveCard[], scored: 0, held: 0, computedAt: null as string | null, today: new Date().toISOString().slice(0, 10) };
 
-  const [policies, signals, attempts, holds, board, requests, noBank] = await Promise.all([
+  const [policies, signals, attempts, holds, requests, noBank] = await Promise.all([
     byPolicy("policy_current", "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, days_past_due, months_paid, product_code, as_of, premium_cents, premium_mode", viewer.tenantId, keys),
     byPolicy("policy_risk_signals", "*", viewer.tenantId, keys),
     byPolicy("save_attempt", "carrier_id, policy_number, attempted_at, risk_score_at_attempt", viewer.tenantId, keys, (q) => q.order("attempted_at", { ascending: false })),
     byPolicy("save_queue_hold", "id, carrier_id, policy_number, kind, until_date, score_at_hold, created_at", viewer.tenantId, keys, (q) => q.is("released_at", null).order("created_at", { ascending: false })),
-    loadBoard(viewer, only),
     requestsByPolicy(viewer.tenantId, keys),
     // LA-5.5: the paper-bill campaign found no bank account for these.
     byPolicy("conversion_attempt", "carrier_id, policy_number", viewer.tenantId, keys, (q) => q.eq("outcome", "unable_no_bank_account")).catch((error) => {
@@ -160,6 +176,8 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
     mapLimit(chunks([...new Set(visiblePolicies.map((p: Loose) => p.agent_user_id).filter(Boolean))] as string[], CHUNK), READ_CONCURRENCY, (ids) => db().from("users").select("id, name, email").in("id", ids)).then((r) => r.flatMap((x: Loose) => x.data ?? [])),
     db().from("carriers").select("id, name"),
   ]);
+  // Only the reasons and the agency's day come from the board: it is first needed here.
+  const board = unwrap(await boardRead);
   const signalOf = new Map<string, Loose>(signals.map((s: Loose) => [keyOf(s), s]));
   const attemptOf = new Map<string, Loose>();
   for (const a of attempts) if (!attemptOf.has(keyOf(a))) attemptOf.set(keyOf(a), a);
@@ -199,16 +217,31 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
 }
 
 export async function loadSaveQueue(viewer: Viewer, sort?: QueueSort): Promise<SaveQueue | { available: false }> {
+  // The whole agency's cards: owners are resolved across the queue, then this viewer's are kept.
+  const agency: Viewer = { ...viewer, role: "owner", scope: null };
+  // Started before the refresh, which writes only the scores, signals, holdout and predictions: the
+  // config, the LA-4.16 board and the owners' inputs are none of those. (The no-op catches only stop an
+  // early failure counting as unhandled; each is still awaited, and thrown, where it was before.)
+  const configRead = loadRadarConfig(viewer.tenantId);
+  const board = loadBoard(agency);
+  const ownerInputs = readOwnerInputs(viewer.tenantId, "save_queue");
+  configRead.catch(() => undefined);
+  board.catch(() => undefined);
   try {
     await ensureRadarFresh(viewer.tenantId);
   } catch (error) {
     // A failed refresh leaves yesterday's scores on screen, dated; it never hides the queue.
     console.error("[save-queue] the radar could not be refreshed", error);
   }
+  // LA-5.9: a policy in the holdout is never shown here (an emergency is the LA-4.16 board's anyway).
+  // Read after the refresh (a run moves the holdout), beside the cards.
+  const heldOut = openHoldoutKeys(viewer.tenantId).catch((error) => {
+    console.error("[save-queue] the holdout could not be read", error);
+    return new Set<string>();
+  });
   let loaded: Awaited<ReturnType<typeof candidates>>;
   try {
-    // The whole agency's cards: owners are resolved across the queue, then this viewer's are kept.
-    loaded = await candidates({ ...viewer, role: "owner", scope: null });
+    loaded = await candidates(agency, undefined, { config: configRead, board });
   } catch (error) {
     if (isSchemaGap(error as Loose)) return { available: false };
     throw error;
@@ -216,16 +249,12 @@ export async function loadSaveQueue(viewer: Viewer, sort?: QueueSort): Promise<S
   if (!loaded) return { available: false };
   const { config, today } = loaded;
   const order = sort ?? config.settings.queueDefaultSort;
-  // LA-5.9: a policy in the holdout is never shown here (an emergency is the LA-4.16 board's anyway).
-  const heldOutKeys = await openHoldoutKeys(viewer.tenantId).catch((error) => {
-    console.error("[save-queue] the holdout could not be read", error);
-    return new Set<string>();
-  });
+  const heldOutKeys = await heldOut;
   const all = loaded.rows.map((r) => ({ ...r, inHoldout: heldOutKeys.has(r.key) }));
 
   // LA-5.8: every card the agency's queue would show has an owner, resolved before anyone filters.
   const wide = buildQueue(all, { ...config.settings, maxCards: Number.MAX_SAFE_INTEGER }, today, order);
-  const owners = await ensureOwners(viewer.tenantId, "save_queue", wide.cards.map((c) => ({ key: c.key, carrierId: c.carrierId, writingAgentId: c.agentUserId, exposureCents: c.atRiskCents })), config.settings, { keep: new Set(all.map((r) => r.key)) }).catch((error) => {
+  const owners = await ensureOwners(viewer.tenantId, "save_queue", wide.cards.map((c) => ({ key: c.key, carrierId: c.carrierId, writingAgentId: c.agentUserId, exposureCents: c.atRiskCents })), config.settings, { keep: new Set(all.map((r) => r.key)), inputs: ownerInputs }).catch((error) => {
     console.error("[save-queue] owners could not be resolved", error);
     return null;
   });
@@ -266,13 +295,15 @@ export async function loadSaveQueue(viewer: Viewer, sort?: QueueSort): Promise<S
  * scores of the ones that could reach the queue (not an emergency, not held, not low-confidence, not
  * held out). The page counts bands and queue volume from these as the thresholds move.
  */
-export async function scoreDistribution(tenantId: string): Promise<{ all: number[]; eligible: number[] } | null> {
-  const loaded = await candidates({ tenantId, userId: "settings", role: "owner" }).catch((error) => {
+export async function scoreDistribution(tenantId: string, early: { config?: Promise<RadarConfig | null> } = {}): Promise<{ all: number[]; eligible: number[] } | null> {
+  // Nothing here writes, so the holdout is read beside the cards rather than after them.
+  const heldOut = openHoldoutKeys(tenantId).catch(() => new Set<string>());
+  const loaded = await candidates({ tenantId, userId: "settings", role: "owner" }, undefined, early).catch((error) => {
     if (isSchemaGap(error)) return null;
     throw error;
   });
   if (!loaded) return null;
-  const heldOutKeys = await openHoldoutKeys(tenantId).catch(() => new Set<string>());
+  const heldOutKeys = await heldOut;
   const all = new Array(101).fill(0);
   const eligible = new Array(101).fill(0);
   for (const r of loaded.rows) {

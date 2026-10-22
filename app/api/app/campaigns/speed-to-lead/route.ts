@@ -62,7 +62,7 @@ async function computed(db: Loose, tenantId: string): Promise<CampaignSpeedRow[]
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", roles);
+  const auth = await requireFeatureRole("outbound_dialing", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Speed to lead");
   if (refused) return refused;

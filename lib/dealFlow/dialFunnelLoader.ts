@@ -3,6 +3,7 @@ import "server-only";
 import { localRangeToUtc } from "./localDate";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
+import { mapLimit } from "@/lib/retention/batch";
 import { buildDialFunnel, type Agent, type ApplicationRow, type AttemptRow, type DealPremiumRow, type DialFunnel, type QuotedRow, type ServedRow } from "./dialFunnel";
 
 /** Hard ceiling per source; a range that exceeds it is reported as capped rather than silently cut. */
@@ -72,11 +73,6 @@ export async function loadDialFunnel(tenantId: string, input: { fromDate: string
     .map((stage) => stage.id);
   let quoted: QuotedRow[] | null = null;
   let quotedCapped = false;
-  if (quotedStageIds.length) {
-    const result = await all<QuotedRow>(() => { let q = db.from("tenant_lead_stage_events").select("lead_id, actor_user_id").eq("tenant_id", tenantId).in("to_stage_id", quotedStageIds).gte("created_at", gte).lt("created_at", lt).order("created_at"); if (agent) q = q.eq("actor_user_id", agent); return scopeQuery(q, "actor_user_id", scope); }, "quoted stage moves");
-    quoted = result.rows;
-    quotedCapped = result.capped;
-  }
 
   // Names and roles for everyone who appears, members or not.
   // A narrowed session's per-agent breakdown lists its scope's agents only.
@@ -85,23 +81,39 @@ export async function loadDialFunnel(tenantId: string, input: { fromDate: string
   const ids = new Set<string>(memberRows.map((row) => row.user_id));
   for (const row of servedRows.rows) if (row.agent_user_id) ids.add(row.agent_user_id);
   for (const row of attemptRows.rows) if (row.agent_id) ids.add(row.agent_id);
-  const users = ids.size ? await db.from("users").select("id, name").in("id", [...ids]) : { data: [], error: null };
-  if (users.error) throw new Error(`Could not read agent names: ${users.error.message}`);
-  const agents: Agent[] = ((users.data ?? []) as Array<{ id: string; name: string | null }>).map((user) => ({ id: user.id, name: user.name ?? "Unnamed user", role: roleById.get(user.id) ?? "" }));
 
   // Costs for exactly the served (lead, campaign) pairs.
   const leadIds = [...new Set(servedRows.rows.map((row) => row.lead_id))];
   const campaignIds = [...new Set(servedRows.rows.map((row) => row.campaign_id).filter((id): id is string => !!id))];
+  const costStarts = Array.from({ length: Math.ceil(leadIds.length / 300) }, (_, n) => n * 300);
+
+  // The second round (quoted moves, names, lead and campaign costs) needs only the first, so it runs at once
+  // (lead-cost chunks at most 6 at a time); a failure is still reported in the order the reads used to run.
+  const settled = await Promise.allSettled([
+    quotedStageIds.length ? all<QuotedRow>(() => { let q = db.from("tenant_lead_stage_events").select("lead_id, actor_user_id").eq("tenant_id", tenantId).in("to_stage_id", quotedStageIds).gte("created_at", gte).lt("created_at", lt).order("created_at"); if (agent) q = q.eq("actor_user_id", agent); return scopeQuery(q, "actor_user_id", scope); }, "quoted stage moves") : Promise.resolve(null),
+    ids.size ? Promise.resolve(db.from("users").select("id, name").in("id", [...ids])) : Promise.resolve({ data: [], error: null } as Result),
+    mapLimit(costStarts, 6, (index) => db.from("tenant_lead_sources").select("lead_id, campaign_id, cost_cents").eq("tenant_id", tenantId).in("lead_id", leadIds.slice(index, index + 300))),
+    campaignIds.length ? Promise.resolve(db.from("tenant_campaigns").select("id, effective_cost_per_record_cents").eq("tenant_id", tenantId).in("id", campaignIds)) : Promise.resolve(null),
+  ]);
+  for (const outcome of settled) if (outcome.status === "rejected") throw outcome.reason;
+  const [quotedRead, usersRead, costParts, campaignRead] = settled.map((outcome) => (outcome as PromiseFulfilledResult<unknown>).value) as [{ rows: QuotedRow[]; capped: boolean } | null, Result, Result[], Result | null];
+
+  if (quotedRead) {
+    quoted = quotedRead.rows;
+    quotedCapped = quotedRead.capped;
+  }
+  const users = usersRead;
+  if (users.error) throw new Error(`Could not read agent names: ${users.error.message}`);
+  const agents: Agent[] = ((users.data ?? []) as Array<{ id: string; name: string | null }>).map((user) => ({ id: user.id, name: user.name ?? "Unnamed user", role: roleById.get(user.id) ?? "" }));
+
   const leadCost = new Map<string, number>();
-  for (let index = 0; index < leadIds.length; index += 300) {
-    const chunk = leadIds.slice(index, index + 300);
-    const { data, error } = await db.from("tenant_lead_sources").select("lead_id, campaign_id, cost_cents").eq("tenant_id", tenantId).in("lead_id", chunk);
+  for (const { data, error } of costParts) {
     if (error) throw new Error(`Could not read lead costs: ${error.message}`);
     for (const row of (data ?? []) as Array<{ lead_id: string; campaign_id: string; cost_cents: number }>) leadCost.set(`${row.lead_id}:${row.campaign_id}`, row.cost_cents);
   }
   const campaignPerRecord = new Map<string, number>();
-  if (campaignIds.length) {
-    const { data, error } = await db.from("tenant_campaigns").select("id, effective_cost_per_record_cents").eq("tenant_id", tenantId).in("id", campaignIds);
+  if (campaignRead) {
+    const { data, error } = campaignRead;
     if (error) throw new Error(`Could not read campaign costs: ${error.message}`);
     for (const row of (data ?? []) as Array<{ id: string; effective_cost_per_record_cents: number | string | null }>) {
       const value = row.effective_cost_per_record_cents == null ? null : Number(row.effective_cost_per_record_cents);

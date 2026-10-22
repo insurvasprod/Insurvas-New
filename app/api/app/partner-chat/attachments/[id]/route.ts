@@ -8,7 +8,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 const roles = ["owner", "producer"] as const;
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("inbound_transfers", roles);
+  const auth = await requireFeatureRole("inbound_transfers", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const id = (await params).id;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Attachment not found" }, { status: 404 });

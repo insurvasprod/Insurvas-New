@@ -12,7 +12,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/app/view-tabs";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { APPOINTMENT_STATUS_LABEL } from "@/lib/appointments/appointmentFacts";
 import { VERDICT_LABEL, VERDICT_MIN_CLOSED, NOISE_BELOW_PCT, type AppointmentDetail, type DayRowKind } from "@/lib/setters/dayView";
 import { getSettersOverview } from "@/lib/setters/overview";
@@ -81,7 +81,7 @@ const KIND_LABEL: Record<DayRowKind, string> = {
 export default async function SettersPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const guard = await guardPage("outbound_dialing");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Appointments & setters" description="Setters book into your real availability." />;
-  if (!["owner", "producer"].includes(guard.role))
+  if (!actAsPage(guard, ["owner", "producer"]))
     return <RoleGateNotice featureLabel="Appointments & setters" detail="Setters book from the dialer and see their numbers on Activity & scorecard." />;
 
   const view = await getSettersOverview({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });

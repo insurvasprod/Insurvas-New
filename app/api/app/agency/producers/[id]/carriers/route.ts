@@ -12,7 +12,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
 
 /** AG-0.9 / AG-1.1 Carriers tab · his level and the agency's, his writing number, his appointments, with dates. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"]);
+  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That producer could not be found." }, { status: 404 });

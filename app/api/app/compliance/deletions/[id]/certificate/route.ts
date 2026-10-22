@@ -12,7 +12,7 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
  * the request's recorded results, so it can be produced again at any time and always says the same.
  */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("tcpa_checker", ["owner", "producer"]);
+  const auth = await requireFeatureRole("tcpa_checker", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
   if (refused) return refused;

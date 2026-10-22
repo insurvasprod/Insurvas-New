@@ -151,11 +151,14 @@ export async function listAgentAlerts(tenantId: string, userId: string, scope: P
     // `push`: whether the bell may raise a browser notification for it (the person's choice, quiet hours).
     return eventType && choice.in_app ? [{ ...row, event_type: eventType, push: choice.push }] : [];
   });
-  const hiddenLeads = scope === null ? new Set<string>() : await leadsOutsideScope(tenantId, scope, userId, allowed.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)));
+  // A narrowed agency session reads the alerts' queue rows ONCE per poll and answers both questions from it —
+  // whose lead it is now (scope) and whether it is still unclaimed — instead of one read for each.
+  const queue = scope === null ? null : await latestQueueRows(tenantId, allowed.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)));
+  const hiddenLeads = scope === null ? new Set<string>() : outsideScope(queue, scope, userId, allowed.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)));
   const rows = hiddenLeads.size ? allowed.filter((row) => { const leadId = leadIdFromAlertLink(row.link); return !leadId || !hiddenLeads.has(leadId); }) : allowed;
 
   const leadIds = [...new Set(rows.flatMap((row) => (WORKSPACE_ALERT_EVENTS.includes(row.event_type) ? [leadIdFromAlertLink(row.link)] : [])).filter((id): id is string => Boolean(id)))];
-  const unclaimed = await unclaimedLeadIds(tenantId, leadIds);
+  const unclaimed = scope === null ? await unclaimedLeadIds(tenantId, leadIds) : queue && new Set(leadIds.filter((id) => queue.get(id)?.status === "unclaimed"));
   // A queue read that fails leaves every alert standing: hiding a live problem is the worse error.
   const { live, resolved } = partitionAlertRows(rows, unclaimed ?? new Set(leadIds), Date.now());
 
@@ -207,15 +210,28 @@ export async function listAlertCentre(tenantId: string, userId: string, scope: P
  * them all: the scope closes rather than opens.
  */
 async function leadsOutsideScope(tenantId: string, scope: readonly string[], viewerId: string, leadIds: string[]): Promise<Set<string>> {
+  return outsideScope(await latestQueueRows(tenantId, leadIds), scope, viewerId, leadIds);
+}
+
+type LatestQueueRow = { owner_user_id: string | null; status: string };
+
+/** Each lead's latest queue row (owner and status); null when the queue could not be read. */
+async function latestQueueRows(tenantId: string, leadIds: string[]): Promise<Map<string, LatestQueueRow> | null> {
   const unique = [...new Set(leadIds)];
-  if (!unique.length) return new Set();
-  const result = await db().from("lead_queue").select("lead_id, owner_user_id, queued_at").eq("tenant_id", tenantId).in("lead_id", unique).order("queued_at", { ascending: false });
-  if (result.error) { console.error(`[agent-alerts] could not read the queue for alert scope: ${result.error.message}`); return new Set(unique); }
-  const latest = new Map<string, string | null>();
-  for (const row of (result.data ?? []) as { lead_id: string; owner_user_id: string | null }[]) {
-    if (!latest.has(row.lead_id)) latest.set(row.lead_id, row.owner_user_id);
+  if (!unique.length) return new Map();
+  const result = await db().from("lead_queue").select("lead_id, owner_user_id, status, queued_at").eq("tenant_id", tenantId).in("lead_id", unique).order("queued_at", { ascending: false });
+  if (result.error) { console.error(`[agent-alerts] could not read the queue for alert scope: ${result.error.message}`); return null; }
+  const latest = new Map<string, LatestQueueRow>();
+  for (const row of (result.data ?? []) as { lead_id: string; owner_user_id: string | null; status: string }[]) {
+    if (!latest.has(row.lead_id)) latest.set(row.lead_id, { owner_user_id: row.owner_user_id, status: row.status });
   }
-  return new Set([...latest].filter(([, owner]) => owner !== null && owner !== viewerId && !rowVisible(scope, owner)).map(([leadId]) => leadId));
+  return latest;
+}
+
+/** The leads among `leadIds` that are with a producer outside `scope`; every one of them when the queue was not read. */
+function outsideScope(latest: Map<string, LatestQueueRow> | null, scope: readonly string[], viewerId: string, leadIds: string[]): Set<string> {
+  if (latest === null) return new Set(leadIds);
+  return new Set([...latest].filter(([, row]) => row.owner_user_id !== null && row.owner_user_id !== viewerId && !rowVisible(scope, row.owner_user_id)).map(([leadId]) => leadId));
 }
 
 /** The leads among these whose latest queue item is still unclaimed. Null when the queue could not be read. */

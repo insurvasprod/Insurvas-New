@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { CheckoutView } from "@/components/public/checkout-view";
 import { TRIAL_DAYS } from "@/lib/checkout/constants";
+import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
 import { dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, priceForCycle, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
@@ -58,6 +59,7 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
       trialDays={TRIAL_DAYS}
       trialEnds={dayMonthYear(trialEndDate(), "UTC")}
       pending={pending === "1"}
+      noPayment={checkoutPaymentMode() === "none"}
     />
   );
 }

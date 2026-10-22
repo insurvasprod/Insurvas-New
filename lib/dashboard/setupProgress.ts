@@ -23,6 +23,101 @@ async function proves(read: PromiseLike<ExistenceRead>, test: (result: Existence
  * role, which has no RLS predicate, and an unfiltered read would walk every tenant's rows.
  */
 export async function loadSetupProgress(tenantId: string): Promise<SetupProgress> {
+  const [base, more] = await Promise.all([loadBaseProgress(tenantId), loadWalkthroughProgress(tenantId)]);
+  return { ...base, ...more };
+}
+
+/**
+ * The 2026-10-21 walkthrough's facts: team, outbound, inbound and the per-module settings. Same rules
+ * as the base reads — tenant-filtered existence checks, in parallel, an error proves nothing. Each
+ * table is the one the step's own screen writes (the settings rows are created on first save, so a
+ * row means the owner has been through that screen).
+ */
+async function loadWalkthroughProgress(tenantId: string): Promise<SetupProgress> {
+  const [
+    teamInvited, leadsImported, callingWindowsSet, queueOwned, ruleActive, outcomesMapped, queueSlaSet,
+    salesCarriersSet, disclosuresPublished, retentionSet, complianceSet, accountingSet, hierarchySet,
+  ] = await Promise.all([
+    // Invited or joined: the invite writes the membership row up front (accepted_at stays null until then).
+    proves(db().from("tenant_users").select("user_id").eq("tenant_id", tenantId).neq("role", "owner").limit(1), readFoundRow),
+    proves(db().from("agent_lead_import_batches").select("id").eq("tenant_id", tenantId).eq("status", "completed").limit(1), readFoundRow),
+    proves(db().from("tenant_calling_windows").select("tenant_id").eq("tenant_id", tenantId).maybeSingle(), readFoundRow),
+    proves(db().from("lead_queue").select("id").eq("tenant_id", tenantId).not("owner_user_id", "is", null).limit(1), readFoundRow),
+    proves(db().from("assignment_rules").select("id").eq("tenant_id", tenantId).eq("is_active", true).limit(1), readFoundRow),
+    proves(db().from("stage_dispositions").select("id").eq("tenant_id", tenantId).limit(1), readFoundRow),
+    proves(db().from("tenant_queue_sla_settings").select("tenant_id").eq("tenant_id", tenantId).maybeSingle(), readFoundRow),
+    proves(db().from("tenant_carrier_settings").select("carrier_id").eq("tenant_id", tenantId).limit(1), readFoundRow),
+    // The agency's own wording, published — the platform rows (tenant_id null) do not count.
+    proves(db().from("application_disclosures").select("id").eq("tenant_id", tenantId).eq("status", "published").limit(1), readFoundRow),
+    proves(db().from("retention_settings").select("tenant_id").eq("tenant_id", tenantId).maybeSingle(), readFoundRow),
+    proves(db().from("retention_rule").select("id").eq("tenant_id", tenantId).limit(1), readFoundRow),
+    proves(db().from("accounting_settings").select("tenant_id").eq("tenant_id", tenantId).maybeSingle(), readFoundRow),
+    proves(db().from("producer_hierarchy").select("id").eq("tenant_id", tenantId).not("parent_producer_id", "is", null).limit(1), readFoundRow),
+  ]);
+  return {
+    teamInvited, leadsImported, callingWindowsSet, leadsAssigned: queueOwned || ruleActive, outcomesMapped, queueSlaSet,
+    salesCarriersSet, disclosuresPublished, retentionSet, complianceSet, accountingSet, hierarchySet,
+  };
+}
+
+/**
+ * A member's own facts: what they did, not what the agency did. tenant_lead_activity records every
+ * lead served to a person (the queue-claim trigger, LA-2.21) and the outcome they recorded on it.
+ */
+export async function loadMemberSetupProgress(tenantId: string, userId: string): Promise<SetupProgress> {
+  const [leadServed, transferClaimed, outcomeRecorded] = await Promise.all([
+    proves(db().from("tenant_lead_activity").select("id").eq("tenant_id", tenantId).eq("agent_user_id", userId).limit(1), readFoundRow),
+    proves(db().from("tenant_lead_activity").select("id").eq("tenant_id", tenantId).eq("agent_user_id", userId).not("work_item_id", "is", null).limit(1), readFoundRow),
+    proves(db().from("tenant_lead_activity").select("id").eq("tenant_id", tenantId).eq("agent_user_id", userId).not("dispositioned_at", "is", null).limit(1), readFoundRow),
+  ]);
+  return { leadServed, transferClaimed, outcomeRecorded };
+}
+
+/** This person's marks on their walkthrough (tenant_setup_guide). */
+export type SetupGuideState = {
+  skipped: string[];
+  done: string[];
+  hiddenAt: string | null;
+  finishedAt: string | null;
+  /** A row exists: the person has opened their walkthrough at least once. */
+  exists: boolean;
+};
+
+export const EMPTY_GUIDE_STATE: SetupGuideState = { skipped: [], done: [], hiddenAt: null, finishedAt: null, exists: false };
+
+/** A failed read (the table not migrated yet) is no marks: nothing skipped, nothing hidden. */
+export async function loadSetupGuideState(tenantId: string, userId: string): Promise<SetupGuideState> {
+  try {
+    const { data, error } = await db().from("tenant_setup_guide").select("skipped_steps, done_steps, hidden_at, finished_at").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle();
+    if (error || !data) return EMPTY_GUIDE_STATE;
+    return { skipped: data.skipped_steps ?? [], done: data.done_steps ?? [], hiddenAt: data.hidden_at ?? null, finishedAt: data.finished_at ?? null, exists: true };
+  } catch {
+    return EMPTY_GUIDE_STATE;
+  }
+}
+
+/** Writes this person's marks (the whole row: the route reads, changes and writes back). */
+export async function saveSetupGuideState(tenantId: string, userId: string, state: SetupGuideState): Promise<void> {
+  const { error } = await db()
+    .from("tenant_setup_guide")
+    .upsert(
+      { tenant_id: tenantId, user_id: userId, skipped_steps: state.skipped, done_steps: state.done, hidden_at: state.hiddenAt, finished_at: state.finishedAt },
+      { onConflict: "tenant_id,user_id" },
+    );
+  if (error) throw new Error(`Could not save your setup progress: ${error.message}`);
+}
+
+/** A member's walkthrough, once finished, is stamped like the owner's and does not come back. */
+export async function recordMemberSetupFinished(tenantId: string, userId: string, state: SetupGuideState): Promise<void> {
+  if (state.finishedAt) return;
+  try {
+    await saveSetupGuideState(tenantId, userId, { ...state, finishedAt: new Date().toISOString() });
+  } catch {
+    // Not stamped: the next render tries again.
+  }
+}
+
+async function loadBaseProgress(tenantId: string): Promise<SetupProgress> {
   const [carriersAdded, statementImported, appointmentsConfirmed, leadSourcesAdded, phoneAdded, bookImported, finished] = await Promise.all([
     proves(db().from("tenant_carriers").select("id").eq("tenant_id", tenantId).eq("is_active", true).limit(1), readFoundRow),
     hasImportedStatement(tenantId),

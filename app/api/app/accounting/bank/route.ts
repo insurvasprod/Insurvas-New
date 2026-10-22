@@ -13,7 +13,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 const ROLES = ["owner", "bookkeeper"] as const;
 const uuid = z.string().uuid();
 const body = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("save_account"), id: uuid.optional(), nickname: z.string().trim().min(1).max(80), bank_name: z.string().trim().max(120).nullable(), last_four: z.string().regex(/^\d{4}$/).nullable() }).strict(),
+  z.object({ op: z.literal("save_account"), id: uuid.optional(), nickname: z.string().trim().min(1).max(80), bank_name: z.string().trim().max(120).nullable(), last_four: z.string().regex(/^\d{4}$/, "Last four must be exactly four digits.").nullable() }).strict(),
   z.object({ op: z.literal("suggest") }).strict(),
   z.object({ op: z.literal("confirm"), match_ids: z.array(uuid).min(1).max(50) }).strict(),
   z.object({ op: z.literal("manual"), transaction_id: uuid, statement_id: uuid, amount_cents: z.number().int().min(1).max(1_000_000_000_00) }).strict(),

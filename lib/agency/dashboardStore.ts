@@ -39,35 +39,42 @@ export async function readDashboard(context: { tenantId: string; userId: string;
   const today = new Date().toISOString().slice(0, 10);
   const horizon = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
 
-  const [scores, seatsUsed, seatLimit, producers] = await Promise.all([
+  // Panel 3 — the payable ledger (reported basis). Empty state, not zero, until AG-1.5 is live. The sync must
+  // land before the balances are read, so the two stay a chain; the chain itself runs beside the other panels.
+  const ledger = (async () => {
+    await agencyRpc<number>("agency_ledger_sync", { p_tenant_id: context.tenantId });
+    return agencyRpc<Array<{ producer_user_id: string; basis: string; balance_cents: number }>>("agency_producer_balances", { p_tenant_id: context.tenantId, p_as_of: today });
+  })().then((rows) => ({ ok: true as const, rows }), () => ({ ok: false as const, rows: null }));
+
+  // The owner's override for the period: what the carriers paid the agency on producers' business, less the
+  // producers' reported share of it. Both sides are reported basis. Read alongside the ledger and used only
+  // when the ledger turned out ready, exactly as when it was read after it.
+  const overrideReads = scope === null
+    ? Promise.all([
+      db().from("commission_entry").select("amount_cents, id").eq("tenant_id", context.tenantId).in("entry_type", ["advance", "earned", "chargeback"]).gte("transaction_date", period.from).lte("transaction_date", period.to),
+      db().from("producer_ledger_entry").select("amount_cents, commission_entry_id").eq("tenant_id", context.tenantId).eq("basis", "reported").in("entry_type", ["earned", "chargeback"]).gte("occurred_on", period.from).lte("occurred_on", period.to),
+    ])
+    : null;
+
+  const [scores, seatsUsed, seatLimit, producers, ledgerResult, overrideResult] = await Promise.all([
     producerScores(context, period),
     agencyRpc<number>("tenant_seats_used", { p_tenant_id: context.tenantId }).catch(() => 0),
     agencyRpc<number | null>("tenant_seat_limit", { p_tenant_id: context.tenantId }).catch(() => null),
     db().from("producer").select("id, user_id, display_name").eq("tenant_id", context.tenantId).neq("status", "offboarded"),
+    ledger,
+    overrideReads,
   ]);
   const visible = ((producers.data ?? []) as Array<{ id: string; user_id: string; display_name: string }>).filter((p) => scope === null || scope.includes(p.user_id));
   const producerIds = visible.map((p) => p.id);
   const nameOfProducerId = new Map(visible.map((p) => [p.id, { name: p.display_name, user: p.user_id }]));
 
-  // Panel 3 — the payable ledger (reported basis). Empty state, not zero, until AG-1.5 is live.
-  let ledgerReady = true;
+  const ledgerReady = ledgerResult.ok;
   const balance = new Map<string, number>();
-  try {
-    await agencyRpc<number>("agency_ledger_sync", { p_tenant_id: context.tenantId });
-    const rows = await agencyRpc<Array<{ producer_user_id: string; basis: string; balance_cents: number }>>("agency_producer_balances", { p_tenant_id: context.tenantId, p_as_of: today });
-    for (const r of rows ?? []) if (r.basis === "reported") balance.set(r.producer_user_id, Number(r.balance_cents));
-  } catch {
-    ledgerReady = false;
-  }
+  for (const r of ledgerResult.rows ?? []) if (r.basis === "reported") balance.set(r.producer_user_id, Number(r.balance_cents));
 
-  // The owner's override for the period: what the carriers paid the agency on producers' business, less the
-  // producers' reported share of it. Both sides are reported basis.
   let overrideCents: number | null = null;
-  if (ledgerReady && scope === null) {
-    const [{ data: paid }, { data: shares }] = await Promise.all([
-      db().from("commission_entry").select("amount_cents, id").eq("tenant_id", context.tenantId).in("entry_type", ["advance", "earned", "chargeback"]).gte("transaction_date", period.from).lte("transaction_date", period.to),
-      db().from("producer_ledger_entry").select("amount_cents, commission_entry_id").eq("tenant_id", context.tenantId).eq("basis", "reported").in("entry_type", ["earned", "chargeback"]).gte("occurred_on", period.from).lte("occurred_on", period.to),
-    ]);
+  if (ledgerReady && overrideResult) {
+    const [{ data: paid }, { data: shares }] = overrideResult;
     const posted = new Set(((shares ?? []) as Array<{ commission_entry_id: string | null }>).map((s) => s.commission_entry_id).filter(Boolean));
     const agencySide = ((paid ?? []) as Array<{ id: string; amount_cents: number }>).filter((p) => posted.has(p.id)).reduce((s, p) => s + Number(p.amount_cents), 0);
     const producerSide = ((shares ?? []) as Array<{ amount_cents: number }>).reduce((s, p) => s + Number(p.amount_cents), 0);

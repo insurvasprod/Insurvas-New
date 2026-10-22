@@ -34,7 +34,7 @@ async function queueSla(tenantId: string) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const parsed = filtersSchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose valid inbox filters" }, { status: 400 });

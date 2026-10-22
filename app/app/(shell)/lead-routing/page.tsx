@@ -4,6 +4,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AssignmentWorkspace } from "@/components/app/assignment-workspace";
 import { UnassignedPool } from "@/components/app/agency/unassigned-pool";
 import { hasFeature } from "@/lib/entitlements/types";
+import { PageHeader } from "@/components/ui/page-header";
 
 /**
  * AG-0.10 · Team › Lead routing. Not a new lead system: LA-2.24's rule chain (state, language, campaign, product,
@@ -16,7 +17,8 @@ export default async function LeadRoutingPage() {
   if (guard.role !== "owner") return <RoleGateNotice featureLabel="Lead routing" detail="In an agency the owner or an admin routes leads. Your assigned leads are in your queue." />;
   return (
     <>
-      {hasFeature(guard.entitlement, "outbound_dialing") && <AssignmentWorkspace canManage />}
+      {/* Without dialing there is no rule chain to show, only the pool; the page still gets its one title. */}
+      {hasFeature(guard.entitlement, "outbound_dialing") ? <AssignmentWorkspace canManage title="Lead routing" /> : <PageHeader title="Lead routing" />}
       <div className="mt-4"><UnassignedPool /></div>
     </>
   );

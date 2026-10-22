@@ -34,7 +34,15 @@ function ExistingCustomerPreflight({ data, onRecheck, busy }: { data: Workspace;
   return <Card className={data.preflight.status === "already_customer" ? "border-[var(--error)]/50 bg-[var(--error)]/5" : data.preflight.status === "spoken_before" ? "border-[var(--warning)]/50 bg-[var(--warning)]/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p>{data.preflight.soldByMultiplePartners && <p className="mt-1 text-sm font-semibold text-[var(--error-ink)]">Sold by {data.preflight.soldByPartners?.length ?? 2} partners: {(data.preflight.soldByPartners ?? []).map((partner) => partner.partnerName).join(", ")}</p>}</div><div className="flex items-center gap-2">{data.preflight.soldByMultiplePartners && <StatusChip tone="danger">Sold by two partners</StatusChip>}<StatusChip tone={data.preflight.status === "already_customer" ? "danger" : data.preflight.status === "spoken_before" ? "warning" : "neutral"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</StatusChip><Button type="button" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
 }
 
-function display(value: unknown) { return Array.isArray(value) ? value.join(", ") : value === null || value === undefined || value === "" ? "Not provided" : String(value); }
+// A currency field holds cents and a yes/no field a boolean: shown as the form showed them, not
+// "25000000" and "false" (QA pass 2026-10-22).
+function display(value: unknown, type?: string) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (value === null || value === undefined || value === "") return "Not provided";
+  if (type === "currency" && typeof value === "number") return (value / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+}
 function when(value: string) { return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
 function visible(field: { show_when: { field_key: string; equals: string } | null; conditional_on?: { field_key: string; equals: string } | null }, values: Record<string, unknown>) { const condition = field.show_when ?? field.conditional_on; if (!condition) return true; const current = values[condition.field_key]; return Array.isArray(current) ? current.includes(condition.equals) : String(current ?? "") === condition.equals; }
 function stateTone(state: string) { return state === "outstanding" ? "danger" : state === "corrected" ? "warning" : "good"; }
@@ -205,8 +213,8 @@ function LeadDetailTab({ data, onAllNotes }: { data: Workspace; onAllNotes: () =
           const change = corrections.get(field.field_key);
           return (
             <Fact key={field.field_key} label={field.label}>
-              {display(data.lead.values[field.field_key])}
-              {change && <span className="mt-1 block text-xs font-normal text-[var(--warning-ink)]">Was {display(change.old_value)} — corrected on verification</span>}
+              {display(data.lead.values[field.field_key], field.type)}
+              {change && <span className="mt-1 block text-xs font-normal text-[var(--warning-ink)]">Was {display(change.old_value, field.type)} — corrected on verification</span>}
             </Fact>
           );
         })}

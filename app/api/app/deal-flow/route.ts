@@ -51,7 +51,7 @@ async function csvResponse(tenantId: string, filters: ReturnType<typeof queryPar
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("daily_deal_flow", ["owner", "producer"]);
+  const auth = await requireFeatureRole("daily_deal_flow", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const filters = queryParams(request);

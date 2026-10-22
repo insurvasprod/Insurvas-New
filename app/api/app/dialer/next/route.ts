@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { DialerWorkflowError, emptyQueueReason, serveNextLead } from "@/lib/dialerScripts/service";
+import { DialerWorkflowError, diagnoseAssignedQueue, emptyQueueReason, serveNextLead } from "@/lib/dialerScripts/service";
 import { capacityEmptyReason } from "@/lib/dialerScripts/display";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -29,14 +29,14 @@ export async function POST() {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    // AG-0.5 / AG-0.10: in an agency a producer, manager or setter is dealt only the leads assigned to
-    // him, never the owner's unassigned pool (serveNextLead with a scope). From the session; null scope
-    // (solo, owner/admin) = serve_next_lead exactly as before.
+    // AG-0.5 / AG-0.10: every session is served by serve_next_lead. In an agency the database closes the
+    // unassigned pool to a producer, manager, assistant or setter (agent_can_take_pool_lead), so its weighted,
+    // scored draw runs over the leads assigned to him alone. The scope (from the session; null = solo or
+    // owner/admin) only decides how an empty queue is explained.
     const scope = await scopeFor(auth.context);
-    const { served, refused, atCapacity, emptyReason: assignedEmptyReason } = await serveNextLead({
+    const { served, refused, atCapacity } = await serveNextLead({
       tenantId: auth.context.tenantId,
       agentId: auth.context.userId,
-      scope,
     });
     // Leads the queue offered in states this agent may not sell in. They went straight back to the
     // queue for someone who is licensed there, and the screen says why, instead of looking empty.
@@ -54,18 +54,19 @@ export async function POST() {
     const emptyReason = served
       ? null
       : refusal
+        // A scoped session never takes from the pool, so the ceiling is not why his queue is empty, and
+        // the agency-wide counts are not his to see (AG-0.5): the reason comes from his assigned work only.
+        ?? (scope ? (await diagnoseAssignedQueue(auth.context.tenantId, auth.context.userId).catch(() => null))?.message ?? null : null)
         // 20260925700000: at the open-lead ceiling the pool is closed to this agent; say so,
         // rather than blaming windows and timers for an empty screen they did not cause.
         ?? (atCapacity ? capacityEmptyReason(atCapacity.open, atCapacity.max) : null)
-        // A scoped serve explains its own empty queue, from the agent's assigned work only.
-        ?? assignedEmptyReason
         ?? (await emptyQueueReason(auth.context.tenantId, auth.context.userId));
     return NextResponse.json(
       {
         served,
         refused: refused.length,
         emptyReason,
-        atCapacity: atCapacity ?? null,
+        atCapacity: scope ? null : atCapacity ?? null,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

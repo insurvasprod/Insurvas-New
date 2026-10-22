@@ -224,17 +224,25 @@ async function resolveDue(tenantId: string, today: string) {
 
 export { PERIODS, PERIOD_LABELS, type Period } from "./effectiveness";
 
+/**
+ * The page's three reads, which need none of the settings: the page starts them beside the radar config
+ * and hands the promise to loadEffectiveness (which awaits it, and throws from it, as it always did).
+ */
+export function readEffectiveness(tenantId: string): Promise<[Loose[], Loose[], Loose]> {
+  return Promise.all([
+    everyRow(() => db().from("prediction_outcome").select("band, confidence, weight_set_version, outcome_at_horizon, was_worked, in_holdout, scored_on, horizon_days").eq("tenant_id", tenantId).not("resolved_at", "is", null).order("id")),
+    everyRow(() => db().from("retention_holdout").select("band_at_draw, selected, outcome_at_horizon, was_worked, exposure_cents, drawn_on, horizon_days, ineligible_reason, left_at, left_reason, resolved_at").eq("tenant_id", tenantId).order("id")),
+    db().from("prediction_outcome").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).is("resolved_at", null),
+  ]);
+}
+
 /** The page: Part 1 (all resolved predictions) and Part 2 (draws whose horizon ended in the period). */
-export async function loadEffectiveness(tenantId: string, period: Period, settings: RetentionSettings) {
+export async function loadEffectiveness(tenantId: string, period: Period, settings: RetentionSettings, reads: Promise<[Loose[], Loose[], Loose]> = readEffectiveness(tenantId)) {
   let predictions: Loose[];
   let draws: Loose[];
   let awaiting: Loose;
   try {
-    [predictions, draws, awaiting] = await Promise.all([
-      everyRow(() => db().from("prediction_outcome").select("band, confidence, weight_set_version, outcome_at_horizon, was_worked, in_holdout, scored_on, horizon_days").eq("tenant_id", tenantId).not("resolved_at", "is", null).order("id")),
-      everyRow(() => db().from("retention_holdout").select("band_at_draw, selected, outcome_at_horizon, was_worked, exposure_cents, drawn_on, horizon_days, ineligible_reason, left_at, left_reason, resolved_at").eq("tenant_id", tenantId).order("id")),
-      db().from("prediction_outcome").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).is("resolved_at", null),
-    ]);
+    [predictions, draws, awaiting] = await reads;
   } catch (error) {
     if (isSchemaGap(error as Loose)) return null;
     throw error;

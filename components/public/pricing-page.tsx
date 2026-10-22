@@ -30,7 +30,35 @@ import { publicPriceForCycle, type PublicPlan } from "@/lib/publicPlans/types";
  * the one before it, by module; a module-by-module explorer (which replaced the flat compare table);
  * add-ons; questions; the closing call. The feature descriptions in the explorer are written copy,
  * kept in components/public/pricing-explorer.tsx — everything priced or granted is catalog data.
+ *
+ * Two audiences (2026-10-22): individual agents and agencies, one at a time behind a toggle at the
+ * top (?for=agency links straight to the agency view). Agencies buy AG-0.12's flat seat bands: the
+ * first band reads "Everything in <the top individual plan>, plus" the agency-only features, each
+ * card names its seat range, and the questions add who uses a seat and how band changes are billed.
+ * The "which plan fits you" picker is an individual-agent question, so it shows only there.
  */
+export type PricingAudience = "individual" | "agency";
+
+const AUDIENCE_COPY: Record<PricingAudience, { title: string; lede: string }> = {
+  individual: {
+    title: "Priced per workspace. Never per lead.",
+    lede: "You already pay your vendors for every lead. Insurvas is priced by plan, so the lead you bought is not charged twice. Add-ons and usage above a plan’s allowance are priced separately.",
+  },
+  agency: {
+    title: "One flat price for your whole agency.",
+    lede: "Pick the band your team fits in. Producers, managers and assistants all work inside it, with payouts, lead routing and the agency dashboard included — never priced per seat or per lead.",
+  },
+};
+
+/** "Up to 50 seats", "51–150 seats", "151+ seats": each band from the one below it. */
+function seatLabels(plans: PublicPlan[]): (string | null)[] {
+  return plans.map((plan, index) => {
+    const below = index > 0 ? plans[index - 1].max_seats : null;
+    if (plan.max_seats == null || plan.max_seats <= 0) return below != null ? `${(below + 1).toLocaleString("en-US")}+ seats` : null;
+    if (below == null) return `Up to ${plan.max_seats.toLocaleString("en-US")} seats`;
+    return `${(below + 1).toLocaleString("en-US")}–${plan.max_seats.toLocaleString("en-US")} seats`;
+  });
+}
 export type PricingAddon = { code: string; name: string; description: string | null; price_cents: number; billing_cycle: BillingCycle };
 
 function savingPercent(plan: PublicPlan, cycle: BillingCycle): number | null {
@@ -71,7 +99,25 @@ const SECTION = "mx-auto max-w-7xl px-4 sm:px-6 lg:px-16";
 const EYEBROW = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--accent-ink)]";
 const H2 = "mt-3 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg";
 
-export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[]; addons: PricingAddon[]; loadError: string | null }) {
+export function PricingPage({ plans: catalog, addons, loadError, initialAudience = "individual" }: { plans: PublicPlan[]; addons: PricingAddon[]; loadError: string | null; initialAudience?: PricingAudience }) {
+  const audiences = useMemo(() => (["individual", "agency"] as const).filter((item) => catalog.some((plan) => plan.audience === item)), [catalog]);
+  const [audience, setAudienceState] = useState<PricingAudience>(audiences.includes(initialAudience) ? initialAudience : audiences[0] ?? "individual");
+  const setAudience = (next: PricingAudience) => {
+    setAudienceState(next);
+    setNeeds([]);
+    // Shareable: /pricing?for=agency opens the agency view.
+    const url = new URL(window.location.href);
+    if (next === "agency") url.searchParams.set("for", "agency");
+    else url.searchParams.delete("for");
+    window.history.replaceState(null, "", url);
+  };
+  const plans = useMemo(() => catalog.filter((plan) => plan.audience === audience), [catalog, audience]);
+  // An agency band builds on the top individual plan: its card says so, then lists only what it adds.
+  const baseForAgency = useMemo(() => {
+    const individual = catalog.filter((plan) => plan.audience === "individual");
+    return individual.length ? individual[individual.length - 1] : null;
+  }, [catalog]);
+  const seats = useMemo(() => (audience === "agency" ? seatLabels(plans) : plans.map(() => null)), [audience, plans]);
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [needs, setNeeds] = useState<string[]>([]);
@@ -82,7 +128,10 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
     () => BILLING_CYCLES.filter((candidate) => plans.some((plan) => publicPriceForCycle(plan, candidate))),
     [plans],
   );
-  const increments = useMemo(() => planIncrements(plans), [plans]);
+  const increments = useMemo(
+    () => (audience === "agency" && baseForAgency ? planIncrements([baseForAgency, ...plans]).slice(1) : planIncrements(plans)),
+    [audience, baseForAgency, plans],
+  );
   const questions = useMemo(() => availableNeeds(plans), [plans]);
   const fit = useMemo(
     () => recommendPlan(plans.map((plan) => ({ ...plan, monthlyCents: plan.price_monthly ? parseDollarsToCents(plan.price_monthly) : null })), needs),
@@ -97,7 +146,10 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
   const monthlyCents = (plan: PublicPlan) => (plan.price_monthly ? parseDollarsToCents(plan.price_monthly) : null) ?? Number.POSITIVE_INFINITY;
   const defaultIsCheapest = defaultPlan ? plans.every((plan) => monthlyCents(defaultPlan) <= monthlyCents(plan)) : false;
   const defaultIsDearest = defaultPlan ? plans.every((plan) => monthlyCents(defaultPlan) >= monthlyCents(plan)) : false;
-  const closingLine = !defaultPlan
+  const leadPlan = defaultPlan ?? plans[0] ?? null;
+  const closingLine = audience === "agency"
+    ? "Start on the band your team fits. Move up the day you grow."
+    : !defaultPlan
     ? "Start your trial. Export your data either way."
     : plans.length < 2
       ? `Start on ${defaultPlan.name}. Export your data either way.`
@@ -114,6 +166,12 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
     { q: "Is there a per-lead charge?", a: "No. A plan is priced per workspace, not per lead: you already pay your vendors for every lead, and we do not charge you for it again. Add-ons you choose, and metered usage above your plan’s allowance, are billed at the rates shown." },
     { q: "Can I change plan mid-cycle?", a: "Yes. You choose whether it applies now with proration or at renewal, and the confirmation names the effective date before anything moves." },
     { q: "What happens to existing subscribers when you change a plan?", a: "They keep the version they bought. Plans are versioned, so publishing a new version leaves every current subscriber on theirs until they renew." },
+    ...(audience === "agency"
+      ? [
+          { q: "Who uses a seat?", a: "Every accepted, working member of the agency: the owner, producers, managers and assistants. Each person is one seat, whatever they do." },
+          { q: "What happens when my team outgrows its band?", a: "Move up a band at any time: the change applies straight away and you pay the prorated difference for the rest of the period. Moving down takes effect at the end of the period, with no refund." },
+        ]
+      : []),
     yearlySaving
       ? { q: "Do you offer a discount for yearly billing?", a: `Yes — ${savingLabel(yearlySaving, "yearly")} on yearly billing. Switch the toggle above and the prices update.` }
       : { q: "Do you offer a discount for yearly billing?", a: "Not at the moment: every plan is billed at the same monthly rate whichever cycle you choose." },
@@ -138,16 +196,27 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
         <div aria-hidden="true" className="pz-aurora left-1/2 -top-[460px] -z-10 -translate-x-1/2" />
         <Reveal>
           <div className={EYEBROW}>Pricing</div>
-          <h1 className="mx-auto mt-4 max-w-[780px] text-headline-lg font-semibold leading-[1.02] tracking-[-0.035em] text-foreground sm:text-hero">
-            Priced per workspace. Never per lead.
+          <h1 key={audience} className="pz-fade mx-auto mt-4 max-w-[780px] text-headline-lg font-semibold leading-[1.02] tracking-[-0.035em] text-foreground sm:text-hero">
+            {AUDIENCE_COPY[audience].title}
           </h1>
-          <p className="mx-auto mt-5 max-w-[600px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            You already pay your vendors for every lead. Insurvas is priced by plan, so the lead you bought is not charged twice. Add-ons and usage above a plan’s allowance are priced separately.
+          <p key={`${audience}-lede`} className="pz-fade mx-auto mt-5 max-w-[600px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+            {AUDIENCE_COPY[audience].lede}
           </p>
         </Reveal>
 
-        {ready && offeredCycles.length > 1 && (
+        {audiences.length > 1 && (
           <div className="mt-10 flex justify-center">
+            <SegmentedControl
+              label="Who it is for"
+              value={audience}
+              onChange={setAudience}
+              options={audiences.map((item) => ({ value: item, label: item === "agency" ? "Agencies" : "Individual agents" }))}
+            />
+          </div>
+        )}
+
+        {ready && offeredCycles.length > 1 && (
+          <div className={`${audiences.length > 1 ? "mt-4" : "mt-10"} flex justify-center`}>
             <SegmentedControl
               label="Billing cycle"
               value={cycle}
@@ -168,7 +237,7 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
           <div className="rounded-xl border border-border bg-card p-10 text-center text-muted-foreground">No public plans are available right now.</div>
         ) : (
           <>
-            {plans.length > 1 && questions.length > 0 && (
+            {audience === "individual" && plans.length > 1 && questions.length > 0 && (
               <Reveal className="mx-auto mb-10 max-w-[960px]">
                 <PricingPicker needs={questions} selected={needs} onToggle={toggleNeed} result={fit} onShow={showPlan} />
               </Reveal>
@@ -176,7 +245,7 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
 
             <div className={`grid items-stretch gap-6 ${plans.length >= 3 ? "lg:grid-cols-3" : plans.length === 2 ? "md:grid-cols-2 lg:mx-auto lg:max-w-[880px]" : "mx-auto max-w-[440px]"}`}>
               {plans.map((plan, index) => (
-                <Reveal key={plan.code} delay={index * 110} className="h-full">
+                <Reveal key={`${audience}-${plan.code}`} delay={index * 110} className="h-full">
                   <PricingPlanCard
                     plan={plan}
                     increment={increments[index]}
@@ -184,6 +253,7 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
                     price={cardPrice(plan, cycle)}
                     recommended={plan.code === recommendedCode}
                     pickTurn={pickTurn}
+                    seats={seats[index]}
                   />
                 </Reveal>
               ))}
@@ -274,7 +344,7 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
           <h2 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">{closingLine}</h2>
           <div className="mt-7 flex justify-center gap-3.5">
             <Button asChild className="h-12 rounded-full px-7 text-base shadow-[var(--shadow-brand)]">
-              <Link href={defaultPlan ? `/signup?plan=${encodeURIComponent(defaultPlan.code)}&cycle=${cycle}` : "/signup"}>Start your trial</Link>
+              <Link href={leadPlan ? `/signup?plan=${encodeURIComponent(leadPlan.code)}&cycle=${cycle}` : "/signup"}>Start your trial</Link>
             </Button>
           </div>
         </Reveal>

@@ -95,6 +95,8 @@ function InvoiceForm({ sources, initial, onClose, onSaved }: { sources: Sources;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!totals || taxCents === null) { setError("Check the amounts: dollars and cents only."); return; }
+    if (taxCents < 0) { setError("Tax can't be negative."); return; }
+    if (f.periodStart && f.periodEnd && f.periodEnd < f.periodStart) { setError("“Period to” is before “Period from”."); return; }
     const [kind, id] = f.source.split(":");
     setBusy(true);
     setError(null);

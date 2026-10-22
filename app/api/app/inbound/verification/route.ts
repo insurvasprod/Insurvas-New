@@ -37,7 +37,7 @@ async function screenPanel(panel: Panel, tenantId: string, userId: string, workI
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const workItemId = new URL(request.url).searchParams.get("work_item_id");
   const parsed = workItemSchema.safeParse(workItemId);

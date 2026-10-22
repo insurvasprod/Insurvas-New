@@ -65,10 +65,10 @@ function errorResponse(error: unknown) {
  * The calling window for each state on the page, so "Book a callback" can say "Inside the Arizona
  * calling window" while the agent picks a time. Advisory: the reschedule below asks the database.
  */
-async function windowsFor(tenantId: string, states: string[]): Promise<Record<string, CallbackWindowFacts>> {
+async function windowsFor(settingsRead: Promise<Awaited<ReturnType<typeof getCallingWindows>>>, states: string[]): Promise<Record<string, CallbackWindowFacts>> {
   if (!states.length) return {};
   try {
-    const settings = await getCallingWindows(tenantId);
+    const settings = await settingsRead;
     return Object.fromEntries(states.map((state) => [state, callbackWindowFacts(state, settings.federal, settings.stateRules, settings.tenant)]));
   } catch {
     return {};
@@ -76,7 +76,7 @@ async function windowsFor(tenantId: string, states: string[]): Promise<Record<st
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("callback_calendar", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("callback_calendar", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());
   const parsed = querySchema.safeParse(params);
@@ -98,6 +98,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ nearest });
   }
   try {
+    // A single-callback read (History) needs none of the page's context.
+    const pageRead = !parsed.data.callback_id;
+    // None of the page's context depends on the callbacks except which states' windows to describe, so it
+    // is read beside the list rather than after it. The calling-window settings are read up front too and
+    // used only if a callback has a state. Each carries a handler so a failure the list's own error
+    // overtakes is not left unhandled; awaited below, each settles exactly as it did when read after.
+    const settingsRead = getCallingWindows(auth.context.tenantId);
+    const zoneRead = getWorkspaceTimezone(auth.context.tenantId).catch(() => null);
+    const refusalsRead = pageRead ? recentCallbackRefusals(auth.context.tenantId, scope, auth.context.userId).catch(() => []) : Promise.resolve([]);
+    const ownZoneRead = agentTimezones(auth.context.tenantId, auth.context.userId);
+    for (const read of [settingsRead, ownZoneRead]) read.catch(() => undefined);
     const callbacks = await listCallbacks(auth.context.tenantId, {
       from: parsed.data.from,
       to: parsed.data.to,
@@ -107,13 +118,11 @@ export async function GET(request: Request) {
       scope: scope === null ? null : [...new Set([...scope, auth.context.userId])],
     });
     const states = [...new Set(callbacks.map((callback) => callback.state).filter((state): state is string => Boolean(state)))];
-    // A single-callback read (History) needs none of the page's context.
-    const pageRead = !parsed.data.callback_id;
     const [windows, agencyTimezone, refusals, ownZone] = await Promise.all([
-      windowsFor(auth.context.tenantId, states),
-      getWorkspaceTimezone(auth.context.tenantId).catch(() => null),
-      pageRead ? recentCallbackRefusals(auth.context.tenantId, scope, auth.context.userId).catch(() => []) : Promise.resolve([]),
-      agentTimezones(auth.context.tenantId, auth.context.userId),
+      windowsFor(settingsRead, states),
+      zoneRead,
+      refusalsRead,
+      ownZoneRead,
     ]);
     // LA-1.22: the customer's time "with the agent's shown alongside" — the agent's OWN zone, the one
     // saved with their working hours, not the agency's (an agent licensed in 14 states is routinely

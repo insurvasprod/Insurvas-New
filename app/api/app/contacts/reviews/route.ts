@@ -10,7 +10,7 @@ const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
 
 /** The duplicate review queue, oldest first. `?index=` (0-based) picks the pair shown ("1 of N"). */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES);
+  const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Duplicate review");
   if (refused) return refused;

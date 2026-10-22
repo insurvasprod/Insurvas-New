@@ -28,7 +28,7 @@ const saveSchema = z.object({
 }).strict();
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Queue scoring");
   if (refused) return refused;

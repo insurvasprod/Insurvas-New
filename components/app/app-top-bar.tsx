@@ -303,9 +303,11 @@ export function TopBarShell({
       return () => window.clearTimeout(clear);
     }
     const controller = new AbortController();
+    let inFlight = false;
     // 180ms is long enough that a normal typist issues one request per word and short enough that
     // the list feels attached to the keyboard.
     const timer = window.setTimeout(async () => {
+      inFlight = true;
       setSearching(true);
       try {
         const response = await fetch(`${searchEndpoint}?q=${encodeURIComponent(trimmed)}`, {
@@ -318,14 +320,22 @@ export function TopBarShell({
         setTotal(body.total);
         setCursor(0);
       } catch (cause) {
-        if ((cause as Error)?.name === "AbortError") return;
+        // A superseded keystroke, not a failure. Checked on the signal rather than the error's name:
+        // the rejection's shape varies by browser and by whatever has wrapped fetch.
+        if (controller.signal.aborted || (cause as Error)?.name === "AbortError") return;
         setSearchError("Search is unavailable right now.");
         setHits([]);
       } finally {
-        setSearching(false);
+        inFlight = false;
+        if (!controller.signal.aborted) setSearching(false);
       }
     }, 180);
-    return () => { controller.abort(); window.clearTimeout(timer); };
+    return () => {
+      window.clearTimeout(timer);
+      // Only a request that actually left needs cancelling, and it gets a named reason: a bare
+      // abort() surfaced in the dev overlay as an uncaught "signal is aborted without reason".
+      if (inFlight) controller.abort(new DOMException("Search superseded", "AbortError"));
+    };
   }, [trimmed, searchEndpoint]);
 
   // ---- this person's workspaces: read once, drawn only when there is a choice ----

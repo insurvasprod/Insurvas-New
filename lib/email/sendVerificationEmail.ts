@@ -9,6 +9,9 @@ type VerificationEmailInput = {
   name: string;
   verificationUrl: string;
   verificationId: string;
+  /** Individual agent or agency owner, from the plan they signed up on. */
+  audience?: "agency" | "individual" | null;
+  planName?: string | null;
 };
 
 export type { EmailDelivery };
@@ -28,6 +31,8 @@ export async function sendVerificationEmail(input: VerificationEmailInput): Prom
   const rendered = emailVerificationEmail({
     name: input.name,
     verificationUrl: input.verificationUrl,
+    audience: input.audience,
+    planName: input.planName,
   });
 
   const delivery = await sendEmail({

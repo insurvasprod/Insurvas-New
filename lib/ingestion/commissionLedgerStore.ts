@@ -166,31 +166,54 @@ export async function statementLinesAsLedger(entries: StatementLedgerEntry[]): P
 
 /** The ledger itself, newest statement first, for the Commission ledger page. A producer sees their own lines. */
 export async function loadLedger(viewer: { tenantId: string; userId: string; role: string }) {
-  const read = await allRows(() => {
-    let query = db().from("commission_entry")
-      .select("id, carrier_id, policy_number, entry_type, corrects_type, amount_cents, transaction_date, statement_date, rate_bp, months_advanced, payee_level, agent_identifier, agent_user_id, reversal_reason, file_id, row_number, created_at")
-      .eq("tenant_id", viewer.tenantId);
-    if (viewer.role === "producer") query = query.eq("agent_user_id", viewer.userId);
-    return query.order("statement_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).order("id");
-  }, LEDGER_CAP);
+  // One round trip for every read that needs no other (the lines, the flagged files, the book's policies,
+  // the carriers, the account lines), then one for the file names. Decided in the order they used to be
+  // read: the lines (a schema gap = not available), then the rest, then the account lines.
+  const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+  const [read, rest, accounts] = await Promise.all([
+    allRows(() => {
+      let query = db().from("commission_entry")
+        .select("id, carrier_id, policy_number, entry_type, corrects_type, amount_cents, transaction_date, statement_date, rate_bp, months_advanced, payee_level, agent_identifier, agent_user_id, reversal_reason, file_id, row_number, created_at")
+        .eq("tenant_id", viewer.tenantId);
+      if (viewer.role === "producer") query = query.eq("agent_user_id", viewer.userId);
+      return query.order("statement_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).order("id");
+    }, LEDGER_CAP),
+    settle(Promise.all([
+      flaggedFiles(viewer.tenantId),
+      allRows(() => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).order("carrier_id").order("policy_number"), 200_000),
+      db().from("carriers").select("id, name"),
+    ])),
+    // Account-level lines name no policy, so no producer's: owners and bookkeepers see them.
+    viewer.role !== "producer"
+      ? allRows(() => db().from("commission_account_entry")
+        .select("id, carrier_id, entry_type, corrects_type, amount_cents, transaction_date, statement_date, description, agent_identifier, reversal_reason, file_id, row_number, created_at")
+        .eq("tenant_id", viewer.tenantId).order("statement_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).order("id"), LEDGER_CAP)
+      : null,
+  ]);
   if (read.error) {
     if (isSchemaGap(read.error)) return { available: false as const };
     throw new Error(`Could not load the commission ledger: ${read.error.message}`);
   }
   const rows = read.rows;
   const fileIds = [...new Set(rows.map((row) => row.file_id))];
-  const [flagged, held, carriers] = await Promise.all([
-    flaggedFiles(viewer.tenantId),
-    allRows(() => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).order("carrier_id").order("policy_number"), 200_000),
-    db().from("carriers").select("id, name"),
-  ]);
+  if (!rest.ok) throw rest.error;
+  const [flagged, held, carriers] = rest.value;
   const known = new Set(held.rows.map((p: Loose) => `${p.carrier_id}|${p.policy_number}`));
   const carrierName = new Map<string, string>((carriers.data ?? []).map((row: Loose) => [row.id, row.name]));
   const fileName = new Map<string, string>();
   const nameFiles = async (ids: string[]) => {
     for (const r of await Promise.all(chunks(ids).map((part) => db().from("file_registry").select("id, original_filename").eq("tenant_id", viewer.tenantId).in("id", part)))) for (const row of (r.data ?? []) as Loose[]) fileName.set(row.id, row.original_filename);
   };
-  await nameFiles(fileIds);
+  // Account-level lines name no policy, so no producer's: owners and bookkeepers see them.
+  const accountRows: Loose[] = [];
+  let accountsTruncated = false;
+  if (accounts) {
+    if (accounts.error && !isSchemaGap(accounts.error)) throw new Error(`Could not load the account lines: ${accounts.error.message}`);
+    accountRows.push(...accounts.rows);
+    accountsTruncated = accounts.truncated;
+  }
+  // Both sets of lines named in one go (the account lines' files only add the ones not named already).
+  await nameFiles([...new Set([...fileIds, ...accountRows.map((row) => row.file_id)])]);
   const entries: LedgerRow[] = rows.map((row) => ({
     id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "Carrier not known", policyNumber: row.policy_number, agentUserId: row.agent_user_id,
     type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,
@@ -198,18 +221,6 @@ export async function loadLedger(viewer: { tenantId: string; userId: string; rol
     fileName: fileName.get(row.file_id) ?? null, fileId: row.file_id, rowNumber: row.row_number, createdAt: row.created_at,
     heldByStatement: flagged.has(row.file_id), orphan: !known.has(`${row.carrier_id}|${row.policy_number}`),
   }));
-  // Account-level lines name no policy, so no producer's: owners and bookkeepers see them.
-  const accountRows: Loose[] = [];
-  let accountsTruncated = false;
-  if (viewer.role !== "producer") {
-    const accounts = await allRows(() => db().from("commission_account_entry")
-      .select("id, carrier_id, entry_type, corrects_type, amount_cents, transaction_date, statement_date, description, agent_identifier, reversal_reason, file_id, row_number, created_at")
-      .eq("tenant_id", viewer.tenantId).order("statement_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).order("id"), LEDGER_CAP);
-    if (accounts.error && !isSchemaGap(accounts.error)) throw new Error(`Could not load the account lines: ${accounts.error.message}`);
-    accountRows.push(...accounts.rows);
-    accountsTruncated = accounts.truncated;
-  }
-  await nameFiles([...new Set(accountRows.map((row) => row.file_id).filter((id) => !fileName.has(id)))]);
   for (const row of accountRows) entries.push({
     id: `account:${row.id}`, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "Carrier not known", policyNumber: "", agentUserId: null,
     type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,

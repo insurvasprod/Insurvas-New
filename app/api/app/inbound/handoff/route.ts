@@ -23,7 +23,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     if (auth.context.role === "assistant") {

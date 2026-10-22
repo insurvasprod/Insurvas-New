@@ -28,11 +28,11 @@ export const invoiceSchema = z.object({
   period_start: isoDate.nullable(),
   period_end: isoDate.nullable(),
   due_date: isoDate.nullable(),
-  tax_cents: cents,
+  tax_cents: z.number().int().min(0, "Tax can't be negative.").max(1_000_000_000_00),
   note: z.string().trim().max(2000).nullable(),
   status: z.enum(["draft", "received"]),
   lines: z.array(lineSchema).min(1).max(50),
-}).strict();
+}).strict().refine((b) => !b.period_start || !b.period_end || b.period_end >= b.period_start, { message: "“Period to” is before “Period from”.", path: ["period_end"] });
 
 export const fromTemplateSchema = z.object({
   template_id: uuid,

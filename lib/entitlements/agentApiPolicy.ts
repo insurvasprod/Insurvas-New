@@ -66,7 +66,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/dialer/next/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter"] },
   { sourceFile: "app/api/app/dialer/pick/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter"] },
   { sourceFile: "app/api/app/dialer/queue/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter"] },
-  { sourceFile: "app/api/app/appointments/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter"] },
+  { sourceFile: "app/api/app/appointments/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant", "setter"] },
   // The other half of LA-2.12's role-table line: a setter books into these hours and may not change
   // them, so this route admits the roles that hold `calendar.manage` and the booking route does not.
   { sourceFile: "app/api/app/availability/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant"] },
@@ -82,7 +82,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/lead-post-keys/[id]/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
   // Reading the diary. A setter books into it, so a setter can see it — booking into a calendar you
   // cannot see is how two setters put two people in the same hour.
-  { sourceFile: "app/api/app/calendar/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter"] },
+  { sourceFile: "app/api/app/calendar/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant", "setter"] },
   { sourceFile: "app/api/app/leads/import/preflight/route.ts", featureKey: "lead_import", allowedRoles: ["owner", "producer", "assistant"] },
   // The inventory of imported lists. Same feature and roles as the import that fills it.
   { sourceFile: "app/api/app/lead-lists/route.ts", featureKey: "lead_import", allowedRoles: ["owner", "producer", "assistant"] },
@@ -399,6 +399,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/onboarding/business-profile/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/status/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/verification/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/setup/route.ts", featureKey: null },
   { sourceFile: "app/api/app/pipelines/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/pipelines/[id]/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/pipelines/[id]/stages/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
@@ -428,6 +429,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/team/[userId]/reactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/timezone/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/team/[userId]/access/route.ts", featureKey: "custom_team_access", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/team/presets/route.ts", featureKey: "custom_team_access", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/team/presets/[id]/route.ts", featureKey: "custom_team_access", allowedRoles: ["owner"] },
   // Agency Module 0 (AG-0 / AG-1). "owner" here admits an agency admin too (an admin's base role is owner);
   // a producer reaches only his own rows through lib/agency/visibility.
   { sourceFile: "app/api/app/auth/accept-invite/route.ts", featureKey: null },

@@ -36,6 +36,8 @@
  * review shot (html.intro-3d) reveals it itself. */
 :global(html.intro-play) .introLogo { animation: intro-logo-in 200ms ease 2300ms both; }
 :global(html.intro-3d) .introLogo { animation: none; }
+/* Held with the rest of the intro while it waits for the 3D shot (landing.module.css). */
+:global(html.intro-wait) .introLogo { animation-play-state: paused; }
 /* Once the intro is done the logo is simply there — even if the tab was in the background and its
  * animation clock never ran. */
 :global(html.intro-done) .introLogo { animation: none; }

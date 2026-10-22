@@ -487,7 +487,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
           </button>
         ))}
       </div>
-        <Button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Claim next"}</Button>
+        <Button data-guide="inbound-claim" type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Claim next"}</Button>
       </div>
 
       <div key={tab} id="inbound-tabpanel" role="tabpanel" aria-labelledby={`inbound-tab-${tab}`} className="flex min-w-0 flex-col gap-6">

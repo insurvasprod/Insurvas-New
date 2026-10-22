@@ -19,7 +19,8 @@ import { applyAutoOffer } from "@/lib/offers/service";
 import { audit } from "@/lib/audit/log";
 import type { BillingCycle } from "@/lib/money";
 
-export type CompletionSource = "return" | "webhook";
+/** "no_payment": a checkout with CHECKOUT_PAYMENT_MODE=none (lib/checkout/noPayment.ts). */
+export type CompletionSource = "return" | "webhook" | "no_payment";
 
 export type Completion = {
   subscriptionId: string;

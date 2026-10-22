@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { INTRO_WAIT } from "@/components/marketing/intro-timing";
+
 // The two shots: the CSS intro (3.2 s) and the 3D Data Highway (5 s, html.intro-3d). A skip lands
 // on each one's hand-off, so the hand-off always plays.
 // The CSS shot skips to the start of the mark's flight to the nav, so the landing always plays.
@@ -55,9 +57,15 @@ export function LandingIntroGate({ skipClassName }: { skipClassName: string }) {
     const finish = (after: number) => timers.push(window.setTimeout(() => root.classList.add("intro-done"), after));
     if (!fromScript) {
       try { window.sessionStorage.setItem("insurvas-intro", "1"); } catch { /* private mode: it simply plays */ }
-      root.classList.add("intro-play");
+      root.classList.add("intro-play", "intro-wait");
       measureFlight(root);
-      timers.push(window.setTimeout(() => (root.classList.contains("intro-3d") ? finish(1900) : root.classList.add("intro-done")), SHOTS.css.length + 100));
+      // As the page script does: the 3D shot takes over while the intro waits, or the CSS shot plays.
+      timers.push(window.setTimeout(() => {
+        if (root.classList.contains("intro-3d") || root.classList.contains("intro-done")) return;
+        root.classList.remove("intro-wait");
+        finish(SHOTS.css.length + 100);
+      }, INTRO_WAIT));
+      finish(INTRO_WAIT + 4200);
     }
 
     const scope = document.querySelector<HTMLElement>("[data-landing-intro-root]");
@@ -67,6 +75,8 @@ export function LandingIntroGate({ skipClassName }: { skipClassName: string }) {
     const events = ["pointerdown", "keydown", "wheel", "touchstart", SKIP_EVENT] as const;
     const skip = () => {
       events.forEach((name) => window.removeEventListener(name, skip));
+      // Nothing has played yet: skipping simply shows the page.
+      if (root.classList.contains("intro-wait")) { root.classList.remove("intro-wait"); root.classList.add("intro-done"); return; }
       if (!scope || !clockElement) return;
       const clock = clockElement.getAnimations().find((animation) => animation.timeline === document.timeline);
       const elapsed = typeof clock?.currentTime === "number" ? clock.currentTime : 0;
@@ -93,7 +103,8 @@ export function LandingIntroGate({ skipClassName }: { skipClassName: string }) {
     const releaseScroll = () => held.forEach((name) => window.removeEventListener(name, hold));
     const watcher = new MutationObserver(() => { if (root.classList.contains("intro-done")) { releaseScroll(); watcher.disconnect(); } });
     watcher.observe(root, { attributes: true, attributeFilter: ["class"] });
-    timers.push(window.setTimeout(() => events.forEach((name) => window.removeEventListener(name, skip)), SHOTS.highway.length));
+    // Skipping is offered for the length of a shot once it has started (the wait adds up to INTRO_WAIT).
+    timers.push(window.setTimeout(() => events.forEach((name) => window.removeEventListener(name, skip)), SHOTS.highway.length + INTRO_WAIT));
 
     return () => {
       releaseScroll();

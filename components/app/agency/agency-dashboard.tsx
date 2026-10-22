@@ -12,6 +12,7 @@ import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { dollars } from "@/lib/agency/constants";
 import { BasisChip, Money } from "./money";
 import { useAgencyData } from "./use-agency-data";
@@ -70,8 +71,7 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
           </StatStrip>
 
           <TableCard
-            title="Producers this month"
-            description="Placement and month-4 survival show counts until there are enough policies for a percentage."
+            title="Producers"
             toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />}
           >
             {data.producers.length === 0 ? (
@@ -83,7 +83,7 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
                     <TableHead>Producer</TableHead>
                     <TableHead className="text-right">Submitted</TableHead>
                     <TableHead className="text-right">Issued</TableHead>
-                    <TableHead className="text-right">Placement</TableHead>
+                    <TableHead className="text-right">Placement <InfoTip label="About placement and month-4 survival">Placement and month-4 survival show counts until there are enough policies for a percentage.</InfoTip></TableHead>
                     <TableHead className="text-right">Month-4 alive</TableHead>
                     <TableHead className="text-right">Advance at risk</TableHead>
                     <TableHead className="text-right">Balance <BasisChip basis="reported" /></TableHead>
@@ -106,7 +106,7 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
             )}
           </TableCard>
 
-          <TableCard title="Licence and seat health" description="Licences, appointments and E&O expiring inside 60 days. An expiry stops that producer submitting by itself.">
+          <TableCard title="Expiring inside 60 days" description="Licences, appointments and E&O. An expiry stops that producer from submitting.">
             {data.alerts.length === 0 ? (
               <EmptyState title="Nothing expires in the next 60 days" hint="Licences, appointments and E&O certificates appear here two months before they lapse." />
             ) : (

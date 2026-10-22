@@ -10,7 +10,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * carrier and product. No commission, contract level or appointment figure is in this payload.
  */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("quoting", ["owner", "producer"]);
+  const auth = await requireFeatureRole("quoting", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   try {

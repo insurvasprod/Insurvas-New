@@ -26,6 +26,13 @@ export type PublicPlan = {
   features: PublicFeature[];
   trial_days: number;
   is_default: boolean;
+  /**
+   * Who the plan is for (2026-10-22): an individual agent, or an agency (plan_type agency_* —
+   * AG-0.12's flat seat bands). The pricing page shows one audience at a time.
+   */
+  audience: "individual" | "agency";
+  /** The plan's seat limit (plan_limits.max_seats); null when unlimited or not set. */
+  max_seats: number | null;
 };
 
 /** A plan's features grouped by module, in the catalog's module order. */

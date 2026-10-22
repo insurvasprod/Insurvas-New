@@ -25,7 +25,8 @@ const AGENT_NOT_IN_SCOPE = () => NextResponse.json({ error: "Choose an agent who
  * and the overlap in particular *cannot* be decided outside the database without reintroducing the
  * race LA-2.11 exists to prevent.
  */
-const BOOKING_ROLES = ["owner", "producer", "setter"] as const;
+// LA-0.2: an assistant books like a setter (appointments.book); in an agency only into the producers he assists.
+const BOOKING_ROLES = ["owner", "producer", "assistant", "setter"] as const;
 
 const bookSchema = z.object({
   lead_id: z.string().uuid(),
@@ -98,7 +99,7 @@ function refusal(error: unknown) {
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", BOOKING_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", BOOKING_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     // AG-0.5: in an agency only the calendars of the session and the producers in its scope (and its own

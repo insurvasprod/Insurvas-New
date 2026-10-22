@@ -16,7 +16,7 @@ import { audit } from "@/lib/audit/log";
  *   contracting — the owner approves     w9 — the owner uploads     eo — the producer (or the owner) uploads, with expiry
  */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"]);
+  const auth = await requireFeatureRole("team_hierarchy", ["owner", "bookkeeper", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That producer could not be found." }, { status: 404 });

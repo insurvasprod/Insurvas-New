@@ -7,6 +7,8 @@ import { isPendingSchema, SchemaPendingError } from "@/lib/appointments/pendingS
 import { newestStamp } from "./lastSeen";
 import { heldSeat } from "./seats";
 import { memberTimezones } from "./membership";
+import { readTeamAccess, type TeamAccessSnapshot } from "./access";
+import type { ExtraRole } from "@/lib/tenantAuth/teamAccess";
 
 export type TeamMember = {
   id: string;
@@ -32,6 +34,11 @@ export type TeamMember = {
   licensedStateExpiries?: Record<string, string>;
   /** LA-8.6: the member's own zone (roster, scorecards). Null = not set; never used for calling windows. */
   timezone?: string | null;
+  /** Custom team access: extra working roles and hidden menu keys, as stored (dormant without the add-on). */
+  extraRoles?: ExtraRole[];
+  hiddenPages?: string[];
+  /** AG-0.2 title on the same row (admin, manager); null for the plain role, including the billing owner. */
+  agencyTitle?: string | null;
 };
 
 export type TeamSnapshot = {
@@ -45,6 +52,8 @@ export type TeamSnapshot = {
   presenceRecorded?: boolean;
   /** The signed-in person, set by the settings page (not by GET /api/app/team). */
   viewerId?: string;
+  /** Custom team access: whether the add-on is held, the presets, and the plan's features for the page list. */
+  teamAccess?: TeamAccessSnapshot;
 };
 
 export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement): Promise<TeamSnapshot> {
@@ -52,7 +61,7 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
   // One trip for the members: the user row is embedded through tenant_users_user_id_fkey (the only
   // foreign key from tenant_users to users, checked live 2026-09-23). The licensed states go out
   // alongside it; the pending invitations need the member list, so they follow.
-  const [membershipResult, statesResult, activityResult, floorResult, zones] = await Promise.all([
+  const [membershipResult, statesResult, activityResult, floorResult, zones, access] = await Promise.all([
     supabase
       .from("tenant_users")
       .select("user_id, role, invited_at, accepted_at, users!tenant_users_user_id_fkey(id, name, email, status, last_login_at)")
@@ -65,6 +74,8 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
     supabase.from("agent_presence").select("user_id, last_seen_at").eq("tenant_id", tenantId),
     // LA-8.6: garnish too — an empty map before 20261015350000.
     memberTimezones(tenantId),
+    // Custom team access: garnish as well — empty before 20261020500000.
+    readTeamAccess(tenantId, entitlement),
   ]);
 
   const { data: rows, error: membershipError } = membershipResult;
@@ -130,6 +141,9 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
       licensedStates: statesByUser.get(user.id) ?? [],
       licensedStateExpiries: expiriesByUser.get(user.id) ?? {},
       timezone: zones.get(user.id) ?? null,
+      extraRoles: access.byUser.get(user.id)?.extraRoles ?? [],
+      hiddenPages: access.byUser.get(user.id)?.hiddenPages ?? [],
+      agencyTitle: access.byUser.get(user.id)?.agencyTitle ?? null,
     }];
   });
 
@@ -140,6 +154,7 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
     bufferSeats: { used: activeBufferSeats, max: entitlement.limits.max_buffer_seats },
     licensedStatesAvailable,
     presenceRecorded,
+    teamAccess: access.snapshot,
   };
 }
 
@@ -222,23 +237,33 @@ async function pendingMember(tenantId: string, userId: string): Promise<PendingM
 export async function resendTenantInvite(params: { tenantId: string; userId: string; tokenHash: string; expiresAt: string }): Promise<PendingMember> {
   const member = await pendingMember(params.tenantId, params.userId);
   const supabase = getSupabaseServiceClient();
+  // user_invitations_one_live_idx allows one unaccepted invite per (user, purpose), and expiring a row
+  // does not free it — so inserting first, as this used to, failed every time with 23505 and Resend
+  // invite always answered 500 (QA 2026-10-22). The old link is removed first, the way the email-change
+  // and admin token paths do it, and put back if the new one cannot be written. This tenant's rows
+  // only: the same person can hold a pending invite from another agency.
+  const { data: retired, error: retireError } = await supabase
+    .from("user_invitations")
+    .delete()
+    .eq("user_id", params.userId)
+    .eq("tenant_id" as never, params.tenantId as never)
+    .is("partner_id", null)
+    .eq("purpose", "invite")
+    .is("accepted_at", null)
+    .select("*");
+  if (retireError) throw new Error(retireError.message);
   const { data: created, error } = await supabase
     .from("user_invitations")
     .insert({ user_id: params.userId, tenant_id: params.tenantId, token_hash: params.tokenHash, expires_at: params.expiresAt, purpose: "invite" } as never)
     .select("id")
     .single<{ id: string }>();
-  if (error || !created) throw new Error(error?.message ?? "Could not issue a new invitation");
-  const { error: retireError } = await supabase
-    .from("user_invitations")
-    .update({ expires_at: new Date().toISOString() } as never)
-    .eq("user_id", params.userId)
-    // This tenant's invitations only: the same person can hold a pending invite from another agency.
-    .eq("tenant_id" as never, params.tenantId as never)
-    .is("partner_id", null)
-    .eq("purpose", "invite")
-    .is("accepted_at", null)
-    .neq("id", created.id);
-  if (retireError) console.error("[team] could not retire the previous invitation", retireError.message);
+  if (error || !created) {
+    if (retired?.length) {
+      const { error: restoreError } = await supabase.from("user_invitations").insert(retired as never);
+      if (restoreError) console.error("[team] could not restore the previous invitation", restoreError.message);
+    }
+    throw new Error(error?.message ?? "Could not issue a new invitation");
+  }
   return member;
 }
 

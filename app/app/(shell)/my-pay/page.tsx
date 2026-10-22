@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ProducerMoneyTab } from "@/components/app/agency/producer-money-tab";
@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 export default async function MyPayPage() {
   const guard = await guardPage("producer_payouts");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="My pay" description="What you earned, what came back, and every statement." />;
-  if (guard.role !== "producer") return <RoleGateNotice featureLabel="My pay" detail="My pay is a producer's own page. The owner sees everyone's pay under Payout runs." />;
+  if (!actAsPage(guard, ["producer"])) return <RoleGateNotice featureLabel="My pay" detail="My pay is a producer's own page. The owner sees everyone's pay under Payout runs." />;
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="My pay" description="What you earned, what came back, and every statement." />

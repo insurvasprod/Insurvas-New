@@ -147,8 +147,9 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
   const thisMonth = monthStart(0);
   const lastMonth = monthStart(-1);
 
-  // Max attempts for the tenant default (20260929201100). Seven before it is applied.
-  const tenantCeiling = await cadenceMaxAttempts(tenantId, null).catch(() => DEFAULT_CEILING);
+  // Max attempts for the tenant default (20260929201100). Seven before it is applied. Only the rotation
+  // example needs it, so that one read waits for it and everything else starts at once.
+  const ceilingRead = cadenceMaxAttempts(tenantId, null).catch(() => DEFAULT_CEILING);
   const [campaigns, nurtureLeads, reactivations, performance, cadence, rotationLead, poolResult, batchResult, conversionView] = await Promise.all([
     listNurtureCampaigns(tenantId),
     allRows(
@@ -162,11 +163,13 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
     db.rpc("tenant_recycle_performance", { p_tenant_id: tenantId, p_actor_user_id: actor.userId, p_actor_role: actor.role, p_agent_user_id: null, p_campaign_id: null, p_disposition: null, p_from_at: thisMonth, p_to_at: null }).then((result) => (result.error ? null : result.data), () => null),
     getCadence(tenantId, { campaignId: null }).catch(() => null),
     // The most recently touched lead still mid-cadence: the example the rotation card explains.
-    db.from("agent_leads").select("id, values, attempts_made, next_preferred_slot, campaign_id, attempt_ceiling").eq("tenant_id", tenantId).in("lead_state", ["working", "retry", "nurture"]).gt("attempts_made", 0).lt("attempts_made", tenantCeiling).order("updated_at", { ascending: false }).limit(1),
+    ceilingRead.then((ceiling) => db.from("agent_leads").select("id, values, attempts_made, next_preferred_slot, campaign_id, attempt_ceiling").eq("tenant_id", tenantId).in("lead_state", ["working", "retry", "nurture"]).gt("attempts_made", 0).lt("attempts_made", ceiling).order("updated_at", { ascending: false }).limit(1)),
     rpcSafe(db, "tenant_recycle_pool", { p_tenant_id: tenantId, p_actor: actor.userId }),
     rpcSafe(db, "tenant_recycle_batch_report", { p_tenant_id: tenantId, p_campaign_id: null, p_limit: 12 }),
     conversion(db, tenantId),
   ]);
+
+  const tenantCeiling = await ceilingRead;
 
   // 20260925706500. A missing function is "not applied yet"; any other failure is an error.
   const batchesReady = !poolResult.error && !batchResult.error;
@@ -191,18 +194,22 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
   // The fresh baseline over the same span as the batches listed, by tenant_recycle_performance's own
   // definition (contacts per clicked dial) — the one each batch's rate uses too.
   const oldest = batches.length ? batches[batches.length - 1].createdAt : null;
-  const baselineRows = oldest
-    ? await db.rpc("tenant_recycle_performance", { p_tenant_id: tenantId, p_actor_user_id: actor.userId, p_actor_role: actor.role, p_agent_user_id: null, p_campaign_id: null, p_disposition: null, p_from_at: oldest, p_to_at: null }).then((result) => (result.error ? null : result.data), () => null)
+  const baselineRead = oldest
+    ? db.rpc("tenant_recycle_performance", { p_tenant_id: tenantId, p_actor_user_id: actor.userId, p_actor_role: actor.role, p_agent_user_id: null, p_campaign_id: null, p_disposition: null, p_from_at: oldest, p_to_at: null }).then((result) => (result.error ? null : result.data), () => null)
     : null;
-  const baselineRow = (Array.isArray(baselineRows) ? (baselineRows as Row[]) : []).find((row) => row.source_type === "fresh");
-  const batchBaseline = baselineRow && baselineRow.contact_rate_percent != null ? Number(baselineRow.contact_rate_percent) : null;
 
-  // Last disposition per lead in nurture, read for those leads only.
+  // Last disposition per lead in nurture, read for those leads only — beside the baseline, which it does not need.
   const lastDisposition = new Map<string, string>();
   const ids = nurtureLeads.map((lead) => text(lead.id));
   const chunks: string[][] = [];
   for (let start = 0; start < ids.length; start += CHUNK) chunks.push(ids.slice(start, start + CHUNK));
-  const attemptPages = await Promise.all(chunks.map((chunk) => db.from("tenant_call_attempts").select("lead_id, disposition, attempted_at").eq("tenant_id", tenantId).in("lead_id", chunk).order("attempted_at", { ascending: false })));
+  const [baselineRows, attemptPages] = await Promise.all([
+    baselineRead,
+    Promise.all(chunks.map((chunk) => db.from("tenant_call_attempts").select("lead_id, disposition, attempted_at").eq("tenant_id", tenantId).in("lead_id", chunk).order("attempted_at", { ascending: false }))),
+  ]);
+  const baselineRow = (Array.isArray(baselineRows) ? (baselineRows as Row[]) : []).find((row) => row.source_type === "fresh");
+  const batchBaseline = baselineRow && baselineRow.contact_rate_percent != null ? Number(baselineRow.contact_rate_percent) : null;
+
   for (const page of attemptPages) {
     if (page.error) throw new Error(`Could not load the last outcome of each lead: ${page.error.message}`);
     for (const row of page.data ?? []) if (!lastDisposition.has(text(row.lead_id))) lastDisposition.set(text(row.lead_id), text(row.disposition));

@@ -1,5 +1,5 @@
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { QuotesList } from "@/components/app/applications/quotes-list";
@@ -34,7 +34,7 @@ async function orPending<T>(read: Promise<T>): Promise<T | null> {
 export default async function QuotingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("quoting");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Quoting" description="Compare carrier premiums side by side." />;
-  if (guard.role !== "owner" && guard.role !== "producer") return <RoleGateNotice featureLabel="Quoting" detail="Owners and producers quote clients." />;
+  if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Quoting" detail="Owners and producers quote clients." />;
   const query = await searchParams;
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") return <QuotesList rows={sampleRows()} sample />;
   const [rows, timeZone] = await Promise.all([orPending(scopeFor(guard.context).then((scope) => listQuoteRows(guard.context.tenantId, scope))), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);

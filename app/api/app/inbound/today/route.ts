@@ -13,7 +13,7 @@ import { scopeFor } from "@/lib/agency/visibility";
  * inbox's one-second poll; the page refreshes this every 30 seconds.
  */
 export async function GET() {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   // AG-0.5: both halves are the agency's, not a producer's. Lost transfers were never queued to anyone
   // and recovering them is routing; today-by-partner counts every producer's completed and dropped
@@ -23,10 +23,10 @@ export async function GET() {
   if (scope !== null) return NextResponse.json({ lost: [], byPartner: [], canRecover: false }, { headers: { "Cache-Control": "no-store" } });
   const canRecover = auth.context.role === "owner" || auth.context.role === "producer";
   try {
-    const zone = await getWorkspaceTimezone(auth.context.tenantId).catch(() => null);
+    // The lost transfers do not need the workspace zone, so they do not wait for it; only today's counts do.
     const [lost, byPartner] = await Promise.all([
       canRecover ? listLostTransfers(auth.context.tenantId) : Promise.resolve([]),
-      todayByPartner(auth.context.tenantId, zone),
+      getWorkspaceTimezone(auth.context.tenantId).catch(() => null).then((zone) => todayByPartner(auth.context.tenantId, zone)),
     ]);
     return NextResponse.json({ lost, byPartner, canRecover }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

@@ -13,13 +13,16 @@ import { NO_STORE, refuseManagerMoney } from "@/lib/agency/http";
  * manager (he sees production, not pay) and absent for an assistant. A producer opens his own.
  */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireFeatureRole("producer_payouts", ["owner", "bookkeeper", "producer"]);
+  const auth = await requireFeatureRole("producer_payouts", ["owner", "bookkeeper", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That producer could not be found." }, { status: 404 });
-  const hidden = await guardProducer(auth.context, id);
+  // the guard and the record are read together; nothing of the record is used before the guard has passed
+  const [hidden, { data: producer }] = await Promise.all([
+    guardProducer(auth.context, id),
+    getSupabaseServiceClient().from("producer" as never).select("user_id").eq("tenant_id", auth.context.tenantId).eq("id", id).maybeSingle<{ user_id: string }>(),
+  ]);
   if (hidden) return hidden;
-  const { data: producer } = await getSupabaseServiceClient().from("producer" as never).select("user_id").eq("tenant_id", auth.context.tenantId).eq("id", id).maybeSingle<{ user_id: string }>();
   if (!producer) return NextResponse.json({ error: "That producer could not be found." }, { status: 404 });
   const refused = refuseManagerMoney(auth.context, producer.user_id);
   if (refused) return refused;

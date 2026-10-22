@@ -45,6 +45,7 @@ async function everyRow(build: () => Loose, max = 50_000): Promise<Loose[]> {
   }
   return rows;
 }
+const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
 const chunks = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
 
 export type BoardEntry = {
@@ -59,22 +60,37 @@ const POLICY_COLUMNS = "carrier_id, policy_number, contact_id, agent_user_id, st
 /** The board for this viewer (a producer sees the policies credited to them), in the default order. */
 export async function loadBoard(viewer: Viewer, only?: { carrierId: string; policyNumber: string }) {
   const utcToday = new Date().toISOString().slice(0, 10);
-  const policies = await everyRow(() => {
-    let q = db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", viewer.tenantId).not("status_normalized", "in", "(submitted,declined,withdrawn)");
-    if (viewer.role === "producer") q = q.eq("agent_user_id", viewer.userId);
-    if (only) q = q.eq("carrier_id", only.carrierId).eq("policy_number", only.policyNumber);
-    return scopeQuery(q, "agent_user_id", viewer.scope ?? null).order("carrier_id").order("policy_number");
-  });
+  // One round trip for everything but the names: the change log and the carriers never needed the
+  // policies, and the agency's and the platform's carrier rules (a few rows) are read whole, then cut to
+  // what the two rule reads below used to ask for. A failed rule read, or a policy whose rule is not among
+  // them, falls back to those two reads exactly as they were.
+  const [policies, ruleBook, changesRead, carriers] = await Promise.all([
+    everyRow(() => {
+      let q = db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", viewer.tenantId).not("status_normalized", "in", "(submitted,declined,withdrawn)");
+      if (viewer.role === "producer") q = q.eq("agent_user_id", viewer.userId);
+      if (only) q = q.eq("carrier_id", only.carrierId).eq("policy_number", only.policyNumber);
+      return scopeQuery(q, "agent_user_id", viewer.scope ?? null).order("carrier_id").order("policy_number");
+    }),
+    everyRow(() => db().from("carrier_retention_rule").select("id, tenant_id, carrier_id, rule_type, window_days, grace_days, cleared, effective_from, created_at").or(`tenant_id.eq.${viewer.tenantId},tenant_id.is.null`).order("effective_from", { ascending: true }).order("created_at", { ascending: true }).order("id"), 5_000).catch(() => null),
+    settle(everyRow(() => db().from("policy_change").select("carrier_id, policy_number, field_name, old_value, new_value, to_snapshot_date").eq("tenant_id", viewer.tenantId).in("field_name", ["paid_to_date", "carrier_status_raw"]).gte("to_snapshot_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("to_snapshot_date").order("detected_at").order("id"))),
+    db().from("carriers").select("id, name"),
+  ]);
   // "Today" is the agency's day the book was computed for (policy_current.as_of, its own time zone),
   // not UTC, which runs a day ahead in US evenings.
   const today = (policies.map((p) => p.as_of as string | null).filter(Boolean).sort().at(-1) as string | undefined) ?? utcToday;
   const ruleIds = [...new Set(policies.map((p) => p.retention_rule_id).filter(Boolean))] as string[];
-  const [rules, reinstatement, changes, carriers] = await Promise.all([
-    ruleIds.length ? db().from("carrier_retention_rule").select("id, rule_type, window_days, grace_days").in("id", ruleIds) : { data: [] },
-    db().from("carrier_retention_rule").select("tenant_id, carrier_id, rule_type, window_days, cleared, effective_from, created_at").in("rule_type", ["reinstatement", "conservation", "cancellation_request"]).or(`tenant_id.eq.${viewer.tenantId},tenant_id.is.null`).lte("effective_from", today).order("effective_from", { ascending: true }).order("created_at", { ascending: true }),
-    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, field_name, old_value, new_value, to_snapshot_date").eq("tenant_id", viewer.tenantId).in("field_name", ["paid_to_date", "carrier_status_raw"]).gte("to_snapshot_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("to_snapshot_date").order("detected_at").order("id")),
-    db().from("carriers").select("id, name"),
+  const wanted = new Set(ruleIds);
+  const ownRules = ruleBook && ruleIds.every((id) => ruleBook.some((r) => r.id === id)) ? ruleBook.filter((r) => wanted.has(r.id)) : null;
+  const WINDOW_TYPES = ["reinstatement", "conservation", "cancellation_request"];
+  const [rules, reinstatement] = await Promise.all([
+    ownRules ? { data: ownRules } : ruleIds.length ? db().from("carrier_retention_rule").select("id, rule_type, window_days, grace_days").in("id", ruleIds) : { data: [] },
+    ruleBook
+      ? { data: ruleBook.filter((r) => WINDOW_TYPES.includes(r.rule_type) && r.effective_from !== null && String(r.effective_from) <= today) }
+      : db().from("carrier_retention_rule").select("tenant_id, carrier_id, rule_type, window_days, cleared, effective_from, created_at").in("rule_type", WINDOW_TYPES).or(`tenant_id.eq.${viewer.tenantId},tenant_id.is.null`).lte("effective_from", today).order("effective_from", { ascending: true }).order("created_at", { ascending: true }),
   ]);
+  // The change log's failure surfaces here, where it used to (after the policies).
+  if (!changesRead.ok) throw changesRead.error;
+  const changes = changesRead.value;
   const grace = new Map<string, number | null>((rules.data ?? []).map((r: Loose) => [r.id, r.grace_days]));
   // The policy's own rule, when it is a first-payment one: its window counts a missed first draft down.
   const firstWindow = new Map<string, number | null>((rules.data ?? []).filter((r: Loose) => r.rule_type === "first_payment").map((r: Loose) => [r.id, r.window_days]));

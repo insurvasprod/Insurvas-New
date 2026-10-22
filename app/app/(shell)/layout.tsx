@@ -4,7 +4,7 @@ import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/require
 import { prefetchTopBarIdentity, readTopBarIdentity } from "@/lib/tenantAuth/topBarIdentity";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { buildAgentMenu } from "@/lib/menu/definition";
-import { scopeFor } from "@/lib/agency/visibility";
+import { scopeFor, visibleProducerUserIds } from "@/lib/agency/visibility";
 import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
@@ -20,6 +20,9 @@ import { NotifySoundPrimer } from "@/components/app/notify-sound-primer";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
 import { OverdueComplaintBanner } from "@/components/app/overdue-complaint-banner";
 import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
+import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
+import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
+import { Suspense } from "react";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -49,7 +52,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
     return result.value;
   };
 
-  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , overdueComplaints] =
+  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , , overdueComplaints, setupStamps] =
     await Promise.all([
       resolveSignupContext(),
       resolveTenantContext(),
@@ -60,8 +63,13 @@ export default async function AgentShellLayout({ children }: { children: React.R
       settle(loadFeatureSwitches()),
       // Display-only; started here so `readTopBarIdentity` below finds it already fetched.
       settle(prefetchTopBarIdentity(session.sub, session.tenantId)),
+      // The producer scope for the menu, started with the rest (it is a per-request cache keyed by these
+      // same two ids, so `scopeFor(context)` below picks it up instead of making its own trip).
+      settle(visibleProducerUserIds(session.tenantId, session.sub)),
       // LA-6.4: a regulator complaint past its deadline (one counted read; 0 on any failure).
       overdueRegulatorComplaintCount(session.tenantId),
+      // The walkthrough's two finished stamps, for the "Get set up" item (never throws; a failure reads as finished).
+      readSetupStamps(session.tenantId, session.sub),
     ]);
 
   // Self-serve users must finish the gated signup states before the normal entitlement shell.
@@ -91,7 +99,17 @@ export default async function AgentShellLayout({ children }: { children: React.R
   // AG-0.2: the member role, so an agency title sees its own items (an admin's and a manager's menus).
   // AG-0.5: a narrowed session inside an agency is not offered the agency's own screens (their APIs refuse it).
   const agencyNarrow = (await scopeFor(context)) !== null;
-  const menu = buildAgentMenu(available, context.memberRole ?? context.role, { agencyNarrow });
+  // Custom team access: every role the member holds opens its items, minus the pages the owner hid for them.
+  const menu = buildAgentMenu(available, context.memberRole ?? context.role, {
+    agencyNarrow,
+    extraRoles: (context.roles ?? []).slice(1),
+    hiddenPages: context.hiddenPages,
+  });
+  // 2026-10-21 walkthrough: "Get set up" sits under Home until this person's setup is finished.
+  if (setupStillOpen(setupStamps, context, available)) {
+    const home = menu.find((section) => section.id === "home");
+    if (home) home.items = [...home.items, SETUP_MENU_ITEM];
+  }
   const planName = entitlement.plan_code ? planDisplayName(entitlement.plan_code, entitlement.plan_name) : null;
   const identity = await readTopBarIdentity(context);
   const moduleAccess = {
@@ -141,6 +159,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
         <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
+        {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
+        <Suspense fallback={null}><SetupGuideBar /></Suspense>
         <PortalPageTransition>{children}</PortalPageTransition>
       </div>
       </main>

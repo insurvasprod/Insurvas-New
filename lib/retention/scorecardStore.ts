@@ -50,36 +50,42 @@ export async function loadScorecard(viewer: { tenantId: string; userId: string; 
   const from = new Date(Date.now() - SCORECARD_PERIODS[period] * 86_400_000).toISOString().slice(0, 10);
   const mineOnly = viewer.role !== "owner";
   const since = `${from}T00:00:00Z`;
-  let saves: Loose[];
-  try {
-    saves = await everyRow(() => {
-      let q = db().from("save_attempt").select("carrier_id, policy_number, attempted_by, attempted_at, contact_outcome, recommended_actions_json, client_reason, unearned_advance_at_attempt_cents, in_holdout").eq("tenant_id", viewer.tenantId).gte("attempted_at", since);
-      if (mineOnly) q = q.eq("attempted_by", viewer.userId);
-      return q.order("attempted_at").order("id");
-    });
-  } catch (error) {
-    if (isSchemaGap(error as Loose)) return { available: false };
-    throw error;
-  }
+  const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
   const optional = async (build: () => Loose) => everyRow(build).catch((error) => {
     if (isSchemaGap(error as Loose)) return [] as Loose[];
     throw error;
   });
-  const [conversions, reinstated, held, members] = await Promise.all([
-    optional(() => {
-      let q = db().from("conversion_attempt").select("carrier_id, policy_number, attempted_by, attempted_at, outcome, servicing_request_id").eq("tenant_id", viewer.tenantId).gte("attempted_at", since);
+  // One round trip: the save calls beside the rest (none of them needs the calls). The calls are still
+  // decided first — before the migration the page is "not switched on", whatever the others did.
+  const [savesRead, rest] = await Promise.all([
+    settle(everyRow(() => {
+      let q = db().from("save_attempt").select("carrier_id, policy_number, attempted_by, attempted_at, contact_outcome, recommended_actions_json, client_reason, unearned_advance_at_attempt_cents, in_holdout").eq("tenant_id", viewer.tenantId).gte("attempted_at", since);
       if (mineOnly) q = q.eq("attempted_by", viewer.userId);
       return q.order("attempted_at").order("id");
-    }),
-    optional(() => {
-      let q = db().from("reinstatement_case").select("carrier_id, policy_number, worked_by, resolved_at").eq("tenant_id", viewer.tenantId).eq("status", "reinstated").gte("resolved_at", since);
-      if (mineOnly) q = q.eq("worked_by", viewer.userId);
-      return q.order("resolved_at").order("id");
-    }),
-    // Held out at any point in the period (drawn before its end, and not left before its start).
-    optional(() => db().from("retention_holdout").select("carrier_id, policy_number, drawn_on, left_at").eq("tenant_id", viewer.tenantId).eq("selected", true).lte("drawn_on", today).order("id")),
-    db().from("tenant_users").select("user_id, role, users!tenant_users_user_id_fkey(name, email)").eq("tenant_id", viewer.tenantId),
+    })),
+    settle(Promise.all([
+      optional(() => {
+        let q = db().from("conversion_attempt").select("carrier_id, policy_number, attempted_by, attempted_at, outcome, servicing_request_id").eq("tenant_id", viewer.tenantId).gte("attempted_at", since);
+        if (mineOnly) q = q.eq("attempted_by", viewer.userId);
+        return q.order("attempted_at").order("id");
+      }),
+      optional(() => {
+        let q = db().from("reinstatement_case").select("carrier_id, policy_number, worked_by, resolved_at").eq("tenant_id", viewer.tenantId).eq("status", "reinstated").gte("resolved_at", since);
+        if (mineOnly) q = q.eq("worked_by", viewer.userId);
+        return q.order("resolved_at").order("id");
+      }),
+      // Held out at any point in the period (drawn before its end, and not left before its start).
+      optional(() => db().from("retention_holdout").select("carrier_id, policy_number, drawn_on, left_at").eq("tenant_id", viewer.tenantId).eq("selected", true).lte("drawn_on", today).order("id")),
+      db().from("tenant_users").select("user_id, role, users!tenant_users_user_id_fkey(name, email)").eq("tenant_id", viewer.tenantId),
+    ])),
   ]);
+  if (!savesRead.ok) {
+    if (isSchemaGap(savesRead.error as Loose)) return { available: false };
+    throw savesRead.error;
+  }
+  const saves: Loose[] = savesRead.value;
+  if (!rest.ok) throw rest.error;
+  const [conversions, reinstated, held, members] = rest.value;
   const holdoutKeys = new Set(held.filter((h) => !h.left_at || String(h.left_at).slice(0, 10) >= from).map(keyOf));
 
   const requestIds = [...new Set(conversions.map((c) => c.servicing_request_id).filter(Boolean))] as string[];

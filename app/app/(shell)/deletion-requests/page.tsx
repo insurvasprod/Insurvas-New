@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { DeletionError, deletionSettings, listDeletionRequests } from "@/lib/compliance/dataSubjectStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -18,11 +18,11 @@ export default async function DeletionRequestsPage() {
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Deletion requests" description="When one person asks to be deleted: verify, hold, delete and certify." />;
   }
-  if (!["owner", "producer"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer"])) {
     return <RoleGateNotice featureLabel="Deletion requests" detail="Only owners and producers can see consumer deletion requests." />;
   }
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
-  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Deletion requests" detail="In an agency, the owner and admins handle deletion requests." />;
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Deletion requests" detail="In an agency, the owner and admins handle deletion requests." />;
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
   let loaded: { requests: Awaited<ReturnType<typeof listDeletionRequests>>; settings: Awaited<ReturnType<typeof deletionSettings>> } | null = null;
   let problem: string | null = null;

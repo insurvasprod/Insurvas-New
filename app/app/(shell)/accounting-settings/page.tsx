@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { listAccounts } from "@/lib/accounting/bankStore";
 import { LOCKED, loadAccountingSettings, recentChanges, SettingsError } from "@/lib/accounting/settingsStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -19,7 +19,7 @@ export default async function AccountingSettingsPage() {
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Accounting settings" description="Thresholds, categories, periods and split rules." />;
   }
-  if (!["owner", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Accounting settings" detail="Only owners and bookkeepers can see the agency's accounting settings." />;
   }
   const tenantId = guard.context.tenantId;

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
+import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { LeadListDetailView } from "@/components/app/lead-list-detail";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -22,10 +23,10 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
       />
     );
   // The same roles as the index this opens from.
-  if (!["owner", "producer", "assistant"].includes(guard.role))
+  if (!actAsPage(guard, ["owner", "producer", "assistant"]))
     return <RoleGateNotice featureLabel="Lead lists" detail="Only owners, producers and assistants can hand out leads." />;
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
-  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Lead lists" detail="In an agency, the owner and admins handle lead lists." />;
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Lead lists" detail="In an agency, the owner and admins handle lead lists." />;
 
   const { campaignId } = await params;
   if (!UUID.test(campaignId)) notFound();
@@ -35,8 +36,8 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
   // Assigning goes through /api/app/assignments, which is Outbound dialing's and managers' only
   // (assign_lead_list refuses anyone else with ASSIGNMENT_MANAGER_REQUIRED).
   const [trueCpa, dialing] = await Promise.all([guardPage("true_cpa"), guardPage("outbound_dialing")]);
-  const money = trueCpa.entitled && ["owner", "producer"].includes(guard.role);
-  const manager = ["owner", "producer"].includes(guard.role);
+  const money = trueCpa.entitled && holdsAnyRole(guard.roles, ["owner", "producer"]);
+  const manager = holdsAnyRole(guard.roles, ["owner", "producer"]);
   const assignBlocked = !dialing.entitled
     ? "Add Outbound dialing to your plan to assign leads."
     : dialing.entitlement.access === "read_only"

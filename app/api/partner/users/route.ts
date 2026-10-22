@@ -5,7 +5,7 @@ import { getEntitlement } from "@/lib/entitlements/get";
 import { requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { partnerAdminUserInviteSchema } from "@/lib/partnerAuth/schemas";
 import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendExistingPartnerInvitationEmail, sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { sendPartnerInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { countAgencyPartnerSeats, invitePartnerUser, listPartnerUsers } from "@/lib/partnerUsers/service";
 
@@ -33,9 +33,7 @@ export async function POST(request: NextRequest) {
   try {
     const result = await invitePartnerUser({ tenantId: auth.context.tenantId, partnerId: auth.context.partnerId, ...parsed.data, partnerAdminUserId: auth.context.userId, maxPartnerUsers: (await getEntitlement(auth.context.tenantId)).limits.max_partner_users, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString() });
     const inviteUrl = result.has_existing_password ? buildExistingPartnerInviteUrl(token, origin) : buildPartnerInviteUrl(token, origin);
-    const { delivered } = result.has_existing_password
-      ? await sendExistingPartnerInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId })
-      : await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId });
+    const { delivered } = await sendPartnerInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId, partnerId: auth.context.partnerId, role: result.role, existingAccount: result.has_existing_password });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_user_invited", targetType: "partner_user", targetId: result.user_id, metadata: { partnerId: auth.context.partnerId, email: result.email, role: result.role, delivered, actorPlane: "partner" }, request });
     return NextResponse.json({ ok: true, user: { id: result.user_id, name: result.name, email: result.email, role: result.role }, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered, mode: result.has_existing_password ? "existing_account" : "set_password" } }, { status: 201 });
   } catch (error) {

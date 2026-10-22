@@ -5,6 +5,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 import type { ContactOutcome, PaymentMethod } from "./constants";
+import { mapLimit, READ_CONCURRENCY } from "./batch";
 import { assertQueueCard, logSaveAttempt, SaveQueueError } from "./queueStore";
 import { computeRadar } from "./radarStore";
 import { fieldChanges, OPEN_STATUSES, ServicingRuleError, canStep, WAITING_STATUSES, type CarrierMethod, type FieldChange, type Origin, type RequestInput, type RequestStatus, type RequestType } from "./servicing";
@@ -252,35 +253,34 @@ export async function loadServicing(viewer: Viewer): Promise<ServicingList | { a
     throw new Error(error.message);
   }
   let rows = (data ?? []) as Loose[];
+  // Chunks of policy numbers / ids: independent reads, a few at a time.
+  const chunksOf = (values: string[]) => Array.from({ length: Math.ceil(values.length / CHUNK) }, (_, n) => values.slice(n * CHUNK, n * CHUNK + CHUNK));
   if (viewer.role === "producer") {
     const numbers = [...new Set(rows.map((r) => r.policy_number))];
     const mine = new Set<string>();
-    for (let i = 0; i < numbers.length; i += CHUNK) {
-      const part = await db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("agent_user_id", viewer.userId).in("policy_number", numbers.slice(i, i + CHUNK));
+    await mapLimit(chunksOf(numbers), READ_CONCURRENCY, async (chunk) => {
+      const part = await db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("agent_user_id", viewer.userId).in("policy_number", chunk);
       for (const p of (part.data ?? []) as Loose[]) mine.add(`${p.carrier_id}|${p.policy_number}`);
-    }
+    });
     rows = rows.filter((r) => mine.has(`${r.carrier_id}|${r.policy_number}`));
   }
   if ((viewer.scope ?? null) !== null) {
     const numbers = [...new Set(rows.map((r) => r.policy_number))];
     const visible = new Set<string>();
-    for (let i = 0; i < numbers.length; i += CHUNK) {
-      const part = await scopeQuery(db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId), "agent_user_id", viewer.scope ?? null).in("policy_number", numbers.slice(i, i + CHUNK));
+    await mapLimit(chunksOf(numbers), READ_CONCURRENCY, async (chunk) => {
+      const part = await scopeQuery(db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId), "agent_user_id", viewer.scope ?? null).in("policy_number", chunk);
       for (const p of (part.data ?? []) as Loose[]) visible.add(`${p.carrier_id}|${p.policy_number}`);
-    }
+    });
     rows = rows.filter((r) => visible.has(`${r.carrier_id}|${r.policy_number}`));
   }
   const contactIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))] as string[];
-  const contacts: Loose[] = [];
-  for (let i = 0; i < contactIds.length; i += CHUNK) {
-    const part = await db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", contactIds.slice(i, i + CHUNK));
-    contacts.push(...(part.data ?? []));
-  }
   const userIds = [...new Set(rows.map((r) => r.requested_by).filter(Boolean))] as string[];
-  const [users, carriers] = await Promise.all([
+  const [contactParts, users, carriers] = await Promise.all([
+    mapLimit(chunksOf(contactIds), READ_CONCURRENCY, async (chunk) => ((await db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", chunk)).data ?? []) as Loose[]),
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
     db().from("carriers").select("id, name"),
   ]);
+  const contacts: Loose[] = contactParts.flat();
   const contactOf = new Map<string, Loose>(contacts.map((c) => [c.id, c]));
   const userName = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
@@ -336,8 +336,10 @@ export async function runServicingVerification(tenantId: string, carrierId?: str
 export async function requestsByPolicy(tenantId: string, keys: Set<string>) {
   const numbers = [...new Set([...keys].map((k) => k.slice(k.indexOf("|") + 1)))];
   const rows: Loose[] = [];
-  for (let i = 0; i < numbers.length; i += CHUNK) {
-    const part = await db().from("servicing_request").select("id, carrier_id, policy_number, request_type, status, failure_reason, failed_at, created_at").eq("tenant_id", tenantId).in("policy_number", numbers.slice(i, i + CHUNK)).order("created_at", { ascending: false });
+  // The chunks are read a few at a time, then checked in chunk order (the first failing chunk decides, as before).
+  const starts = Array.from({ length: Math.ceil(numbers.length / CHUNK) }, (_, n) => n * CHUNK);
+  const parts = await mapLimit(starts, READ_CONCURRENCY, async (i) => await db().from("servicing_request").select("id, carrier_id, policy_number, request_type, status, failure_reason, failed_at, created_at").eq("tenant_id", tenantId).in("policy_number", numbers.slice(i, i + CHUNK)).order("created_at", { ascending: false }));
+  for (const part of parts as Loose[]) {
     if (part.error) {
       if (isSchemaGap(part.error)) return new Map<string, { open: Array<{ type: RequestType; status: RequestStatus }>; failed: { id: string; reason: string; at: string | null } | null }>();
       throw part.error;

@@ -10,7 +10,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * on the client, and submitted applications still missing a carrier number. No sensitive value.
  */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("applications", ["owner", "producer"]);
+  const auth = await requireFeatureRole("applications", ["owner", "producer"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   try {

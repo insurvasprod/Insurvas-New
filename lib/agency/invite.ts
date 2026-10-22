@@ -73,7 +73,7 @@ export async function inviteAgencyMember(input: {
       const [, used, max] = message.match(/max_buffer_seats:(\d+):(\d+)/) ?? [];
       return { ok: false, status: 403, body: { error: `Your plan has reached its buffer-agent seat limit (${used} of ${max}).`, code: "limit_reached", limitKey: "max_buffer_seats", upgrade: true } };
     }
-    if (/agency_record_missing/.test(message)) return { ok: false, status: 409, body: { error: "Your agency record is missing. Contact support to finish the agency upgrade.", code: "agency_record_missing" } };
+    if (/agency_record_missing/.test(message)) return { ok: false, status: 409, body: { error: "Finish setting up your agency first: open Team › Producers and press Finish setup, then invite again.", code: "agency_record_missing" } };
     if (error.code === "PGRST202" || /could not find the function/i.test(message)) {
       return { ok: false, status: 503, body: { error: "Agency invites need a database update (20261018140000) that has not been applied yet.", code: "schema_pending" } };
     }

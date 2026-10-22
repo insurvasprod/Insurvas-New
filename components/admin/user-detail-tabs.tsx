@@ -42,7 +42,7 @@ export function UserDetailTabCard({
   const base = `/admin/users/${userId}`;
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-      <nav aria-label="User record" className="min-w-0 overflow-x-auto border-b border-[var(--border)]">
+      <nav aria-label="User record" className="min-w-0 overflow-x-auto  border-[var(--border)]">
         <ul className="m-0 flex w-max min-w-full list-none gap-6 p-0">
           {USER_DETAIL_TABS.map((tab) => {
             const current = tab.key === active;

@@ -6,6 +6,7 @@ import { isApplicationOutcome, outcomeDescription } from "@/lib/dispositions/app
 import { answerDisposition, completeDisposition, DispositionError, getDispositionWizard, listMappedOutcomes } from "@/lib/dispositions/service";
 import { DO_NOT_CALL_DISPOSITION_KEY, type DispositionWizard } from "@/lib/dispositions/types";
 import { ensureDefaultPublisherDispositionMappings } from "@/lib/pipelines/service";
+import { leadPipelineId } from "@/lib/pipelines/outcomeStages";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { rowVisible, scopeFor, type ProducerScope } from "@/lib/agency/visibility";
@@ -41,8 +42,10 @@ async function withOutcomeContext(tenantId: string, userId: string, wizard: Disp
   // this lead is in (a marketing or affiliate lead's first call used to offer nothing).
   const publisher = await supabase.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").order("is_default", { ascending: false }).limit(1).maybeSingle();
   if (publisher.data?.id) await ensureDefaultPublisherDispositionMappings(tenantId, publisher.data.id).catch((error) => console.error("[disposition] default outcomes could not be seeded", error));
+  // Each outcome is described by where it takes THIS lead: its pipeline's own stage first (20261022200000).
+  const pipelineId = await leadPipelineId(tenantId, wizard.lead.id).catch(() => null);
   const [outcomes, verification, flowStage] = await Promise.all([
-    listMappedOutcomes(tenantId).catch(() => null),
+    listMappedOutcomes(tenantId, pipelineId).catch(() => null),
     verificationStatus(tenantId, wizard.workItem.id).catch(() => null),
     supabase.from("tenant_pipeline_stages").select("id, pipeline_id").eq("id", wizard.flow.stage_id).maybeSingle(),
   ]);

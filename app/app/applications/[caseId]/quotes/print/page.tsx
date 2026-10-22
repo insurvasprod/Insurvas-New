@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { guardCase } from "@/lib/agency/guards";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { SampleDataNotice } from "@/components/app/applications/parts";
@@ -38,7 +38,7 @@ export default async function ClientQuotesPrintPage({ params, searchParams }: {
   // belongs to the case, and the standalone Quoting list's kill switch must not take it down.
   const guard = await guardPage("applications");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Applications" description="Take a sale from the health interview to the carrier's policy number in one place." />;
-  if (guard.role !== "owner" && guard.role !== "producer") return <RoleGateNotice featureLabel="Applications" detail="Owners and producers work applications." />;
+  if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Applications" detail="Owners and producers work applications." />;
   const [{ caseId }, query] = await Promise.all([params, searchParams]);
 
   const sample = single(query.preview) === "sample" && process.env.NODE_ENV !== "production";

@@ -58,7 +58,7 @@ splits, payout runs, statements, scorecards, review, reconciliation). The agency
 | D3 | Spec says RLS "is the one that protects us". The app reads through the **service-role client** (≈411 files), which bypasses RLS. | The **application helper is the enforced boundary** for app reads; RLS policies are added for every `tenant_app` connection as defence in depth; the AG-0.5 audit tests the *routes*, which is what actually ships data. Say this plainly in the audit report. |
 | D4 | LA-7.5 `producer_split` pays a % of the agency's commission; AG pays by contract level (pool) with the override off the top. | For **agency-audience** tenants the AG-1.3 engine computes the pool from contract levels; `producer_split` is narrowed to "two producers share one policy" (AG-1.6) and applies to the pool. Individual tenants keep LA-7.5 unchanged. |
 | D5 | Spec names `producer_payable_entry`; LA-7.5 built `producer_ledger_entry`. | **Evolve `producer_ledger_entry`** (add `basis`, `source_raw_row_id`, `policy_id`, `carrier_id`, AG entry types `earned / advance_paid / chargeback / adjustment / payout`). "producer_payable_entry" is a spec label only. Producer runs stay `producer_payout_run` (`payout_run` is LA-7.4's). |
-| D6 | `one_seat_rule` counts invited as a seat; AG-0.6 says it does not. | For **agency** audience, seats = `active + suspended` producers (invited and offboarded do not count). Individual plans keep `one_seat_rule`. |
+| D6 | `one_seat_rule` counts invited as a seat; AG-0.6 says it does not. | For **agency** audience, a seat is held by every accepted, working member — producers **and** assistants, bookkeepers, setters, retention and the owner (module doc §6: "assistants consume a seat inside the band"; owner confirmed 2026-10-20). Invited members and offboarded producers (after their period ends) hold none. Individual plans keep `one_seat_rule`. |
 | D7 | The invite route 409s any existing email; spec allows one user in two tenants. | The invite attaches an **existing** auth user to the new tenant instead of refusing; an email already in *this* tenant is still refused. |
 | D8 | Bands vs plan `max_seats`. | Three agency plans (`agency_50` $999, `agency_150` $2,499, `agency_unlimited` $4,999), `plan_type = agency_with_teams`, `max_seats` 50 / 150 / null. Band change = plan change through SA-3 (upgrade prorated now, downgrade end of period). `agency.seat_band` mirrors the plan. |
 | D9 | Menu groups max 8 items. | New **Team** section (7 nodes). Attribution queue + Producer reconciliation live under **Commissions**. |
@@ -193,4 +193,11 @@ the owner does that after the migration is live.
 
 "built" = code and migration written, unit-tested and rehearsed (2026-10-18); none of it is live until the owner pastes the bundle; nothing is committed.
 
+Performance follow-up 2026-10-19 (AG-0.5, uncommitted): deal flow, the activity log and the contact directory page a
+multi-agent scope in SQL — 20261019400000 / 410000 / 420000, LIVE (bodies verified against the files). Null scope
+sends the unchanged call; a scoped call never falls back to an every-agent path. Alert poll: one queue read, scope
+cached 30s. Static proof: lib/agency/scopedInSql.test.mjs.
+
 Live 2026-10-18: all 17 AG migrations applied and verified read-only (99 objects, 14 scope policies, every in-place patch, grants, 0.12 seeds, bucket). Follow-up outside the 24 tasks: 20261018260000 backfills producer rows for the 3 agency tenants that pre-date the module — rehearsed, awaiting paste.
+
+Follow-up 2026-10-19 (AG-0.10, dialer): agency producers are served by serve_next_lead again (pool closed by 20261019100000; the app-side tier-order serve is removed), and a refused lead that was assigned stays assigned with the reason in its history. 20261019300000 stops serve_top scanning the pool when it is closed — rehearsed, awaiting paste.

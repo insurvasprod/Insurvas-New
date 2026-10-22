@@ -6,6 +6,7 @@ import { historyStart, issued as isIssued, persistency, placed as isPlaced, type
 import { perPolicy, persisting, chargebackTax, type PerPolicy, type Persisting } from "@/lib/accounting/pnlCore";
 import { allocateLeadCost, countOrPercent, type Assignment } from "./scorecardCore";
 import { scopeFor } from "./visibility";
+import { allRows } from "@/lib/ingestion/pages";
 
 /**
  * AG-1.9 / AG-0.11 · per-producer figures, grouped from the engines that already compute them (see scorecardCore).
@@ -33,26 +34,35 @@ export type ProducerScore = {
   chargebackTaxCents: number | null;
 };
 
+/** Every row of an ordered read, in the `{ data }` shape the reads around it use; a failed read is empty, as before. */
+async function readAll(build: () => unknown): Promise<{ data: unknown[] | null }> {
+  const { rows, error } = await allRows(build);
+  return { data: error ? null : rows };
+}
+
 export async function producerScores(context: { tenantId: string; userId: string; role: string }, period: { from: string; to: string }, minSampleOverride?: number): Promise<{ available: boolean; rows: ProducerScore[]; minSample: number }> {
-  const scope = await scopeFor(context);
   // LA-4.18 is asked for the whole book (its own producer filter keys on role "producer" only); the AG-0.4 scope
   // below then keeps exactly the producers this person may see, managers' reports included.
-  const data = await loadScorecards({ tenantId: context.tenantId, userId: context.userId, role: "owner" }, period, { withSpend: false });
+  // None of these reads depends on another, so they are one round trip (they used to be four in a row).
+  // lead spend per campaign in the period (LA-7 cost ledger, positive), and who each lead was ASSIGNED to
+  const [scope, data, { data: producers }, { data: costs }, { data: queue }, { data: risk }, { data: subs }] = await Promise.all([
+    scopeFor(context),
+    loadScorecards({ tenantId: context.tenantId, userId: context.userId, role: "owner" }, period, { withSpend: false }),
+    db().from("producer").select("user_id, display_name, status").eq("tenant_id", context.tenantId).neq("status", "invited"),
+    // The API answers at most 1,000 rows a request, so the sums below read every page, each ordered along a
+    // tenant-leading index with a unique tail (a .limit() above 1,000 used to stop at 1,000 without saying so).
+    readAll(() => db().from("cost_entry").select("campaign_id, amount_cents").eq("tenant_id", context.tenantId).eq("entry_type", "lead_cost").gte("incurred_on", period.from).lte("incurred_on", period.to).order("incurred_on").order("id")),
+    readAll(() => db().from("lead_queue").select("owner_user_id, agent_leads(campaign_id)").eq("tenant_id", context.tenantId).not("owner_user_id", "is", null).gte("created_at", `${period.from}T00:00:00Z`).lte("created_at", `${period.to}T23:59:59Z`).order("status").order("queued_at").order("lead_id")),
+    readAll(() => db().from("policy_current").select("agent_user_id, unearned_advance_cents").eq("tenant_id", context.tenantId).eq("in_clawback_window", true).order("carrier_id").order("policy_number")),
+    readAll(() => db().from("tenant_application_submissions").select("application_id, tenant_applications(case_id, tenant_application_cases(opened_by))").eq("tenant_id", context.tenantId).gte("submitted_at", `${period.from}T00:00:00Z`).lte("submitted_at", `${period.to}T23:59:59Z`).order("submitted_at").order("application_id")),
+  ]);
   if (!("policies" in data)) return { available: false, rows: [], minSample: 0 };
   const minSample = minSampleOverride ?? data.minSample;
   const today = data.today;
   const start = historyStart(data.policies);
 
-  const { data: producers } = await db().from("producer").select("user_id, display_name, status").eq("tenant_id", context.tenantId).neq("status", "invited");
   const visible = ((producers ?? []) as Array<{ user_id: string; display_name: string }>).filter((p) => scope === null || scope.includes(p.user_id));
 
-  // lead spend per campaign in the period (LA-7 cost ledger, positive), and who each lead was ASSIGNED to
-  const [{ data: costs }, { data: queue }, { data: risk }, { data: subs }] = await Promise.all([
-    db().from("cost_entry").select("campaign_id, amount_cents").eq("tenant_id", context.tenantId).eq("entry_type", "lead_cost").gte("incurred_on", period.from).lte("incurred_on", period.to),
-    db().from("lead_queue").select("owner_user_id, agent_leads(campaign_id)").eq("tenant_id", context.tenantId).not("owner_user_id", "is", null).gte("created_at", `${period.from}T00:00:00Z`).lte("created_at", `${period.to}T23:59:59Z`).limit(50_000),
-    db().from("policy_current").select("agent_user_id, unearned_advance_cents").eq("tenant_id", context.tenantId).eq("in_clawback_window", true),
-    db().from("tenant_application_submissions").select("application_id, tenant_applications(case_id, tenant_application_cases(opened_by))").eq("tenant_id", context.tenantId).gte("submitted_at", `${period.from}T00:00:00Z`).lte("submitted_at", `${period.to}T23:59:59Z`).limit(50_000),
-  ]);
   const spend = new Map<string, number>();
   for (const c of (costs ?? []) as Array<{ campaign_id: string | null; amount_cents: number }>) if (c.campaign_id) spend.set(c.campaign_id, (spend.get(c.campaign_id) ?? 0) - Number(c.amount_cents));
   const assignments: Assignment[] = ((queue ?? []) as Array<{ owner_user_id: string; agent_leads: { campaign_id: string | null } | null }>)

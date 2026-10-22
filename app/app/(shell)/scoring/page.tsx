@@ -1,6 +1,7 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { scopeFor } from "@/lib/agency/visibility";
 import { ScoringWorkspace } from "@/components/app/scoring-workspace";
 
 export default async function ScoringPage() {
@@ -11,5 +12,7 @@ export default async function ScoringPage() {
   // rate is one of the signals.
   if (!("owner" === guard.role || "producer" === guard.role))
     return <RoleGateNotice featureLabel="Queue scoring" detail="Only owners and producers can change how the queue is ordered." />;
+  // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Queue scoring" detail="In an agency, the owner and admins decide how the queue is ordered." />;
   return <ScoringWorkspace />;
 }

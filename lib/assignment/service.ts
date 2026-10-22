@@ -101,23 +101,21 @@ export async function getAssignmentWorkspace(tenantId: string): Promise<Assignme
     rulesQuery(),
     capacityQuery(),
     settingsQuery(),
-    client.from("tenant_users").select("user_id, role, accepted_at").eq("tenant_id", tenantId),
+    // The member's name, email and status ride along (tenant_users_user_id_fkey), so no second read.
+    client.from("tenant_users").select("user_id, role, accepted_at, users!tenant_users_user_id_fkey(id, name, email, status)").eq("tenant_id", tenantId),
     client.from("tenant_campaigns").select("id, name").eq("tenant_id", tenantId).order("name", { ascending: true }),
     client.rpc("assignment_insights", { p_tenant_id: tenantId, p_since: since.toISOString() }),
   ]);
   const failure = [rules, capacities, settings, memberships].find((item) => item.error);
   if (failure?.error) throw new Error(`Could not load assignment workspace: ${failure.error.message}`);
 
-  const accepted = rows<{ user_id: string; role: string; accepted_at: string | null }>(memberships.data)
+  type MemberUser = { id: string; name: string; email: string; status: string };
+  const accepted = rows<{ user_id: string; role: string; accepted_at: string | null; users: MemberUser | MemberUser[] | null }>(memberships.data)
     .filter((membership) => membership.accepted_at && ["owner", "producer", "setter"].includes(membership.role));
 
-  // Only the members of this tenant. This read used to fetch every row of `users` in the database
-  // and discard all but a handful.
-  const memberIds = accepted.map((membership) => membership.user_id);
-  const users = memberIds.length
-    ? await client.from("users").select("id, name, email, status").in("id", memberIds)
-    : { data: [], error: null };
-  if (users.error) throw new Error(`Could not load assignment workspace: ${users.error.message}`);
+  // Only the members of this tenant, embedded on their memberships. This read once fetched every row
+  // of `users` in the database and discarded all but a handful; then a second trip by id.
+  const users = { data: accepted.flatMap((membership) => (Array.isArray(membership.users) ? membership.users : membership.users ? [membership.users] : [])) };
 
   const insightRow = insights.error ? null : (insights.data as Record<string, unknown> | null);
   const eligibleFromSql = insightRow && typeof insightRow.eligible_states === "object" ? insightRow.eligible_states as Record<string, string[]> : null;

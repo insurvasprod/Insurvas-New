@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { resolvePeriod, type PeriodKind as PnlKind } from "@/lib/accounting/pnlCore";
 import { loadPnl, PnlError, reportingSettings } from "@/lib/accounting/pnlStore";
 import { contractors } from "@/lib/accounting/taxStore";
@@ -18,7 +18,7 @@ export default async function PnlPage({ searchParams }: { searchParams: Promise<
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Profit & loss" description="Money in, money out, and what a lasting policy really cost." />;
   }
-  if (!["owner", "bookkeeper"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return <RoleGateNotice featureLabel="Profit & loss" detail="Only owners and bookkeepers can see the agency's profit and loss." />;
   }
   const q = await searchParams;

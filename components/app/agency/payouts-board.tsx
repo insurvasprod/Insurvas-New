@@ -166,7 +166,7 @@ export function PayoutsBoard({ canCommit }: { canCommit: boolean }) {
         </>
       ) : (
         <TableCard>
-          {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Each committed run appears here, one row per producer, with his statement." /> : (
+          {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Each committed run appears here, one row per producer, with their statement." /> : (
             <Table>
               <TableHeader><TableRow><TableHead>Producer</TableHead><TableHead>Period</TableHead><TableHead>Decision</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Withheld</TableHead><TableHead>How</TableHead><TableHead /></TableRow></TableHeader>
               <TableBody>

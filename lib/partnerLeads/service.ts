@@ -7,6 +7,7 @@ import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
 import { CONVERTED_WINDOW_MS, HELD_STATUSES, NOBODY_CLAIMED_LABEL, SALE_DISPOSITIONS, nobodyClaimed, partnerLane, type PartnerLaneCounts } from "./lanes";
 import { countersFromLanes, startOfTodayIn, submittedSinceFromBuckets } from "./counters";
+import { partnerBoardStages, type BoardCount, type BoardStage } from "./board";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -59,19 +60,10 @@ export function partnerOutcomeLabel(value: string | null | undefined) {
   return PARTNER_OUTCOME_LABELS[normalized] ?? titleCase(normalized);
 }
 
-/** Translate internal LA pipeline vocabulary into a partner-safe progress label. */
-export function partnerStageLabel(stageName: string, stageType: string, _status?: string, outcome?: string | null) {
-  const normalized = stageName.trim().toLowerCase().replace(/[_-]+/g, " ");
-  const outcomeValue = (outcome ?? "").toLowerCase();
-  if (/^application[ _]submitted$/.test(outcomeValue)) return "Application submitted";
-  if (stageType === "won" || /\b(issued|completed|converted|sold)\b/.test(normalized)) return "Completed";
-  if (stageType === "lost" || /\b(closed|declined|not interested|did not qualify|previously sold|withdrawn|returned|disqualified)\b/.test(normalized)) return "Closed";
-  if (/\b(need.*input|incomplete|information requested|customer response)\b/.test(normalized)) return "Needs your input";
-  if (/\b(review|verification|screening|pending approval)\b/.test(normalized)) return "In review";
-  if (/\b(claimed|contacted|call|qualified|working|progress|callback)\b/.test(normalized)) return "In progress";
-  if (/\b(new|submitted|referred|form lead|transfer)\b/.test(normalized)) return "Submitted";
-  return titleCase(stageName);
-}
+// LA-1.17: the partner sees the stages of their own pipeline (LA-1.9) by name — the board's columns,
+// the table's Stage column, the Stage filter and the lead detail all say the same stage name. The
+// generic "Submitted / In progress / Completed" folding this file used to do is gone with the four
+// fixed lanes; lanes.ts now feeds only the counters.
 function objectValues(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -125,17 +117,18 @@ async function loadPartnerData(tenantId: string, partnerId: string, filters: Par
     // caller still runs its created_by check before anything from it is returned.
     withTimeline && leadId ? db.from("partner_messages").select("id, message, message_kind, created_at, created_by, event_key").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("work_item_id", queueRows[0].id).order("created_at") : Promise.resolve(null),
   ]);
-  const [leadPages, dealPages] = await Promise.all([
+  const userIds = new Set<string>((partnerMembers.data ?? []).map((row) => row.user_id));
+  for (const queue of queueRows) { if (queue.owner_user_id) userIds.add(queue.owner_user_id); if (queue.claimed_by) userIds.add(queue.claimed_by); }
+  // The names need only the queue and the members, so they ride beside the extra lead and deal pages.
+  const [leadPages, dealPages, users] = await Promise.all([
     firstLeads.data?.length === 1000 ? Promise.all([1, 2, 3, 4].map((page) => leadsPage(page * 1000))) : Promise.resolve([]),
     firstDeals.data?.length === 1000 ? Promise.all([1, 2, 3, 4].map((page) => dealsPage(page * 1000))) : Promise.resolve([]),
+    db.from("users").select("id, name").in("id", [...userIds]),
   ]);
   const leadData = [firstLeads, ...leadPages];
   const dealData = [firstDeals, ...dealPages];
   const failure = [...leadData, ...dealData, stages, pipelines, partnerMembers, dispositions].find((result) => result.error);
   if (failure?.error) throw new Error(`Could not load partner pipeline: ${failure.error.message}`);
-  const userIds = new Set<string>((partnerMembers.data ?? []).map((row) => row.user_id));
-  for (const queue of queueRows) { if (queue.owner_user_id) userIds.add(queue.owner_user_id); if (queue.claimed_by) userIds.add(queue.claimed_by); }
-  const users = await db.from("users").select("id, name").in("id", [...userIds]);
   if (users.error) throw new Error(`Could not load partner closers: ${users.error.message}`);
   return { queues: queueRows, leads: leadData.flatMap((result) => result.data ?? []) as LeadRow[], deals: dealData.flatMap((result) => result.data ?? []) as DealRow[], stages: (stages.data ?? []) as StageRow[], pipelines: (pipelines.data ?? []) as PipelineRow[], users: (users.data ?? []) as UserRow[], dispositions: (dispositions.data ?? []) as DispositionRow[], timelineMessages };
 }
@@ -151,7 +144,7 @@ function mapRows(data: Awaited<ReturnType<typeof loadPartnerData>>, filters: Par
     if (!lead || !stage) return [];
     if (filters.closerId && lead.created_by !== filters.closerId) return [];
     const outcome = queue.disposition ? partnerOutcomeLabel(dispositions.get(queue.disposition) ?? queue.disposition) : null;
-    return [{ id: lead.id, workItemId: queue.id, customer: displayName(lead.values), submittedAt: lead.created_at, updatedAt: queue.updated_at, product: queue.product_line, stageId: stage.id, stageName: partnerStageLabel(stage.name, stage.stage_type, queue.status, queue.disposition), stageType: stage.stage_type, disposition: queue.disposition, outcome, submittedBy: { id: lead.created_by, name: lead.created_by ? users.get(lead.created_by) ?? "Partner closer" : "Partner closer" }, status: queue.status }];
+    return [{ id: lead.id, workItemId: queue.id, customer: displayName(lead.values), submittedAt: lead.created_at, updatedAt: queue.updated_at, product: queue.product_line, stageId: stage.id, stageName: stage.name, stageType: stage.stage_type, disposition: queue.disposition, outcome, submittedBy: { id: lead.created_by, name: lead.created_by ? users.get(lead.created_by) ?? "Partner closer" : "Partner closer" }, status: queue.status }];
   });
 }
 
@@ -295,6 +288,40 @@ async function oldestOpenQueuedAt(db: ReturnType<typeof getSupabaseServiceClient
   return typeof first?.queued_at === "string" ? first.queued_at : null;
 }
 
+/**
+ * The partner's own pipeline: the tenant's default pipeline for the partner's type (LA-1.9). Read
+ * beside the page RPC. Null when the partner has no type or the agency has no such default; the
+ * board then shows the pipelines its leads are in.
+ */
+async function partnerOwnPipelineId(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, partnerId: string): Promise<string | null> {
+  const [partner, pipelines] = await Promise.all([
+    db.from("partners").select("partner_type").eq("tenant_id", tenantId).eq("id", partnerId).maybeSingle<{ partner_type: string | null }>(),
+    db.from("tenant_pipelines").select("id, partner_type").eq("tenant_id", tenantId).eq("is_default", true).not("partner_type", "is", null),
+  ]);
+  if (partner.error || pipelines.error) {
+    console.error(`[partner-pipeline] own pipeline lookup failed: ${partner.error?.message ?? pipelines.error?.message}`);
+    return null;
+  }
+  const type = partner.data?.partner_type;
+  return ((pipelines.data ?? []) as Array<{ id: string; partner_type: string | null }>).find((row) => type && row.partner_type === type)?.id ?? null;
+}
+
+/**
+ * The board's columns (board.ts): the own pipeline's stages, then any other pipeline holding the
+ * partner's leads. Pipelines are read tenant-scoped and a stage is kept only under one of them;
+ * the candidate ids come from the partner-scoped read model and the tenant-scoped lookup above.
+ */
+async function partnerPipelineStages(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, ownPipelineId: string | null, counts: BoardCount[]): Promise<PartnerPipelineStage[]> {
+  const ids = [...new Set([ownPipelineId, ...counts.map((entry) => entry.pipelineId)].filter((id): id is string => Boolean(id && UUID.test(id))))];
+  if (!ids.length) return partnerBoardStages({ defaultPipelineId: null, pipelines: [], stages: [], counts });
+  const [pipelines, stages] = await Promise.all([
+    db.from("tenant_pipelines").select("id, name").eq("tenant_id", tenantId).in("id", ids),
+    db.from("tenant_pipeline_stages").select("id, pipeline_id, name, position, stage_type, color, is_archived").in("pipeline_id", ids),
+  ]);
+  if (pipelines.error || stages.error) throw new Error(`Could not load partner pipeline stages: ${pipelines.error?.message ?? stages.error?.message}`);
+  return partnerBoardStages({ defaultPipelineId: ownPipelineId, pipelines: pipelines.data ?? [], stages: (stages.data ?? []) as BoardStage[], counts });
+}
+
 export async function listPartnerLeads(tenantId: string, partnerId: string, filters: PartnerLeadFilters, timezone: string, pagination: { limit?: number; offset?: number } = {}, access?: PartnerLeadAccess) {
   validateFilter({ ...filters });
   const limit = pagination.limit ?? 250;
@@ -309,19 +336,22 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   // are calculated. Partner admins retain organization-wide visibility and may use
   // the optional closer filter.
   const effectiveCloserId = access?.role === "partner_user" ? access.userId : filters.closerId ?? null;
-  const { data, error } = await db.rpc("partner_lead_pipeline_page", {
-    p_tenant_id: tenantId,
-    p_partner_id: partnerId,
-    p_date_from: filters.dateFrom ?? null,
-    p_date_to: filters.dateTo ?? null,
-    p_closer_id: effectiveCloserId,
-    p_product: filters.product ?? null,
-    p_stage_id: filters.stageId ?? null,
-    p_outcome: filters.outcome ?? null,
-    p_timezone: timezone,
-    p_limit: limit,
-    p_offset: offset,
-  });
+  const [{ data, error }, ownPipelineId] = await Promise.all([
+    db.rpc("partner_lead_pipeline_page", {
+      p_tenant_id: tenantId,
+      p_partner_id: partnerId,
+      p_date_from: filters.dateFrom ?? null,
+      p_date_to: filters.dateTo ?? null,
+      p_closer_id: effectiveCloserId,
+      p_product: filters.product ?? null,
+      p_stage_id: filters.stageId ?? null,
+      p_outcome: filters.outcome ?? null,
+      p_timezone: timezone,
+      p_limit: limit,
+      p_offset: offset,
+    }),
+    partnerOwnPipelineId(db, tenantId, partnerId),
+  ]);
   if (error) throw new Error(`Could not load partner pipeline: ${error.message}`);
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Could not load partner pipeline: invalid read model response");
 
@@ -357,13 +387,15 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
       status,
     }];
   });
-  const stages: PartnerPipelineStage[] = (Array.isArray(payload.stages) ? payload.stages : []).flatMap((value): PartnerPipelineStage[] => {
+  // The read model's `stages` are per-stage counts only (its name is the queue's stage_key and its
+  // pipeline name a placeholder); the stage names, order and types come from the pipeline itself.
+  const stageCounts: BoardCount[] = (Array.isArray(payload.stages) ? payload.stages : []).flatMap((value): BoardCount[] => {
     if (!Array.isArray(value) || value.length < 9) return [];
-    const [id, pipelineId, pipelineName, name, position, stageType, color, isArchived, leadCount] = value;
-    if (![id, pipelineId, pipelineName, name, stageType, color].every((item) => typeof item === "string")) return [];
-    if (typeof position !== "number" || typeof isArchived !== "boolean" || typeof leadCount !== "number") return [];
-    return [{ id, pipelineId, pipelineName, name: partnerStageLabel(name, stageType), position, stageType, color, isArchived, leadCount }];
+    const [stageId, pipelineId, , stageName, , , , , leadCount] = value;
+    if (typeof stageId !== "string" || typeof pipelineId !== "string" || typeof leadCount !== "number") return [];
+    return [{ stageId, pipelineId, stageName: typeof stageName === "string" ? stageName : "", leadCount }];
   });
+  const stages: PartnerPipelineStage[] = await partnerPipelineStages(db, tenantId, ownPipelineId, stageCounts);
   const closers = (Array.isArray(payload.closers) ? payload.closers : []).flatMap((value): PartnerLeadFacets["closers"] => {
     if (!Array.isArray(value) || value.length < 2 || typeof value[0] !== "string" || typeof value[1] !== "string") return [];
     return [{ id: value[0], name: value[1] }];
@@ -376,7 +408,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   const stageById = new Map(stages.map((stage) => [stage.id, stage]));
   const hydratedRows = rows.map((row) => {
     const stage = stageById.get(row.stageId);
-    return stage ? { ...row, stageName: partnerStageLabel(stage.name, stage.stageType, row.status, row.outcome), stageType: stage.stageType } : row;
+    return stage ? { ...row, stageName: stage.name, stageType: stage.stageType } : row;
   });
   const rawCounters = payload.counters && typeof payload.counters === "object" && !Array.isArray(payload.counters) ? payload.counters as Record<string, unknown> : {};
   const counter = (key: string) => typeof rawCounters[key] === "number" ? rawCounters[key] : 0;

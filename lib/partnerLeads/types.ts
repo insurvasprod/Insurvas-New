@@ -41,7 +41,7 @@ export type PartnerLeadRow = {
   // never reaches a partner. Partners see the coded outcome and the stage only.
   submittedBy: { id: string | null; name: string };
   status: string;
-  /** New / Claimed / Verification / Converted / closed. Set by the pipeline read; see lanes.ts. */
+  /** New / Claimed / Verification / Converted / closed: the counters' vocabulary (lanes.ts). The board's columns are the stages. */
   lane?: import("./lanes").PartnerLane;
 };
 

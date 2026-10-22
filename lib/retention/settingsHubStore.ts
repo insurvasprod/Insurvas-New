@@ -53,21 +53,31 @@ async function rules(tenantId: string): Promise<Record<La5Queue, La5OwnerRole>> 
 }
 
 export async function loadHub(tenantId: string): Promise<Hub> {
-  const config = await loadRadarConfig(tenantId);
-  if (!config) throw new HubError(HUB_PENDING_MESSAGE, 503);
-  const [distribution, queueRules, members, carriers, changes, set] = await Promise.all([
-    scoreDistribution(tenantId).catch((error) => {
+  const configRead = loadRadarConfig(tenantId);
+  // Everything but the weight-set row is read beside the config (none of it needs the config), and the
+  // carrier names as soon as the scored carriers are in. The config is still decided first: no config is
+  // the pending notice, whatever the rest did. The no-op catch only stops an early failure counting as
+  // unhandled while the config is awaited; `rest` is awaited (and throws) below as before.
+  const rest = Promise.all([
+    scoreDistribution(tenantId, { config: configRead }).catch((error) => {
       console.error("[retention-settings] distribution", error);
       return null;
     }),
     rules(tenantId),
     loadMembers(tenantId),
-    db().from("policy_risk_score").select("carrier_id").eq("tenant_id", tenantId).limit(5000),
+    db().from("policy_risk_score").select("carrier_id").eq("tenant_id", tenantId).limit(5000).then(async (carriers: Loose) => {
+      const carrierIds = [...new Set(((carriers.data ?? []) as Loose[]).map((c) => c.carrier_id))];
+      return carrierIds.length ? await db().from("carriers").select("id, name").in("id", carrierIds) : { data: [] };
+    }),
     db().from("retention_setting_change").select("setting, old_value, new_value, changed_by, changed_at").eq("tenant_id", tenantId).order("changed_at", { ascending: false }).limit(40),
+  ]);
+  rest.catch(() => undefined);
+  const config = await configRead;
+  if (!config) throw new HubError(HUB_PENDING_MESSAGE, 503);
+  const [[distribution, queueRules, members, names, changes], set] = await Promise.all([
+    rest,
     db().from("risk_weight_set").select("tenant_id").eq("id", config.weightSetId).maybeSingle(),
   ]);
-  const carrierIds = [...new Set(((carriers.data ?? []) as Loose[]).map((c) => c.carrier_id))];
-  const names = carrierIds.length ? await db().from("carriers").select("id, name").in("id", carrierIds) : { data: [] };
   const userName = new Map(members.map((m) => [m.userId, m.name]));
   return {
     settings: config.settings,

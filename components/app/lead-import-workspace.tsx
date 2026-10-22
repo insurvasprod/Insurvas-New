@@ -421,7 +421,7 @@ export function LeadImportWorkspace() {
               <p className="mt-2.5 text-base leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a vendor CSV or Excel file here</p>
               <p className="mt-1.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{reading ? "Reading the workbook…" : `.csv or .xlsx · up to ${(info?.maxRows ?? 20000).toLocaleString()} rows per file`}</p>
               <input id="lead-csv" className="peer sr-only" type="file" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => void takeFile(event.target.files?.[0])} />
-              <Button asChild variant="outline" className="mt-4 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
+              <Button data-guide="lead-import-upload" asChild variant="outline" className="mt-4 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
                 <label htmlFor="lead-csv">Choose file</label>
               </Button>
             </div>}

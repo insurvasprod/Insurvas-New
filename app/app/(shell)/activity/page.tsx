@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ActivityLogWorkspace } from "@/components/app/activity-log-workspace";
@@ -25,7 +25,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
       />
     );
   }
-  if (!["owner", "producer", "setter"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer", "setter"])) {
     return (
       <RoleGateNotice
         featureLabel="Activity & scorecard"

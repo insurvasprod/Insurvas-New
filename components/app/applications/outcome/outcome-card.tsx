@@ -55,6 +55,8 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [lateNumber, setLateNumber] = useState("");
+  const [savingNumber, setSavingNumber] = useState(false);
 
   const status = attempt.status;
   const decidable = status === "submitted" || status === "pending_carrier";
@@ -107,11 +109,26 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
     const canLose = newest && caseView.status === "open" && attempt.outcome !== null && attempt.outcome !== "issued";
     const anyLive = caseView.attempts.some((a) => a.status !== "closed");
     const policyNo = attempt.outcome === "issued" ? [...attempt.submissions].reverse().find((s) => s.policyNumber)?.policyNumber ?? null : null;
+    // Issued without a number: the Missing reference list sends the agent here, so the number is
+    // added here (QA pass 2026-10-22: the card was read-only and the sale could never reach the book).
+    const latestSubmission = attempt.submissions.at(-1) ?? null;
+    const canAddNumber = attempt.outcome === "issued" && !policyNo && latestSubmission !== null;
+    async function saveLateNumber() {
+      const number = lateNumber.trim().toUpperCase();
+      if (!number || !latestSubmission) return;
+      if (sample) { notify.done(`Policy ${number} added`, { detail: "Sample data — nothing was saved." }); return; }
+      setSavingNumber(true);
+      try {
+        if (await actions.setReference(latestSubmission.id, { policyNumber: number })) notify.done(`Policy ${number} added`, { detail: "The sale now joins your book." });
+      } finally {
+        setSavingNumber(false);
+      }
+    }
     return (
       <StepCard
         title="Outcome"
         chips={<AttemptStatusChip status={attempt.status} outcome={attempt.outcome} />}
-        footerNote={retry ? CARRY_LINE : "This attempt is closed, so nothing on it changes."}
+        footerNote={retry ? CARRY_LINE : canAddNumber ? "This attempt is closed. Only the missing policy number can still be added." : "This attempt is closed, so nothing on it changes."}
         actions={<>
           <Button type="button" variant="outline" onClick={() => goTo("submit")}><ArrowLeft aria-hidden="true" />Back to Submit</Button>
           {canLose && (
@@ -126,6 +143,12 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
           {label && (<><dt className="text-[var(--muted)]">Reason</dt><dd className="font-semibold text-[var(--ink)]">{label}</dd></>)}
           {attempt.outcomeReasonText && (<><dt className="text-[var(--muted)]">{label ? "Details" : "Reason"}</dt><dd>{attempt.outcomeReasonText}</dd></>)}
           {attempt.outcome === "issued" && (<><dt className="text-[var(--muted)]">Policy number</dt><dd>{policyNo ? <span className="font-mono font-semibold">{policyNo}</span> : <StatusChip tone="warning">Missing reference</StatusChip>}</dd></>)}
+          {canAddNumber && (<><dt className="text-[var(--muted)]"><label htmlFor="outcome-late-policy-number">Add the policy number</label></dt><dd>
+            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void saveLateNumber(); }}>
+              <input id="outcome-late-policy-number" className={`${control} max-w-[240px] font-mono uppercase`} value={lateNumber} onChange={(e) => setLateNumber(e.target.value)} maxLength={80} autoComplete="off" spellCheck={false} />
+              <Button type="submit" variant="outline" disabled={!lateNumber.trim() || savingNumber}>{savingNumber ? "Saving…" : "Save policy number"}</Button>
+            </form>
+          </dd></>)}
           <dt className="text-[var(--muted)]">Closed</dt><dd className="tabular-nums">{shortDate(attempt.closedAt, { timeZone })}</dd>
         </dl>
         <CloseCaseDialog open={closing} onOpenChange={setClosing} defaultReason={attempt.outcomeReasonCode} />

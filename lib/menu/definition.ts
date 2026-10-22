@@ -1,6 +1,7 @@
 // THE agent menu definition. This is the one data contract shared by the agent app and the
 // admin plan preview. Plans grant feature keys; this file never branches on a plan code.
 import { baseRoleOf, isAgencyTitle, type MemberRole } from "../tenantAuth/roles.ts";
+import { UNHIDEABLE_PAGES } from "../tenantAuth/teamAccess.ts";
 
 export type MenuItem = {
   /** Stable namespaced key used by the menu contract, for example `leads.inbound`. */
@@ -76,7 +77,7 @@ export const AGENT_MENU: MenuSection[] = [
       // LA-2.11's day and week calendar, beside Callbacks because they are the two things on Ray's
       // diary. At `/app/calendar` specifically: `book_appointment` has always written its
       // notification with that link, and until now it was a 404.
-      item("Today", { key: "sell.calendar", label: "Calendar", path: "/app/calendar", icon: "calendar-days", required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"], built: true }),
+      item("Today", { key: "sell.calendar", label: "Calendar", path: "/app/calendar", icon: "calendar-days", required_feature: "outbound_dialing", required_roles: ["owner", "producer", "assistant", "setter"], built: true }),
       // p-app-setters: the licensed agent's day and the setters who book into it. Owners and producers
       // only — the people Settings › Calendar lists as bookable; setters book from the dialer.
       item("Today", { key: "sell.setters", label: "Appointments & setters", path: "/app/setters", icon: "headset", required_feature: "outbound_dialing", required_roles: ["owner", "producer"], built: true }),
@@ -272,15 +273,26 @@ export const AGENCY_OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
   "compliance.dashboard", "compliance.tcpa", "compliance.consent", "compliance.complaints", "compliance.deletions", "compliance.litigation",
 ]);
 
-export function buildAgentMenu(grantedFeatureKeys: Iterable<string>, role: MemberRole = "owner", options: { agencyNarrow?: boolean } = {}): MenuSection[] {
+/**
+ * Custom team access: `extraRoles` are the member's other roles (the union opens an item), `hiddenPages` the menu
+ * keys the owner hid for them (removed whatever their roles allow; Settings is never hidden).
+ */
+export function buildAgentMenu(
+  grantedFeatureKeys: Iterable<string>,
+  role: MemberRole = "owner",
+  options: { agencyNarrow?: boolean; extraRoles?: readonly MemberRole[]; hiddenPages?: readonly string[] } = {},
+): MenuSection[] {
   const granted = new Set(grantedFeatureKeys);
+  const roles = [role, ...(options.extraRoles ?? [])];
+  const hidden = new Set((options.hiddenPages ?? []).filter((key) => !UNHIDEABLE_PAGES.has(key)));
 
   return AGENT_MENU.map((section) => ({
     ...section,
     items: section.items.filter((entry) =>
       (!entry.required_feature || granted.has(entry.required_feature)) &&
-      menuRoleAdmits(entry.required_roles, role) &&
-      !(options.agencyNarrow && AGENCY_OWNER_ONLY_KEYS.has(entry.key)),
+      roles.some((held) => menuRoleAdmits(entry.required_roles, held)) &&
+      !(options.agencyNarrow && AGENCY_OWNER_ONLY_KEYS.has(entry.key)) &&
+      !hidden.has(entry.key),
     ),
   })).filter((section) => section.items.length > 0);
 }

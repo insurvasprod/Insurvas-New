@@ -15,6 +15,8 @@ import { availableBillingCycles } from "@/lib/money";
 import type { PlanPrices } from "@/lib/money";
 import { checkoutReturnUrl } from "./constants";
 import { trialDaysForPlan } from "./trialDays";
+import { checkoutPaymentMode } from "./paymentMode";
+import { completeWithoutPayment, NO_PAYMENT_LANDING } from "./noPayment";
 import type { CouponTerms } from "./couponSummary";
 import type { BillingCycle } from "@/lib/money";
 
@@ -132,6 +134,13 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     const check = await checkCoupon(couponCode, plan.id);
     if (!check.ok) throw new CheckoutError(check.reason);
     couponId = check.couponId;
+  }
+
+  // No payment taken (CHECKOUT_PAYMENT_MODE=none): the plan chosen at signup starts here, the same way a
+  // paid checkout ends, and the owner is sent straight into the workspace. The provider is never called.
+  if (checkoutPaymentMode() === "none") {
+    const started = await completeWithoutPayment(tenantId, { id: plan.id, name: plan.name }, selection.billing_cycle);
+    return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
   }
 
   // An open session is reused so returning to checkout does not strand the first one.

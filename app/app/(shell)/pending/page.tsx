@@ -1,5 +1,5 @@
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { canWrite } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -29,7 +29,7 @@ async function orPending<T>(read: Promise<T>): Promise<T | null> {
 export default async function PendingCasesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("applications");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Pending cases" description="What each submitted case is waiting on." />;
-  if (guard.role !== "owner" && guard.role !== "producer") return <RoleGateNotice featureLabel="Pending cases" detail="Owners and producers work pending cases." />;
+  if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Pending cases" detail="Owners and producers work pending cases." />;
   const query = await searchParams;
   const tab = single(query.tab);
   const initialTab = TABS.find((key) => key === tab) ?? "requirements";

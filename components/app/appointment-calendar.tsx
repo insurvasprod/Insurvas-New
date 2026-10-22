@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronDown, Plus } from "lucide-react";
 
@@ -209,8 +209,12 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     return { from, to, lastFrom: weekStart - 7 * DAY_MS, lastTo: weekStart, first };
   }, [anchor, zone, view]);
 
+  // The week is first read in the browser's zone and again once the diary's own zone is known; the
+  // two reads overlap, so only the newest one may land (an older answer arriving last is dropped).
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
     if (!range) return;
+    const seq = ++loadSeq.current;
     setLoading(true);
     const get = async (from: number, to: number) => {
       const response = await fetch(`/api/app/calendar?from=${encodeURIComponent(new Date(from).toISOString())}&to=${encodeURIComponent(new Date(to).toISOString())}`, { cache: "no-store" });
@@ -220,14 +224,18 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     };
     try {
       const [current, previous] = await Promise.all([get(range.from, range.to), get(range.lastFrom, range.lastTo)]);
+      if (seq !== loadSeq.current) return;
       setAppointments(current);
       setLastWeek(previous);
       setError("");
     } catch (cause) {
+      if (seq !== loadSeq.current) return;
       setError(cause instanceof Error ? cause.message : "Could not load the calendar");
     } finally {
-      setLoading(false);
-      setLoadedOnce(true);
+      if (seq === loadSeq.current) {
+        setLoading(false);
+        setLoadedOnce(true);
+      }
     }
   }, [range]);
 

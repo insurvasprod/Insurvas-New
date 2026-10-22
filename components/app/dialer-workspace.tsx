@@ -35,7 +35,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
           <>
             {/* Owners and producers (sales.use), as the check route admits; a setter dials what the queue serves. */}
             {canCheckNumber && <Button type="button" variant="outline" onClick={() => setCheckOpen(true)}>Check a number</Button>}
-            {!readOnly && <Button type="button" variant="outline" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
+            {!readOnly && <Button data-guide="dialer-next" type="button" variant="outline" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
               {serving ? "Serving…" : "Serve next lead"}
             </Button>}
           </>
@@ -282,7 +282,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                   the buttons above are disabled then. */}
               {!isSetter && !searchMode && panel.lead.workItemId && (!attempt || dialled) && (
                 <div className="shrink-0 border-t border-[var(--border)] p-3">
-                  <Button type="button" variant="outline" className="w-full" onClick={() => setOutcomeOpen(true)} disabled={working}>Open call outcome</Button>
+                  <Button data-guide="disposition-open" type="button" variant="outline" className="w-full" onClick={() => setOutcomeOpen(true)} disabled={working}>Open call outcome</Button>
                 </div>
               )}
             </section>

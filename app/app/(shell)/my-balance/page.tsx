@@ -1,5 +1,5 @@
 import { canSeeProducerRow } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { myBalance, ProducerError } from "@/lib/accounting/producerStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -20,7 +20,7 @@ export default async function MyBalancePage() {
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="My balance" description="Your share of the commission, and what has come back." />;
   }
-  if (guard.role !== "producer") {
+  if (!actAsPage(guard, ["producer"])) {
     return <RoleGateNotice featureLabel="My balance" detail="This page is a producer's own balance. Owners and bookkeepers see every producer at Producer splits." />;
   }
   let data: Awaited<ReturnType<typeof myBalance>> | null = null;

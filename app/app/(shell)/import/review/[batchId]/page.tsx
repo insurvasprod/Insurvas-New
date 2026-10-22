@@ -25,7 +25,7 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
   if (!("owner" === guard.role || "producer" === guard.role || "assistant" === guard.role))
     return <RoleGateNotice featureLabel="List import" detail="Only owners, producers and assistants can import leads." />;
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
-  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="List import" detail="In an agency, the owner and admins handle list import." />;
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="List import" detail="In an agency, the owner and admins handle list import." />;
 
   // `guardPage` already resolved the tenant to decide entitlement, so re-resolving it here would
   // be a second answer to a question already answered.

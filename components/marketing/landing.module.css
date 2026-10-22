@@ -419,6 +419,11 @@
 /* The 3D shot (review only, ?intro=3d) dissolves the ground and the lens itself. */
 :global(html.intro-3d) .introBackdrop, :global(html.intro-3d) .introVignette, :global(html.intro-3d) .introGrain { animation: none; }
 :global(html.intro-3d) .hero { --intro-delay: 1700ms; }
+/* Waiting for the 3D shot (html.intro-wait, at most INTRO_WAIT): every animation timed off the intro
+ * — the overlay, Skip and the hero — holds at its first frame, a blank ground, so whichever shot
+ * then plays starts from its beginning and the hero still waits for it. */
+:global(html.intro-wait) .intro, :global(html.intro-wait) .intro *, :global(html.intro-wait) .introSkip,
+:global(html.intro-wait) .hero, :global(html.intro-wait) .hero * { animation-play-state: paused !important; }
 .highwayCanvas { position: absolute; inset: 0; }
 .highwayMark { position: absolute; left: calc(50% - 84px); top: calc(50% - 84px); width: 168px; height: 168px; opacity: 0; transform-origin: 50% 50%; }
 @media (max-width: 640px) { .highwayMark { left: calc(50% - 60px); top: calc(50% - 60px); width: 120px; height: 120px; } }

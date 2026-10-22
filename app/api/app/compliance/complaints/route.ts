@@ -17,7 +17,9 @@ const uuid = z.string().uuid();
 const body = z.object({
   channel: z.enum(COMPLAINT_CHANNELS),
   regulator_state: z.string().regex(/^[A-Z]{2}$/).nullable().optional(),
-  received_at: z.string().datetime({ offset: true }).nullable().optional(),
+  // A regulator's deadline counts from this day, so it cannot be a day that has not come yet (the
+  // form sends noon UTC, which is still "today" anywhere in the US; a day's slack covers the rest).
+  received_at: z.string().datetime({ offset: true }).refine((v) => Date.parse(v) <= Date.now() + 86_400_000, "The complaint can't have arrived in the future.").nullable().optional(),
   received_via: z.enum(COMPLAINT_VIA),
   complainant_name: z.string().trim().max(200).nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
@@ -37,7 +39,7 @@ const fail = (error: unknown) => {
 };
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("tcpa_checker", ROLES);
+  const auth = await requireFeatureRole("tcpa_checker", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Complaints");
   if (refused) return refused;

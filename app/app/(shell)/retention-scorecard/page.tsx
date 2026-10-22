@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { loadScorecard, SCORECARD_PERIODS, type ScorecardPeriod } from "@/lib/retention/scorecardStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -18,7 +18,7 @@ export default async function RetentionScorecardPage({ searchParams }: { searchP
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Retention scorecard" description="What each person working retention achieved, save rate by reason." />;
   }
-  if (!["owner", "producer", "retention"].includes(guard.role)) {
+  if (!actAsPage(guard, ["owner", "producer", "retention"])) {
     return <RoleGateNotice featureLabel="Retention scorecard" detail="Only owners, producers and retention reps have a retention scorecard." />;
   }
   const { period: periodParam, rep } = await searchParams;
