@@ -52,8 +52,9 @@ export function SetupGuideBar() {
 
   useEffect(() => {
     if (!stepKey) return;
-    void load();
     const again = () => void load();
+    // The first check runs from a timer callback, not the effect body (react-hooks/set-state-in-effect).
+    const first = window.setTimeout(again, 0);
     const onVisible = () => { if (document.visibilityState === "visible") again(); };
     const onClick = () => {
       timers.current.forEach((id) => window.clearTimeout(id));
@@ -64,6 +65,7 @@ export function SetupGuideBar() {
     document.addEventListener("visibilitychange", onVisible);
     document.addEventListener("click", onClick, true);
     return () => {
+      window.clearTimeout(first);
       window.removeEventListener("focus", again);
       window.removeEventListener("setup:changed", again);
       document.removeEventListener("visibilitychange", onVisible);
