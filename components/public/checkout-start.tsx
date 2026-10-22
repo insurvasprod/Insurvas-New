@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
  */
 export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: ReactNode; noPayment?: boolean }) {
   const [couponCode, setCouponCode] = useState("");
-  const [valid, setValid] = useState<{ code: string; summary: string | null } | null>(null);
+  const [valid, setValid] = useState<{ code: string; summary: string | null; fullComp: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function applyCoupon() {
@@ -41,7 +41,7 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
 
     // Not "will be applied": Whop's hosted checkout cannot be handed a promo code, so the buyer
     // types it themselves. Saying otherwise promised a discount we could not deliver.
-    setValid({ code: body.code, summary: body.summary ?? null });
+    setValid({ code: body.code, summary: body.summary ?? null, fullComp: body.fullComp === true });
   }
 
   async function start() {
@@ -49,7 +49,9 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
     const res = await fetch("/api/app/checkout/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ couponCode: valid?.code ?? undefined }),
+      // A code typed but never applied is still sent: the server checks it either way, and a free
+      // (100%) code must never be lost on the way to a full-price payment page.
+      body: JSON.stringify({ couponCode: valid?.code ?? (couponCode.trim() || undefined) }),
     }).catch(() => null);
     if (!res) { setBusy(false); notify.block("Could not reach Insurvas. Check your connection and try again."); return; }
     const body = await res.json().catch(() => null);
@@ -100,23 +102,26 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
               </span>
             </div>
             <p className="mt-2.5 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-              Enter it on the payment page to get your discount — it is not applied automatically.
+              {valid.fullComp
+                ? "No card needed. Your plan starts free and is never charged."
+                : "Enter it on the payment page to get your discount — it is not applied automatically."}
             </p>
           </>
         )}
       </div>}
 
-      {disclosure ? (
+      {/* The renewal statement names a price and a first charge; a free-forever code has neither. */}
+      {disclosure && !valid?.fullComp ? (
         <p id="renewal-terms" className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
           {disclosure}
         </p>
       ) : null}
 
-      <Button onClick={start} disabled={busy} aria-describedby={disclosure ? "renewal-terms" : undefined} className="h-11 w-full px-4">
-        {busy && noPayment ? "Opening your workspace…" : noPayment ? "Start using Insurvas" : "Continue to secure checkout"}
+      <Button onClick={start} disabled={busy} aria-describedby={disclosure && !valid?.fullComp ? "renewal-terms" : undefined} className="h-11 w-full px-4">
+        {busy && (noPayment || valid?.fullComp) ? "Opening your workspace…" : noPayment || valid?.fullComp ? "Start using Insurvas" : "Continue to secure checkout"}
       </Button>
 
-      {!noPayment && <p className="flex items-center justify-center gap-2 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+      {!noPayment && !valid?.fullComp && <p className="flex items-center justify-center gap-2 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="4" y="10" width="16" height="10" rx="2" />
           <path d="M8 10V7a4 4 0 0 1 8 0v3" />

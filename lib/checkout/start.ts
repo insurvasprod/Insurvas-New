@@ -10,7 +10,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildProvider } from "@/lib/payments/registry";
 import { WhopProvider } from "@/lib/payments/whop/provider";
 import { ensureWhopPlan } from "@/lib/payments/whop/planMapping";
-import { couponRejectionReason } from "@/lib/coupons/discount";
+import { couponRejectionReason, isFullComp } from "@/lib/coupons/discount";
+import { redeemFullComp } from "./fullComp";
 import { availableBillingCycles } from "@/lib/money";
 import type { PlanPrices } from "@/lib/money";
 import { checkoutReturnUrl } from "./constants";
@@ -134,6 +135,12 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     const check = await checkCoupon(couponCode, plan.id);
     if (!check.ok) throw new CheckoutError(check.reason);
     couponId = check.couponId;
+    // 100% off forever: nothing will ever be owed, so the provider is never called. There is no card
+    // page and no membership, so there is nothing that could be charged (lib/checkout/fullComp.ts).
+    if (isFullComp(check.terms)) {
+      const started = await redeemFullComp(tenantId, { id: plan.id, name: plan.name }, selection.billing_cycle, { id: check.couponId, code: check.code });
+      return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
+    }
   }
 
   // No payment taken (CHECKOUT_PAYMENT_MODE=none): the plan chosen at signup starts here, the same way a

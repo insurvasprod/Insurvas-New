@@ -5,6 +5,7 @@ import { resolveSignupContext } from "@/lib/signup/context";
 import { checkCoupon } from "@/lib/checkout/start";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { couponSummary } from "@/lib/checkout/couponSummary";
+import { isFullComp } from "@/lib/coupons/discount";
 import type { BillingCycle } from "@/lib/money";
 
 const schema = z.object({ code: z.string().trim().min(1).max(40) });
@@ -44,6 +45,18 @@ export async function POST(request: NextRequest) {
 
   const result = await checkCoupon(parsed.data.code, selection.plan_id);
   if (!result.ok) return NextResponse.json({ error: result.reason }, { status: 409 });
+
+  // 100% off forever: checkout starts the plan with no payment page at all (lib/checkout/fullComp.ts).
+  if (isFullComp(result.terms)) {
+    return NextResponse.json({
+      ok: true,
+      code: result.code,
+      summary: "100% off, forever",
+      fullComp: true,
+      mustEnterAtCheckout: false,
+      instruction: "No card needed. Your plan starts free and is never charged.",
+    });
+  }
 
   return NextResponse.json({
     ok: true,

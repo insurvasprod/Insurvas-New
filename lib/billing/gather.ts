@@ -120,6 +120,20 @@ export async function findDueSubscriptions(supabase: Db, now = new Date()): Prom
   }));
 }
 
+/** An open tenant_comps row (staff comp, or a 100%-off-forever coupon redeemed at checkout). */
+async function isComped(supabase: Db, tenantId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("tenant_comps" as never)
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .is("ended_at", null)
+    .limit(1);
+  // A failed read must not invoice a tenant who may be comped. Thrown, so this one subscription is
+  // reported as an error and retried on the next run.
+  if (error) throw new Error(`could not read comps: ${(error as { message: string }).message}`);
+  return (data ?? []).length > 0;
+}
+
 async function fetchPendingCharges(supabase: Db, subscriptionId: string): Promise<PendingChargeForBilling[]> {
   const { data, error } = await supabase
     .from("pending_charges")
@@ -270,16 +284,22 @@ export async function billSubscriptionPeriod(
   };
 
   try {
-    const [pending, addons, usage, pricing, creditBalanceCents, waivers] = await Promise.all([
+    const [pending, addons, usage, pricing, creditBalanceCents, waivers, comped] = await Promise.all([
       fetchPendingCharges(supabase, subscription.id),
       fetchAttachedAddons(supabase, subscription.id),
       fetchUsage(supabase, subscription.tenant_id, subscription.current_period_start),
       fetchMeterPricing(supabase),
       fetchCreditBalance(supabase, subscription.tenant_id),
       fetchWaivers(supabase, subscription.id, subscription.current_period_start),
+      isComped(supabase, subscription.tenant_id),
     ]);
 
-    const assembled = assemblePeriodInvoice({
+    // A comped tenant (tenant_comps: comped by staff, or a 100%-off-forever coupon) owes nothing. The
+    // period is still recorded so it rolls over, but with an empty bill, so no invoice is raised and
+    // nothing is sent for collection. Pending charges, credit and waivers are left untouched.
+    const assembled = comped
+      ? { lines: [], pendingIds: [], creditAppliedCents: 0, waiverIds: [], skippedAddons: [], waivedCents: 0, unusedWaivers: [] }
+      : assemblePeriodInvoice({
       pending,
       addons,
       cycle: subscription.billing_cycle,
