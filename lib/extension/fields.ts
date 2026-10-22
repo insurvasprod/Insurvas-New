@@ -4,6 +4,8 @@ import { buildCopyGroups } from "@/components/app/applications/copy-assist/copy-
 import { CANONICAL_GROUPS, isSensitiveKey } from "@/lib/applications/constants";
 import { ApplicationError } from "@/lib/applications/db";
 import { revealField } from "@/lib/applications/mutations";
+import { hasTwoFactor } from "@/lib/tenantAuth/twoFactor";
+import { TWO_FACTOR_REQUIRED_CODE, TWO_FACTOR_REQUIRED_MESSAGE } from "@/lib/tenantAuth/securityRules";
 import { getCaseView } from "@/lib/applications/service";
 import type { AttemptView } from "@/lib/applications/types";
 import { recordRead, type ExtensionContext } from "./grants";
@@ -80,6 +82,9 @@ export async function readBulk(ctx: ExtensionContext): Promise<BulkPayload> {
 /** One sensitive value. With `entryId`, transformed the way that map entry says. */
 export async function readSensitive(ctx: ExtensionContext, fieldKey: string, entryId: string | null) {
   if (!isSensitiveKey(fieldKey)) throw new ApplicationError("FIELD_NOT_SENSITIVE", "Only the SSN and bank / card numbers are read one at a time — the rest come in the bulk read.", 400);
+  // LA-8.2: the extension has no browser session of its own to check, so the person must have
+  // two-factor on; the grant that lets it in was made from a session.
+  if (!(await hasTwoFactor(ctx.userId))) throw new ApplicationError(TWO_FACTOR_REQUIRED_CODE, TWO_FACTOR_REQUIRED_MESSAGE, 403);
   let transform: string | null = null;
   let optionMap: Record<string, string> | null = null;
   if (entryId) {

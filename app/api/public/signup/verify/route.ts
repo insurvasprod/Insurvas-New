@@ -3,10 +3,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hashInviteToken } from "@/lib/users/invitations";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
-  signTenantSessionToken,
   tenantSessionCookieOptions,
   TENANT_SESSION_COOKIE,
 } from "@/lib/tenantAuth/session";
+import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/verification-failed", request.url));
   }
 
-  const session = await signTenantSessionToken(verified.user_id, verified.tenant_id);
+  // A session row like every other sign-in (LA-8.2), so the owner can see and end it.
+  const { token: session } = await issueTenantSession({ userId: verified.user_id, tenantId: verified.tenant_id, sessionVersion: 0, request });
   const response = NextResponse.redirect(new URL("/app/onboarding/business-profile?verified=1", request.url));
   response.cookies.set(TENANT_SESSION_COOKIE, session, tenantSessionCookieOptions);
   return response;

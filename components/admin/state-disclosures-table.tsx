@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SlidersHorizontal } from "lucide-react";
@@ -10,7 +11,7 @@ import { NoMatches } from "@/components/admin/empty-state";
 import { StateDisclosureEditor, type EditorTarget } from "@/components/admin/state-disclosures-editor";
 import { StateDisclosuresImport } from "@/components/admin/state-disclosures-import";
 import { StateDisclosuresReviewCard } from "@/components/admin/state-disclosures-review";
-import { Callout, Pill, btn, st } from "@/components/app/settings/primitives";
+import { Callout, btn, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -34,7 +35,7 @@ import {
 import type { DisclosureProposal, StateDisclosure } from "@/lib/stateDisclosures/constants";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const TOTAL_STATES = STATE_CODES.length;
 
 type CoverageFilter = "all" | "in_force" | "not_covered";
@@ -337,17 +338,17 @@ export function StateDisclosuresTable({
                   <td className={st.td}>
                     {row.live ? (
                       <span className="flex min-w-0 items-center gap-2">
-                        {row.placeholder && <Pill tone="warning">Placeholder</Pill>}
-                        {row.pending.length > 0 && <Pill tone="brand">In review</Pill>}
-                        {row.scheduled[0] && <Pill tone="info">Next {formatEffectiveDate(row.scheduled[0].effective_from)}</Pill>}
+                        {row.placeholder && <StatusChip dot={false} tone="warning">Placeholder</StatusChip>}
+                        {row.pending.length > 0 && <StatusChip dot={false} tone="action">In review</StatusChip>}
+                        {row.scheduled[0] && <StatusChip dot={false} tone="info">Next {formatEffectiveDate(row.scheduled[0].effective_from)}</StatusChip>}
                         <span className="min-w-0 truncate" title={row.live.required_text}>
                           &ldquo;{wordingPreview(row.live.required_text)}&rdquo;
                         </span>
                       </span>
                     ) : (
                       <span className="flex min-w-0 items-center gap-2">
-                        {row.pending.length > 0 && <Pill tone="brand">In review</Pill>}
-                        {row.scheduled[0] && <Pill tone="info">From {formatEffectiveDate(row.scheduled[0].effective_from)}</Pill>}
+                        {row.pending.length > 0 && <StatusChip dot={false} tone="action">In review</StatusChip>}
+                        {row.scheduled[0] && <StatusChip dot={false} tone="info">From {formatEffectiveDate(row.scheduled[0].effective_from)}</StatusChip>}
                         <span>&mdash;</span>
                       </span>
                     )}
@@ -367,7 +368,7 @@ export function StateDisclosuresTable({
                         Edit
                       </button>
                     ) : (
-                      <Pill tone="error">Not covered</Pill>
+                      <StatusChip dot={false} tone="danger">Not covered</StatusChip>
                     )}
                   </td>
                 </tr>

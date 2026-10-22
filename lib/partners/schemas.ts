@@ -2,6 +2,16 @@ import { z } from "zod";
 
 import { PARTNER_PAYOUT_MODELS, PARTNER_TYPES } from "./constants";
 
+/** An IANA zone the runtime knows ("Mars/Olympus" was saved before 2026-10-22). */
+function isTimeZone(value: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const optionalText = (max: number) => z.string().trim().max(max).optional().default("");
 
 export const partnerSchema = z.object({
@@ -10,7 +20,7 @@ export const partnerSchema = z.object({
   country: z.string().trim().regex(/^[A-Za-z]{2}$/, "Use a two-letter country code").transform((value) => value.toUpperCase()),
   contact_name: optionalText(200),
   contact_email: z.union([z.literal(""), z.string().trim().email("Enter a valid contact email").max(320)]).default(""),
-  timezone: z.string().trim().min(1, "Timezone is required").max(100, "Timezone must be 100 characters or fewer"),
+  timezone: z.string().trim().min(1, "Timezone is required").max(100, "Timezone must be 100 characters or fewer").refine(isTimeZone, "Use a timezone such as America/New_York"),
   notes: optionalText(5000),
 });
 

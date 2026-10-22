@@ -1,9 +1,12 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
-import { Callout, Pill, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
+import { InfoTip } from "@/components/ui/info-tip";
+
 import { isImportDateField, slashDateReadings, type ImportDateOrder, type ImportDateScan } from "@/lib/agentTemplates/csv";
 import type { TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
@@ -94,7 +97,7 @@ export function columnMappingStatus(input: { rows: MappingRow[]; fields: Mapping
 }
 
 const cellSelect =
-  "h-8 w-full min-w-0 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+  "h-8 w-full min-w-0 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 
 export function ColumnMappingDialog({
   open,
@@ -160,13 +163,13 @@ export function ColumnMappingDialog({
           >
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px]">
               <div className="min-w-0">
-                <DialogPrimitive.Title className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Map the columns</DialogPrimitive.Title>
-                <DialogPrimitive.Description id="column-mapping-sub" className="mt-[5px] mb-0 truncate text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)] tabular-nums">
+                <DialogPrimitive.Title className="m-0 text-base leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Map the columns</DialogPrimitive.Title>
+                <DialogPrimitive.Description id="column-mapping-sub" className="mt-[5px] mb-0 truncate text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)] tabular-nums">
                   {fileName} · {rowCount.toLocaleString()} row{rowCount === 1 ? "" : "s"} · {columnCount.toLocaleString()} column{columnCount === 1 ? "" : "s"}
                 </DialogPrimitive.Description>
               </div>
               <div className="flex shrink-0 items-center gap-3.5">
-                <span className="text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)]">Step 2 of 4</span>
+                <span className="text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)]">Step 2 of 4</span>
                 <button type="button" aria-label="Close" onClick={onClose} className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--muted)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
                   <X className="size-[13px]" aria-hidden />
                 </button>
@@ -175,15 +178,15 @@ export function ColumnMappingDialog({
 
             <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto p-[22px]">
               <div className="flex flex-wrap items-center gap-3" role="status">
-                <Pill tone="success" dot>{status.mapped.toLocaleString()} mapped</Pill>
-                {status.needsDecision > 0 && <Pill tone="warning" dot>{status.needsDecision.toLocaleString()} {status.needsDecision === 1 ? "needs" : "need"} a decision</Pill>}
-                <Pill>{status.ignored.toLocaleString()} ignored</Pill>
+                <StatusChip tone="good" dot>{status.mapped.toLocaleString()} mapped</StatusChip>
+                {status.needsDecision > 0 && <StatusChip tone="warning" dot>{status.needsDecision.toLocaleString()} {status.needsDecision === 1 ? "needs" : "need"} a decision</StatusChip>}
+                <StatusChip dot={false}>{status.ignored.toLocaleString()} ignored</StatusChip>
                 <span className="flex-1" />
-                <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</span>
+                <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</span>
               </div>
 
               <div className="min-w-0 shrink-0 overflow-x-auto">
-                <table className={cn(st.table, "min-w-[760px] table-fixed")}>
+                <table className={cn(st.table, "min-w-[760px]")}>
                   <thead>
                     <tr className={st.headRow}>
                       <th scope="col" className={cn(st.th, "w-[200px]")}>Their column</th>
@@ -208,8 +211,8 @@ export function ColumnMappingDialog({
                         </td>
                         <td className={st.td}>
                           {rowStatus && <span className="flex min-w-0 flex-col items-start" title={rowStatus.detail}>
-                            <Pill tone={rowStatus.tone}>{rowStatus.label}</Pill>
-                            <span className="mt-0.5 block max-w-full truncate text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{rowStatus.detail}</span>
+                            <StatusChip dot={false} tone={pillTone(rowStatus.tone)}>{rowStatus.label}</StatusChip>
+                            <span className="mt-0.5 block max-w-full truncate text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{rowStatus.detail}</span>
                           </span>}
                         </td>
                       </tr>;
@@ -220,8 +223,8 @@ export function ColumnMappingDialog({
                       <td className={st.td}>{field.label}</td>
                       <td className={st.td}>
                         <span className="flex min-w-0 flex-col items-start">
-                          <Pill tone="error">Required — not mapped</Pill>
-                          <span className="mt-0.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Pick the column that holds it above</span>
+                          <StatusChip dot={false} tone="danger">Required — not mapped</StatusChip>
+                          <span className="mt-0.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Pick the column that holds it above</span>
                         </span>
                       </td>
                     </tr>)}
@@ -233,7 +236,7 @@ export function ColumnMappingDialog({
                 tone="warning"
                 title={dates.firstUnambiguous ? `${dates.firstUnambiguous} is unambiguous. ${ambiguous} is not.` : `${ambiguous} can be read two ways`}
               >
-                <p className="m-0">This file has {dates.ambiguous.toLocaleString()} date{dates.ambiguous === 1 ? "" : "s"} where both readings are valid. Pick the format once and it applies to the whole file. The preview updates when you continue.</p>
+                <p className="m-0">Pick one format for all {dates.ambiguous.toLocaleString()} date{dates.ambiguous === 1 ? "" : "s"} in this file.</p>
                 <fieldset className="m-0 mt-3 flex min-w-0 flex-wrap gap-3 border-0 p-0">
                   <legend className="sr-only">Date format</legend>
                   {([["mdy", "Month first (US)", readings.mdy], ["dmy", "Day first", readings.dmy]] as const).map(([order, label, reading]) => {
@@ -241,24 +244,27 @@ export function ColumnMappingDialog({
                     return <label key={order} htmlFor={`date-order-${order}`} className={cn("flex min-w-[220px] flex-1 cursor-pointer items-start gap-2.5 rounded-[8px] border bg-[var(--surface)] px-3 py-2.5", checked ? "border-[var(--primary)]" : "border-[var(--border-strong)]")}>
                       <input id={`date-order-${order}`} type="radio" name="date-order" className="mt-1 accent-[var(--primary)]" checked={checked} onChange={() => onPickDateOrder(order)} />
                       <span className="min-w-0">
-                        <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{label}</span>
-                        <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{ambiguous} = {spokenDate(reading)}</span>
+                        <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{label}</span>
+                        <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{ambiguous} = {spokenDate(reading)}</span>
                       </span>
                     </label>;
                   })}
                 </fieldset>
-                {usingSavedDates && <p className="m-0 mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Using {vendorName}&rsquo;s saved date format</p>}
+                {usingSavedDates && <p className="m-0 mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Using {vendorName}&rsquo;s saved date format</p>}
               </Callout>}
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5">
-              <span className="max-w-[380px] text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-                Nothing is imported until step 4, and the leads land in one transaction — all of them or none.
+              <span className="max-w-[380px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                <span className="inline-flex items-center gap-0.5">
+                  Nothing is imported until step 4.
+                  <InfoTip label="About the import step">The leads land in one transaction: all of them or none.</InfoTip>
+                </span>
                 {(blocked || continueNote) && <span id="column-mapping-continue-note" className={cn("mt-1 block font-semibold", blocked ? "text-[var(--warning-ink)]" : "text-[var(--body)]")}>{blocked ?? continueNote}</span>}
               </span>
               <span className="flex gap-2.5">
-                <button type="button" className={btn("secondary", "h-10")} onClick={onBack}>Back</button>
-                <button type="button" className={btn("primary", "h-10")} disabled={Boolean(blocked) || busy} aria-describedby={blocked || continueNote ? "column-mapping-continue-note" : undefined} onClick={onContinue}>
+                <button type="button" className={btn("secondary")} onClick={onBack}>Back</button>
+                <button type="button" className={btn("primary")} disabled={Boolean(blocked) || busy} aria-describedby={blocked || continueNote ? "column-mapping-continue-note" : undefined} onClick={onContinue}>
                   {busy ? "Checking…" : "Continue to scrub"}
                 </button>
               </span>

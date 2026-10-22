@@ -1,73 +1,95 @@
 "use client";
 
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { SETTINGS_PANELS } from "@/components/app/settings/panels";
+import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
-import type { TeamSnapshot } from "@/lib/tenantTeam/service";
-import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
+import { groupSections, parseSettingsHash, sectionHref, visibleSections } from "@/lib/settings/registry";
+import { revealAnchor } from "@/lib/settings/revealAnchor";
+import type { SettingsSection } from "@/lib/settings/sections";
+import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { cn } from "@/lib/utils";
 
-export type AgentSettingsTab = {
-  id: string;
-  label: string;
-  description: string;
-  disabled?: string;
-  /** Selectable, locked, and explained on its own page: the thing is managed somewhere else. */
-  managed?: string;
-  /** The rail heading this section sits under. Sections with no group are listed first, ungrouped. */
-  group?: string;
-  /** One short line under the tab's title, when the description (kept for search) is long. */
-  short?: string;
-};
+/**
+ * The settings shell (LA-8.1). It draws whatever lib/settings/sections.ts registers, gated and
+ * grouped by lib/settings/registry.ts; it names no section of its own beyond the two rail badges.
+ */
+export type AgentSettingsTab = SettingsSection;
+
+/** Sections a read-only account can still act in: Billing is how the account is reactivated. */
+const READ_ONLY_EXEMPT = new Set(["billing"]);
 
 export function AgentSettingsTabs({
-  tabs,
+  tabs: registered,
   team,
   workspace,
-  initialTab = "agency-profile",
+  granted,
+  role,
+  initialTab = "business-identity",
+  readOnly = false,
+  hidden,
 }: {
   tabs: AgentSettingsTab[];
-  team: TeamSnapshot;
-  workspace: WorkspaceSnapshot;
+  /** Owner-only panel context; null for everyone else, whose sections do not need it. */
+  team: SettingsPanelContext["team"];
+  workspace: SettingsPanelContext["workspace"];
+  /** The features this tenant can reach right now, and this person's role: the menu's gate. */
+  granted: readonly string[];
+  role: TenantRole;
   initialTab?: string;
+  /**
+   * A read-only (suspended) account (LA-4.10): every section stays readable, and every form control
+   * in it is disabled through one <fieldset disabled>, so no panel can forget to. The server refuses
+   * the writes anyway; this says so before anyone tries. Billing stays usable, since that is where
+   * the account is put right.
+   */
+  readOnly?: boolean;
+  /** Sections the plan has no use for (LA-8.6: Team & access on a one-seat plan) — absent, like the rest. */
+  hidden?: readonly string[];
 }) {
-  const firstAvailable = tabs.find((tab) => !tab.disabled)?.id ?? tabs[0]?.id ?? initialTab;
-  const [activeId, setActiveId] = useState(initialTab);
+  // Sections the plan has no use for leave the list before anything else sees it.
+  const tabs = useMemo(() => (hidden?.length ? registered.filter((tab) => !hidden.includes(tab.id)) : registered), [registered, hidden]);
+  // Absent, not greyed out: a section this person may not open is not in the rail at all.
+  const visible = useMemo(() => visibleSections(tabs, granted, role), [tabs, granted, role]);
+  // Only in-page sections are tabs; a section with a route is a link to its own module's screen.
+  const inPage = useMemo(() => visible.filter((tab) => !tab.route), [visible]);
+  const firstAvailable = inPage.find((tab) => tab.id === initialTab)?.id ?? inPage[0]?.id ?? initialTab;
+  const [activeId, setActiveId] = useState(firstAvailable);
+  const [anchor, setAnchor] = useState<string | null>(null);
   const active = useMemo(
-    () => tabs.find((tab) => tab.id === activeId && !tab.disabled) ?? tabs.find((tab) => tab.id === firstAvailable),
-    [activeId, firstAvailable, tabs]
+    () => inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
+    [activeId, firstAvailable, inPage]
   );
 
-  // Grouped in the order the caller listed them, so the rail's order and the page's order cannot
-  // drift apart. A tab with no group keeps its place in the first, unheaded run.
-  const grouped = useMemo(() => {
-    const out: { group?: string; items: AgentSettingsTab[] }[] = [];
-    for (const tab of tabs) {
-      const last = out[out.length - 1];
-      if (last && last.group === tab.group) last.items.push(tab);
-      else out.push({ group: tab.group, items: [tab] });
-    }
-    return out;
-  }, [tabs]);
+  // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
+  const grouped = useMemo(() => groupSections(visible), [visible]);
 
   useEffect(() => {
     const syncFromHash = () => {
-      const hash = window.location.hash.slice(1);
-      if (hash && tabs.some((tab) => tab.id === hash && !tab.disabled)) {
+      // "#tab" selects a tab; "#tab/anchor" (from search) also brings one setting into view.
+      const { tab, anchor: target } = parseSettingsHash(window.location.hash.slice(1));
+      if (tab && inPage.some((item) => item.id === tab)) {
         // Hash deep-links are external browser state that should select the matching tab.
-        setActiveId(hash);
+        setActiveId(tab);
+        setAnchor(target);
       }
     };
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
     return () => window.removeEventListener("hashchange", syncFromHash);
-  }, [tabs]);
+  }, [inPage]);
+
+  // After the tab has rendered (its panel may still be loading), reveal the setting search named.
+  useEffect(() => (anchor ? revealAnchor(anchor) : undefined), [anchor, activeId]);
 
   function selectTab(id: string) {
-    const tab = tabs.find((item) => item.id === id);
-    if (!tab || tab.disabled) return;
+    if (!inPage.some((item) => item.id === id)) return;
     setActiveId(id);
+    setAnchor(null);
     window.history.replaceState(null, "", `#${id}`);
+    // The rail scrolls on its own (2026-10-15); a section picked low in it opens at the top of the page.
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   /**
@@ -76,10 +98,10 @@ export function AgentSettingsTabs({
    * A zero is not drawn — a badge that always says something stops being read.
    */
   function badgeFor(id: string): { text: string; warn: boolean } | null {
-    if (id === "states-licences" && workspace.licencesExpiringSoon > 0) {
+    if (id === "states-licences" && workspace && workspace.licencesExpiringSoon > 0) {
       return { text: `${workspace.licencesExpiringSoon} expiring`, warn: true };
     }
-    if (id === "team-access" && team.seats.max !== null) {
+    if (id === "team-access" && team && team.seats.max !== null) {
       return { text: `${team.seats.used} / ${team.seats.max}`, warn: team.seats.used >= team.seats.max };
     }
     return null;
@@ -98,7 +120,7 @@ export function AgentSettingsTabs({
         aria-label="Settings sections"
         role="tablist"
         aria-orientation="vertical"
-        className="box-border flex w-full shrink-0 gap-1 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 pt-1 pb-2.5 lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:w-[262px] lg:flex-col lg:gap-0 lg:overflow-visible"
+        className="box-border flex w-full shrink-0 gap-1 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 pt-1 pb-2.5 lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] lg:w-[262px] lg:flex-col lg:gap-0 lg:overflow-x-visible lg:overflow-y-auto lg:overscroll-contain"
       >
         {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
             caller's order, and the same name can legitimately open a second run — so the name is not
@@ -108,11 +130,28 @@ export function AgentSettingsTabs({
         {grouped.map(({ group, items }, index) => (
           <div key={`${group ?? "ungrouped"}-${index}`} role="presentation" className="flex shrink-0 gap-1 lg:flex-col lg:gap-0">
             {group && (
-              <p className="hidden px-2.5 pt-3.5 pb-1.5 text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)] lg:block">
+              <p className="hidden px-2.5 pt-3.5 pb-1.5 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)] lg:block">
                 {group}
               </p>
             )}
             {items.map((tab) => {
+              if (tab.route) {
+                // Another module's own screen: opened there, never copied here. It carries a trail
+                // back to Settings (components/app/settings/settings-trail.tsx).
+                return (
+                  <Link
+                    key={tab.id}
+                    href={sectionHref(tab)}
+                    className={cn(
+                      "mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] whitespace-nowrap no-underline transition-colors lg:whitespace-normal",
+                      "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                    )}
+                  >
+                    <span className="min-w-0 flex-grow">{tab.label}</span>
+                    <ArrowUpRight aria-label="Opens its own screen" className="ml-auto size-3.5 shrink-0 text-[var(--muted)]" />
+                  </Link>
+                );
+              }
               const isActive = active?.id === tab.id;
               const badge = badgeFor(tab.id);
               return (
@@ -126,7 +165,7 @@ export function AgentSettingsTabs({
                   disabled={Boolean(tab.disabled)}
                   onClick={() => selectTab(tab.id)}
                   className={cn(
-                    "mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-[14px] leading-[1.5] tracking-[-0.02em] whitespace-nowrap transition-colors lg:whitespace-normal",
+                    "mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] whitespace-nowrap transition-colors lg:whitespace-normal",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
                     isActive
                       ? "bg-[var(--brand-50)] font-semibold text-[var(--accent-ink)] shadow-[inset_2px_0_0_var(--primary)]"
@@ -139,7 +178,7 @@ export function AgentSettingsTabs({
                   {badge && (
                     <span
                       className={cn(
-                        "ml-auto shrink-0 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] tabular-nums",
+                        "ml-auto shrink-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] tabular-nums",
                         badge.warn ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"
                       )}
                     >
@@ -167,8 +206,15 @@ export function AgentSettingsTabs({
             tabIndex={-1}
             key={active.id}
           >
-            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description }}>
-              {renderActiveContent()}
+            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner" }}>
+              {readOnly && !READ_ONLY_EXEMPT.has(active.id) ? (
+                <>
+                  <p role="status" className="m-0 mb-4 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">
+                    Your account is read-only, so settings can be read but not changed. Reactivate the subscription in Billing to change them.
+                  </p>
+                  <fieldset disabled aria-disabled="true" className="m-0 min-w-0 border-0 p-0">{renderActiveContent()}</fieldset>
+                </>
+              ) : renderActiveContent()}
             </SettingsSectionProvider>
           </section>
         )}

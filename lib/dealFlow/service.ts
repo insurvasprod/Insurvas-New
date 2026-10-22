@@ -2,7 +2,9 @@ import "server-only";
 
 import { getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCell } from "@/lib/csv/cell";
 import { resolveRuntimeStage, partnerTypeForLead } from "@/lib/pipelines/service";
+import { rowVisible, type ProducerScope } from "@/lib/agency/visibility";
 import type { DealFlowFilterOptions, DealFlowKpis, DealFlowReport, DealFlowRow, DealFlowSource, DealFlowStageType, DealFlowStatus, DealFlowSummary } from "./types";
 import { DEAL_FLOW_STAGE_TYPES, DEAL_FLOW_STATUSES, shortLeadId } from "./types";
 
@@ -303,7 +305,100 @@ async function enrichLegacyRows(db: UntypedDb, tenantId: string, raws: RawRow[])
   });
 }
 
-export async function listDealFlow(tenantId: string, filters: DealFlowListFilters): Promise<DealFlowReport> {
+/* ── AG-0.5 · producer visibility ────────────────────────────────────────── */
+
+/**
+ * A deal-flow row's producer is the agent it is credited to — `worked_by`, the report's own "agent"
+ * column and the field its agent filter matches. A narrowed agency session (producer, manager,
+ * assistant, setter) sees the rows credited to its scope; an unattributed row is the all-seeing roles'.
+ *
+ * The agents a scope reads: the requested agent when the scope holds him (another producer's id in
+ * ?agent_id= reads nothing), otherwise every agent in the scope.
+ */
+function scopedAgents(scope: readonly string[], agentId: string | undefined): string[] {
+  if (agentId) return scope.includes(agentId) ? [agentId] : [];
+  return [...new Set(scope)];
+}
+
+function emptyReport(options: DealFlowFilterOptions, page: number, pageSize: number, focusLeadId: string | null): DealFlowReport {
+  return {
+    rows: [], total: 0, page, pageSize,
+    kpis: kpisFor([]), summary: [], options,
+    focus: focusLeadId ? { leadId: focusLeadId, position: null, inFilter: false, row: null } : null,
+    schemaPending: false, capped: false,
+  };
+}
+
+/** Agents offered in the filter: only the scope's, so the list does not offer an agent whose rows are hidden. */
+function narrowOptions(options: DealFlowFilterOptions, scope: readonly string[]): DealFlowFilterOptions {
+  const allowed = new Set(scope);
+  return { ...options, agents: options.agents.filter((agent) => allowed.has(agent.id)) };
+}
+
+/** Summary rows by partner x status x stage type, counted over rows already read (the legacy path's way). */
+function summaryOfRows(rows: DealFlowRow[], partners: Map<string, string>): DealFlowSummary[] {
+  return summaryFrom(
+    Object.values(rows.reduce<Record<string, RawRow>>((acc, row) => {
+      const key = `${row.partner_id ?? "none"}|${row.status}|${row.stage_type ?? "open"}`;
+      acc[key] = { partner_id: row.partner_id, partner_name: row.partner_name, status: row.status, stage_type: row.stage_type ?? "open", total: ((acc[key]?.total as number | undefined) ?? 0) + 1 };
+      return acc;
+    }, {})),
+    partners,
+  );
+}
+
+/**
+ * A narrowed session whose scope holds several agents asks the report for them by list (p_agent_ids,
+ * migration 20261019400000). Before that migration the function does not take the list, and there is no
+ * safe fallback — the older paths would read agents outside the scope — so the view refuses with this.
+ */
+export const SCOPED_DEAL_FLOW_PENDING = "The team deal-flow view needs database update 20261019400000, which has not been applied yet.";
+
+/**
+ * The report for a narrowed session, paged, counted and totalled in SQL either way. One agent (a producer, a
+ * setter, or a manager filtering to one report): the report with its agent filter pinned to him. Several (a
+ * manager, an assistant to more than one producer): the report with p_agent_ids set to them. A focused deal
+ * outside the scope is answered as "not in this view", never pinned.
+ */
+async function scopedDealFlow(tenantId: string, filters: DealFlowListFilters, scope: readonly string[]): Promise<DealFlowReport> {
+  const agentId = filters.agentId ? assertUuid(filters.agentId, "agent") : undefined;
+  const agents = scopedAgents(scope, agentId);
+  if (!agents.length) {
+    const pageSize = Math.min(10000, Math.max(1, Number.isInteger(filters.pageSize) ? (filters.pageSize as number) : 100));
+    const focusLeadId = typeof filters.focusLeadId === "string" && UUID.test(filters.focusLeadId) ? filters.focusLeadId : null;
+    const requestedPage = filters.page === null ? null : Number.isInteger(filters.page) && (filters.page ?? 1) > 0 ? (filters.page as number) : 1;
+    return emptyReport(narrowOptions(await lookups(tenantId), scope), requestedPage ?? 1, pageSize, focusLeadId);
+  }
+  const report = agents.length === 1
+    ? await dealFlowReport(tenantId, { ...filters, agentId: agents[0] }, null)
+    : await dealFlowReport(tenantId, { ...filters, agentId: undefined }, agents);
+  const focus = report.focus && report.focus.row && !rowVisible(scope, report.focus.row.worked_by)
+    ? { ...report.focus, position: null, inFilter: false, row: null }
+    : report.focus;
+  return { ...report, focus, options: narrowOptions(report.options, scope) };
+}
+
+/** The agent a deal-flow row is credited to, for the one-row guard; null when there is no such row. */
+export async function dealFlowProducer(tenantId: string, dealId: string): Promise<string | null> {
+  const id = assertUuid(dealId, "deal flow id");
+  const { data } = await getSupabaseServiceClient().from("deal_flow").select("worked_by").eq("tenant_id", tenantId).eq("id", id).maybeSingle();
+  return (data as { worked_by: string | null } | null)?.worked_by ?? null;
+}
+
+/**
+ * `scope` (AG-0.5, from scopeFor(auth.context)): null — the default — is the whole agency's report, read
+ * exactly as before. Otherwise only the rows credited to the scope's agents (scopedDealFlow).
+ */
+export async function listDealFlow(tenantId: string, filters: DealFlowListFilters, scope: ProducerScope = null): Promise<DealFlowReport> {
+  if (scope !== null) return scopedDealFlow(tenantId, filters, scope);
+  return dealFlowReport(tenantId, filters, null);
+}
+
+/**
+ * The report. `agentIds` (a narrowed scope of several agents, never from the request) is sent as p_agent_ids;
+ * null sends exactly the call the report has always had.
+ */
+async function dealFlowReport(tenantId: string, filters: DealFlowListFilters, agentIds: readonly string[] | null): Promise<DealFlowReport> {
   const requestedPage = filters.page === null ? null : Number.isInteger(filters.page) && (filters.page ?? 1) > 0 ? (filters.page as number) : 1;
   const pageSize = Math.min(10000, Math.max(1, Number.isInteger(filters.pageSize) ? (filters.pageSize as number) : 100));
   const service = getSupabaseServiceClient();
@@ -325,8 +420,11 @@ export async function listDealFlow(tenantId: string, filters: DealFlowListFilter
     p_tenant_id: tenantId, p_from_date: fromDate, p_to_date: toDate, p_partner_id: partnerId, p_product_line: productLine,
     p_agent_id: agentId, p_status: selectedStatus, p_page: page, p_page_size: pageSize,
     p_search: search, p_stage_type: stageType, p_focus_lead_id: focusLeadId,
+    ...(agentIds ? { p_agent_ids: agentIds } : {}),
   });
   if (next.error && !schemaMissing(next.error)) throw new Error(`Could not load daily deal flow: ${next.error.message}`);
+  // The legacy path below reads every agent: never for a scoped list.
+  if (next.error && agentIds) throw new Error(SCOPED_DEAL_FLOW_PENDING);
 
   if (!next.error) {
     const report = (next.data && typeof next.data === "object" && !Array.isArray(next.data) ? next.data : {}) as RawRow;
@@ -373,14 +471,7 @@ export async function listDealFlow(tenantId: string, filters: DealFlowListFilter
       focusRow = normaliseRow((await enrichLegacyRows(db, tenantId, [withPartner]))[0], partners, agents);
     }
   }
-  const legacySummary = summaryFrom(
-    Object.values(filtered.reduce<Record<string, RawRow>>((acc, row) => {
-      const key = `${row.partner_id ?? "none"}|${row.status}|${row.stage_type ?? "open"}`;
-      acc[key] = { partner_id: row.partner_id, partner_name: row.partner_name, status: row.status, stage_type: row.stage_type ?? "open", total: ((acc[key]?.total as number | undefined) ?? 0) + 1 };
-      return acc;
-    }, {})),
-    partners,
-  );
+  const legacySummary = summaryOfRows(filtered, partners);
   return {
     rows,
     total: filtered.length,
@@ -408,9 +499,21 @@ export async function updateDealFlow(tenantId: string, dealId: string, input: { 
     notes: text(input.notes, "Notes", 5000, false),
     local_date: date(input.local_date, "Deal date"),
   };
-  const { data, error } = await getSupabaseServiceClient().from("deal_flow").update(patch).eq("tenant_id", tenantId).eq("id", id).select(select).maybeSingle();
+  const supabase = getSupabaseServiceClient();
+  // The row as it was, so the audit entry can say what changed from what (LA-1.13: "editing a field
+  // writes an audit entry" — a list of field names alone cannot be reviewed).
+  const before = await supabase.from("deal_flow").select(Object.keys(patch).join(", ")).eq("tenant_id", tenantId).eq("id", id).maybeSingle();
+  if (before.error || !before.data) throw new Error(before.error?.message ?? "Deal flow row not found");
+  const previous = before.data as unknown as Record<string, unknown>;
+  const { data, error } = await supabase.from("deal_flow").update(patch).eq("tenant_id", tenantId).eq("id", id).select(select).maybeSingle();
   if (error || !data) throw new Error(error?.message ?? "Deal flow row not found");
-  return data;
+  const clip = (value: unknown) => (typeof value === "string" && value.length > 500 ? `${value.slice(0, 500)}…` : value ?? null);
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const [field, next] of Object.entries(patch)) {
+    const was = previous[field] ?? null;
+    if (String(was ?? "") !== String(next ?? "")) changes[field] = { from: clip(was), to: clip(next) };
+  }
+  return { deal: data, changes };
 }
 
 export async function createManualDeal(tenantId: string, userId: string, input: { product_line: unknown; insured_name: unknown; phone?: unknown; partner_id?: unknown; local_date: unknown; carrier?: unknown; product_type?: unknown; monthly_premium_cents?: unknown; face_amount_cents?: unknown; draft_date?: unknown; status?: unknown; call_result?: unknown; notes?: unknown; initial_quote?: unknown }) {
@@ -435,7 +538,6 @@ export async function createManualDeal(tenantId: string, userId: string, input: 
   return deal.data;
 }
 
-const csvCell = (value: unknown) => { const raw = String(value ?? ""); const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw; return `"${safe.replaceAll('"', '""')}"`; };
 // The first sixteen columns are the export's original shape and stay in place for the
 // spreadsheets already reading it; everything the board added is appended after them.
 const CSV_HEADERS = [
@@ -487,7 +589,20 @@ function exportCursor(raw: unknown): ExportCursor | null {
  * keyset cursor. Before it is applied, the report itself is paged (page_size 1,000), which is slower
  * but no single read grows with the export.
  */
-export async function* dealFlowExportPages(tenantId: string, filters: DealFlowListFilters): AsyncGenerator<DealFlowRow[]> {
+export async function* dealFlowExportPages(tenantId: string, filters: DealFlowListFilters, scope: ProducerScope = null): AsyncGenerator<DealFlowRow[]> {
+  // AG-0.5: a narrowed session exports the rows credited to its scope's agents — one agent streams through
+  // the export's own agent filter; several through its p_agent_ids list, walked by the same cursor.
+  if (scope !== null) {
+    const agents = scopedAgents(scope, filters.agentId ? assertUuid(filters.agentId, "agent") : undefined);
+    if (agents.length === 1) yield* exportPages(tenantId, { ...filters, agentId: agents[0] }, null);
+    else if (agents.length > 1) yield* exportPages(tenantId, { ...filters, agentId: undefined }, agents);
+    return;
+  }
+  yield* exportPages(tenantId, filters, null);
+}
+
+/** The export walk. `agentIds` as dealFlowReport: sent as p_agent_ids, and null sends exactly the old call. */
+async function* exportPages(tenantId: string, filters: DealFlowListFilters, agentIds: readonly string[] | null): AsyncGenerator<DealFlowRow[]> {
   const db = getSupabaseServiceClient() as unknown as UntypedDb;
   const args = {
     p_tenant_id: tenantId,
@@ -500,6 +615,7 @@ export async function* dealFlowExportPages(tenantId: string, filters: DealFlowLi
     p_search: cleanSearch(filters.search),
     p_stage_type: filters.stageType ?? null,
     p_limit: DEAL_FLOW_EXPORT_PAGE_SIZE,
+    ...(agentIds ? { p_agent_ids: agentIds } : {}),
   };
   if (filters.stageType && !isStageType(filters.stageType)) throw new Error("Choose a valid status");
 
@@ -508,6 +624,8 @@ export async function* dealFlowExportPages(tenantId: string, filters: DealFlowLi
   for (let read = 0; read < DEAL_FLOW_EXPORT_MAX_PAGES; read += 1) {
     const result = await db.rpc("list_deal_flow_export", { ...args, p_after_local_date: cursor?.local_date ?? null, p_after_created_at: cursor?.created_at ?? null, p_after_id: cursor?.id ?? null });
     if (result.error && read === 0 && schemaMissing(result.error)) {
+      // reportPages reads every agent: never for a scoped list.
+      if (agentIds) throw new Error(SCOPED_DEAL_FLOW_PENDING);
       yield* reportPages(tenantId, filters);
       return;
     }

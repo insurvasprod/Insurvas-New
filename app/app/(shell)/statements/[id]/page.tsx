@@ -6,7 +6,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementFileButton, StatementManualEntry } from "@/components/app/statement-manual-entry";
-import { StatementReview } from "@/components/app/statement-review";
+import { StatementActions, StatementReview } from "@/components/app/statement-review";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, isRecordId, statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
@@ -21,6 +21,9 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
  * LA-4.1: the original file opens from the header when it was kept. LA-4.2: a PDF statement waits
  * for its lines, and this page is where they are typed in, beside the PDF. LA-4.3: a statement read
  * from a stored CSV or workbook can be re-processed; one that was says which statement it replaced.
+ *
+ * 2026-10-06 redesign: the statement's actions (Original file, Re-process, Void) are grouped top
+ * right in the header; the review below it is one full-height list.
  */
 export default async function StatementPage({ params }: { params: Promise<{ id: string }> }) {
   const guard = await guardPage("statement_ingestion");
@@ -69,7 +72,10 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
       <PageHeader
         title={`${statement.carrierName} · ${statementPeriod(statement.periodStart, statement.periodEnd)}`}
         description={`${statement.fileName} · ${kindLabel} · imported ${statementDay(statement.uploadedAt)}${statement.uploadedByName ? ` by ${statement.uploadedByName}` : ""} · ${awaitingEntry ? "lines not entered yet" : `${statement.rowCount.toLocaleString("en-US")} ${statement.rowCount === 1 ? "line" : "lines"}`}`}
-        actions={statement.hasFile ? <StatementFileButton statementId={statement.id} /> : undefined}
+        actions={<>
+          {statement.hasFile && <StatementFileButton statementId={statement.id} />}
+          {!awaitingEntry && <StatementActions statementId={statement.id} canWrite={!readOnly && !voided} reprocess={canReprocess ? { headers: statement.headers, mapping: statement.mapping } : null} />}
+        </>}
       />
 
       {statement.reprocessedFrom && (
@@ -106,7 +112,6 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
         voided={voided}
         canWrite={!readOnly && !voided}
         writeBlockedReason={readOnly ? "Reading remains available; decisions are paused while the account is read-only." : null}
-        reprocess={canReprocess ? { headers: statement.headers, mapping: statement.mapping } : null}
       />
       </>}
     </div>

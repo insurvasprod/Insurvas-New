@@ -3,13 +3,18 @@ import { z } from "zod";
 
 import { screeningForWorkItem } from "@/lib/transferInbox/inboxExtras";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
+import { guardWorkItem } from "@/lib/transferInbox/scope";
 
 /** One transfer's screening ladder, for the inbox drawer. Read-only. */
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const id = z.string().uuid().safeParse(new URL(request.url).searchParams.get("work_item_id"));
   if (!id.success) return NextResponse.json({ error: "Choose a transfer" }, { status: 400 });
+  // AG-0.5: another producer's transfer is 404 in an agency; waiting transfers and one's own stay readable.
+  const hidden = await guardWorkItem(auth.context, id.data, await scopeFor(auth.context));
+  if (hidden) return hidden;
   const ladder = await screeningForWorkItem(auth.context.tenantId, id.data).catch(() => null);
   if (!ladder) return NextResponse.json({ error: "That transfer's screening could not be read" }, { status: 404 });
   return NextResponse.json(ladder, { headers: { "Cache-Control": "no-store" } });

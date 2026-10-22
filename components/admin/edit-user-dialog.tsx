@@ -58,7 +58,8 @@ export function EditUserDialog({
     const res = await fetch(`/api/admin/users/${user.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, phone, email, role }),
+      // The row's tenant: the role is per tenant, and the route refuses to guess for a user in several.
+      body: JSON.stringify({ name, phone, email, role, tenantId: user.tenant_id ?? null }),
     });
     const body = await res.json().catch(() => null);
     setLoading(false);

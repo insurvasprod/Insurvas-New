@@ -4,6 +4,7 @@ import { z } from "zod";
 import { SchemaPendingError, schemaPendingBody } from "@/lib/appointments/pendingSchema";
 import { DialerWorkflowError, serveLeadById, serveLeadByLeadId } from "@/lib/dialerScripts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 // The same roles as every dialer route (a test pins them to rolesWith("dialer.use")). A literal
 // array because the money-route guard reads these lists statically.
@@ -31,9 +32,13 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Choose a lead from the queue" }, { status: 400 });
 
   try {
+    // AG-0.5 / AG-0.10: in an agency a narrow session picks only a lead assigned to it; the unassigned
+    // pool and another producer's lead answer "not in the queue" (409 not_found, the pick's own refusal).
+    // Null scope (solo, owner/admin): unchanged.
+    const scope = await scopeFor(auth.context);
     const result = "lead_id" in parsed.data
-      ? await serveLeadByLeadId({ tenantId: auth.context.tenantId, agentId: auth.context.userId, leadId: parsed.data.lead_id })
-      : await serveLeadById({ tenantId: auth.context.tenantId, agentId: auth.context.userId, workItemId: parsed.data.work_item_id });
+      ? await serveLeadByLeadId({ tenantId: auth.context.tenantId, agentId: auth.context.userId, leadId: parsed.data.lead_id, scope })
+      : await serveLeadById({ tenantId: auth.context.tenantId, agentId: auth.context.userId, workItemId: parsed.data.work_item_id, scope });
     if (result.refusal) {
       return NextResponse.json({ served: null, error: result.refusal.message, code: result.refusal.code }, { status: 409, headers: { "Cache-Control": "no-store" } });
     }

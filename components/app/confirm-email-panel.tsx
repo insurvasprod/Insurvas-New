@@ -16,8 +16,8 @@ const SUPPORT = "mailto:support@insurvas.com?subject=Email%20change%20I%20did%20
 
 function Card({ title, lede, children }: { title: string; lede: ReactNode; children?: ReactNode }) {
   return (
-    <div className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
-      <h1 className="mt-2 text-center text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">{title}</h1>
+    <div data-auth-card="" className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
+      <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">{title}</h1>
       <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">{lede}</p>
       {children}
     </div>
@@ -28,7 +28,7 @@ function Chip({ tone, children }: { tone: "good" | "action"; children: ReactNode
   const style =
     tone === "good"
       ? { chip: "bg-[var(--success-surface)] text-[var(--success-ink)]", dot: "bg-[var(--success)]" }
-      : { chip: "bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" };
+      : { chip: "bg-[var(--primary-soft)] text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" };
   return (
     <span className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold leading-normal tracking-[-0.01em] ${style.chip}`}>
       <span className={`size-1.5 shrink-0 rounded-full ${style.dot}`} aria-hidden="true" />
@@ -39,7 +39,7 @@ function Chip({ tone, children }: { tone: "good" | "action"; children: ReactNode
 
 function AddressRow({ label, email, chip, highlight }: { label: string; email: string; chip: ReactNode; highlight?: boolean }) {
   return (
-    <div className={`flex items-center justify-between gap-4 px-4 py-3.5 ${highlight ? "border-t border-border bg-[var(--soft-orange-surface)]" : "bg-card"}`}>
+    <div className={`flex items-center justify-between gap-4 px-4 py-3.5 ${highlight ? "border-t border-border bg-[var(--primary-soft)]" : "bg-card"}`}>
       <span className="min-w-0">
         <span className="block text-xs leading-normal tracking-[-0.01em] text-muted-foreground">{label}</span>
         <span className="mt-0.5 block break-all text-base font-semibold leading-normal tracking-[-0.02em] text-foreground">{email}</span>

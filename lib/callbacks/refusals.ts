@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { customerName } from "./timezone";
 import { nearestLegalTime, type NearestLegalTime } from "./nearest";
+import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
 
 /**
  * Callback times refused in the last day, for the notice on the Callbacks page: "Marcus Pell's
@@ -28,7 +29,11 @@ export type CallbackRefusalNotice = {
 const WINDOW_MS = 24 * 3_600_000;
 const MAX_NOTICES = 3;
 
-export async function recentCallbackRefusals(tenantId: string): Promise<CallbackRefusalNotice[]> {
+/**
+ * AG-0.5: `scope` (scopeFor, from the session) keeps the refusals made by the session itself or by a
+ * producer in its scope; null or omitted = every refusal in the agency, as before.
+ */
+export async function recentCallbackRefusals(tenantId: string, scope: ProducerScope = null, viewerId?: string): Promise<CallbackRefusalNotice[]> {
   const db = getSupabaseServiceClient();
   const since = new Date(Date.now() - WINDOW_MS).toISOString();
   const refusals = await db
@@ -46,7 +51,8 @@ export async function recentCallbackRefusals(tenantId: string): Promise<Callback
   // One notice per lead: the latest refusal says what the agent last tried.
   const latest = new Map<string, Row>();
   for (const row of refusals.data as unknown as Row[]) {
-    if (row.target_id && row.metadata?.tenantId === tenantId && !latest.has(row.target_id)) latest.set(row.target_id, row);
+    const mine = scope === null || (viewerId && row.actor_id === viewerId) || rowVisible(scope, row.actor_id);
+    if (row.target_id && row.metadata?.tenantId === tenantId && mine && !latest.has(row.target_id)) latest.set(row.target_id, row);
   }
   const leadIds = [...latest.keys()];
   if (!leadIds.length) return [];

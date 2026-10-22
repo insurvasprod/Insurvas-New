@@ -47,7 +47,7 @@ export type LeadListRow = {
   offTerritoryStates: number;
   /** The most recent change to any lead in the list — "stalling" is untouched work nobody is moving. */
   lastTouchedAt: string | null;
-  /** Leads the vendor can still be asked to refund (return window open), from vendor_returns_report. */
+  /** Leads the vendor can still be asked to refund (return window open): vendor_claimable_leads, counted. */
   claimable: number;
 };
 
@@ -81,7 +81,10 @@ type Query<T> = PromiseLike<Result<T>> & {
   order(column: string, options?: { ascending?: boolean }): Query<T>;
   range(from: number, to: number): Query<T>;
 };
-type Db = { from(table: string): Query<Row[]> };
+type Db = {
+  from(table: string): Query<Row[]>;
+  rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: Row[] | null; error: { code?: string; message: string } | null }>;
+};
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 const num = (value: unknown) => (typeof value === "number" ? value : Number(value ?? 0) || 0);
@@ -145,56 +148,90 @@ export async function listLeadLists(tenantId: string): Promise<LeadListRow[]> {
   return (await leadListsReport(tenantId)).lists;
 }
 
-export async function leadListsReport(tenantId: string): Promise<LeadListsReport> {
-  const db = getSupabaseServiceClient() as unknown as Db;
+const INVENTORY_RECHECK_MS = 5 * 60_000;
+let inventoryMissingAt = -Infinity;
 
-  // Independent reads, so they go together. Run sequentially this screen took three to six seconds
-  // on a tenant holding 28 leads — four round trips at ~200ms each, one after another, for data
-  // that has no ordering between the parts.
-  const [campaigns, vendors, attributedLeads, licences, returns] = await Promise.all([
-    db
-      .from("tenant_campaigns")
-      .select("id, name, vendor_id, status, created_at, records_purchased, total_spend_cents, credits_received_cents, scrub_status")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: false }),
-    db.from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId),
-    // Only leads that belong to a list. The first draft read every lead on the tenant and filtered
-    // in memory, which is the whole book to count the inventory — and on a tenant with a real book
-    // that is the difference between a page and a timeout.
-    allRowsParallel(
-      (start) =>
-        db
-          .from("agent_leads")
-          // The work item rides along through lead_queue_lead_id_fkey (unique on lead_id, so at
-          // most one), replacing a second sequential pass of .in() chunks over lead_queue.
-          .select("id, campaign_id, lead_state, updated_at, us_state:values->>state, lead_queue!lead_queue_lead_id_fkey(lead_id, status, owner_user_id)")
-          .eq("tenant_id", tenantId)
-          .eq("lead_queue.tenant_id", tenantId)
-          .not("campaign_id", "is", null)
-          .order("id", { ascending: true })
-          .range(start, start + PAGE - 1),
-      db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).not("campaign_id", "is", null),
-      "the leads in your lists",
-    ),
-    // Territory: the union of what the agency's members are licensed in, expired rows left out.
-    // Read failures degrade to "unknown territory" rather than taking the screen down.
-    heldLicensedStates(db, tenantId),
-    getVendorReturns(tenantId).catch(() => null),
-  ]);
-  if (campaigns.error) throw new Error(`Could not load lead lists: ${campaigns.error.message}`);
-  if (vendors.error) throw new Error(`Could not load vendors: ${vendors.error.message}`);
-  const rows = campaigns.data ?? [];
-  const licensed = new Set(licences ?? []);
-  if (rows.length === 0) return { lists: [], licensedStates: [...licensed].sort() };
+/** One list's counts: what the screen shows, whichever way they were read. */
+type ListInventory = { received: number; assigned: number; untouched: number; states: Record<string, number>; usStates: Record<string, number>; lastTouched: string | null };
 
-  const claimableByCampaign = new Map<string, number>();
-  for (const candidate of returns?.claimable ?? []) {
-    if (candidate.claimable) claimableByCampaign.set(candidate.campaign_id, (claimableByCampaign.get(candidate.campaign_id) ?? 0) + 1);
+/**
+ * Per-list counts from lead_list_inventory (20261020100000): one row per list instead of every list lead
+ * (16 pages, ~3.7 s on the demo tenant, for a few dozen numbers). Until it is applied, the old read below.
+ */
+async function listInventory(db: Db, tenantId: string): Promise<Map<string, ListInventory>> {
+  // Known missing in this process (within the last few minutes): straight to the old read, rather than
+  // paying a refused call (0.4–1.1 s measured) ahead of it on every load until the migration is pasted.
+  if (Date.now() - inventoryMissingAt < INVENTORY_RECHECK_MS) return inventoryFromRows(await listLeadRows(db, tenantId));
+  const result = await db.rpc("lead_list_inventory", { p_tenant_id: tenantId });
+  if (!result.error) {
+    return new Map((result.data ?? []).map((row) => [text(row.campaign_id), {
+      received: num(row.received),
+      assigned: num(row.assigned),
+      untouched: num(row.untouched),
+      states: Object.fromEntries(Object.entries((row.by_lead_state ?? {}) as Record<string, unknown>).map(([k, v]) => [k, num(v)])),
+      usStates: Object.fromEntries(Object.entries((row.by_us_state ?? {}) as Record<string, unknown>).map(([k, v]) => [k, num(v)])),
+      lastTouched: text(row.last_touched_at) || null,
+    }]));
   }
+  const missing = result.error.code === "PGRST202" || result.error.code === "42883" || /could not find the function/i.test(result.error.message);
+  if (!missing) throw new Error(`Could not count the leads in your lists: ${result.error.message}`);
+  inventoryMissingAt = Date.now();
+  return inventoryFromRows(await listLeadRows(db, tenantId));
+}
 
-  const vendorName = new Map((vendors.data ?? []).map((row) => [text(row.id), text(row.name)]));
-  const attributed = attributedLeads;
+function listLeadRows(db: Db, tenantId: string): Promise<Row[]> {
+  return allRowsParallel(
+    (start) =>
+      db
+        .from("agent_leads")
+        // The work item rides along through lead_queue_lead_id_fkey (unique on lead_id, so at
+        // most one), replacing a second sequential pass of .in() chunks over lead_queue.
+        .select("id, campaign_id, lead_state, updated_at, us_state:values->>state, lead_queue!lead_queue_lead_id_fkey(lead_id, status, owner_user_id)")
+        .eq("tenant_id", tenantId)
+        .eq("lead_queue.tenant_id", tenantId)
+        .not("campaign_id", "is", null)
+        // Ordered along agent_leads (tenant_id, campaign_id, created_at desc), id breaking ties. By
+        // id alone there is no tenant index to follow, so the planner walked the primary key across
+        // every tenant's leads and the first page hit the 8s statement timeout once the table held
+        // 331k rows (2026-10-05). This order: every page under ~1.2s, 15,767 rows, none twice.
+        .order("campaign_id", { ascending: true })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(start, start + PAGE - 1),
+    db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).not("campaign_id", "is", null),
+    "the leads in your lists",
+  );
+}
 
+let claimableCountsMissingAt = -Infinity;
+
+/**
+ * Claimable rows per list from vendor_claimable_lead_counts (20261020200000). The screen used to read the
+ * whole vendor_returns_report (~490 KB on the demo tenant, plus a claim-name lookup) only to count these.
+ * Until the function is applied, that report as before. Null when neither can be read (the column then
+ * shows 0, as it always has on a failed read).
+ */
+async function claimableByList(db: Db, tenantId: string): Promise<Map<string, number> | null> {
+  const fromReport = async () => {
+    const returns = await getVendorReturns(tenantId).catch(() => null);
+    if (!returns) return null;
+    const counts = new Map<string, number>();
+    for (const candidate of returns.claimable ?? []) {
+      if (candidate.claimable) counts.set(candidate.campaign_id, (counts.get(candidate.campaign_id) ?? 0) + 1);
+    }
+    return counts;
+  };
+  if (Date.now() - claimableCountsMissingAt < INVENTORY_RECHECK_MS) return fromReport();
+  const result = await db.rpc("vendor_claimable_lead_counts", { p_tenant_id: tenantId });
+  if (!result.error) return new Map((result.data ?? []).map((row) => [text(row.campaign_id), num(row.claimable)]));
+  const missing = result.error.code === "PGRST202" || result.error.code === "42883" || /could not find the function/i.test(result.error.message);
+  if (!missing) return null;
+  claimableCountsMissingAt = Date.now();
+  return fromReport();
+}
+
+/** The same counts, from the leads themselves (the read before lead_list_inventory). */
+function inventoryFromRows(attributed: Row[]): Map<string, ListInventory> {
   // The work items belonging to those leads came back embedded on each lead.
   const queueByLead = new Map(
     attributed.flatMap((row) => {
@@ -202,17 +239,13 @@ export async function leadListsReport(tenantId: string): Promise<LeadListsReport
       return item ? [[text(row.id), item] as const] : [];
     }),
   );
-
-  type Counts = { received: number; untouched: number; assigned: number; states: Record<string, number>; off: number; offStates: Set<string>; lastTouched: string | null };
-  const empty = (): Counts => ({ received: 0, untouched: 0, assigned: 0, states: {}, off: 0, offStates: new Set(), lastTouched: null });
-  const byCampaign = new Map<string, Counts>();
+  const byCampaign = new Map<string, ListInventory>();
   for (const lead of attributed) {
     const key = text(lead.campaign_id);
-    const entry = byCampaign.get(key) ?? empty();
+    const entry = byCampaign.get(key) ?? { received: 0, assigned: 0, untouched: 0, states: {}, usStates: {}, lastTouched: null };
     entry.received += 1;
     const usState = text(lead.us_state).trim().toUpperCase();
-    // A lead with no state recorded cannot be called off-territory; it is only counted when known.
-    if (licensed.size > 0 && usState && !licensed.has(usState)) { entry.off += 1; entry.offStates.add(usState); }
+    if (usState) entry.usStates[usState] = (entry.usStates[usState] ?? 0) + 1;
     const touched = text(lead.updated_at);
     if (touched && (!entry.lastTouched || touched > entry.lastTouched)) entry.lastTouched = touched;
     const state = text(lead.lead_state) || "unknown";
@@ -224,6 +257,51 @@ export async function leadListsReport(tenantId: string): Promise<LeadListsReport
     // put down is not untouched, and counting it as such is how a list looks full of work it does
     // not have.
     else if (state === "fresh") entry.untouched += 1;
+    byCampaign.set(key, entry);
+  }
+  return byCampaign;
+}
+
+export async function leadListsReport(tenantId: string): Promise<LeadListsReport> {
+  const db = getSupabaseServiceClient() as unknown as Db;
+
+  // Independent reads, so they go together. Run sequentially this screen took three to six seconds
+  // on a tenant holding 28 leads — four round trips at ~200ms each, one after another, for data
+  // that has no ordering between the parts.
+  const [campaigns, vendors, inventory, licences, claimable] = await Promise.all([
+    db
+      .from("tenant_campaigns")
+      .select("id, name, vendor_id, status, created_at, records_purchased, total_spend_cents, credits_received_cents, scrub_status")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false }),
+    db.from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId),
+    listInventory(db, tenantId),
+    // Territory: the union of what the agency's members are licensed in, expired rows left out.
+    // Read failures degrade to "unknown territory" rather than taking the screen down.
+    heldLicensedStates(db, tenantId),
+    claimableByList(db, tenantId).catch(() => null),
+  ]);
+  if (campaigns.error) throw new Error(`Could not load lead lists: ${campaigns.error.message}`);
+  if (vendors.error) throw new Error(`Could not load vendors: ${vendors.error.message}`);
+  const rows = campaigns.data ?? [];
+  const licensed = new Set(licences ?? []);
+  if (rows.length === 0) return { lists: [], licensedStates: [...licensed].sort() };
+
+  const claimableByCampaign = claimable ?? new Map<string, number>();
+
+  const vendorName = new Map((vendors.data ?? []).map((row) => [text(row.id), text(row.name)]));
+  type Counts = { received: number; untouched: number; assigned: number; states: Record<string, number>; off: number; offStates: Set<string>; lastTouched: string | null };
+  const empty = (): Counts => ({ received: 0, untouched: 0, assigned: 0, states: {}, off: 0, offStates: new Set(), lastTouched: null });
+  const byCampaign = new Map<string, Counts>();
+  for (const [key, list] of inventory) {
+    const entry = empty();
+    entry.received = list.received;
+    entry.assigned = list.assigned;
+    entry.untouched = list.untouched;
+    entry.states = list.states;
+    entry.lastTouched = list.lastTouched;
+    // A lead with no state recorded cannot be called off-territory; it is only counted when known.
+    if (licensed.size > 0) for (const [usState, n] of Object.entries(list.usStates)) if (!licensed.has(usState)) { entry.off += n; entry.offStates.add(usState); }
     byCampaign.set(key, entry);
   }
 

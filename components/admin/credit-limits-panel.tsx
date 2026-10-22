@@ -1,13 +1,15 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import { MoreHorizontal } from "lucide-react";
 
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { Field, Pill, SettingsMeter, control, st } from "@/components/app/settings/primitives";
+import { Field, SettingsMeter, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -30,7 +32,7 @@ import { buildMonitorEntries, tenantsOverCount, tenantsOverLabel, type LimitStat
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const count = (value: number) => value.toLocaleString("en-US");
 
@@ -43,7 +45,7 @@ const METER_TONE: Record<LimitState, "error" | "warning" | "success"> = { over: 
 
 /** Compact inputs for the pricing table's cells; the dialogs use the boards' 44px `control`. */
 const cellInput =
-  "ml-auto box-border block h-8 w-28 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 text-right text-[14px] leading-[1.43] tabular-nums text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+  "ml-auto box-border block h-8 w-28 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 text-right text-sm leading-[1.43] tabular-nums text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 
 type PackForm = { name: string; meter_key: CreditMeterKey; quantity: string; price_cents: string };
 const emptyPack: PackForm = { name: "", meter_key: "tcpa_checks", quantity: "5000", price_cents: "4500" };
@@ -294,6 +296,18 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
         }
       />
 
+      <StatStrip label="Credits and limits">
+        <StatTile label="Over a limit" value={overCount.toLocaleString("en-US")} valueTone={overCount > 0 ? "danger" : undefined} footnote={overCount === 1 ? "tenant" : "tenants"} />
+        <StatTile
+          label="Near a limit"
+          value={new Set(entries.filter((entry) => entry.state === "near").map((entry) => entry.tenantId)).size.toLocaleString("en-US")}
+          footnote={`at ${warnPercent}% or more`}
+        />
+        <StatTile label="Limits watched" value={entries.length.toLocaleString("en-US")} footnote="meters and seats" />
+        <StatTile label="Credit packs" value={packs.filter((pack) => pack.is_active).length.toLocaleString("en-US")} footnote={`on sale · ${packs.filter((pack) => !pack.is_active).length.toLocaleString("en-US")} retired`} />
+        <StatTile label="Meters priced" value={pricing.filter((meter) => meter.sell_cents > 0).length.toLocaleString("en-US")} footnote={`of ${pricing.length.toLocaleString("en-US")} meters`} />
+      </StatStrip>
+
       {/* Usage monitor */}
       <TableCard
         className="min-w-0"
@@ -322,15 +336,15 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
               <option value="all">All limits</option>
               <option value="over">Over {warnPercent}%</option>
             </select>
-            <Pill tone={overCount > 0 ? "error" : "success"} dot>
+            <StatusChip tone={pillTone(overCount > 0 ? "error" : "success")} dot>
               {tenantsOverLabel(overCount)}
-            </Pill>
+            </StatusChip>
           </DataToolbar>
         }
       >
 
         {pageRows.length === 0 ? (
-          <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+          <p className="m-0 px-4 py-6 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
             {overOnly
               ? `No tenant is at or above ${warnPercent}% of a limit.`
               : "No tenant has a finite limit to watch. Unlimited meters are not listed."}
@@ -379,7 +393,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
                   <td className={st.td}>
                     <span className="inline-flex flex-wrap items-center gap-2">
                       {pack.name}
-                      {!pack.is_active && <Pill>Archived</Pill>}
+                      {!pack.is_active && <StatusChip dot={false}>Archived</StatusChip>}
                     </span>
                   </td>
                   <td className={st.td}>{CREDIT_METER_LABELS[pack.meter_key] ?? pack.meter_key}</td>
@@ -417,7 +431,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
         {/* Default limits */}
         <TableCard className="min-w-0" title="Default limits">
           {defaultLimits.plans.length === 0 ? (
-            <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No current plans.</p>
+            <p className="m-0 px-4 py-6 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No current plans.</p>
           ) : (
             <table className={st.table}>
               <thead>
@@ -463,14 +477,14 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
               const belowCost = !unpriced && sell <= row.cost_cents;
               const margin = row.cost_cents > 0 && !unpriced ? Math.round(((sell - row.cost_cents) / row.cost_cents) * 100) : null;
               return (
-                <tr key={row.meter_key} className={cn("m-row", belowCost && "bg-[var(--warning-surface)]")}>
+                <tr key={row.meter_key} className={cn("m-row", belowCost && "bg-[var(--error-surface)]")}>
                   <td className={st.td}>
                     <span className={st.strong}>{CREDIT_METER_LABELS[row.meter_key]}</span>
                     <span className={cn(st.sub, "font-mono")}>{row.meter_key}</span>
                   </td>
                   <td className={cn(st.td, st.num)}>
                     {money(row.cost_cents)}
-                    <span className={st.sub}>{row.cost_source === "compliance_vendor" ? "From vendor" : "Set here"}</span>
+                    <span className={st.sub}>{row.cost_source === "compliance_vendor" ? "Costliest vendor" : "Set here"}</span>
                   </td>
                   <td className={st.td}>
                     <input
@@ -480,7 +494,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
                       aria-label={`${CREDIT_METER_LABELS[row.meter_key]} sell price in cents`}
                       aria-invalid={belowCost}
                       onChange={(event) => editRow(row, { sell: event.target.value })}
-                      className={cn(cellInput, belowCost && "border-[var(--warning)]")}
+                      className={cn(cellInput, belowCost && "border-[var(--error)]")}
                     />
                   </td>
                   <td className={cn(st.td, "text-right")}>
@@ -488,10 +502,10 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
                       <span className="text-[var(--muted)]">Not priced</span>
                     ) : (
                       <>
-                        <span className={cn("font-semibold tabular-nums", belowCost ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]")}>
+                        <span className={cn("font-semibold tabular-nums", belowCost ? "text-[var(--error-ink)]" : "text-[var(--success-ink)]")}>
                           {margin === null ? "—" : `${margin > 0 ? "+" : ""}${margin}%`}
                         </span>
-                        {belowCost && <span className={cn(st.sub, "text-[var(--warning-ink)]")}>At or below cost</span>}
+                        {belowCost && <span className={cn(st.sub, "text-[var(--error-ink)]")}>At or below cost</span>}
                       </>
                     )}
                   </td>
@@ -541,7 +555,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
                 <input id="pack-price" required type="number" min="0" value={packForm.price_cents} onChange={(event) => setPackForm({ ...packForm, price_cents: event.target.value })} className={control} />
               </Field>
             </div>
-            {packError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{packError}</p>}
+            {packError && <p role="alert" className="m-0 text-sm leading-[1.5] text-[var(--error-ink)]">{packError}</p>}
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setPackDialog(null)}>Cancel</Button>
               <Button type="submit" disabled={busy === "pack"}>
@@ -585,7 +599,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
             <Field label="Reason" htmlFor="grant-reason" required>
               <input id="grant-reason" required minLength={5} maxLength={500} value={grant.reason} onChange={(event) => setGrant({ ...grant, reason: event.target.value })} placeholder="Goodwill for an outage" className={control} />
             </Field>
-            {grantError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{grantError}</p>}
+            {grantError && <p role="alert" className="m-0 text-sm leading-[1.5] text-[var(--error-ink)]">{grantError}</p>}
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setGrantOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={busy === "grant"}>
@@ -625,7 +639,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
             <Field label="Reason" htmlFor="purchase-reason" required>
               <input id="purchase-reason" required minLength={5} maxLength={500} value={purchase.reason} onChange={(event) => setPurchase({ ...purchase, reason: event.target.value })} placeholder="Customer requested a top-up" className={control} />
             </Field>
-            {purchaseError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{purchaseError}</p>}
+            {purchaseError && <p role="alert" className="m-0 text-sm leading-[1.5] text-[var(--error-ink)]">{purchaseError}</p>}
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setPurchasePack(null)}>Cancel</Button>
               <Button type="submit" disabled={busy === "purchase"}>
@@ -641,7 +655,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
       {dirtyRows.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-rest)] lg:left-60">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-8 py-3.5">
-            <p className="m-0 text-[14px] leading-[1.5]">
+            <p className="m-0 text-sm leading-[1.5]">
               <span className="font-semibold text-[var(--ink)]">
                 {dirtyRows.length === 1 ? "1 unsaved change" : `${dirtyRows.length} unsaved changes`}
               </span>
@@ -670,10 +684,10 @@ function MonitorRow({ entry, onGrant }: { entry: MonitorEntry; onGrant: (prefill
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--border)] px-4 py-3 first:border-t-0 lg:flex-nowrap">
       <span className="w-full min-w-0 lg:w-[230px] lg:shrink-0">
-        <span className="block truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{entry.tenantName}</span>
+        <span className="block truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{entry.tenantName}</span>
         {entry.tenantStatus !== "active" && <span className={st.sub}>{entry.tenantStatus}</span>}
       </span>
-      <span className="w-[150px] shrink-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{entry.label}</span>
+      <span className="w-[150px] shrink-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{entry.label}</span>
       <span className="min-w-[120px] flex-1">
         <SettingsMeter
           value={entry.used}
@@ -682,7 +696,7 @@ function MonitorRow({ entry, onGrant }: { entry: MonitorEntry; onGrant: (prefill
           ariaLabel={`${entry.tenantName}, ${entry.label}: ${count(entry.used)} of ${count(entry.limit)}`}
         />
       </span>
-      <span className={cn("w-[150px] shrink-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums", FIGURE_TONE[entry.state])}>
+      <span className={cn("w-[150px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums", FIGURE_TONE[entry.state])}>
         {count(entry.used)} / {count(entry.limit)}
         {entry.addonQty > 0 && <span className={cn(st.sub, "font-normal")}>incl. {count(entry.addonQty)} from add-ons</span>}
         {entry.grantQty > 0 && <span className={cn(st.sub, "font-normal")}>incl. {count(entry.grantQty)} granted</span>}
@@ -694,7 +708,7 @@ function MonitorRow({ entry, onGrant }: { entry: MonitorEntry; onGrant: (prefill
           </Button>
         ) : (
           <span
-            className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]"
+            className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]"
             title={entry.kind === "seats" ? "Seats come from the plan; change the plan to raise them." : "Credits cannot be granted on this meter."}
           >
             {entry.kind === "seats" ? "Set by the plan" : "Not grantable"}

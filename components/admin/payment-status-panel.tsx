@@ -29,8 +29,8 @@ export type StatusView = {
 export type WebhookView = { lastReceivedAt: string | null; lastProcessedAt: string | null; stuck: number };
 
 const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)]";
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 /** The mode alert's colour: production is the dangerous one, unknown means payments are down. */
 const MODE_CALLOUT: Record<ProviderMode, { tone: Tone; title: string }> = {
@@ -99,26 +99,30 @@ export function PaymentStatusPanel({ status, webhooks }: { status: StatusView; w
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
         <section className={cn(card, "overflow-hidden")} aria-labelledby="payments-credentials">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-            <h2 id="payments-credentials" className="text-[14px] font-semibold text-[var(--ink)]">Credentials</h2>
+            <h2 id="payments-credentials" className="text-sm font-semibold text-[var(--ink)]">Credentials</h2>
             <StatusChip tone="neutral">Super admin only</StatusChip>
           </div>
           <dl className="m-0">
             {credentials.map((item) => (
               <div key={item.label} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
                 <dt className="min-w-0">
-                  <span className="block text-[14px] font-semibold text-[var(--ink)]">{item.label}</span>
-                  <span className="block text-[12px] text-[var(--muted)]">{item.note}</span>
+                  <span className="block text-sm font-semibold text-[var(--ink)]">{item.label}</span>
+                  <span className="block text-xs text-[var(--muted)]">{item.note}</span>
                 </dt>
-                <dd className={cn("m-0 font-mono text-[14px] break-all", item.missing ? "text-[var(--error-ink)]" : "text-[var(--ink)]")}>{item.value}</dd>
+                <dd className={cn("m-0 font-mono text-sm break-all", item.missing ? "text-[var(--error-ink)]" : "text-[var(--ink)]")}>{item.value}</dd>
               </div>
             ))}
           </dl>
+          {/* SA-4.2: nothing on this screen can change a key or the mode — say how they ARE changed. */}
+          <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-xs text-[var(--muted)]">
+            Read-only. To replace a key or move between sandbox and production, change these environment variables in the hosting project and redeploy; the mode follows WHOP_API_BASE_URL. Views and connection tests are recorded in the audit log.
+          </p>
         </section>
 
         <section className={cn(card, "overflow-hidden")} aria-labelledby="payments-health">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-            <h2 id="payments-health" className="text-[14px] font-semibold text-[var(--ink)]">Provider health</h2>
-            <span className="text-[12px] text-[var(--muted)] tabular-nums">{status.health.totalCalls.toLocaleString("en-US")} calls recorded</span>
+            <h2 id="payments-health" className="text-sm font-semibold text-[var(--ink)]">Provider health</h2>
+            <span className="text-xs text-[var(--muted)] tabular-nums">{status.health.totalCalls.toLocaleString("en-US")} calls recorded</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] border-collapse">
@@ -128,7 +132,7 @@ export function PaymentStatusPanel({ status, webhooks }: { status: StatusView; w
                   <tr key={row.check}>
                     <td className={cn(td, "font-semibold text-[var(--ink)]")}>{row.check}</td>
                     <td className={td}><StatusChip tone={row.tone} dot>{row.result}</StatusChip></td>
-                    <td className={cn(td, "text-[12px] text-[var(--muted)] tabular-nums")}>{row.last ? when(row.last) : "—"}</td>
+                    <td className={cn(td, "text-xs text-[var(--muted)] tabular-nums")}>{row.last ? when(row.last) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -141,9 +145,9 @@ export function PaymentStatusPanel({ status, webhooks }: { status: StatusView; w
               </Button>
             </div>
             {result && (
-              <p role="status" className={cn("flex items-start gap-2 rounded-[8px] border-l-[3px] p-3 text-[14px]", result.ok ? "border-l-[var(--success)] bg-[var(--success-surface)] text-[var(--success-ink)]" : "border-l-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]")}>
+              <p role="status" className={cn("flex items-start gap-2 rounded-[8px] border-l-[3px] p-3 text-sm", result.ok ? "border-l-[var(--success)] bg-[var(--success-surface)] text-[var(--success-ink)]" : "border-l-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]")}>
                 {result.ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden /> : <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden />}
-                <span>{result.message} <span className="text-[12px] opacity-80">· {when(result.at)}</span></span>
+                <span>{result.message} <span className="text-xs opacity-80">· {when(result.at)}</span></span>
               </p>
             )}
           </div>

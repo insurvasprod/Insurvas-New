@@ -4,6 +4,7 @@ import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
+import type { ProducerScope } from "../agency/visibilityCore";
 
 export type ScorecardRow = {
   userId: string;
@@ -82,6 +83,10 @@ export async function getScorecard(
   userId: string,
   role: TenantRole,
   sinceDays = 30,
+  // AG-0.5: the session's producer scope (scopeFor, from the session). Inside an agency a role that
+  // sees "the team" sees only the members in its scope (a producer: himself; a manager: his reports);
+  // omitted / null = the role rule alone, as before.
+  producerScope: ProducerScope = null,
 ): Promise<{ rows: ScorecardRow[]; scope: "team" | "own" }> {
   const db = getSupabaseServiceClient();
   const seesEveryone = hasTenantPermission(role, "scorecard.view.all");
@@ -94,6 +99,7 @@ export async function getScorecard(
     .gte("day", since)
     .order("day", { ascending: false });
   if (!seesEveryone) query = query.eq("user_id", userId);
+  else if (producerScope !== null) query = query.in("user_id", [...new Set([userId, ...producerScope])]);
 
   const { data, error } = await query.returns<ViewRow[]>();
   if (error) throw new Error(`Could not load the scorecard: ${error.message}`);
@@ -130,7 +136,11 @@ export async function getScorecard(
  * rules that use the same availability row can never disagree about what time it is for that
  * member.
  */
-export async function getRoster(tenantId: string): Promise<RosterRow[]> {
+/**
+ * AG-0.5: `scope` (scopeFor, from the session) keeps the members in scope (and `viewerId`); omitted /
+ * null = the whole roster, as before.
+ */
+export async function getRoster(tenantId: string, scope: ProducerScope = null, viewerId = ""): Promise<RosterRow[]> {
   const db = getSupabaseServiceClient();
   const { data, error } = await db
     .from("tenant_member_roster")
@@ -182,7 +192,9 @@ export async function getRoster(tenantId: string): Promise<RosterRow[]> {
       hasHours: false,
     });
   }
-  return [...byUser.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const roster = [...byUser.values()];
+  const shown = scope === null ? roster : roster.filter((row) => row.userId === viewerId || scope.includes(row.userId));
+  return shown.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** The roles on the roster: whoever works the phones or holds the calendar they book into. */

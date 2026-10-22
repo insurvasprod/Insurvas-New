@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { MoveError, moveLeadWithDisposition } from "@/lib/pipelines/views";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
 
 /**
  * Move leads between stages by applying a disposition — the board drop, the table's bulk change and
@@ -28,6 +29,12 @@ export async function POST(request: NextRequest) {
   const moved: Array<{ lead_id: string; from_stage_id: string | null; to_stage_id: string; recorded: boolean }> = [];
   const failed: Array<{ lead_id: string; code: string; error: string }> = [];
   for (const leadId of [...new Set(leadIds)]) {
+    // AG-0.5: a lead another producer holds is answered exactly like one that does not exist, so a bulk
+    // move can neither change nor confirm it. (No read at all for a solo tenant or an all-seeing role.)
+    if (await guardLead(auth.context, leadId)) {
+      failed.push({ lead_id: leadId, code: "lead_not_found", error: "That lead is not in your workspace." });
+      continue;
+    }
     try {
       const result = await moveLeadWithDisposition({ tenantId: auth.context.tenantId, leadId, dispositionKey, actorId: auth.context.userId, source });
       moved.push({ lead_id: leadId, from_stage_id: result.fromStageId, to_stage_id: result.toStageId, recorded: result.recorded });

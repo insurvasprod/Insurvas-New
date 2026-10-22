@@ -1,6 +1,7 @@
 /**
  * LA-4.8 · persistency: of the policies old enough to be judged, how many were still alive N months
  * after they were issued. Carriers watch month 9; below about 65% an agent can lose the contract.
+ * Reported overall, by issue cohort (the quarter issued), by carrier and by lead source.
  *
  *   · the denominator for month N is every policy issued at least N months before today that is not
  *     pending (a pending policy was never issued);
@@ -23,6 +24,9 @@ export const TARGET_MONTH: PersistencyMonth = 9;
 export const TARGET_RATE = 0.65;
 /** Fewer policies than this in a cell, and the cell shows "—". */
 export const MIN_COHORT = 5;
+
+/** A rate as the page prints it, "—" when there is none. Shared by the server page and the client tables. */
+export const persistencyPct = (rate: number | null) => (rate === null ? "—" : `${Math.round(rate * 100)}%`);
 
 export type PersistencyPolicy = {
   id: string;
@@ -70,8 +74,35 @@ function groupBy(policies: PersistencyPolicy[], keyOf: (policy: PersistencyPolic
     .sort((a, b) => b.policies - a.policies || a.label.localeCompare(b.label));
 }
 
+/**
+ * The issue cohort a policy belongs to: the calendar quarter it was issued in, "2026 Q1". A quarter,
+ * not a month, because an agent writing 8–40 policies a month would see every monthly cell under
+ * MIN_COHORT; a quarter is how carriers report persistency too.
+ */
+export function issueCohort(effectiveDate: string): { key: string; label: string } {
+  const year = effectiveDate.slice(0, 4);
+  const quarter = Math.floor((Number(effectiveDate.slice(5, 7)) - 1) / 3) + 1;
+  return { key: `${year}-Q${quarter}`, label: `${year} Q${quarter}` };
+}
+
+/** One row per issue quarter, newest first: is the book getting better or worse at keeping policies? */
+function byIssueCohort(policies: PersistencyPolicy[], today: string): PersistencyRow[] {
+  const groups = new Map<string, { label: string; members: PersistencyPolicy[] }>();
+  for (const policy of policies) {
+    const cohort = issueCohort(policy.effectiveDate);
+    const group = groups.get(cohort.key) ?? { label: cohort.label, members: [] };
+    group.members.push(policy);
+    groups.set(cohort.key, group);
+  }
+  return [...groups.entries()]
+    .map(([key, group]) => ({ key, label: group.label, policies: group.members.length, cells: cellsFor(group.members, today) }))
+    .sort((a, b) => b.key.localeCompare(a.key));
+}
+
 export type PersistencyReport = {
   overall: PersistencyCell[];
+  /** By the quarter a policy was issued in, newest first. */
+  byCohort: PersistencyRow[];
   byCarrier: PersistencyRow[];
   byLeadSource: PersistencyRow[];
   /** The month-9 figure against the target, for the headline. */
@@ -85,6 +116,7 @@ export function computePersistency(policies: PersistencyPolicy[], today: string)
   const at = overall.find((cell) => cell.month === TARGET_MONTH) as PersistencyCell;
   return {
     overall,
+    byCohort: byIssueCohort(issued, today),
     byCarrier: groupBy(issued, (policy) => policy.carrier, today),
     byLeadSource: groupBy(issued, (policy) => policy.leadSource, today),
     target: { month: TARGET_MONTH, rate: at.rate, eligible: at.eligible, below: at.rate === null ? null : at.rate < TARGET_RATE },

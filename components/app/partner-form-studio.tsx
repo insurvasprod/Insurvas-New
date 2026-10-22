@@ -14,6 +14,7 @@ import { notify } from "@/lib/notify";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InfoTip } from "@/components/ui/info-tip";
 import {
   Dialog,
   DialogContent,
@@ -543,10 +544,10 @@ export function PartnerFormStudio({
                   ? `Form setup · ${target.name}`
                   : "Publisher form defaults"}
               </CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
                 {target
-                  ? "Direct overrides take priority; inheriting users update automatically when an admin default changes."
-                  : "These defaults apply unless an admin or user has a direct override."}
+                  ? <>Changes here override the admin&rsquo;s defaults.<InfoTip label="About overrides">Users who inherit update automatically when their admin&rsquo;s default changes.</InfoTip></>
+                  : "Admins and users can override these."}
               </p>
             </div>
             <StatusChip tone={profile?.profile ? "info" : "neutral"}>
@@ -1135,11 +1136,8 @@ function Preview({
         Partner preview
       </p>
       <h3 className="mt-1 text-sm font-semibold">Lead form</h3>
-      <p className="mt-1 text-xs text-muted-foreground">
-        The Partner Portal shows these fields, in this order, with these controls.
-      </p>
       <div className="mt-4 space-y-3">
-        <div className="rounded-md border border-[var(--color-blue)]/20 bg-[var(--color-blue-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
+        <div className="rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
           Product, Carrier, and State are required before the partner can
           continue.
         </div>

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { CheckoutView } from "@/components/public/checkout-view";
 import { TRIAL_DAYS } from "@/lib/checkout/constants";
+import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
 import { dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, priceForCycle, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
@@ -53,10 +54,12 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
       planLine={[moduleLine, seats, cycle ? `billed ${cycle}` : null].filter(Boolean).join(" · ")}
       cycle={cycle}
       price={priceCents === null ? null : formatCentsAsCurrency(priceCents)}
+      setupFee={prices?.setup_fee_cents ? formatCentsAsCurrency(prices.setup_fee_cents) : null}
       // Card at signup, not charged for the trial — the constant the checkout itself opens with.
       trialDays={TRIAL_DAYS}
       trialEnds={dayMonthYear(trialEndDate(), "UTC")}
       pending={pending === "1"}
+      noPayment={checkoutPaymentMode() === "none"}
     />
   );
 }

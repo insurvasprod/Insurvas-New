@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Plus } from "lucide-react";
 
@@ -9,19 +10,9 @@ import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  control,
-  Field,
-  Pill,
-  SettingsCard,
-  SettingsGrid,
-  SettingsMeter,
-  SettingsSectionHeader,
-  SettingsStack,
-  st,
-} from "@/components/app/settings/primitives";
+import { Callout, control, Field, SettingsCard, SettingsGrid, SettingsMeter, SettingsSectionHeader, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { canonicalFieldMap, FIELD_RULES, KNOWN_LEAD_FIELDS, OUR_FIELD_PATTERN, readFieldMap } from "@/lib/leadPost/fieldMap";
@@ -54,10 +45,10 @@ const same = (a: Record<string, string>, b: Record<string, string>) => {
 };
 
 /** Code at 14px: the scale has no 13. */
-const code = cn(st.code, "text-[14px]");
+const code = cn(st.code, "text-sm");
 
 const cellInput =
-  "box-border h-8 w-full min-w-0 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-[14px] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+  "box-border h-8 w-full min-w-0 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 
 async function send(url: string, method: string, body: unknown) {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -301,16 +292,18 @@ export function LeadPostKeysSettings() {
       <SettingsSectionHeader />
 
       <SettingsCard title="Where vendors post" pad={20}>
-        <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] px-3.5 py-3 font-mono text-[14px] break-all text-[var(--ink)]">
+        <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] px-3.5 py-3 font-mono text-sm break-all text-[var(--ink)]">
           POST {headerUrl} &nbsp;&middot;&nbsp; Authorization: Bearer &lt;key&gt;
         </div>
         {/* Kept for vendors already posting: the global URL, and the key-in-path form for systems that cannot set a header. */}
-        <p className="mt-2 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+        <p className="mt-2 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
           Also accepted: <span className="font-mono">{legacyUrl}</span> and <span className="font-mono">{legacyUrl}/&lt;key&gt;</span>.
         </p>
       </SettingsCard>
 
-      <TableCard
+      <PagedTableCard
+        total={shownKeys.length}
+        noun="keys"
         title="Posting keys"
         toolbar={
           <DataToolbar
@@ -346,7 +339,7 @@ export function LeadPostKeysSettings() {
                 <th scope="col" className={st.th}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {shownKeys.map((key) => {
                 const stats = statsByKey.get(key.id);
                 const campaigns = campaignsByVendor(key.vendorId);
@@ -364,7 +357,7 @@ export function LeadPostKeysSettings() {
                         {key.vendorName}
                       </button>
                       <span className={cn(st.sub, "flex flex-wrap items-center gap-1.5")}>
-                        <Pill tone={key.isActive ? "success" : "neutral"} dot>{key.isActive ? "Active" : "Disabled"}</Pill>
+                        <StatusChip tone={pillTone(key.isActive ? "success" : "neutral")} dot>{key.isActive ? "Active" : "Disabled"}</StatusChip>
                         <span>
                           Created {when(key.createdAt) ?? "—"}
                           {key.rotatedAt ? ` · retired ${when(key.rotatedAt)}` : ""}
@@ -391,7 +384,7 @@ export function LeadPostKeysSettings() {
                           </option>
                         ))}
                       </select>
-                      {campaignError?.keyId === key.id && <span role="alert" className="mt-1 block text-[12px] text-[var(--error-ink)]">{campaignError.message}</span>}
+                      {campaignError?.keyId === key.id && <span role="alert" className="mt-1 block text-xs text-[var(--error-ink)]">{campaignError.message}</span>}
                     </td>
                     <td className={st.td}>
                       <code className={code}>{key.keyPrefix}&hellip;</code>
@@ -424,10 +417,10 @@ export function LeadPostKeysSettings() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <SettingsGrid>
         <SettingsCard
@@ -442,11 +435,11 @@ export function LeadPostKeysSettings() {
           }
         >
           {!selectedKey ? (
-            <p className="m-0 text-[14px] text-[var(--muted)]">Create a key to map a vendor&rsquo;s field names onto yours.</p>
+            <p className="m-0 text-sm text-[var(--muted)]">Create a key to map a vendor&rsquo;s field names onto yours.</p>
           ) : (
             <div className="flex flex-col gap-3.5">
               {vendorKeys.length > 1 && (
-                <p className="m-0 text-[12px] text-[var(--muted)]">
+                <p className="m-0 text-xs text-[var(--muted)]">
                   {selectedKey.vendorName} has {vendorKeys.length} keys. Saving writes this map to all of them.
                 </p>
               )}
@@ -461,7 +454,7 @@ export function LeadPostKeysSettings() {
                 {KNOWN_LEAD_FIELDS.map((field) => <option key={field} value={field} />)}
               </datalist>
               {draft.length === 0 && !editing ? (
-                <p className="m-0 text-[14px] text-[var(--muted)]">
+                <p className="m-0 text-sm text-[var(--muted)]">
                   No fields mapped. Their payload is read as sent, so it must already use your names &mdash; phone, state and a name.
                 </p>
               ) : (
@@ -482,7 +475,7 @@ export function LeadPostKeysSettings() {
                       return editing ? (
                         <tr key={row.id}>
                           <td className={cn(st.td, "align-top")}>
-                            <input aria-label={`Their field, row ${index + 1}`} className={cn(cellInput, "font-mono text-[14px]")} value={row.theirs} maxLength={120} placeholder="ph1" onChange={(event) => update({ theirs: event.target.value })} />
+                            <input aria-label={`Their field, row ${index + 1}`} className={cn(cellInput, "font-mono text-sm")} value={row.theirs} maxLength={120} placeholder="ph1" onChange={(event) => update({ theirs: event.target.value })} />
                           </td>
                           <td className={cn(st.td, "align-top")}>
                             <input aria-label={`Your field, row ${index + 1}`} list="lead-post-our-fields" className={cellInput} value={row.ours} maxLength={80} placeholder="phone" onChange={(event) => update({ ours: event.target.value.toLowerCase() })} aria-invalid={problem ? true : undefined} />
@@ -499,7 +492,7 @@ export function LeadPostKeysSettings() {
                               onChange={(event) => update({ note: event.target.value })}
                             />
                             {rule && <span className={st.sub}>{rule}</span>}
-                            {problem && <span role="alert" className="mt-1 block text-[12px] text-[var(--error-ink)]">{problem}</span>}
+                            {problem && <span role="alert" className="mt-1 block text-xs text-[var(--error-ink)]">{problem}</span>}
                           </td>
                           <td className={cn(st.td, "align-top")}>
                             <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)]" aria-label={`Remove row ${index + 1}`} onClick={() => setDraft((rows) => rows.filter((item) => item.id !== row.id))}>
@@ -526,7 +519,7 @@ export function LeadPostKeysSettings() {
                   <Button type="button" variant="outline" onClick={() => setDraft((rows) => [...rows, { id: nextRowId(), theirs: "", ours: "", note: "" }])}>
                     <Plus aria-hidden="true" /> Add a field
                   </Button>
-                  {!loaded.schemaReady && <span className="text-[12px] text-[var(--muted)]">Notes need a database update; the map itself saves.</span>}
+                  {!loaded.schemaReady && <span className="text-xs text-[var(--muted)]">Notes need a database update; the map itself saves.</span>}
                 </div>
               )}
             </div>
@@ -535,7 +528,7 @@ export function LeadPostKeysSettings() {
 
         <SettingsCard title={`Rejections, last ${loaded.windowDays} days`}>
           {loaded.rejections.length === 0 ? (
-            <p className="m-0 text-[14px] text-[var(--muted)]">No posts were rejected in the last {loaded.windowDays} days.</p>
+            <p className="m-0 text-sm text-[var(--muted)]">No posts were rejected in the last {loaded.windowDays} days.</p>
           ) : (
             <div className="flex flex-col gap-3.5">
               {loaded.rejections.map((row) => (
@@ -599,7 +592,7 @@ export function LeadPostKeysSettings() {
                 ))}
               </select>
             </Field>
-            {mintError && <span role="alert" className="text-[12px] text-[var(--error-ink)]">{mintError}</span>}
+            {mintError && <span role="alert" className="text-xs text-[var(--error-ink)]">{mintError}</span>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setMinting(false)}>Cancel</Button>
               <Button type="submit" disabled={busy === "mint" || !mintVendor}>
@@ -619,8 +612,8 @@ export function LeadPostKeysSettings() {
             const matches = revokeTyped.trim().toLowerCase() === revoking.vendorName.trim().toLowerCase();
             const fact = (label: string, value: string) => (
               <div>
-                <div className="text-[12px] font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--muted)]">{label}</div>
-                <div className="mt-1 text-[14px] font-semibold tabular-nums text-[var(--ink)]">{value}</div>
+                <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--muted)]">{label}</div>
+                <div className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</div>
               </div>
             );
             return (
@@ -633,8 +626,8 @@ export function LeadPostKeysSettings() {
                 </DialogHeader>
                 <div className="flex flex-col gap-4">
                   <div className="rounded-[8px] border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-4">
-                    <p className="text-[14px] font-semibold text-[var(--error-ink)]">{revoking.vendorName} stops being able to post the moment you confirm</p>
-                    <p className="mt-1 text-[14px] leading-normal text-[var(--body)]">
+                    <p className="text-sm font-semibold text-[var(--error-ink)]">{revoking.vendorName} stops being able to post the moment you confirm</p>
+                    <p className="mt-1 text-sm leading-normal text-[var(--body)]">
                       Their integration will start receiving <code className={code}>401 Unauthorized</code>. Nothing warns them first, and there is no grace period.
                       {" "}{posts ? `${fmt(posts)} ${posts === 1 ? "lead" : "leads"} arrived on this key in the last ${loaded.windowDays} days${stats?.perVendor ? " (counted across this vendor’s keys)" : ""}.` : `No lead arrived on this key in the last ${loaded.windowDays} days.`}
                     </p>
@@ -691,9 +684,9 @@ export function LeadPostKeysSettings() {
 function RevealLine({ label, value, onCopy }: { label: string; value: string; onCopy: (value: string) => Promise<void> }) {
   return (
     <div>
-      <span className="text-[12px] font-semibold text-[var(--muted)]">{label}</span>
+      <span className="text-xs font-semibold text-[var(--muted)]">{label}</span>
       <div className="mt-1 flex items-center gap-2">
-        <code className="flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] p-3 font-mono text-[14px] break-all text-[var(--ink)]">{value}</code>
+        <code className="flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] p-3 font-mono text-sm break-all text-[var(--ink)]">{value}</code>
         <Button type="button" variant="outline" size="icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => void onCopy(value)}>
           <Copy aria-hidden="true" />
         </Button>

@@ -13,7 +13,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // The sidebar owns its own width, so the whole aside is a client component; the server's job is
   // only to decide what this role may see. Role gating stays here, never in the browser.
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    // `portal-agent` is the agent shell's own root class (owner request 2026-10-13: the same sidebar,
+    // bar and page spacing as the app): the fixed rail's offset for <main>, the page ground, card
+    // edges and the 32px page title all come from it, so the two shells cannot drift apart.
+    <div className="portal-agent flex min-h-screen flex-col md:flex-row">
       <AdminSidebar
         nodes={buildAdminNav(admin.role)}
         adminName={admin.name}
@@ -23,7 +26,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           shrink below its widest child — a wide table pushed main, main pushed the page, and the
           sidebar scrolled off the left on every screen with a table. With it, main can shrink and
           the table scrolls inside its own overflow-x-auto container instead (see table-styles.ts). */}
-      <main className="min-w-0 flex-1 bg-[var(--color-page-bg)] flex flex-col">
+      <main className="min-w-0 flex-1 overflow-x-clip bg-[var(--color-page-bg)] flex flex-col">
         <AdminTopBar
           user={{
             name: admin.name,
@@ -32,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             workspaceName: "Insurvas staff",
           }}
         />
-        <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8">
+        <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         {children}
       </div>
       </main>

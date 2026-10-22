@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit/log";
 import { getPartnerChannelFacts } from "@/lib/partnerChat/partnerFacts";
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, createAgentChannel, getAgentChatChannels, getAgentChatDirectory, markChannelRead, markPartnerChatRead, postChannelText, postPartnerText, setAgentChannelArchived, type ChatAttachmentInput } from "@/lib/partnerChat/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const roles = ["owner", "producer"] as const;
 const messageSchema = z.object({ channel_id: z.string().uuid().optional(), partner_id: z.string().uuid().optional(), message: z.string().trim().min(1).max(2000), mentions: z.array(z.string().uuid()).max(20).optional() }).strict().refine((value) => Boolean(value.channel_id || value.partner_id), { message: "Choose a chat channel" });
@@ -32,13 +33,19 @@ async function readInput(request: NextRequest) {
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("inbound_transfers", roles);
+  const auth = await requireFeatureRole("inbound_transfers", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
+    // AG-0.5: in an agency a producer keeps the chat itself (messages people wrote, and the transfer
+    // cards about waiting transfers and his own), but not cards about another producer's transfers, and
+    // not the per-partner facts line, which counts every producer's transfers that day. From the
+    // session; null scope (solo, owner/admin) = everything, as before.
+    const scope = await scopeFor(auth.context);
     // The per-partner facts line is extra: if it cannot be read, the chat still loads without it.
-    const facts = getWorkspaceTimezone(auth.context.tenantId).catch(() => null).then((zone) => getPartnerChannelFacts(auth.context.tenantId, zone)).catch((error) => { console.error("[partner-chat] partner facts failed", error); return []; });
-    const [channels, directory, partnerFacts] = await Promise.all([getAgentChatChannels(auth.context.tenantId, auth.context.userId), getAgentChatDirectory(auth.context.tenantId), facts]);
-    return NextResponse.json({ channels, directory, partnerFacts }, { headers: { "Cache-Control": "no-store" } });
+    const facts = scope !== null ? Promise.resolve([]) : getWorkspaceTimezone(auth.context.tenantId).catch(() => null).then((zone) => getPartnerChannelFacts(auth.context.tenantId, zone)).catch((error) => { console.error("[partner-chat] partner facts failed", error); return []; });
+    const [channels, directory, partnerFacts] = await Promise.all([getAgentChatChannels(auth.context.tenantId, auth.context.userId, scope), getAgentChatDirectory(auth.context.tenantId), facts]);
+    // viewerId: the signed-in person's own id, so the thread can set their messages on the right.
+    return NextResponse.json({ channels, directory, partnerFacts, viewerId: auth.context.userId }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[partner-chat] channel or directory load failed", error);
     return NextResponse.json({ error: "Could not load partner channels" }, { status: 503 });

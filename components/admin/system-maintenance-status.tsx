@@ -46,7 +46,7 @@ export function SystemMaintenanceStatus({
     <Callout tone={tone} title={title}>
       {detail && <p className="m-0">{detail}</p>}
       {lastChange && (
-        <p className={`m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] ${detail ? "mt-1.5" : ""}`}>
+        <p className={`m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] ${detail ? "mt-1.5" : ""}`}>
           Last changed <DashboardUtcTime iso={lastChange.at} text={utcDateTime(lastChange.at)} />
           {lastChange.actorName ? ` by ${lastChange.actorName}` : ""}
           {lastChange.reason ? ` — “${lastChange.reason}”` : ""}

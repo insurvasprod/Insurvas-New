@@ -6,8 +6,10 @@ import { APPLICATION_OUTCOME, fallbackOutcomeKeys, INBOUND_RETURN_CALL } from "@
 import { callModeWorkItem, getCallModeWizard, linkWalkToAttempt, loadDialOutcomeRow } from "@/lib/dialerScripts/callOutcome";
 import { DIAL_OUTCOME_KEY_PATTERN, decideDialOutcomeKey, setterMayRecord, type DialOutcomeRow } from "@/lib/dialerScripts/dialOutcomeKey";
 import { applicationOutcomeFor, assertApplicationOutcomeVerified } from "@/lib/dispositions/applicationGate";
+import { workItemPipelineId } from "@/lib/pipelines/outcomeStages";
 import { answerDisposition, DispositionError } from "@/lib/dispositions/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardCallAttempt } from "@/lib/agency/guards";
 
 // LA-2.12 audit. A setter's whole job is "work the outbound queue" and "record dispositions", and
 // permissions.ts has granted them `dialer.use` since the role was added — but every route here
@@ -71,6 +73,9 @@ function failure(error: unknown, fallback: string) {
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("outbound_dialing", ["owner", "producer"]);
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardCallAttempt(auth.context, (await params).id);
+  if (hidden) return hidden;
   const attemptId = (await params).id;
   if (!z.string().uuid().safeParse(attemptId).success) return NextResponse.json({ error: "Choose a valid call attempt" }, { status: 400 });
   try {
@@ -83,6 +88,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("outbound_dialing", DIALER_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardCallAttempt(auth.context, (await params).id);
+  if (hidden) return hidden;
   const attemptId = (await params).id;
   if (!z.string().uuid().safeParse(attemptId).success) return NextResponse.json({ error: "Choose a valid call attempt" }, { status: 400 });
   const body = await request.json().catch(() => null) as { action?: unknown } | null;
@@ -124,7 +132,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // same test the verification gate below uses. The screen does not offer them; this is the refusal
   // for anything else that calls the API.
   if (auth.context.role === "setter") {
-    const isApplication = key === INBOUND_RETURN_CALL ? false : await applicationOutcomeFor(auth.context.tenantId, key).then((outcome) => Boolean(outcome), () => null);
+    // Judged in the lead's own pipeline, where its own stage for the outcome wins (20261022200000).
+    const isApplication = key === INBOUND_RETURN_CALL ? false : await attemptWorkItemId({ tenantId: auth.context.tenantId, agentId: auth.context.userId, attemptId })
+      .then((itemId) => (itemId ? workItemPipelineId(auth.context.tenantId, itemId) : null))
+      .then((pipelineId) => applicationOutcomeFor(auth.context.tenantId, key, pipelineId))
+      .then((outcome) => Boolean(outcome), () => null);
     if (!setterMayRecord({ role: auth.context.role, key, isApplication }))
       return NextResponse.json({ error: "Setters book appointments; an application is recorded by the licensed agent who takes it.", code: "setter_may_not_sell" }, { status: 403 });
   }

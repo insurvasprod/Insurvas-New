@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { startTransition, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff } from "lucide-react";
@@ -9,14 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
-import { PortalAuthSplitShell, type PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
+import { AuthBrand, PortalAuthSplitShell, type PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-import type { PublicPlanOption } from "@/lib/plans/public";
 import type { MaintenanceStatus } from "@/lib/system/constants";
-
-type BillingCycle = "monthly" | "quarterly" | "yearly";
-
-const cycleLabels: Record<BillingCycle, string> = { monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
 
 /**
  * The panel is reassurance, not content.
@@ -32,10 +27,11 @@ const floorLines = [
   { label: "Callbacks, appointments and the book", value: "One record" },
 ];
 
+// The trial needs a card: it starts on Whop's hosted checkout, which takes the card (2026-10-15).
 const trialPoints = [
   {
-    title: "Card details are never typed here",
-    description: "Payment happens on the provider\u2019s hosted page, after checkout.",
+    title: "A card is required for the trial",
+    description: "You enter it on Whop\u2019s hosted checkout page, never on an Insurvas form.",
   },
   {
     title: "Your plan decides the menu",
@@ -43,20 +39,13 @@ const trialPoints = [
   },
 ];
 
-function availableCycles(plan: PublicPlanOption) {
-  return (["monthly", "quarterly", "yearly"] as BillingCycle[]).filter((cycle) => plan.prices[cycle] !== null);
-}
-
-function money(cents: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
-}
-
-function StoryPanel({ mode }: { mode: PortalAuthMode }) {
+/** The brand panel beside the agent forms; AppAuthFrame (set password, verify and confirm email) shows the sign-in one. */
+export function StoryPanel({ mode }: { mode: PortalAuthMode }) {
   if (mode === "sign-up") {
     return (
       <div className="m-stagger mx-auto w-full max-w-[38rem]">
-        <h2 className="mb-8 max-w-[460px] text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-[var(--on-dark)] sm:text-[40px]">
-          Fourteen days, no card.
+        <h2 className="mb-8 max-w-[520px] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--on-dark)] lg:text-[clamp(2.75rem,4.2vw,3.75rem)]">
+          Free trial. Card required.
         </h2>
         <div className="flex max-w-[460px] flex-col gap-6">
           {trialPoints.map((point) => (
@@ -75,9 +64,6 @@ function StoryPanel({ mode }: { mode: PortalAuthMode }) {
             </div>
           ))}
         </div>
-        <p className="mt-10 max-w-[460px] text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
-          Your workspace and owner account are created before payment, so nothing you type here is lost at checkout.
-        </p>
       </div>
     );
   }
@@ -87,7 +73,7 @@ function StoryPanel({ mode }: { mode: PortalAuthMode }) {
       <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--nav-muted)]">
         Licensed agent portal
       </div>
-      <h2 className="mt-3.5 max-w-[460px] text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-[var(--on-dark)] sm:text-[40px]">
+      <h2 className="mt-3.5 max-w-[520px] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--on-dark)] lg:text-[clamp(2.75rem,4.2vw,3.75rem)]">
         Your floor is already running.
       </h2>
       <div className="mt-8 max-w-[460px]">
@@ -103,46 +89,30 @@ function StoryPanel({ mode }: { mode: PortalAuthMode }) {
           </div>
         ))}
       </div>
-      <p className="mt-8 max-w-[460px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)]">
-        This panel is the reason a licensed agent signs in here rather than anywhere else: the queue does not wait for
-        you, and the first thing you should see is how far behind it is.
-      </p>
     </div>
   );
 }
 
+/**
+ * Sign-in only. Sign-up is the one public flow at /signup (/api/public/signup): email verification,
+ * legal acceptance, the disposable-address check and Whop checkout. The form that used to live here
+ * posted to the legacy app sign-up route (now 410), which skipped all of that and failed on every attempt.
+ */
 export function TenantAuthWorkspace({
-  plans,
-  initialMode = "sign-in",
   maintenance,
 }: {
-  plans: PublicPlanOption[];
-  initialMode?: PortalAuthMode;
   maintenance?: MaintenanceStatus | null;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<PortalAuthMode>(initialMode);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
-  const firstPlan = plans[0];
-  const initialCycles = firstPlan ? availableCycles(firstPlan) : [];
-  const [workspaceName, setWorkspaceName] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [planId, setPlanId] = useState(firstPlan?.id ?? "");
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>(initialCycles[0] ?? "monthly");
-  const [signupError, setSignupError] = useState<string | null>(null);
-  const [signupLoading, setSignupLoading] = useState(false);
-
-  const selectedPlan = useMemo(() => plans.find((plan) => plan.id === planId) ?? null, [plans, planId]);
-  const selectedCycles = selectedPlan ? availableCycles(selectedPlan) : [];
+  // LA-8.2: with two-factor on, the password is step one; the authenticator (or a recovery) code is step two.
+  const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
 
   // "Forgot password" swaps the sign-in form for a one-field reset request in the same panel.
   const [resetting, setResetting] = useState(false);
@@ -150,18 +120,13 @@ export function TenantAuthWorkspace({
   const [resetState, setResetState] = useState<"idle" | "sending" | "sent">("idle");
   const [resetError, setResetError] = useState<string | null>(null);
 
-  function switchMode(next: PortalAuthMode) {
-    setMode(next);
-    setResetting(false);
-    setLoginError(null);
-    setSignupError(null);
-  }
-
   function openReset() {
-    setResetEmail(loginEmail);
-    setResetState("idle");
-    setResetError(null);
-    setResetting(true);
+    startTransition(() => {
+      setResetEmail(loginEmail);
+      setResetState("idle");
+      setResetError(null);
+      setResetting(true);
+    });
   }
 
   async function handleReset(event: FormEvent<HTMLFormElement>) {
@@ -188,6 +153,7 @@ export function TenantAuthWorkspace({
       const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setLoginError(body?.error ?? "Something went wrong"); return; }
+      if (body?.twoFactor) { setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
       // Straight to the landing page, once. The old push("/app") + refresh() rendered the landing page
       // twice and bounced through /app's redirect — the slowest part of "11 seconds after login".
       // Nothing above the shell reads the session, so no refresh is needed for the new cookie.
@@ -199,37 +165,28 @@ export function TenantAuthWorkspace({
     }
   }
 
-  function choosePlan(nextPlanId: string) {
-    const nextPlan = plans.find((plan) => plan.id === nextPlanId);
-    setPlanId(nextPlanId);
-    const cycles = nextPlan ? availableCycles(nextPlan) : [];
-    if (!cycles.includes(billingCycle)) setBillingCycle(cycles[0] ?? "monthly");
-  }
-
-  async function handleSignup(event: FormEvent<HTMLFormElement>) {
+  async function handleTwoFactor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSignupError(null);
-    if (passwordTooShort(signupPassword)) { setSignupError("Use a password with at least 12 characters."); return; }
-    if (signupPassword !== confirmPassword) { setSignupError("The passwords do not match."); return; }
-    if (!workspaceName.trim() || !fullName.trim() || !signupEmail.trim()) { setSignupError("Complete your workspace and account details."); return; }
-    if (!selectedPlan || !selectedCycles.includes(billingCycle)) { setSignupError("Choose an available plan and billing cycle."); return; }
-    setSignupLoading(true);
+    setLoginError(null);
+    setLoginLoading(true);
     try {
-      const response = await fetch("/api/app/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceName, fullName, email: signupEmail, password: signupPassword, planId, billingCycle }) });
+      const payload = useRecoveryCode ? { recoveryCode: twoFactorCode.trim() } : { code: twoFactorCode.replace(/\s/g, "") };
+      const response = await fetch("/api/app/auth/verify-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { setSignupError(body?.error ?? "We could not create your workspace. Check the form and try again."); return; }
+      if (response.status === 401 && /Sign in again/.test(body?.error ?? "")) { setTwoFactorStep(false); setLoginError(body.error); return; }
+      if (!response.ok) { setLoginError(body?.error ?? "That code is not right."); return; }
       router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
-      setSignupError("Could not create your workspace. Check your connection and try again.");
+      setLoginError("Could not check the code. Check your connection and try again.");
     } finally {
-      setSignupLoading(false);
+      setLoginLoading(false);
     }
   }
 
   const brand = (
-    <Link href="/app/login" className="mb-10 flex items-center gap-2.5 no-underline" aria-label="Insurvas licensed agent portal">
+    <AuthBrand href="/" label="Insurvas home">
       <InsurvasLogo size="auth" />
-    </Link>
+    </AuthBrand>
   );
 
   const signIn = (
@@ -238,11 +195,11 @@ export function TenantAuthWorkspace({
       <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
         Licensed agent
       </div>
-      <h1 className="mt-2 text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[40px]">
+      <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
         Welcome back
       </h1>
       <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-        One message covers a wrong email and a wrong password — naming which would confirm the address exists.
+        Sign in to your agency&rsquo;s workspace.
       </p>
 
       <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
@@ -287,9 +244,6 @@ export function TenantAuthWorkspace({
               {showLoginPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
             </button>
           </div>
-          <p className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-            Paste is allowed, and nothing is autofocused.
-          </p>
         </div>
 
         {maintenance?.level === "locked" && (
@@ -316,9 +270,7 @@ export function TenantAuthWorkspace({
           </button>
         </LinkArrow>
         <LinkArrow asChild>
-          <button type="button" onClick={() => switchMode("sign-up")}>
-            Create a workspace
-          </button>
+          <Link href="/signup">Create a workspace</Link>
         </LinkArrow>
       </div>
 
@@ -327,8 +279,14 @@ export function TenantAuthWorkspace({
         <Link href="/partner/login" className="font-semibold text-foreground">
           Use the partner portal instead
         </Link>
-        . Insurvas staff sign in at a different door.
+        .
       </p>
+
+      <nav className="portal-login-footer" aria-label="Legal links">
+        <Link href="/legal/privacy">Privacy</Link>
+        <Link href="/legal/tos">Terms</Link>
+        <a href="mailto:support@insurvas.com">Support</a>
+      </nav>
     </div>
   );
 
@@ -338,7 +296,7 @@ export function TenantAuthWorkspace({
       <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
         Licensed agent
       </div>
-      <h1 className="mt-2 text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[40px]">
+      <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
         {resetState === "sent" ? "Check your inbox" : "Reset your password"}
       </h1>
       {resetState === "sent" ? (
@@ -375,225 +333,50 @@ export function TenantAuthWorkspace({
     </div>
   );
 
-  const signUp = (
-    <div className="m-stagger portal-auth-form-inner portal-auth-signup-inner">
+  const twoFactor = (
+    <div className="m-stagger portal-auth-form-inner">
       {brand}
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-        Licensed agent
-      </div>
-      <h1 className="mt-2 text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[40px]">
-        Create your workspace
+      <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+        Enter your code
       </h1>
       <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-        Nothing here is hard-coded. If the plans call fails, this form says so and refuses to submit rather than
-        creating an account with no plan.
+        {useRecoveryCode ? "Type one of the recovery codes you saved. Each one works once." : "Open your authenticator app and type the six-digit code for Insurvas."}
       </p>
-
-      <form className="flex flex-col gap-4" onSubmit={handleSignup} noValidate>
+      <form className="flex flex-col gap-4" onSubmit={handleTwoFactor} noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="tenant-workspace-name">Workspace name</Label>
+          <Label htmlFor="tenant-login-code">{useRecoveryCode ? "Recovery code" : "Authentication code"}</Label>
           <Input
-            id="tenant-workspace-name"
+            id="tenant-login-code"
+            inputMode={useRecoveryCode ? "text" : "numeric"}
+            autoComplete="one-time-code"
+            autoFocus
             required
-            maxLength={160}
-            value={workspaceName}
-            onChange={(event) => setWorkspaceName(event.target.value)}
+            maxLength={useRecoveryCode ? 20 : 6}
+            value={twoFactorCode}
+            onChange={(event) => { setTwoFactorCode(event.target.value); setLoginError(null); }}
           />
         </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-full-name">Your full name</Label>
-          <Input
-            id="tenant-full-name"
-            required
-            maxLength={120}
-            autoComplete="name"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-signup-email">Work email</Label>
-          <Input
-            id="tenant-signup-email"
-            type="email"
-            required
-            autoComplete="email"
-            value={signupEmail}
-            onChange={(event) => setSignupEmail(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-signup-password">Password</Label>
-          <div className="relative">
-            <Input
-              id="tenant-signup-password"
-              type={showSignupPassword ? "text" : "password"}
-              required
-              minLength={12}
-              autoComplete="new-password"
-              value={signupPassword}
-              onChange={(event) => {
-                setSignupPassword(event.target.value);
-                setSignupError(null);
-              }}
-              className="pr-11"
-            />
-            <button
-              type="button"
-              className="portal-auth-visibility"
-              onClick={() => setShowSignupPassword((value) => !value)}
-              aria-label={showSignupPassword ? "Hide password" : "Show password"}
-              aria-pressed={showSignupPassword}
-            >
-              {showSignupPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-confirm-password">Confirm password</Label>
-          <div className="relative">
-            <Input
-              id="tenant-confirm-password"
-              type={showConfirmPassword ? "text" : "password"}
-              required
-              minLength={12}
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => {
-                setConfirmPassword(event.target.value);
-                setSignupError(null);
-              }}
-              className="pr-11"
-            />
-            <button
-              type="button"
-              className="portal-auth-visibility"
-              onClick={() => setShowConfirmPassword((value) => !value)}
-              aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
-              aria-pressed={showConfirmPassword}
-            >
-              {showConfirmPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-            </button>
-          </div>
-          <p className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-            At least 12 characters. Both fields have their own visibility toggle.
-          </p>
-        </div>
-
-        <div className="rounded-lg bg-[var(--surface-alt)] p-4">
-          <div className="mb-2.5 flex items-baseline justify-between gap-3">
-            <span className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-              Plan — live from the API
-            </span>
-            <span className="text-xs font-semibold text-[var(--accent-ink)]">
-              {selectedPlan ? `${selectedPlan.prices.trialDays}-day trial` : "Plans unavailable"}
-            </span>
-          </div>
-
-          {plans.length ? (
-            <div className="flex flex-col gap-2">
-              {plans.map((plan) => {
-                const cycles = availableCycles(plan);
-                const checked = plan.id === planId;
-                return (
-                  <label
-                    key={plan.id}
-                    className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-3.5 py-3 text-left ${
-                      checked
-                        ? "border-[1.5px] border-[var(--primary)] bg-[var(--soft-orange-surface)]"
-                        : "border border-[var(--border-strong)] bg-card"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="tenant-plan"
-                      className="sr-only"
-                      checked={checked}
-                      onChange={() => choosePlan(plan.id)}
-                    />
-                    <span
-                      className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full ${
-                        checked
-                          ? "bg-[var(--primary)] text-[var(--on-primary)]"
-                          : "border-[1.5px] border-[var(--border-strong)]"
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {checked && <Check className="size-3 stroke-[3]" />}
-                    </span>
-                    <span className="flex-1">
-                      <span className="block text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">
-                        {plan.name}
-                      </span>
-                      <span className="block text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-                        {plan.description || `${plan.planType.replaceAll("_", " ")} workspace`}
-                      </span>
-                    </span>
-                    <span className="text-sm font-semibold tabular-nums text-foreground">
-                      {cycles.length
-                        ? `${money(plan.prices[cycles[0]] ?? 0, plan.prices.currency)} / ${cycleLabels[cycles[0]].toLowerCase()}`
-                        : "Custom"}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="portal-auth-plan-empty">Plans are temporarily unavailable. Try again later.</p>
-          )}
-
-          <div className="mt-3 space-y-1.5">
-            <Label htmlFor="tenant-billing-cycle">Billing cycle</Label>
-            <select
-              id="tenant-billing-cycle"
-              value={billingCycle}
-              onChange={(event) => setBillingCycle(event.target.value as BillingCycle)}
-              disabled={!selectedCycles.length}
-              className="h-11 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-base"
-            >
-              {selectedCycles.map((cycle) => (
-                <option key={cycle} value={cycle}>
-                  {cycleLabels[cycle]} — {money(selectedPlan?.prices[cycle] ?? 0, selectedPlan?.prices.currency ?? "USD")}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {signupError && (
-          <p className="portal-auth-alert" role="alert">
-            {signupError}
-          </p>
-        )}
-
-        <Button type="submit" className="mt-2 h-11 w-full" disabled={signupLoading || !plans.length}>
-          {signupLoading ? "Creating workspace…" : "Create workspace and continue"}
+        {loginError && <p className="portal-auth-alert" role="alert">{loginError}</p>}
+        <Button type="submit" className="mt-2 h-12 w-full" disabled={loginLoading || !twoFactorCode.trim()}>
+          {loginLoading ? "Checking…" : "Continue"}
         </Button>
       </form>
-
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-4">
+      <div className="mt-[22px] flex flex-wrap items-center justify-between gap-4">
         <LinkArrow asChild>
-          <button type="button" onClick={() => switchMode("sign-in")}>
-            Sign in instead
+          <button type="button" onClick={() => { setUseRecoveryCode((value) => !value); setTwoFactorCode(""); setLoginError(null); }}>
+            {useRecoveryCode ? "Use the authenticator app" : "Use a recovery code"}
           </button>
         </LinkArrow>
-        <span className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          <Link href="/legal/privacy">Privacy</Link> · <Link href="/legal/tos">Terms</Link> ·{" "}
-          <a href="mailto:support@insurvas.com">Support</a>
-        </span>
+        <LinkArrow asChild>
+          <button type="button" onClick={() => { setTwoFactorStep(false); setLoginError(null); }}>
+            Back to sign in
+          </button>
+        </LinkArrow>
       </div>
     </div>
   );
 
-  const form = mode === "sign-in" ? (resetting ? reset : signIn) : signUp;
+  const form = twoFactorStep ? twoFactor : resetting ? reset : signIn;
 
-  return <PortalAuthSplitShell mode={mode} className="portal-agent portal-tenant-auth-shell" form={form} story={<StoryPanel mode={mode} />} />;
-}
-
-function passwordTooShort(value: string) {
-  return value.length < 12;
+  return <PortalAuthSplitShell mode="sign-in" className="portal-agent portal-tenant-auth-shell" form={form} story={<StoryPanel mode="sign-in" />} />;
 }

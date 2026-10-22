@@ -4,6 +4,19 @@ import { z } from "zod";
 import { assignLead, assignLeadList, getAssignmentPreview, getAssignmentWorkspace, ListChangedError, previewLeadListAssignment, publishAssignmentRules, returnLeadToPool, saveAgentCapacity, saveAssignmentRule, saveAssignmentSettings, SchemaPendingError } from "@/lib/assignment/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { audit } from "@/lib/audit/log";
+import { refuseRoutingInAgency } from "@/lib/agency/routingGuard";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+
+/**
+ * AG-0.10 + AG-0.5 · every view and action here is routing: the rules, the per-member figures, the
+ * pool preview, assigning and returning leads. In an agency that is the owner's and an admin's
+ * (refuseRoutingInAgency, by role); the scope check (refuseNarrowInAgency) holds the same line by the
+ * AG-0.4 visibility rule, so a session whose scope is narrowed can never reach the agency's routing
+ * whatever its base role. Solo tenants: both answer null and nothing changes.
+ */
+async function refuseRouting(context: { tenantId: string; userId: string; role: string }) {
+  return (await refuseRoutingInAgency(context)) ?? (await refuseNarrowInAgency(context, "Lead routing"));
+}
 
 const allRoles = ["owner", "producer", "assistant", "setter"] as const;
 const managers = ["owner", "producer"] as const;
@@ -32,7 +45,7 @@ const publishedRule = z.discriminatedUnion("matchType", [
   assigneeIds: z.array(z.string().uuid()).max(500).default([]),
   isActive: z.boolean().default(true),
   // 20260925702100: how the rule picks, and up to two more conditions ANDed with its own.
-  strategy: z.enum(["round_robin", "least_loaded"]).default("round_robin"),
+  strategy: z.enum(["round_robin", "least_loaded", "best_placement"]).default("round_robin"),
   conditions: z.array(z.discriminatedUnion("match_type", [
     z.object({ match_type: z.literal("language"), match_values: z.object({ languages: list(20) }).strict() }),
     z.object({ match_type: z.literal("campaign"), match_values: z.object({ campaign_ids: z.array(z.string().uuid()).min(1).max(100) }).strict() }),
@@ -72,6 +85,9 @@ const assignListBody = z.object({
 async function assignList(body: unknown) {
   const auth = await requireFeatureRole("outbound_dialing", managers, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
+  const agencyRefusal = await refuseRouting(auth.context);
+  if (agencyRefusal) return agencyRefusal;
   const parsed = assignListBody.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid list assignment" }, { status: 400 });
   const { campaignId, mode, expected } = parsed.data;
@@ -95,6 +111,9 @@ export async function GET(request: NextRequest) {
     // The whole list through the real router, rolled back; managers only, like the commit.
     const auth = await requireFeatureRole("outbound_dialing", managers);
     if (auth instanceof NextResponse) return auth;
+    // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
+    const agencyRefusal = await refuseRouting(auth.context);
+    if (agencyRefusal) return agencyRefusal;
     const params = request.nextUrl.searchParams;
     const parsed = listPreviewQuery.safeParse({ campaign_id: params.get("campaign_id") ?? undefined, mode: params.get("mode") ?? undefined, user_ids: params.get("user_ids") ?? undefined });
     if (!parsed.success) return NextResponse.json({ error: "Choose a list and how to assign it" }, { status: 400 });
@@ -113,6 +132,9 @@ export async function GET(request: NextRequest) {
     // Runs the real router over the next leads and rolls it all back; managers only, like reassigning.
     const auth = await requireFeatureRole("outbound_dialing", managers);
     if (auth instanceof NextResponse) return auth;
+    // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
+    const agencyRefusal = await refuseRouting(auth.context);
+    if (agencyRefusal) return agencyRefusal;
     try {
       const rows = await getAssignmentPreview(auth.context.tenantId, auth.context.userId, 5);
       return NextResponse.json({ rows, pending: rows === null }, { headers: { "Cache-Control": "no-store" } });
@@ -122,6 +144,9 @@ export async function GET(request: NextRequest) {
   }
   const auth = await requireFeatureRole("outbound_dialing", allRoles);
   if (auth instanceof NextResponse) return auth;
+  // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
+  const agencyRefusal = await refuseRouting(auth.context);
+  if (agencyRefusal) return agencyRefusal;
   try {
     const workspace = await getAssignmentWorkspace(auth.context.tenantId);
     // LA-2.12-2: a setter reads who can take work (the lead lists need it) but not the routing rules
@@ -138,6 +163,9 @@ export async function POST(request: NextRequest) {
   if (body && typeof body === "object" && (body as { action?: unknown }).action === "assign_list") return assignList(body);
   const auth = await requireFeatureRole("outbound_dialing", allRoles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
+  const agencyRefusal = await refuseRouting(auth.context);
+  if (agencyRefusal) return agencyRefusal;
   const action = z.object({ action: z.enum(["assign", "return_to_pool"]), workItemId: z.string().uuid().nullable().optional(), targetUserId: z.string().uuid().nullable().optional(), reason: z.string().trim().max(500).nullable().optional() }).strict().safeParse(body);
   if (!action.success) return NextResponse.json({ error: "Enter a valid assignment action" }, { status: 400 });
   try {
@@ -156,6 +184,9 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", managers, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
+  const agencyRefusal = await refuseRouting(auth.context);
+  if (agencyRefusal) return agencyRefusal;
   const body = await request.json().catch(() => null);
   if (body && typeof body === "object" && "rules" in body) {
     const parsed = publishSchema.safeParse(body);
@@ -190,6 +221,9 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", managers, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
+  const agencyRefusal = await refuseRouting(auth.context);
+  if (agencyRefusal) return agencyRefusal;
   const parsed = z.object({
     restDays: z.number().int().min(0).max(3650).optional(),
     attemptsBeforeRotate: z.number().int().min(0).max(50).nullable().optional(),

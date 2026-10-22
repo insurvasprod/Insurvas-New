@@ -2,12 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
-import { DiscrepancyError, SETTABLE_DISCREPANCY_STATUSES, setDiscrepancyStatus } from "@/lib/discrepancies/service";
+import { DiscrepancyError, SETTABLE_DISCREPANCY_STATUSES, getDiscrepancy, setDiscrepancyStatus } from "@/lib/discrepancies/service";
 import { isRecordId } from "@/lib/ledger/statementConstants";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
- * Money boundary (LA-4.4): a person's decision on one discrepancy — disputed (a letter went to the
+ * Money boundary (LA-4.4 / 4.5): GET reads one discrepancy. PATCH is a person's decision on it — disputed (a letter went to the
  * carrier), resolved (the carrier paid), written off (not pursued), or open again. One audit row
  * per decision, with what it was before. "Cleared" is never set by a person: it means the facts
  * changed and the refresh found it no longer applies.
@@ -15,6 +15,22 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * Owner and bookkeeper only. A write, so a read-only account is refused.
  */
 const roles = ["owner", "bookkeeper"] as const;
+
+/** One finding, with its arithmetic and every status change: reading only, so read-only may. */
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeatureRole("discrepancy_report", roles);
+  if (auth instanceof NextResponse) return auth;
+  const { id } = await params;
+  if (!isRecordId(id)) return NextResponse.json({ error: "That discrepancy is not in this workspace" }, { status: 404 });
+  try {
+    const item = await getDiscrepancy(auth.context.tenantId, id);
+    if (!item) return NextResponse.json({ error: "That discrepancy is not in this workspace" }, { status: 404 });
+    return NextResponse.json({ ok: true, item }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("[discrepancies] one", error);
+    return NextResponse.json({ error: "Could not load the discrepancy" }, { status: 500 });
+  }
+}
 
 const bodySchema = z.object({
   status: z.enum(SETTABLE_DISCREPANCY_STATUSES),

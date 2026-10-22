@@ -3,13 +3,15 @@
 /**
  * Reveal one sensitive value for a minute (LA-3.7). The server writes the access record before the
  * value leaves; on screen it is shown for 60 seconds and then masked again — sooner if the window
- * loses focus or the field goes away. The revealed value lives only in this hook's state.
+ * loses focus or the field goes away. The revealed value lives only in this hook's state. Each
+ * reveal first asks why (components/app/reveal-reason-dialog.tsx); render the returned `dialog`.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useRevealReason } from "@/components/app/reveal-reason-dialog";
 
 import { useWorkspace } from "./context";
 
@@ -19,8 +21,9 @@ const REVEAL_MS = 60_000;
  * `stamp` identifies the stored value (its mask): when the stored value changes, a value revealed
  * for the old one is no longer shown.
  */
-export function useReveal(fieldKey: string, stamp: string | undefined) {
+export function useReveal(fieldKey: string, stamp: string | undefined, label = "value") {
   const { actions } = useWorkspace();
+  const { ask, dialog } = useRevealReason();
   const [shown, setShown] = useState<{ value: string; stamp: string | undefined } | null>(null);
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,9 +35,11 @@ export function useReveal(fieldKey: string, stamp: string | undefined) {
   }, []);
 
   const reveal = useCallback(async () => {
+    const reason = await ask(label);
+    if (reason === null) return;
     setBusy(true);
     try {
-      const value = await actions.reveal(fieldKey);
+      const value = await actions.reveal(fieldKey, reason);
       if (value === null) return;
       if (timer.current) clearTimeout(timer.current);
       setShown({ value, stamp });
@@ -42,7 +47,7 @@ export function useReveal(fieldKey: string, stamp: string | undefined) {
     } finally {
       setBusy(false);
     }
-  }, [actions, fieldKey, stamp]);
+  }, [actions, ask, fieldKey, label, stamp]);
 
   // Leaving the window (or the tab) masks it again; unmounting drops it with the component.
   useEffect(() => {
@@ -58,7 +63,7 @@ export function useReveal(fieldKey: string, stamp: string | undefined) {
   }, [hide]);
 
   const value = shown && shown.stamp === stamp ? shown.value : null;
-  return { value, busy, reveal, hide };
+  return { value, busy, reveal, hide, dialog };
 }
 
 /**
@@ -67,19 +72,20 @@ export function useReveal(fieldKey: string, stamp: string | undefined) {
  * stored mask, so a value revealed for an older number is never shown.
  */
 export function RevealBox({ id, fieldKey, masked, display, hasValue, label }: { id?: string; fieldKey: string; masked: string | undefined; display?: string; hasValue: boolean | undefined; label: string }) {
-  const { value, busy, reveal, hide } = useReveal(fieldKey, masked);
+  const { value, busy, reveal, hide, dialog } = useReveal(fieldKey, masked, label);
   const shown = hasValue && value !== null;
   return (
     <div
       id={id}
       tabIndex={id ? -1 : undefined}
-      className="mt-1.5 flex h-9 min-w-0 items-center justify-between gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pl-3 pr-1 text-[14px] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+      className="mt-1.5 flex h-9 min-w-0 items-center justify-between gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pl-3 pr-1 text-sm text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
       {!hasValue ? (
         <span className="text-[var(--muted)]">Not given</span>
       ) : (
         <span className="min-w-0 truncate font-mono tabular-nums" title={shown ? "Masked again after a minute" : undefined}>{shown ? value : display ?? masked ?? "••••"}</span>
       )}
+      {dialog}
       {hasValue && (shown ? (
         <Button type="button" variant="ghost" size="sm" aria-label={`Hide ${label}`} onClick={hide}>
           <EyeOff aria-hidden="true" />Hide

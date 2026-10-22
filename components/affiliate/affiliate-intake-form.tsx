@@ -90,7 +90,7 @@ export function AffiliateIntakeForm({ slug }: { slug: string }) {
   if (error && !link)
     return shell(
       <div className="w-full max-w-lg rounded-xl border border-border bg-card p-8">
-        <h1 className="text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+        <h1 className="text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
           Referral unavailable
         </h1>
         <p className="mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">{error}</p>
@@ -101,7 +101,7 @@ export function AffiliateIntakeForm({ slug }: { slug: string }) {
     return shell(
       <div className="w-full max-w-lg rounded-xl border border-border bg-card p-8" role="status">
         <span className="inline-flex size-10 items-center justify-center rounded-full bg-[var(--success-surface)] text-[var(--success-ink)]" aria-hidden="true">✓</span>
-        <h1 className="mt-4 text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+        <h1 className="mt-4 text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
           {submitted ? `Thanks, ${submitted}` : "Thanks"} — your request is in
         </h1>
         <p className="mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
@@ -121,7 +121,7 @@ export function AffiliateIntakeForm({ slug }: { slug: string }) {
     <div className="flex w-full max-w-[1000px] flex-col items-start gap-8 lg:flex-row">
       <div className="w-full min-w-0 lg:flex-[1.1]">
         <div className="rounded-xl border border-border bg-card p-6 sm:p-8">
-          <h1 className="text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+          <h1 className="text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
             Speak to a licensed agent
           </h1>
           <p className="mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">

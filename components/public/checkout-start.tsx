@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,12 @@ import { Input } from "@/components/ui/input";
 /**
  * The part of checkout that acts: the coupon card, the button that leaves for the provider, and the
  * line saying the card never reaches us. The plan, dates and summary around it are the server's.
+ *
+ * `disclosure` is the automatic-renewal statement (price, period, first charge date, taxes, where
+ * to cancel). It sits directly above the button so it is read before the buyer leaves for the
+ * provider, as automatic-renewal laws expect of a "clear and conspicuous" disclosure.
  */
-export function CheckoutStart() {
+export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: ReactNode; noPayment?: boolean }) {
   const [couponCode, setCouponCode] = useState("");
   const [valid, setValid] = useState<{ code: string; summary: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +66,8 @@ export function CheckoutStart() {
 
   return (
     <>
-      <div className="rounded-lg border border-border bg-card p-5">
+      {/* A coupon only matters on a payment page; with nothing to pay it is not asked for. */}
+      {!noPayment && <div className="rounded-lg border border-border bg-card p-5">
         <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">
           <label htmlFor="coupon">Coupon</label>
         </h2>
@@ -99,19 +104,25 @@ export function CheckoutStart() {
             </p>
           </>
         )}
-      </div>
+      </div>}
 
-      <Button onClick={start} disabled={busy} className="h-11 w-full px-4">
-        Continue to secure checkout
+      {disclosure ? (
+        <p id="renewal-terms" className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+          {disclosure}
+        </p>
+      ) : null}
+
+      <Button onClick={start} disabled={busy} aria-describedby={disclosure ? "renewal-terms" : undefined} className="h-11 w-full px-4">
+        {busy && noPayment ? "Opening your workspace…" : noPayment ? "Start using Insurvas" : "Continue to secure checkout"}
       </Button>
 
-      <p className="flex items-center justify-center gap-2 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+      {!noPayment && <p className="flex items-center justify-center gap-2 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="4" y="10" width="16" height="10" rx="2" />
           <path d="M8 10V7a4 4 0 0 1 8 0v3" />
         </svg>
         Card details are entered on the provider’s hosted page and never reach Insurvas.
-      </p>
+      </p>}
     </>
   );
 }

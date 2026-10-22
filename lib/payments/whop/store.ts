@@ -4,12 +4,18 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
-import { extractCustomerIds, extractTenantIdFromMetadata, type WhopEnvelope } from "./events";
+import { extractCustomerIds, extractTenantIdFromMetadata, isInFlight, type WhopEnvelope } from "./events";
 
 export type StoredEvent = {
   id: string;
   tenantId: string | null;
   alreadyProcessed: boolean;
+  /**
+   * Another delivery of this same webhook-id is being handled right now: stored moments ago, never
+   * finished, never failed. The caller answers it as a duplicate instead of running the handler a
+   * second time in parallel (billing audit, 2026-10-15).
+   */
+  inFlight: boolean;
 };
 
 /**
@@ -81,7 +87,7 @@ export async function recordWebhookEvent(
     .single();
 
   if (!error && inserted) {
-    return { id: inserted.id, tenantId: inserted.tenant_id, alreadyProcessed: false };
+    return { id: inserted.id, tenantId: inserted.tenant_id, alreadyProcessed: false, inFlight: false };
   }
 
   // 23505: this webhook-id has been delivered before.
@@ -89,19 +95,20 @@ export async function recordWebhookEvent(
     throw new Error(`Could not record webhook ${webhookId}: ${error?.message ?? "unknown error"}`);
   }
 
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from("webhook_events")
-    .select("id, tenant_id, processed_at")
+    .select("id, tenant_id, processed_at, process_error, attempts, received_at")
     .eq("provider", "whop")
     .eq("event_id", webhookId)
     .single();
 
-  if (!existing) throw new Error(`Webhook ${webhookId} conflicted but could not be read back`);
+  if (readError || !existing) throw new Error(`Webhook ${webhookId} conflicted but could not be read back`);
 
   return {
     id: existing.id,
     tenantId: existing.tenant_id,
     alreadyProcessed: existing.processed_at !== null,
+    inFlight: isInFlight(existing),
   };
 }
 

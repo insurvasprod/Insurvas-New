@@ -73,9 +73,9 @@ const SWATCHES = [
 ] as const;
 
 const TYPE_SCALE = [
-  { name: "hero · 56/600/-0.035em", className: "text-[56px] font-semibold leading-[1.02] tracking-[-0.035em]" },
-  { name: "headline-lg · 40/600/-0.03em", className: "text-[40px] font-semibold leading-[1.08] tracking-[-0.03em]" },
-  { name: "title-lg · 32/600/-0.025em", className: "text-[32px] font-semibold leading-[1.13] tracking-[-0.025em]" },
+  { name: "hero · 56/600/-0.035em", className: "text-hero font-semibold leading-[1.02] tracking-[-0.035em]" },
+  { name: "headline-lg · 40/600/-0.03em", className: "text-headline-lg font-semibold leading-[1.08] tracking-[-0.03em]" },
+  { name: "title-lg · 32/600/-0.025em", className: "text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]" },
   { name: "title-md · 24/600/-0.02em", className: "text-2xl font-semibold leading-[1.21] tracking-[-0.02em]" },
   { name: "title-sm · 18/600/-0.015em", className: "text-lg font-semibold leading-[1.28] tracking-[-0.015em]" },
   { name: "body · 16/400/-0.02em", className: "text-base leading-normal tracking-[-0.02em]" },
@@ -125,7 +125,7 @@ export function PrimitivesShowcase() {
           <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
             Reference
           </div>
-          <h1 className="mt-1.5 text-[32px] font-semibold leading-[1.13] tracking-[-0.025em]">Primitives</h1>
+          <h1 className="mt-1.5 text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]">Primitives</h1>
           <p className="mt-1.5 max-w-2xl text-base leading-normal tracking-[-0.02em] text-muted-foreground">
             The tokens and controls every other page is assembled from. Nothing here is decorative.
           </p>

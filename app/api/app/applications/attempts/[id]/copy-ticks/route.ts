@@ -5,6 +5,7 @@ import { actorOf, NO_STORE } from "@/lib/extension/http";
 import { copyTickSchema } from "@/lib/extension/schemas";
 import { listTicks, putTicks } from "@/lib/extension/ticks";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardAttempt } from "@/lib/agency/guards";
 
 /**
  * LA-3.14 · copy-assist ticks, shared between the inline panel and the pop-out window (and the
@@ -15,6 +16,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   try {
     return NextResponse.json({ ticks: await listTicks(actorOf(auth, request).tenantId, id) }, { headers: NO_STORE });
   } catch (error) {
@@ -27,6 +31,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const input = await body(request, copyTickSchema);
   if (input instanceof NextResponse) return input;
   try {

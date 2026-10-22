@@ -1,10 +1,10 @@
 /**
- * The partner's four lanes: New, Claimed, Verification, Converted — the columns and the four
- * figures the partner pipeline board draws.
+ * The partner's four lanes: New, Claimed, Verification, Converted — the figures behind the partner
+ * home's counters (counters.ts). The board's columns are the partner's own pipeline stages
+ * (board.ts, LA-1.17); the lanes stay because the counters must mean the same thing in every tenant.
  *
- * They are not the agency's pipeline stages (a tenant may have one stage called "Submitted"); they
- * are where a submission is in its life, read from the queue item and its verification session,
- * which is the one vocabulary every tenant shares:
+ * They are where a submission is in its life, read from the queue item and its verification
+ * session, which is the one vocabulary every tenant shares:
  *
  *   New           the queue item is unclaimed — "not yet claimed"
  *   Claimed       a closer holds it (claimed, buffer, handed, or the licensed agent has it)

@@ -4,6 +4,7 @@ import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds,
 
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { fetchPlans } from "@/lib/plans/queries";
+import { audienceForPlanType } from "@/lib/agency/constants";
 import { publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
@@ -11,10 +12,10 @@ import { recordLastLogin } from "@/lib/loginEvents/record";
 import { getSetting } from "@/lib/settings/queries";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
-  signTenantSessionToken,
   tenantSessionCookieOptions,
   TENANT_SESSION_COOKIE,
 } from "@/lib/tenantAuth/session";
+import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -135,6 +136,8 @@ export async function POST(request: NextRequest) {
     name: input.fullName,
     verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
+    audience: audienceForPlanType(plan.plan_type),
+    planName: plan.name,
   });
 
   // Signup issues a session, which is a sign-in. Without this, last_login_at stays null for a user
@@ -143,7 +146,8 @@ export async function POST(request: NextRequest) {
   // Found by driving the whole journey in a browser.
   await recordLastLogin("user", created.user_id);
 
-  const token = await signTenantSessionToken(created.user_id, created.tenant_id);
+  // A session row like every other sign-in (LA-8.2), so the owner can see and end it.
+  const { token } = await issueTenantSession({ userId: created.user_id, tenantId: created.tenant_id, sessionVersion: 0, request });
   const response = NextResponse.json({
     ok: true,
     email: input.email,

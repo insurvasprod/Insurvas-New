@@ -187,15 +187,44 @@ export async function resendPartnerInvite(params: { tenantId: string; partnerId:
   return { ...result, has_existing_password: Boolean(user.password_hash) };
 }
 
-export async function setPartnerUserStatus(params: { tenantId: string; partnerId: string; userId: string; status: "active" | "revoked"; maxPartnerUsers?: number | null }): Promise<{ old_status: "active" | "revoked"; new_status: "active" | "revoked" }> {
-  const { data, error } = await getSupabaseServiceClient().rpc("partner_set_user_status_with_limit", {
+/**
+ * `actorPlane` says who is acting: the agency (owner/bookkeeper) or the partner's own admin. The
+ * database records who suspended a user and refuses a partner admin lifting the agency's suspension
+ * (partner_user_suspended_by_agency, migration 20261015591000).
+ */
+export async function setPartnerUserStatus(params: { tenantId: string; partnerId: string; userId: string; status: "active" | "revoked"; maxPartnerUsers?: number | null; actorPlane: "agency" | "partner" }): Promise<{ old_status: "active" | "revoked"; new_status: "active" | "revoked" }> {
+  const supabase = getSupabaseServiceClient() as unknown as { rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }> };
+  const base = {
     p_tenant_id: params.tenantId,
     p_partner_id: params.partnerId,
     p_user_id: params.userId,
     p_status: params.status,
     p_max_partner_users: params.maxPartnerUsers ?? null,
-  });
+  };
+  let { data, error } = await supabase.rpc("partner_set_user_status_with_limit", { ...base, p_actor_plane: params.actorPlane });
+  // Before 20261015591000 the function has no p_actor_plane. The agency side may use the old one;
+  // a partner admin reactivating may not, because the old one cannot tell whose suspension it was.
+  if (error && /p_actor_plane|schema cache|does not exist|Could not find the function/i.test(error.message)) {
+    if (params.actorPlane === "partner" && params.status === "active") throw new Error("partner_user_suspended_by_agency");
+    ({ data, error } = await supabase.rpc("partner_set_user_status_with_limit", base));
+  }
   const result = one(data as unknown as { old_status: "active" | "revoked"; new_status: "active" | "revoked" }[] | { old_status: "active" | "revoked"; new_status: "active" | "revoked" } | null);
   if (error || !result) throw new Error(error?.message ?? "Could not change partner user status");
   return result;
+}
+
+/**
+ * Seats in use across the whole agency (LA-1.19: max_partner_users is "total closers across all
+ * partners"): active users of every active partner, plus this partner's own when it is not active —
+ * the same count partner_invite_user_with_auth enforces. Counted in SQL, so no row cap applies.
+ */
+export async function countAgencyPartnerSeats(tenantId: string, partnerId: string): Promise<number> {
+  const supabase = getSupabaseServiceClient();
+  const [activePartners, ownActive] = await Promise.all([
+    supabase.from("partner_users").select("user_id, partners!inner(status)", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "active").eq("partners.status", "active"),
+    // This partner's own active users when the partner itself is NOT active (an active one is already counted).
+    supabase.from("partner_users").select("user_id, partners!inner(status)", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("status", "active").neq("partners.status", "active"),
+  ]);
+  if (activePartners.error || ownActive.error) throw new Error(`Could not count partner seats: ${(activePartners.error ?? ownActive.error)?.message}`);
+  return (activePartners.count ?? 0) + (ownActive.count ?? 0);
 }

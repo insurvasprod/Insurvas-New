@@ -8,6 +8,8 @@ import { checkLitigatorForDialPreflight } from "./screening";
 import { getDncDialingStatus, performDncVendorLookup } from "./service";
 import { getUsPhone10Digits, maskDialPhone } from "./scrub";
 import { answerAge, daysAge, longDate, windowHoursLabel, type PreflightCheck } from "./preflightChecks";
+import { leadProducer } from "@/lib/agency/guards";
+import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
 
 type Row = Record<string, unknown>;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -136,7 +138,14 @@ async function dncRow(db: Db, normalizedPhone: string, tenantId: string, userId:
  * the evidence the lookups already write (provider-call logs, and the litigator row's screening
  * audit + meter charge on a fresh lookup). Nothing is suppressed, dialled or scheduled.
  */
-export async function runDialPreflightChecks(input: { tenantId: string; userId: string; normalizedPhone: string; state?: string | null; fetcher?: typeof fetch }): Promise<DialPreflightReport> {
+/**
+ * AG-0.5: `scope` (scopeFor, from the session). The suppression, DNC, litigator and window checks are the
+ * agency's compliance answers for a NUMBER and are unchanged. The one producer-scoped part is the lead
+ * the number belongs to: in an agency, a lead assigned to a producer outside the session's scope (or
+ * still in the owner's unassigned pool) is treated as "no lead with this number" — its id, state,
+ * campaign window and consent are not read into the answer. Omitted / null = as before.
+ */
+export async function runDialPreflightChecks(input: { tenantId: string; userId: string; normalizedPhone: string; state?: string | null; fetcher?: typeof fetch; scope?: ProducerScope }): Promise<DialPreflightReport> {
   const db = getSupabaseServiceClient() as unknown as Db;
   let digits: string | null = null;
   try { digits = getUsPhone10Digits(input.normalizedPhone); } catch { digits = null; }
@@ -155,7 +164,11 @@ export async function runDialPreflightChecks(input: { tenantId: string; userId: 
       : Promise.resolve({ result: "unavailable" as const, vendorName: null, checkedAt: null, cached: false, message: "It needs a ten-digit US number." }),
   ]);
 
-  const leadRow = lead ?? null;
+  let leadRow = lead ?? null;
+  if (leadRow && input.scope) {
+    const owner = await leadProducer(input.tenantId, text(leadRow.id)).catch(() => null);
+    if (owner !== input.userId && !rowVisible(input.scope, owner)) leadRow = null;
+  }
   const values = (leadRow?.values && typeof leadRow.values === "object" ? leadRow.values : {}) as Row;
   const leadState = leadRow ? stateFromLeadValues(values) : null;
   const picked = typeof input.state === "string" && /^[A-Z]{2}$/.test(input.state) ? input.state : null;

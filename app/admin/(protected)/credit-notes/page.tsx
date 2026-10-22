@@ -5,6 +5,7 @@ import { canViewInvoices } from "@/lib/invoices/permissions";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { Callout } from "@/components/app/settings/primitives";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { BillingTabs } from "@/components/admin/billing-tabs";
 import { CreditNotesTable, type CreditNoteRow } from "@/components/admin/credit-notes-table";
 import { RaiseCreditNotePicker } from "@/components/admin/raise-credit-note-picker";
@@ -44,6 +45,13 @@ export default async function CreditNotesPage() {
         actions={<RaiseCreditNotePicker invoices={paid} />}
       />
       <BillingTabs />
+
+      <StatStrip label="Credit note totals">
+        <StatTile label="Credit notes" value={notes.length.toLocaleString("en-US")} footnote="all time" />
+        <StatTile label="Pending approval" value={pending.length.toLocaleString("en-US")} valueTone={pending.length > 0 ? "warning" : undefined} footnote={ownPending.length > 0 ? `${ownPending.length.toLocaleString("en-US")} raised by you` : pending.length > 0 ? "needs a second admin" : "none waiting"} />
+        <StatTile label="Failed" value={failed.length.toLocaleString("en-US")} valueTone={failed.length > 0 ? "danger" : undefined} footnote={failed.length > 0 ? "at the provider" : "none failed"} />
+        <StatTile label="Awaiting reconciliation" value={providerPending.length.toLocaleString("en-US")} valueTone={providerPending.length > 0 ? "warning" : undefined} footnote={providerPending.length > 0 ? "provider not confirmed" : "all reconciled"} />
+      </StatStrip>
 
       {(pending.length > 0 || failed.length > 0 || providerPending.length > 0) && (
         <div className="flex flex-col gap-2">

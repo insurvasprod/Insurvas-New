@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { SCORING_SIGNALS, saveScoringSettings, scoringOverview } from "@/lib/scoring/service";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-2.13 · queue scoring — its settings, its weights, and the holdout comparison.
@@ -27,8 +28,10 @@ const saveSchema = z.object({
 }).strict();
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Queue scoring");
+  if (refused) return refused;
   // The holdout comparison's window: the last 14 days by default (the board's reading), or all-time.
   const period = request.nextUrl.searchParams.get("period") === "all" ? "all" : "14d";
   try {
@@ -46,6 +49,8 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Queue scoring");
+  if (refused) return refused;
   const parsed = saveSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json(

@@ -13,6 +13,8 @@ import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from 
 import { attemptHead, fail, type Actor } from "./requirements";
 import { getCaseView } from "./service";
 import type { AttemptView, CaseView } from "./types";
+import { EMAIL_WRAPPER_STYLE } from "@/lib/email/brand";
+import { BusinessIdentityMissingError, businessLogo, requireBusinessIdentity, type BusinessIdentity } from "@/lib/agencyProfile/identity";
 
 /**
  * LA-3.20 welcome pack: on submit, a PDF of what the client agreed to — carrier, amount, draft day,
@@ -146,7 +148,10 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return out;
 }
 
-async function buildPdf(input: { title: string; facts: WelcomeFacts; letter: string; household: { lines: string[] } | null }) {
+/** Who the pack is from (LA-8.3): the business identity's trading name, phone and logo. */
+type PackSender = { name: string; phone: string; logo: { bytes: Uint8Array; type: "png" | "jpg" } | null };
+
+async function buildPdf(input: { title: string; facts: WelcomeFacts; letter: string; household: { lines: string[] } | null; from: PackSender }) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(safe(input.title));
   pdf.setProducer("Insurvas");
@@ -165,6 +170,19 @@ async function buildPdf(input: { title: string; facts: WelcomeFacts; letter: str
       y -= size + lineGap;
     }
   };
+
+  // Who sent it, first: a client who cannot tell phones their bank instead of the agent (LA-8.3).
+  // The logo when there is one that embeds; otherwise the trading name as text, never a broken image.
+  const logo = input.from.logo ? await (input.from.logo.type === "png" ? pdf.embedPng(input.from.logo.bytes) : pdf.embedJpg(input.from.logo.bytes)).catch(() => null) : null;
+  if (logo) {
+    const scale = Math.min(40 / logo.height, 200 / logo.width);
+    page.drawImage(logo, { x: M, y: y - logo.height * scale, width: logo.width * scale, height: logo.height * scale });
+    y -= logo.height * scale + 6;
+  } else {
+    text(input.from.name, { size: 14, f: bold });
+  }
+  text(input.from.phone, { size: 10, color: muted });
+  y -= 14;
 
   text(input.title, { size: 20, f: bold });
   y -= 6;
@@ -212,18 +230,24 @@ async function context(actor: Actor, applicationId: string) {
   const attempt = view.attempts.find((x) => x.id === applicationId);
   if (!attempt) throw new ApplicationError("APPLICATION_NOT_FOUND", "That application could not be found.", 404);
   const settings = resolveSalesSettings((await db().from("tenant_sales_settings").select("settings").eq("tenant_id", actor.tenantId).maybeSingle()).data?.settings);
-  return { head, view, attempt, settings };
+  // LA-8.3: no pack without the trading name and phone it is sent under; the prompt names both.
+  const identity: BusinessIdentity = await requireBusinessIdentity(actor.tenantId, "welcome_pack").catch((error: unknown) => {
+    if (error instanceof BusinessIdentityMissingError) throw new ApplicationError(error.code, error.message, error.status);
+    throw error;
+  });
+  return { head, view, attempt, settings, identity };
 }
 
 /** Write a PDF for the attempt as version `version`, and the pack row that points at it. */
 async function writePdf(actor: Actor, ctx: Awaited<ReturnType<typeof context>>, existing: PackRow | null, note: string | null) {
-  const { view, attempt, settings } = ctx;
+  const { view, attempt, settings, identity } = ctx;
   const agent = await agentFor(actor.tenantId, attempt.id, actor.userId);
   const facts = await factsFor(actor.tenantId, view, attempt, agent);
   const letter = renderWelcomeTemplate(settings.welcomePack, facts);
   const version = existing?.pdf_path ? (existing.pdf_version ?? 1) + 1 : existing?.pdf_version ?? 1;
   const path = welcomePackPath(actor.tenantId, attempt.id, attempt.attemptNo, version);
-  const bytes = await buildPdf({ title: `Welcome, ${facts.client_first_name}`, facts, letter: letter.body, household: null });
+  const from: PackSender = { name: identity.tradingName ?? "", phone: identity.phone ?? "", logo: await businessLogo(identity, actor.tenantId).catch(() => null) };
+  const bytes = await buildPdf({ title: `Welcome, ${facts.client_first_name}`, facts, letter: letter.body, household: null, from });
   // upsert: false — an older version is never overwritten (LA-3.20, "without altering the old one").
   const up = await db().storage.from(WELCOME_BUCKET).upload(path, bytes, { contentType: "application/pdf", upsert: false });
   if (up.error && !/already exists|Duplicate/i.test(up.error.message ?? "")) throw new ApplicationError("WELCOME_PACK_STORAGE", `Could not store the welcome pack: ${up.error.message}`, 500);
@@ -278,7 +302,7 @@ async function claim(tenantId: string, row: PackRow, reissue: boolean) {
 }
 
 function htmlOf(body: string) {
-  return `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#1a1b1c;line-height:1.6;max-width:560px">${escapeHtml(body).split("\n").map((l) => (l ? `<p style="margin:0 0 8px">${l}</p>` : "")).join("")}</div>`;
+  return `<div style="${EMAIL_WRAPPER_STYLE}">${escapeHtml(body).split("\n").map((l) => (l ? `<p style="margin:0 0 8px">${l}</p>` : "")).join("")}</div>`;
 }
 
 async function deliver(actor: Actor, ctx: Awaited<ReturnType<typeof context>>, row: PackRow, facts: WelcomeFacts, letter: { subject: string; body: string }, opts: { explicit: boolean; reissue: boolean }): Promise<Delivery> {

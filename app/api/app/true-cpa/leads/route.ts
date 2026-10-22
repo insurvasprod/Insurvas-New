@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getVendorScorecardLeads } from "@/lib/vendorScorecard/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * The rows behind a scorecard figure: ?stage=received|dialable|undialable|dialed|contacted|quoted|
@@ -10,8 +11,10 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * the total and whether there is more (LA-2.17-7).
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "True CPA");
+  if (refused) return refused;
   try {
     const params = request.nextUrl.searchParams;
     return NextResponse.json(

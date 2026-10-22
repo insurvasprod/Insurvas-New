@@ -1,15 +1,17 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useId, useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { Callout, Field, KeyValues, Pill, control, st } from "@/components/app/settings/primitives";
+import { Callout, Field, KeyValues, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { COMPLIANCE_VENDOR_TYPES, COMPLIANCE_VENDOR_TYPE_LABELS, type ComplianceVendor, type ComplianceVendorType } from "@/lib/compliance/constants";
@@ -61,11 +63,13 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
   const [toggling, setToggling] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
   const mounted = useMounted();
   const formId = useId();
 
   const editing = editingId ? vendors.find((vendor) => vendor.id === editingId) ?? null : null;
   const roles = useMemo(() => vendorRoles(vendors), [vendors]);
+  const { current, rows: pageRows } = paginate(vendors, page);
   const unreachable = unreachableVendors(vendors);
   const posture = dialingPosture(vendors, dialing);
   const enabledCount = vendors.filter((vendor) => vendor.is_enabled).length;
@@ -180,7 +184,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
       )}
       {dialing.demo && <Callout tone="info" title={posture.title} />}
 
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />} />}>
+      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />} />} footer={<Pager page={current} total={vendors.length} noun="vendors" onPage={setPage} />}>
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[880px] table-fixed")}>
             <thead>
@@ -201,7 +205,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                   </td>
                 </tr>
               )}
-              {vendors.map((vendor) => {
+              {pageRows.map((vendor) => {
                 const pill = healthPill(vendor);
                 const role = roles.get(vendor.id) ?? "Unused";
                 return (
@@ -218,9 +222,9 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                     </td>
                     <td className={st.td} title={COMPLIANCE_VENDOR_TYPE_LABELS[vendor.vendor_type]}>{vendor.vendor_type}</td>
                     <td className={st.td}>
-                      {vendor.is_enabled ? <Pill tone="success" dot>Enabled</Pill> : <Pill tone="neutral" dot>Disabled</Pill>}
+                      {vendor.is_enabled ? <StatusChip tone="good" dot>Enabled</StatusChip> : <StatusChip tone="neutral" dot>Disabled</StatusChip>}
                     </td>
-                    <td className={st.td} title={pill.hint}><Pill tone={pill.tone} dot>{pill.label}</Pill></td>
+                    <td className={st.td} title={pill.hint}><StatusChip tone={pillTone(pill.tone)} dot>{pill.label}</StatusChip></td>
                     <td className={cn(st.td, "whitespace-nowrap tabular-nums")} title={timeTitle(vendor.last_checked_at) ?? "No lookup or connection test in the last 7 days"}>
                       {shortUtc(vendor.last_checked_at, nowYear) ?? "—"}
                     </td>
@@ -243,9 +247,9 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
           {editing && health && (
             <div className="flex flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">
               <div className="flex flex-wrap items-center gap-2">
-                {editing.is_enabled ? <Pill tone="success" dot>Enabled</Pill> : <Pill tone="neutral" dot>Disabled</Pill>}
-                <Pill tone={health.tone} dot>{health.label}</Pill>
-                <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{roles.get(editing.id) ?? "Unused"} · {ROLE_HINT[roles.get(editing.id) ?? "Unused"]}</span>
+                {editing.is_enabled ? <StatusChip tone="good" dot>Enabled</StatusChip> : <StatusChip tone="neutral" dot>Disabled</StatusChip>}
+                <StatusChip tone={pillTone(health.tone)} dot>{health.label}</StatusChip>
+                <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{roles.get(editing.id) ?? "Unused"} · {ROLE_HINT[roles.get(editing.id) ?? "Unused"]}</span>
               </div>
               <KeyValues
                 items={[
@@ -257,7 +261,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                   { label: "Priority", value: String(editing.priority) },
                 ]}
               />
-              <p className="m-0 min-w-0 truncate font-mono text-[12px] text-[var(--muted)]" title={editing.endpoint}>{editing.endpoint}</p>
+              <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={editing.endpoint}>{editing.endpoint}</p>
               <div className="flex flex-wrap items-center gap-2.5">
                 <Button type="button" variant="outline" onClick={() => test(editing)} disabled={testing === editing.id}>
                   {testing === editing.id ? "Testing…" : "Test connection"}
@@ -294,7 +298,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                 <input id={`${formId}-cost`} className={control} required type="number" min="0" value={form.cost_per_lookup_cents} onChange={(e) => setForm({ ...form, cost_per_lookup_cents: e.target.value })} />
               </Field>
               {!editing && (
-                <label htmlFor={`${formId}-enabled`} className="flex items-center gap-2 pt-8 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+                <label htmlFor={`${formId}-enabled`} className="flex items-center gap-2 pt-8 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
                   <input id={`${formId}-enabled`} type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} /> Enabled
                 </label>
               )}

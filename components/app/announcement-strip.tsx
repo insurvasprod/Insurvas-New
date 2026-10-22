@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { Announcement } from "@/lib/system/constants";
 
 const TONE: Record<Announcement["type"], string> = {
-  info: "border-[var(--color-blue)]/30 bg-[var(--color-blue)]/10",
+  info: "border-[var(--color-brand)]/30 bg-[var(--color-brand)]/10",
   warning: "border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10",
   critical: "border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10",
 };

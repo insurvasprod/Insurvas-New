@@ -6,6 +6,8 @@ import { phoneLists, suppressionOverview } from "@/lib/suppression/overview";
 import { activeExemption } from "@/lib/suppression/exemptions";
 import { listScreeningAudit } from "@/lib/suppression/screeningAudit";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
+import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import {
   LIST_TYPES,
   MANUAL_SOURCES,
@@ -15,6 +17,7 @@ import {
   type SuppressionListType,
   type SuppressionSource,
 } from "@/lib/suppression/service";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-2.3 · the numbers this tenant must never call.
@@ -41,11 +44,11 @@ const addSchema = z
   .strict();
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("tcpa_checker", READ_ROLES);
-  if (auth instanceof NextResponse) return auth;
-
   const params = request.nextUrl.searchParams;
   const check = params.get("check");
+  // Every view but `?check=` asks the producer scope below, so it is read in the auth round trip.
+  const auth = await requireFeatureRole("tcpa_checker", READ_ROLES, { prefetchScope: !check });
+  if (auth instanceof NextResponse) return auth;
 
   // `?check=` answers one question — "may we call this number" — using the same function the
   // dialer calls. It is separate from the list because the list is a `like` match on digits and
@@ -66,6 +69,12 @@ export async function GET(request: NextRequest) {
       );
     }
   }
+
+  // AG-0.5: past the one-number check, this is the agency's list and its figures — the screening audit
+  // names who checked what, the overview counts every producer's refused dials. A narrow session inside
+  // an agency keeps `?check=` (it is how anyone who dials asks "may we call this person") and nothing else.
+  const refused = await refuseNarrowInAgency(auth.context, "The suppression list");
+  if (refused) return refused;
 
   // `?audit=1`: LA-2.3-9, every screening check (who, when, vendor, raw response, outcome, cached),
   // newest first. `phone` and `outcome` narrow it, `page` (1-based) pages it.
@@ -105,7 +114,7 @@ export async function GET(request: NextRequest) {
       limit: Number(params.get("limit")) || undefined,
     });
     return NextResponse.json(
-      { ...page, canEdit: (WRITE_ROLES as readonly string[]).includes(auth.context.role) },
+      { ...page, canEdit: holdsAnyRole(contextRoles(auth.context), WRITE_ROLES) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
@@ -119,6 +128,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", WRITE_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "The suppression list");
+  if (refused) return refused;
 
   const parsed = addSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)

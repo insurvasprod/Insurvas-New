@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit, auditMany } from "@/lib/audit/log";
-import { importAgentLeads, getAgentTemplate } from "@/lib/agentTemplates/service";
+import { importAgentLeads, getAgentTemplate, PRODUCT_CODE } from "@/lib/agentTemplates/service";
 import { recordImportFailure } from "@/lib/agentTemplates/errors";
 import { MAX_LEAD_IMPORT_ROWS } from "@/lib/agentTemplates/csv";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -10,6 +10,7 @@ import { listPipelines } from "@/lib/pipelines/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { outboundLimitResponse, outboundLimitSnapshot, recordOutboundUsage } from "@/lib/metering/outbound";
 import { isImportDateOrder, isRequiredLeadImportField, type ImportDateOrder } from "@/lib/agentTemplates/csv";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const LEAD_IMPORT_ROLES = ["owner", "producer", "assistant"] as const;
 type CampaignOption = { id: string; vendor_id: string; name: string; status: string };
@@ -18,13 +19,30 @@ type MappingOption = { id: string; vendor_id: string; product_code: string; mapp
 const isMissingColumn = (error: { message: string; code?: string }) => ["42703", "PGRST204"].includes(error.code ?? "") || /date_order/.test(error.message);
 type LooseQuery = PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> & { select(columns: string): LooseQuery; eq(column: string, value: unknown): LooseQuery; in(column: string, values: string[]): LooseQuery; order(column: string, options?: unknown): LooseQuery; maybeSingle(): Promise<{ data: unknown; error: { message: string; code?: string } | null }> };
 
-async function context() {
-  const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES);
+// `write`: the import itself refuses a read-only (paused, suspended or cancelled) account; reading the
+// template does not (LA-8.5).
+// The read (the GET, `write` false) also takes the outbound limit snapshot, in the same round trip as the
+// reads below and from the entitlement the auth step already read, instead of after them with a second read.
+async function context(write = false) {
+  // prefetchScope: the refusal below asks scopeFor, which is then the read already made in the auth round trip.
+  const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write, prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
-  // Independent tenant-scoped reads, so one round trip rather than two.
-  const [template, pipelines] = await Promise.all([
+  const refused = await refuseNarrowInAgency(auth.context, "Lead import");
+  if (refused) return refused;
+  const db = getSupabaseServiceClient() as unknown as { from(table: string): LooseQuery };
+  // getAgentTemplate resolves the PRODUCT_CODE copy (its product_code is that code), so the saved maps
+  // need not wait for it.
+  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).eq("product_code", PRODUCT_CODE).order("updated_at", { ascending: false });
+  // Independent tenant-scoped reads, so one round trip.
+  const [template, pipelines, campaigns, vendors, withDateOrder, limits] = await Promise.all([
     getAgentTemplate(auth.context.tenantId, auth.context.userId),
     listPipelines(auth.context.tenantId),
+    // Drafts too: "New campaign" on Vendors & campaigns creates a draft, and a tenant who just made
+    // one to import into must find it here. The screen says a draft is not dialled until activated.
+    db.from("tenant_campaigns").select("id, vendor_id, name, status").eq("tenant_id", auth.context.tenantId).in("status", ["draft", "active", "paused"]),
+    db.from("tenant_lead_vendors").select("id, name, lead_type, status").eq("tenant_id", auth.context.tenantId).order("name"),
+    readMappings("id, vendor_id, product_code, mapping, updated_at, date_order"),
+    !write ? outboundLimitSnapshot(auth.context.tenantId, auth.entitlement) : Promise.resolve(null),
   ]);
   // Manual list imports are agent-owned leads, so they enter the default marketing pipeline. A
   // single pipeline also keeps a friendly stage name unambiguous when publisher/affiliate
@@ -32,18 +50,9 @@ async function context() {
   // The default pipeline with no partner type, when the tenant has one, is where leads with no
   // partner enter (Settings → Pipelines); otherwise the default marketing pipeline, as before.
   const pipeline = pipelines.find((item) => item.partner_type === null && item.is_default) ?? pipelines.find((item) => item.partner_type === "marketing" && item.is_default) ?? pipelines.find((item) => item.is_default) ?? pipelines[0];
-  const db = getSupabaseServiceClient() as unknown as { from(table: string): LooseQuery };
-  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).eq("product_code", template.template.product_code).order("updated_at", { ascending: false });
-  const [campaigns, vendors, withDateOrder] = await Promise.all([
-    // Drafts too: "New campaign" on Vendors & campaigns creates a draft, and a tenant who just made
-    // one to import into must find it here. The screen says a draft is not dialled until activated.
-    db.from("tenant_campaigns").select("id, vendor_id, name, status").eq("tenant_id", auth.context.tenantId).in("status", ["draft", "active", "paused"]),
-    db.from("tenant_lead_vendors").select("id, name, lead_type, status").eq("tenant_id", auth.context.tenantId).order("name"),
-    readMappings("id, vendor_id, product_code, mapping, updated_at, date_order"),
-  ]);
   // `date_order` arrives with 20260924343000. Before it, the saved maps are read as they always were.
   const mappings = withDateOrder.error && isMissingColumn(withDateOrder.error) ? await readMappings("id, vendor_id, product_code, mapping, updated_at") : withDateOrder;
-  return { auth, template, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: mappings.error ? [] : mappings.data as MappingOption[] };
+  return { auth, template, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: mappings.error ? [] : mappings.data as MappingOption[], limits };
 }
 
 export async function GET() {
@@ -62,7 +71,7 @@ export async function GET() {
     canCreateCampaigns: result.auth.context.role === "owner" || result.auth.context.role === "producer",
     vendors: result.vendors as VendorOption[],
     mappings: result.mappings as MappingOption[],
-    limits: await outboundLimitSnapshot(result.auth.context.tenantId),
+    limits: result.limits,
     // Served from the parser's own constant rather than repeated here, so the screen can never
     // advertise a limit the parser does not enforce.
     maxRows: MAX_LEAD_IMPORT_ROWS,
@@ -70,7 +79,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const result = await context();
+  const result = await context(true);
   if (result instanceof NextResponse) return result;
   const body = await request.json().catch(() => null) as { csv?: unknown; campaign_id?: unknown; vendor_id?: unknown; mapping?: unknown; date_order?: unknown } | null;
   if (typeof body?.csv !== "string") return NextResponse.json({ error: "Choose a CSV file to import" }, { status: 400 });
@@ -81,6 +90,16 @@ export async function POST(request: NextRequest) {
   const suppliedKey = request.headers.get("Idempotency-Key")?.trim();
   if (suppliedKey && suppliedKey.length > 200) return NextResponse.json({ error: "Idempotency-Key is too long" }, { status: 400 });
   const idempotencyKey = suppliedKey || createHash("sha256").update(body.csv, "utf8").digest("hex");
+  // Checked before the request key is claimed: a refusal here writes nothing, so the same file (whose
+  // hash is the key) can be sent again once the campaign is active. Refused after the claim, the key
+  // stayed "processing" and the file could never be imported again (E2E 2026-10-16).
+  const campaignId = typeof body.campaign_id === "string" && body.campaign_id ? body.campaign_id : null;
+  const vendorId = typeof body.vendor_id === "string" && body.vendor_id ? body.vendor_id : null;
+  // The direct import keeps its original rule — active or paused campaigns only. Drafts are listed
+  // for the reviewed importer, which reports that a draft's leads are not served yet.
+  const campaign = campaignId ? result.campaigns.find((item: CampaignOption & { vendor_id?: string }) => item.id === campaignId && item.status !== "draft") : null;
+  if (campaignId && !campaign) return NextResponse.json({ error: "Choose a valid active campaign" }, { status: 400 });
+  if (vendorId && campaign && campaign.vendor_id !== vendorId) return NextResponse.json({ error: "The selected vendor does not own this campaign" }, { status: 400 });
   const supabase = getSupabaseServiceClient();
   const claimed = await supabase.from("agent_lead_import_batches").insert({ tenant_id: result.auth.context.tenantId, idempotency_key: idempotencyKey, created_by: result.auth.context.userId }).select("id, status, response, error_message").maybeSingle();
   if (claimed.error?.code === "23505") {
@@ -92,20 +111,13 @@ export async function POST(request: NextRequest) {
   }
   if (claimed.error || !claimed.data) return NextResponse.json({ error: "Could not start the import request" }, { status: 500 });
   try {
-    const campaignId = typeof body.campaign_id === "string" && body.campaign_id ? body.campaign_id : null;
-    const vendorId = typeof body.vendor_id === "string" && body.vendor_id ? body.vendor_id : null;
-    // The direct import keeps its original rule — active or paused campaigns only. Drafts are listed
-    // for the reviewed importer, which reports that a draft's leads are not served yet.
-    const campaign = campaignId ? result.campaigns.find((item: CampaignOption & { vendor_id?: string }) => item.id === campaignId && item.status !== "draft") : null;
-    if (campaignId && !campaign) return NextResponse.json({ error: "Choose a valid active campaign" }, { status: 400 });
-    if (vendorId && campaign && campaign.vendor_id !== vendorId) return NextResponse.json({ error: "The selected vendor does not own this campaign" }, { status: 400 });
     const mappingVendorId = vendorId ?? campaign?.vendor_id ?? null;
     let mapping = body.mapping;
     if (!mapping && mappingVendorId) {
       const saved = result.mappings.find((item: MappingOption) => item.vendor_id === mappingVendorId);
       mapping = saved?.mapping;
     }
-    const { imported, rejected, scrubMarked } = await importAgentLeads(result.auth.context.tenantId, result.auth.context.userId, result.template, body.csv, result.stages, campaignId, mapping && typeof mapping === "object" && !Array.isArray(mapping) ? mapping as Record<string, string | null> : undefined, dateOrder);
+    const { imported, rejected, scrubMarked, scrubWarning } = await importAgentLeads(result.auth.context.tenantId, result.auth.context.userId, result.template, body.csv, result.stages, campaignId, mapping && typeof mapping === "object" && !Array.isArray(mapping) ? mapping as Record<string, string | null> : undefined, dateOrder);
     const createdCount = imported.filter((item) => item.created).length;
     if (createdCount > 0) await recordOutboundUsage(result.auth.context.tenantId, "monthly_leads_imported", createdCount, `${idempotencyKey}:monthly_leads_imported`, idempotencyKey);
     // Same per-row audit rows as before, written in chunks rather than one insert per lead.
@@ -126,7 +138,7 @@ export async function POST(request: NextRequest) {
       leads: imported.map((item) => ({ rowNumber: item.rowNumber, id: item.lead.id })),
       servable: campaignId ? scrubMarked : true,
       ...(campaignId && !scrubMarked
-        ? { warning: "The leads imported, but this campaign could not be marked as scrubbed, so the dialer will not serve them yet. Mark it on Vendors & campaigns, or re-run the import." }
+        ? { warning: scrubWarning ?? "The leads imported, but this campaign could not be marked as scrubbed, so the dialer will not serve them yet. Mark it on Vendors & campaigns, or re-run the import." }
         : {}),
     };
     const completed = await supabase.from("agent_lead_import_batches").update({ status: "completed", response: responseBody, completed_at: new Date().toISOString() }).eq("id", claimed.data.id).eq("tenant_id", result.auth.context.tenantId);

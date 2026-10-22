@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { LeadRecord, RecordCallback } from "@/lib/leadWorkspace/record";
@@ -104,6 +105,9 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 
 const cell = "px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] whitespace-normal";
 const head = "h-auto bg-[var(--surface-alt)] px-3 py-2";
+/** The pager under a tab's table: the TableCard footer's bar, since these tabs sit in the tab card itself. */
+const pagerBar = "flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-2.5 text-xs text-muted-foreground";
+const PAGE_SIZE = 10;
 
 // ── Attempts ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -116,9 +120,12 @@ const head = "h-auto bg-[var(--surface-alt)] px-3 py-2";
  */
 export function LeadAttemptsTab({ leadId }: { leadId: string }) {
   const state = useLeadRecord(leadId);
+  const [page, setPage] = useState(1);
   return (
     <Loading {...state}>
-      {(record) => (
+      {(record) => {
+        const shown = paginate(record.attempts, page, PAGE_SIZE);
+        return (
         <div>
           {record.attempts.length === 0 ? (
             <p className="px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">No dial has been placed or refused on this lead yet.</p>
@@ -135,7 +142,7 @@ export function LeadAttemptsTab({ leadId }: { leadId: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {record.attempts.map((attempt) => (
+                {shown.rows.map((attempt) => (
                   <TableRow key={attempt.id} className="m-row">
                     <TableCell className={`${cell} tabular-nums`}>{attempt.number ?? "—"}</TableCell>
                     <TableCell className={`${cell} tabular-nums`}>{stamp(attempt.at, record.zones.agent)}</TableCell>
@@ -148,9 +155,11 @@ export function LeadAttemptsTab({ leadId }: { leadId: string }) {
               </TableBody>
             </Table>
           )}
+          {record.attempts.length > PAGE_SIZE && <div className={pagerBar}><Pager page={shown.current} pageSize={PAGE_SIZE} total={record.attempts.length} noun="attempts" onPage={setPage} /></div>}
           <p className="border-t border-border px-5 py-3 text-xs leading-normal text-muted-foreground">Times are {zoneShort(record.zones.agent)}.</p>
         </div>
-      )}
+        );
+      }}
     </Loading>
   );
 }
@@ -173,10 +182,12 @@ const CALLBACK_STATE: Record<string, { label: string; tone: StatusTone; detail: 
  */
 export function LeadCallbacksTab({ leadId }: { leadId: string }) {
   const state = useLeadRecord(leadId);
+  const [page, setPage] = useState(1);
   return (
     <Loading {...state}>
       {(record) => {
         const { customer, agent, window } = record.zones;
+        const shown = paginate(record.callbacks, page, PAGE_SIZE);
         return (
           <div className="px-5 py-[18px]">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -200,7 +211,7 @@ export function LeadCallbacksTab({ leadId }: { leadId: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {record.callbacks.map((row) => {
+                    {shown.rows.map((row) => {
                       const look = CALLBACK_STATE[row.status] ?? { label: row.status, tone: "neutral" as const, detail: () => "" };
                       return (
                         <TableRow key={row.id} className="m-row">
@@ -218,6 +229,7 @@ export function LeadCallbacksTab({ leadId }: { leadId: string }) {
                   </TableBody>
                 </Table>
               )}
+              {record.callbacks.length > PAGE_SIZE && <div className={pagerBar}><Pager page={shown.current} pageSize={PAGE_SIZE} total={record.callbacks.length} noun="callbacks" onPage={setPage} /></div>}
             </div>
           </div>
         );

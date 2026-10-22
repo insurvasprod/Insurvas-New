@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCellMinimal } from "@/lib/csv/cell";
 import { getAgentTemplateForProduct } from "@/lib/agentTemplates/service";
 import { DEFAULT_CEILING } from "@/lib/cadence/engine";
 import { getVendorScorecard } from "@/lib/vendorScorecard/service";
@@ -168,6 +169,9 @@ function listLeads(db: Db, tenantId: string, campaignId: string, withCeiling: bo
         .eq("tenant_id", tenantId)
         .eq("campaign_id", campaignId)
         .eq("lead_queue.tenant_id", tenantId)
+        // Along agent_leads (tenant_id, campaign_id, created_at desc); id alone sent the planner down
+        // the primary key across every tenant (see leadListsReport).
+        .order("created_at", { ascending: false })
         .order("id", { ascending: true })
         .range(start, start + PAGE - 1),
     "the leads in this list",
@@ -556,7 +560,7 @@ export async function claimableRowsCsv(tenantId: string, campaignId: string, onl
   const found = (campaign.data ?? [])[0];
   if (!found) return null;
   const perRecord = nullableNum(found.cost_per_record_cents);
-  const cell = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+  const cell = (value: string) => csvCellMinimal(value);
   const lines = ["phone,reason,detail,source_row,removed_at,cost"];
   for (const row of rows) {
     const reason = removalReason(text(row.outcome), text(row.detail));

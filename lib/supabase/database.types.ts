@@ -6459,7 +6459,7 @@ export type Database = {
       };
     };
     Enums: {
-      legal_doc_type: "tos" | "privacy" | "dpa";
+      legal_doc_type: "tos" | "privacy" | "dpa" | "refund" | "cookies" | "subprocessors";
       email_status: "sent" | "failed" | "skipped";
       admin_role:
         "super_admin" | "support_agent" | "billing_admin" | "platform_config";
@@ -6504,7 +6504,7 @@ export type Database = {
         | "cancelled";
       tenant_status: "provisioning" | "active" | "suspended" | "cancelled";
       tenant_user_role:
-        "owner" | "producer" | "assistant" | "bookkeeper" | "setter";
+        "owner" | "producer" | "assistant" | "bookkeeper" | "setter" | "retention";
       user_status:
         | "pending_verification"
         | "active"

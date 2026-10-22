@@ -7,21 +7,12 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  KeyValues,
-  Pill,
-  SettingsCard,
-  SettingsGrid,
-  SettingsSectionHeader,
-  SettingsStack,
-  st,
-  type PillTone,
-} from "@/components/app/settings/primitives";
+import { Callout, KeyValues, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import {
   AppointmentGrid,
   CeDialog,
@@ -69,7 +60,7 @@ type Vault = {
   /** False until migration 20260924110000: licence type/lines, E&O limits and ethics credits cannot be stored. */
   extendedFields?: boolean;
   /** Which carriers require E&O in force (migration 20260924220100); null before it. */
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean }> | null;
+  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }> | null;
 };
 const LICENCE_TYPE_LABEL: Record<LicenceType, string> = { resident: "Resident", non_resident: "Non-resident" };
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
@@ -131,8 +122,10 @@ export function AppointmentVaultSettings({
 
   const configuredCarriers = useMemo(() => {
     if (!vault) return [];
+    // LA-0.4: a carrier the agency switched off is not offered here.
+    const off = new Set((vault.carrierRequirements ?? []).filter((row) => row.contracted === false).map((row) => row.carrier_id));
     const ids = new Set(vault.tenantCarriers.map((row) => row.carrier_id));
-    return vault.carriers.filter((row) => ids.has(row.id));
+    return vault.carriers.filter((row) => ids.has(row.id) && !off.has(row.id));
   }, [vault]);
   const states = useMemo(
     () =>
@@ -298,7 +291,7 @@ export function AppointmentVaultSettings({
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
             {warnings.map((warning) => (
               <li key={`${warning.source}-${warning.sourceId}`} className="flex flex-wrap items-center gap-2">
-                <Pill tone={warning.days === 90 ? "warning" : "error"}>{plural(warning.daysLeft, "day")}</Pill>
+                <StatusChip dot={false} tone={pillTone(warning.days === 90 ? "warning" : "error")}>{plural(warning.daysLeft, "day")}</StatusChip>
                 <span className="font-semibold text-[var(--ink)]">{warning.label}</span>
                 <span className="text-[var(--muted)]">expires {shortDate(warning.expiresAt)}</span>
               </li>
@@ -307,7 +300,9 @@ export function AppointmentVaultSettings({
         </Callout>
       )}
 
-      <TableCard
+      <PagedTableCard
+        total={licenceRows.length + unlicensedAppointedStates.length}
+        noun="licences"
         title="Licences"
         toolbar={
           <DataToolbar
@@ -343,7 +338,7 @@ export function AppointmentVaultSettings({
               <th scope="col" className={cn(st.th, st.num, "w-[130px]")}>Status</th>
             </tr>
           </thead>
-          <tbody>
+          <PagedBody>
             {licenceRows.map((row) => {
               const days = daysUntilExpiry(row.expires_at, today);
               const status: { tone: PillTone; label: string } =
@@ -355,7 +350,7 @@ export function AppointmentVaultSettings({
                   <td className={st.td}>{row.license_number}</td>
                   <td className={st.td}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
                   <td className={cn(st.td, st.num)}>{shortDate(row.expires_at)}</td>
-                  <td className={cn(st.td, st.num)}><Pill tone={status.tone}>{status.label}</Pill></td>
+                  <td className={cn(st.td, st.num)}><StatusChip dot={false} tone={pillTone(status.tone)}>{status.label}</StatusChip></td>
                 </tr>
               );
             })}
@@ -367,14 +362,14 @@ export function AppointmentVaultSettings({
                 <td className={st.td}>&mdash;</td>
                 <td className={cn(st.td, st.num)}>&mdash;</td>
                 <td className={cn(st.td, st.num)} title="The agency holds an active carrier appointment here but no licence, so no lead in this state can be assigned.">
-                  <Pill tone="error">Not licensed</Pill>
+                  <StatusChip dot={false} tone="danger">Not licensed</StatusChip>
                 </td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <SettingsGrid cols={2}>
         <SettingsCard
@@ -397,7 +392,7 @@ export function AppointmentVaultSettings({
               ]}
             />
           ) : (
-            <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No E&amp;O policy on file.</p>
+            <p className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No E&amp;O policy on file.</p>
           )}
           {eoAlert && (
             <Callout className="mt-4" tone={eoLapsed || (eoDays !== null && eoDays <= 60) ? "error" : "warning"} title={`${eoLapsed ? "E&O cover has lapsed" : `E&O expires in ${plural(eoDays ?? 0, "day")}`}${eoRequiredText}`} />
@@ -409,7 +404,7 @@ export function AppointmentVaultSettings({
           sub={ceRecord ? `${stateName(ceRecord.state)}, ${ceRecord.deadline >= today ? "current cycle" : "last recorded cycle"}` : undefined}
           action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><Plus aria-hidden="true" />Add a cycle</>}</Button> : undefined}
         >
-          {ceRecord ? <CeSummary record={ceRecord} /> : <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No continuing-education cycle recorded.</p>}
+          {ceRecord ? <CeSummary record={ceRecord} /> : <p className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No continuing-education cycle recorded.</p>}
         </SettingsCard>
       </SettingsGrid>
 

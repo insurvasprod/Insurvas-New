@@ -4,6 +4,7 @@ import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { demoteIfFailing, saveBeneficiaries } from "@/lib/applications/mutations";
 import { beneficiariesSchema } from "@/lib/applications/schemas";
+import { guardAttempt } from "@/lib/agency/guards";
 
 /** LA-3.8 · replace the beneficiary set. Shares are hundredths of a percent; totals are checked by QA and the `ready` guard. */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +13,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const input = await body(request, beneficiariesSchema);
   if (input instanceof NextResponse) return input;
   try {

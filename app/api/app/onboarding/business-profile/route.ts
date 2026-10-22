@@ -8,7 +8,9 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (context.userStatus !== "active" || !["business_profile", "ready_for_checkout"].includes(context.onboardingState)) {
+  // awaiting_payment too: the owner may correct the profile while checkout is pending. The RPC keeps
+  // that state (migration 20261015580000), so the open checkout is not lost.
+  if (context.userStatus !== "active" || !["business_profile", "ready_for_checkout", "awaiting_payment"].includes(context.onboardingState)) {
     return NextResponse.json({ error: "Verify your email before completing the business profile" }, { status: 409 });
   }
 
@@ -33,6 +35,10 @@ export async function POST(request: NextRequest) {
     p_recommended_setup_steps: setupSteps,
   });
 
+  // Before migration 20261015580000 is live the RPC still refuses awaiting_payment: say so, not "500".
+  if (error?.message?.includes("BUSINESS_PROFILE_NOT_AVAILABLE")) {
+    return NextResponse.json({ error: "Your business profile cannot be changed at this step. Finish checkout, then update it in Settings." }, { status: 409 });
+  }
   if (error || !data?.[0]) {
     console.error("Could not save signup business profile", error?.code, error?.message);
     return NextResponse.json({ error: "Could not save your business profile" }, { status: 500 });

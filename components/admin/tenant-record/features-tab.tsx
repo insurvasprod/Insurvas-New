@@ -17,7 +17,7 @@ export async function TenantFeaturesTab({ tenantId, admin }: TenantTabProps) {
 
   if (!state) {
     // The frame has already resolved the tenant; this is a tenant deleted between the two reads.
-    return <p className="text-[14px] text-[var(--muted)]">This tenant no longer exists.</p>;
+    return <p className="text-sm text-[var(--muted)]">This tenant no longer exists.</p>;
   }
 
   const kill: KillStates = {};

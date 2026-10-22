@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
@@ -8,6 +9,7 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -25,11 +27,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Callout, KeyValues, Pill, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, KeyValues, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import {
   AssignDialog,
   CancelDialog,
   ChangePlanDialog,
+  ReasonDialog,
   type AssignablePlan,
 } from "@/components/admin/subscription-panel";
 import {
@@ -52,6 +55,8 @@ export type SubscriptionCardsProps = {
   currentPriceCents: number | null;
   seatLimits: Record<string, number | null>;
   seatsHeld: number;
+  /** AG-0.12 · an agency's seat band and producer count, in place of any per-seat line; null for a solo tenant. */
+  agency?: { bandLabel: string; producers: number } | null;
   mrrCents: number | null;
   /** Null when this role may not see payment details. */
   billing: { methodLabel: string | null; collection: "automatic" | "manual" } | null;
@@ -83,8 +88,8 @@ function BoardCard({ title, sub, action, children }: { title: string; sub?: Reac
     <section className="flex min-w-0 flex-col gap-5 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
-          {sub && <p className="mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
+          <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
+          {sub && <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
         </div>
         {action}
       </div>
@@ -94,7 +99,7 @@ function BoardCard({ title, sub, action, children }: { title: string; sub?: Reac
 }
 
 const Sub = ({ children }: { children: ReactNode }) => (
-  <span className="mt-0.5 block text-[12px] leading-[1.5] font-normal tracking-[-0.01em] text-[var(--muted)]">{children}</span>
+  <span className="mt-0.5 block text-xs leading-[1.5] font-normal tracking-[-0.01em] text-[var(--muted)]">{children}</span>
 );
 
 export function SubscriptionCards(props: SubscriptionCardsProps) {
@@ -102,12 +107,12 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<
-    null | "assign" | "change" | "seats" | "cancel" | "trial-extend" | "trial-convert" | "trial-end" | "coupon-apply" | "coupon-remove"
+    null | "assign" | "change" | "seats" | "cancel" | "pause" | "resume" | "trial-extend" | "trial-convert" | "trial-end" | "coupon-apply" | "coupon-remove"
   >(null);
   const close = () => setDialog(null);
 
   /** Every subscription route requires an Idempotency-Key; the trial and coupon routes ignore it. */
-  async function send(url: string, method: "POST" | "DELETE", body: unknown, success: string): Promise<boolean> {
+  async function send(url: string, method: "POST" | "DELETE", body: unknown, success: string | ((payload: { downgradeQueued?: boolean } | null) => string)): Promise<boolean> {
     setBusy(true);
     const res = await fetch(url, {
       method,
@@ -120,9 +125,11 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
       notify.block(payload?.error ?? "Something went wrong");
       return false;
     }
-    const warning = payload?.proration?.warning;
-    if (warning) notify.warn(`${success}. ${warning}`);
-    else notify.done(success);
+    const done = typeof success === "function" ? success(payload) : success;
+    // A post-commit step that could not finish (proration, the audit row) is said, not hidden.
+    const warning = [payload?.proration?.warning, payload?.warning].filter(Boolean).join(" ");
+    if (warning) notify.warn(`${done}. ${warning}`);
+    else notify.done(done);
     close();
     router.refresh();
     return true;
@@ -134,7 +141,7 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
     return (
       <div className="grid gap-5 lg:grid-cols-2">
         <BoardCard title="Current subscription">
-          <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+          <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
             Nothing sold to this tenant yet — no plan, no allowances, no seat limit.
           </p>
           {canManage && (
@@ -152,8 +159,8 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
             onClose={close}
             plans={plans}
             busy={busy}
-            onAssign={(planId, cycle) =>
-              void send("/api/admin/subscriptions", "POST", { tenant_id: tenantId, plan_id: planId, billing_cycle: cycle }, "Plan assigned")
+            onAssign={(planId, cycle, reason) =>
+              void send("/api/admin/subscriptions", "POST", { tenant_id: tenantId, plan_id: planId, billing_cycle: cycle, reason }, "Plan assigned")
             }
           />
         )}
@@ -173,7 +180,12 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
     { label: "Price", value: priceCopy(props.currentPriceCents, subscription.billing_cycle) },
     {
       label: "Seats",
-      value: maxSeats === undefined || maxSeats === null ? `${props.seatsHeld} · no limit` : `${props.seatsHeld} of ${maxSeats}`,
+      value: (
+        <>
+          {maxSeats === undefined || maxSeats === null ? `${props.seatsHeld} · no limit` : `${props.seatsHeld} of ${maxSeats}`}
+          {props.agency && <Sub>{`Band ${props.agency.bandLabel} · ${props.agency.producers} producer${props.agency.producers === 1 ? "" : "s"}`}</Sub>}
+        </>
+      ),
       tone: typeof maxSeats === "number" && props.seatsHeld >= maxSeats ? "warning" : undefined,
     },
     {
@@ -216,8 +228,8 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
   const trialing = status === "trialing";
   const canCoupon = props.coupons !== null;
   const menu = [
-    actions.canPause && { key: "pause", label: "Pause", run: () => void send(subUrl, "POST", { action: "pause", reason: "Paused by administrator" }, "Subscription paused") },
-    actions.canResume && { key: "resume", label: "Resume", run: () => void send(subUrl, "POST", { action: "resume" }, "Subscription resumed") },
+    actions.canPause && { key: "pause", label: "Pause…", run: () => setDialog("pause") },
+    actions.canResume && { key: "resume", label: "Resume…", run: () => setDialog("resume") },
     actions.canCancel && !subscription.cancel_at_period_end && { key: "cancel", label: "Cancel subscription…", danger: true, run: () => setDialog("cancel") },
     trialing && { key: "trial-extend", label: "Extend trial…", run: () => setDialog("trial-extend"), group: "trial" },
     trialing && { key: "trial-convert", label: "Convert to paid now…", run: () => setDialog("trial-convert"), group: "trial" },
@@ -234,13 +246,15 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
     periodEnd: subscription.current_period_end,
     busy,
     seatLimits: props.seatLimits,
-    onChange: (planId: string, applyNow: boolean) =>
-      void send(subUrl, "POST", { action: "change_plan", plan_id: planId, apply_now: applyNow }, applyNow ? "Plan changed" : "Plan change queued for period end"),
+    onChange: (planId: string, applyNow: boolean, reason: string) =>
+      void send(subUrl, "POST", { action: "change_plan", plan_id: planId, apply_now: applyNow, reason }, (payload) =>
+        payload?.downgradeQueued ? "A downgrade waits for the period end — change queued" : applyNow ? "Plan changed" : "Plan change queued for period end",
+      ),
   };
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <BoardCard title="Current subscription" action={<Pill tone={STATUS_TONE[status]} dot>{SUBSCRIPTION_STATUS_LABELS[status]}</Pill>}>
+      <BoardCard title="Current subscription" action={<StatusChip tone={pillTone(STATUS_TONE[status])} dot>{SUBSCRIPTION_STATUS_LABELS[status]}</StatusChip>}>
         {access !== "full" && <Callout tone="warning" title={ACCESS_NOTE[access]} />}
         <KeyValues items={items} />
         {subscription.pending_plan_name && (
@@ -289,7 +303,7 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
             )}
           </div>
         ) : (
-          <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+          <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
             Read-only for your role.
           </p>
         )}
@@ -311,6 +325,14 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
                 {props.seatsHeld} {props.seatsHeld === 1 ? "is" : "are"} held. To change the limit, move them to a plan that allows
                 the number they need.
               </>
+            }
+          />
+          <ReasonDialog
+            mode={dialog === "pause" || dialog === "resume" ? dialog : null}
+            onClose={close}
+            busy={busy}
+            onConfirm={(mode, reason) =>
+              void send(subUrl, "POST", { action: mode, reason }, mode === "pause" ? "Subscription paused" : "Subscription resumed")
             }
           />
           <CancelDialog
@@ -355,8 +377,9 @@ function VersionPinningCard({ pinning, periodEnd }: { pinning: VersionPinning | 
   return (
     <BoardCard title="Version pinning">
       {!pinning || pinning.rows.length === 0 ? (
-        <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No plan, so no version to pin.</p>
+        <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No plan, so no version to pin.</p>
       ) : (
+        <PagedProvider>
         <div className="min-w-0 overflow-x-auto">
           <table className={st.table}>
             <thead>
@@ -367,7 +390,7 @@ function VersionPinningCard({ pinning, periodEnd }: { pinning: VersionPinning | 
                 <th scope="col" className={st.th}>This tenant</th>
               </tr>
             </thead>
-            <tbody className="m-seq">
+            <PagedBody className="m-seq">
               {pinning.rows.map((row) => (
                 <tr key={row.planId} className="m-row">
                   <td className={st.td}>
@@ -376,12 +399,18 @@ function VersionPinningCard({ pinning, periodEnd }: { pinning: VersionPinning | 
                   </td>
                   <td className={st.td}>{fullDate(row.liveFrom)}</td>
                   <td className={cn(st.td, "tabular-nums")}>{row.onIt}</td>
-                  <td className={st.td}>{row.isCurrent ? <Pill tone="success">Here</Pill> : "—"}</td>
+                  <td className={st.td}>{row.isCurrent ? <StatusChip dot={false} tone="good">Here</StatusChip> : "—"}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         </div>
+        {pinning.rows.length > 10 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
+            <PagedPager total={pinning.rows.length} noun="versions" />
+          </div>
+        )}
+        </PagedProvider>
       )}
       {pinning?.move && <MoveCallout move={pinning.move} periodEnd={periodEnd} />}
     </BoardCard>
@@ -399,7 +428,7 @@ function MoveCallout({ move, periodEnd }: { move: NonNullable<VersionPinning["mo
           ? `${to} removes ${listOf(move.removes)}.`
           : `${to} grants the same features as v${move.fromVersion}.`;
   return (
-    <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+    <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
       {what} A move at the same price or less waits until {periodEnd ? fullDate(periodEnd) : "the end of the period"} unless applied now.
     </p>
   );

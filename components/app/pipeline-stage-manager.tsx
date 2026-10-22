@@ -50,7 +50,7 @@ type Props = {
 };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
-const SWATCHES = ["#e04e00", "#4457c7", "#2f7d31", "#0091a8", "#b02a9b", "#59606b", "#c62828", "#b35c00"];
+const SWATCHES = ["#0a8769", "#4457c7", "#e04e00", "#0091a8", "#b02a9b", "#59606b", "#c62828", "#b35c00"];
 const UNITS = [{ value: 1, label: "minutes" }, { value: 60, label: "hours" }, { value: 1440, label: "days" }] as const;
 
 async function request(url: string, method: string, payload: unknown): Promise<{ ok: boolean; error?: string }> {
@@ -494,12 +494,12 @@ export function PipelineCreateDialog({
                 <h3 className="text-base font-semibold">The stages a lead moves through</h3>
                 <div className="grid gap-2 sm:grid-cols-3">
                   {pipelines.map((pipeline) => (
-                    <button key={pipeline.id} type="button" onClick={() => applyCopy(pipeline.id)} className={cn("rounded-lg border px-3 py-2.5 text-left", copyFrom === pipeline.id ? "border-2 border-[var(--primary)] bg-[var(--soft-orange-surface)]" : "border-border bg-card")}>
+                    <button key={pipeline.id} type="button" onClick={() => applyCopy(pipeline.id)} className={cn("rounded-lg border px-3 py-2.5 text-left", copyFrom === pipeline.id ? "border-2 border-[var(--primary)] bg-[var(--primary-soft)]" : "border-border bg-card")}>
                       <span className="block text-sm font-semibold">Copy {pipeline.name}</span>
                       <span className="block text-xs text-muted-foreground">{pipeline.stages.filter((stage) => !stage.is_archived).length} stages</span>
                     </button>
                   ))}
-                  <button type="button" onClick={() => { setCopyFrom("empty"); setStages([{ key: nextKey(), name: "", stage_type: "open", color: "#59606b", description: "" }]); setAssignments({}); }} className={cn("rounded-lg border px-3 py-2.5 text-left", copyFrom === "empty" ? "border-2 border-[var(--primary)] bg-[var(--soft-orange-surface)]" : "border-border bg-card")}>
+                  <button type="button" onClick={() => { setCopyFrom("empty"); setStages([{ key: nextKey(), name: "", stage_type: "open", color: "#59606b", description: "" }]); setAssignments({}); }} className={cn("rounded-lg border px-3 py-2.5 text-left", copyFrom === "empty" ? "border-2 border-[var(--primary)] bg-[var(--primary-soft)]" : "border-border bg-card")}>
                     <span className="block text-sm font-semibold">Start empty</span><span className="block text-xs text-muted-foreground">You add every stage</span>
                   </button>
                 </div>
@@ -618,7 +618,7 @@ function actionSentence(row: LibraryRow) {
 }
 
 const LIBRARY_FILTERS: Array<[LibraryFilter, string]> = [["all", "All"], ["nowhere", "Lands nowhere"], ["advancing", "Advancing"], ["terminal", "Terminal"], ["retired", "Retired"]];
-const LIBRARY_PAGE_SIZE = 25;
+const LIBRARY_PAGE_SIZE = 10;
 
 /**
  * The disposition library (DispositionLibrary): every outcome an agent can record, written once,
@@ -761,7 +761,7 @@ export function DispositionLibrary({ open, onOpenChange, pipelines, context, onC
                     const behaviour = behaviourOf(row, stage);
                     const isSelected = selected?.row.key === row.key;
                     return (
-                      <tr key={row.key} className={cn("cursor-pointer", isSelected && "bg-[var(--soft-orange-surface)]", row.retired && "opacity-70")} onClick={() => pick(row.key)}>
+                      <tr key={row.key} className={cn("cursor-pointer", isSelected && "bg-[var(--primary-soft)]", row.retired && "opacity-70")} onClick={() => pick(row.key)}>
                         <td><button type="button" aria-pressed={isSelected} className="text-left font-semibold text-[var(--body)]!" onClick={(event) => { event.stopPropagation(); pick(row.key); }}>{row.label}</button></td>
                         <td><span className={cn("inline-flex rounded-full px-2 py-[2px] text-xs font-semibold", behaviour === "Lands nowhere" ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : behaviour === "Terminal" ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : behaviour === "Retired" ? "bg-[var(--surface-alt)] text-muted-foreground" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{behaviour}</span></td>
                         <td className={cn("text-xs", !stage && !row.retired ? "font-semibold text-[var(--warning-ink)]" : "text-[var(--body)]")}>

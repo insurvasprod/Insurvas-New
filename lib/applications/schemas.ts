@@ -4,6 +4,7 @@
 import { z } from "zod";
 
 import { APPLICATION_OUTCOMES, BENEFICIARY_RELATIONSHIPS, INCOME_TYPES, INSURED_ROLES, PAYMENT_METHODS } from "./constants";
+import { revealReasonField } from "./revealReason";
 
 const uuid = z.string().uuid();
 const fieldKey = z.string().regex(/^[a-z]+\.[a-z0-9_]+$/, "Choose a valid field");
@@ -19,7 +20,8 @@ export const patchValuesSchema = z.object({
 
 export const putSensitiveSchema = z.object({ field_key: z.literal("insured.ssn"), value: z.string().min(9).max(20) }).strict();
 
-export const revealSchema = z.object({ field_key: fieldKey, surface: z.enum(["web", "copy_assist"]).default("web") }).strict();
+// A reveal says why (lib/applications/revealReason.ts); the reason is kept on the access record.
+export const revealSchema = z.object({ field_key: fieldKey, surface: z.enum(["web", "copy_assist"]).default("web"), reason: revealReasonField }).strict();
 
 export const paymentSchema = z.object({
   method: z.enum(PAYMENT_METHODS),
@@ -83,15 +85,19 @@ export const transitionSchema = z.object({
   issued_on: isoDate.nullish(),
 }).strict();
 
+/** How far ahead of the server's clock a submission time may be: the agent's device clock drifts. */
+export const SUBMITTED_AT_SKEW_MS = 5 * 60_000;
+
 export const submissionSchema = z.object({
   reference: z.string().max(120).nullish(),
   reference_kind: z.enum(["application_no", "policy_no"]).default("application_no"),
-  submitted_at: z.string().datetime({ offset: true }).nullish(),
+  // When it was sent on the carrier's portal: never later than now (plus a few minutes of clock skew).
+  submitted_at: z.string().datetime({ offset: true }).refine((v) => Date.parse(v) <= Date.now() + SUBMITTED_AT_SKEW_MS, { message: "The submission time cannot be in the future." }).nullish(),
   submitted_via: z.enum(["extension", "copy_assist", "carrier_portal_manual"]),
   notes: z.string().max(2000).nullish(),
 }).strict();
 
-export const submissionReferenceSchema = z.object({ reference: z.string().max(120).nullish(), policy_number: z.string().max(120).nullish() }).strict();
+export const submissionReferenceSchema = z.object({ reference: z.string().max(120).nullish(), reference_kind: z.enum(["application_no", "policy_no"]).nullish(), policy_number: z.string().max(120).nullish() }).strict();
 
 export const closeCaseSchema = z.object({ reason_code: z.string().min(1).max(60), reason_text: z.string().max(2000).nullish() }).strict();
 

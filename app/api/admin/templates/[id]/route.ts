@@ -15,6 +15,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const body = await request.json().catch(() => null);
 
+  // SA-4.7: make this template the one its product hands out to agents with no template yet. Not
+  // content either, so no new version. admin_set_default_template (20261015610000) clears the
+  // product's previous default in the same transaction.
+  if (body && Object.keys(body).length === 1 && body.is_default === true) {
+    const { data: before } = await getSupabaseServiceClient().from("templates").select("id, name, product_code, is_active").eq("id", id).maybeSingle();
+    if (!before) return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    if (!before.is_active) return NextResponse.json({ error: "Restore the template before making it the default" }, { status: 409 });
+    const { error } = await getSupabaseServiceClient().rpc("admin_set_default_template" as never, { p_template_id: id } as never) as unknown as { error: { code?: string; message: string } | null };
+    if (error && (error.code === "PGRST202" || error.code === "42883")) {
+      return NextResponse.json({ error: "Default templates need a database update that has not been applied yet." }, { status: 503 });
+    }
+    if (error) return NextResponse.json({ error: "Could not make this the default template" }, { status: 500 });
+    await audit({ actorId: auth.session.sub, action: "template.default_set", targetType: "template", targetId: id, metadata: { name: before.name, product_code: before.product_code }, request });
+    return NextResponse.json({ template: { id, is_default: true } });
+  }
+
   // Availability is not content. Toggling it does not create a meaningless new schema version.
   if (body && Object.keys(body).length === 1 && typeof body.is_active === "boolean") {
     const { data: before } = await getSupabaseServiceClient().from("templates").select("id, name, is_active").eq("id", id).maybeSingle();

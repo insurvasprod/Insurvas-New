@@ -6,6 +6,9 @@ import { parsePartnerMessage, type PartnerCardType, type PartnerMessage, type Pa
 import { notifyTenantAgents } from "@/lib/agentAlerts/service";
 import { notifyPartnerUsers } from "@/lib/partnerAlerts/service";
 import { productLineLabel } from "@/lib/format/productLine";
+import { nobodyClaimedKeyFromPartnerEvent } from "@/lib/queueSla/keys";
+import type { ProducerScope } from "../agency/visibilityCore";
+import { visibleWorkItemIds } from "../transferInbox/scopeCore";
 
 export const PARTNER_CHAT_BUCKET = "partner-chat-attachments";
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -149,6 +152,9 @@ async function resolvedCard(supabase: ReturnType<typeof getSupabaseServiceClient
  */
 export const NOBODY_CLAIMED_ALERT_KIND = "unclaimed_sla_escalation";
 export function nobodyClaimedSourceKey(input: { workItemId?: string | null; eventKey: string }) {
+  // The SLA partner rung names its wait in the event key (a transfer back in the queue alerts again).
+  const fromLadder = nobodyClaimedKeyFromPartnerEvent(input.eventKey);
+  if (fromLadder) return fromLadder;
   return input.workItemId ? `unclaimed-sla:${input.workItemId}:nobody-claimed` : `${input.eventKey}:nobody-claimed`;
 }
 
@@ -295,21 +301,34 @@ async function enrichCards<T extends MessageRow>(supabase: ReturnType<typeof get
   }
 }
 
-async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, allowArchived = false, accessVerified = false) {
+/**
+ * AG-0.5: `scope` (scopeFor, from the session). A partner channel is the agency's, and its system cards
+ * (connected, outcome, dropped …) each name one transfer. In an agency a narrow session keeps the
+ * messages that name no transfer and the ones about transfers it may see (waiting ones and its
+ * producers' — lib/transferInbox/scope.ts); a card about another producer's transfer is left out of the
+ * thread and of the unread count. Omitted / null = every message, as before.
+ */
+type PreloadedChat = { messages: Array<MessageRow & Record<string, unknown>>; readAt: string | null };
+
+async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, allowArchived = false, accessVerified = false, scope: ProducerScope = null, preloaded?: PreloadedChat) {
   const tenantId = channel.tenant_id;
   if (!accessVerified) await assertChannelAccess(supabase, channel, userId, allowArchived);
   else if (!allowArchived && channel.status !== "active") throw new Error("Chat channel is archived");
-  const [messages, read] = await Promise.all([
-    // Newest 200, flipped back to chronological below: ascending + limit returned the OLDEST
-    // 200, so a channel past 200 messages never showed anything new.
-    supabase.from("partner_messages").select("id, channel_id, partner_id, work_item_id, message, message_kind, card_type, card_payload, created_by, created_at, event_key").eq("tenant_id", tenantId).eq("channel_id", channel.id).order("created_at", { ascending: false }).limit(200),
-    supabase.from("partner_message_reads").select("read_at").eq("tenant_id", tenantId).eq("channel_id", channel.id).eq("user_id", userId).maybeSingle(),
-  ]);
+  const [messages, read] = preloaded
+    ? [{ data: preloaded.messages, error: null }, { data: preloaded.readAt ? { read_at: preloaded.readAt } : null }]
+    : await Promise.all([
+      // Newest 200, flipped back to chronological below: ascending + limit returned the OLDEST
+      // 200, so a channel past 200 messages never showed anything new.
+      supabase.from("partner_messages").select("id, channel_id, partner_id, work_item_id, message, message_kind, card_type, card_payload, created_by, created_at, event_key").eq("tenant_id", tenantId).eq("channel_id", channel.id).order("created_at", { ascending: false }).limit(200),
+      supabase.from("partner_message_reads").select("read_at").eq("tenant_id", tenantId).eq("channel_id", channel.id).eq("user_id", userId).maybeSingle(),
+    ]);
   if (messages.error) throw new Error(`Could not load chat: ${messages.error.message}`);
   // "nobody_claimed → Ray only" (LA-1.16-4): cards posted to a partner channel before the writer
   // routed them to the owners stay stored, but the channel no longer shows them to anyone.
   const stored = [...(messages.data ?? [])].reverse();
-  const rows = await enrichCards(supabase, tenantId, channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored);
+  const enriched = await enrichCards(supabase, tenantId, channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored);
+  const visibleItems = scope === null ? null : await visibleWorkItemIds(tenantId, scope, enriched.map((row) => row.work_item_id).filter((id): id is string => Boolean(id)), userId);
+  const rows = visibleItems === null ? enriched : enriched.filter((row) => !row.work_item_id || visibleItems.has(row.work_item_id));
   // Attachments are fetched alongside the note filter; hidden notes' entries are simply never attached below.
   const [visibleNoteIds, attachments] = await Promise.all([
     channel.channel_type === "partner" ? visibleToPartner(supabase, tenantId, rows) : Promise.resolve(new Set<string>()),
@@ -446,12 +465,15 @@ export async function createAgentChannel(input: { tenantId: string; userId: stri
 
 export async function getAgentChatDirectory(tenantId: string) {
   const supabase = getSupabaseServiceClient();
-  const tenantUsers = await supabase.from("tenant_users").select("user_id, role, users!inner(id, name, email, status)").eq("tenant_id", tenantId);
-  // The embed names its foreign key. public.partner_users has TWO relationships to public.users --
-  // user_id and the organizations-era invited_by -- so a bare users!inner is ambiguous and PostgREST
-  // refuses it with PGRST201, which the route turned into a blanket 503. Naming the constraint is
-  // the documented disambiguation and says which person is meant: the member, not the inviter.
-  const partnerUsers = await supabase.from("partner_users").select("user_id, role, partner_id, users!partner_users_user_id_fkey!inner(id, name, email, status), partners!inner(name)").eq("tenant_id", tenantId).eq("status", "active");
+  // Independent reads: one round trip.
+  const [tenantUsers, partnerUsers] = await Promise.all([
+    supabase.from("tenant_users").select("user_id, role, users!inner(id, name, email, status)").eq("tenant_id", tenantId),
+    // The embed names its foreign key. public.partner_users has TWO relationships to public.users --
+    // user_id and the organizations-era invited_by -- so a bare users!inner is ambiguous and PostgREST
+    // refuses it with PGRST201, which the route turned into a blanket 503. Naming the constraint is
+    // the documented disambiguation and says which person is meant: the member, not the inviter.
+    supabase.from("partner_users").select("user_id, role, partner_id, users!partner_users_user_id_fkey!inner(id, name, email, status), partners!inner(name)").eq("tenant_id", tenantId).eq("status", "active"),
+  ]);
   if (tenantUsers.error || partnerUsers.error) throw new Error(`Could not load chat directory: ${tenantUsers.error?.message ?? partnerUsers.error?.message}`);
   return { tenantUsers: tenantUsers.data ?? [], partnerUsers: partnerUsers.data ?? [] };
 }
@@ -480,7 +502,7 @@ export async function setAgentChannelArchived(input: { tenantId: string; channel
   return data as ChatChannel;
 }
 
-export async function getAgentChatChannels(tenantId: string, userId: string) {
+export async function getAgentChatChannels(tenantId: string, userId: string, scope: ProducerScope = null) {
   const supabase = getSupabaseServiceClient();
   // The channel list and this user's memberships are independent, so they go out together; each
   // visible channel then reuses the row already loaded instead of re-reading it (access is still
@@ -497,15 +519,38 @@ export async function getAgentChatChannels(tenantId: string, userId: string) {
   // which resolved their tenant_users membership for this tenant — exactly what isChannelMember
   // accepts for a partner channel — and an internal channel is in `visible` only because
   // `memberIds` holds this user's partner_channel_members row for it.
-  const results = await Promise.all(visible.map(async (channel) => { try { return await chatForLoadedChannel(supabase, channel, userId, true, true); } catch { return null; } }));
+  const latest = await latestMessagesByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id));
+  const results = await Promise.all(visible.map(async (channel) => { try { return await chatForLoadedChannel(supabase, channel, userId, true, true, scope, latest?.get(channel.id)); } catch { return null; } }));
   return results.filter(Boolean);
 }
 
-export async function getAttachmentForUser(tenantId: string, attachmentId: string, userId: string, partnerId?: string | null) {
+let latestMessagesMissingAt = -Infinity;
+
+/**
+ * Every visible channel's newest 200 messages and this user's read mark in one call
+ * (partner_chat_latest_messages, 20261020230000) instead of two reads per channel (66 on the demo tenant).
+ * Null — each channel then reads its own, as before — while the function is not applied or the call fails.
+ */
+async function latestMessagesByChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, userId: string, channelIds: string[]): Promise<Map<string, PreloadedChat> | null> {
+  if (!channelIds.length || Date.now() - latestMessagesMissingAt < 5 * 60_000) return null;
+  type LooseRpc = { rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }> };
+  const { data, error } = await (supabase as unknown as LooseRpc).rpc("partner_chat_latest_messages", { p_tenant_id: tenantId, p_user_id: userId, p_channel_ids: channelIds, p_limit: 200 });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883" || /could not find the function/i.test(error.message)) latestMessagesMissingAt = Date.now();
+    return null;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const byChannel = data as Record<string, { messages?: PreloadedChat["messages"]; read_at?: string | null }>;
+  return new Map(channelIds.map((id) => [id, { messages: byChannel[id]?.messages ?? [], readAt: byChannel[id]?.read_at ?? null }]));
+}
+
+/** AG-0.5: with a `scope`, an attachment on a message about a transfer the session may not see is "not found". */
+export async function getAttachmentForUser(tenantId: string, attachmentId: string, userId: string, partnerId?: string | null, scope: ProducerScope = null) {
   const supabase = getSupabaseServiceClient();
-  const row = await supabase.from("partner_message_attachments").select("id, storage_path, partner_messages!inner(channel_id, partner_id, tenant_id)").eq("tenant_id", tenantId).eq("id", attachmentId).maybeSingle();
+  const row = await supabase.from("partner_message_attachments").select("id, storage_path, partner_messages!inner(channel_id, partner_id, tenant_id, work_item_id)").eq("tenant_id", tenantId).eq("id", attachmentId).maybeSingle();
   if (row.error || !row.data) throw new Error("Attachment not found");
-  const message = row.data.partner_messages as unknown as { channel_id: string; partner_id: string | null; tenant_id: string };
+  const message = row.data.partner_messages as unknown as { channel_id: string; partner_id: string | null; tenant_id: string; work_item_id: string | null };
+  if (scope !== null && message.work_item_id && !(await visibleWorkItemIds(tenantId, scope, [message.work_item_id], userId)).has(message.work_item_id)) throw new Error("Attachment not found");
   const channel = await channelById(supabase, tenantId, message.channel_id);
   if (partnerId && (channel.channel_type !== "partner" || message.partner_id !== partnerId)) throw new Error("Attachment not found");
   await assertChannelAccess(supabase, channel, userId, true);

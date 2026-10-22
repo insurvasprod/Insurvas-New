@@ -4,6 +4,7 @@ import { useState } from "react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
+import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import type { CampaignComparison, ComparisonMetricKey, VendorScorecardRow } from "@/lib/vendorScorecard/types";
 import type { CadenceCaveat } from "@/lib/cadence/history";
@@ -97,7 +98,7 @@ export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { 
       </DataToolbar>
     </form>}
   >
-    {!rows.length && <p className="px-4 py-6 text-sm text-muted-foreground">Load at least two campaign rows to compare.</p>}
+    {!rows.length && <EmptyState title="No campaigns to compare" hint="Two campaigns with leads in this period are needed." />}
     {!check.ok && check.problem !== "order" && !error && <p className={`border-b border-border px-4 py-2.5 text-sm ${TONE_TEXT.info}`}>{check.message}</p>}
     {error && <p role="alert" className="border-b border-border px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
     {offer && <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2.5 text-sm">

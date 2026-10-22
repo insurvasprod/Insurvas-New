@@ -54,7 +54,11 @@ export function VerifyStep() {
     { key: "addr.state", label: "State", shown: state ? STATE_NAME.get(state.toUpperCase()) ?? state : "", fields: [v["addr.state"]], keys: ["addr.state"] },
     { key: "insured.ssn", label: "Social Security number", shown: ssn?.hasValue ? "yes" : "", fields: [ssn], keys: ["insured.ssn"] },
   ];
-  const confirmed = (item: Item) => Boolean(item.shown) && (complete || (item.fields.some(hasContent) && item.fields.every((f) => !hasContent(f) || f!.reviewed)));
+  // What the agent confirmed field by field on the call counts here too, so nothing is asked twice
+  // (LA-2.14), even when the call's verification stopped short of 100%.
+  const onCall = new Set(verification?.confirmedKeys ?? []);
+  const confirmedOnCall = (item: Item) => item.keys.every((k) => onCall.has(k));
+  const confirmed = (item: Item) => Boolean(item.shown) && (complete || confirmedOnCall(item) || (item.fields.some(hasContent) && item.fields.every((f) => !hasContent(f) || f!.reviewed)));
   const count = items.filter(confirmed).length;
   const chip = `${count} of ${items.length} confirmed`;
 
@@ -74,8 +78,8 @@ export function VerifyStep() {
     >
       <div className="flex flex-col gap-1.5">
         <Meter value={count} max={items.length} tone="good" label={chip} className="h-1.5" />
-        <span className="text-[12px] leading-[1.5] text-[var(--muted)]">
-          {chip}{complete ? " · verified on the call" : verification?.workItemId ? " · the call's verification is not finished" : ""}
+        <span className="text-xs leading-[1.5] text-[var(--muted)]">
+          {chip}{complete ? " · verified on the call" : onCall.size ? " · confirmed on the call where marked; the call's verification is not finished" : verification?.workItemId ? " · the call's verification is not finished" : ""}
         </span>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -84,7 +88,9 @@ export function VerifyStep() {
           return (
             <Field key={item.key} label={item.label} htmlFor={item.key}>
               <ValueBox id={item.key} prefilled={isPrefilled(fv)}>{item.shown || <span className="text-[var(--muted)]">Not given — add it on the Application step</span>}</ValueBox>
-              {item.shown && <PrefillHint fv={fv} fieldKey={item.keys} readOnly={readOnly || complete} />}
+              {item.shown && (confirmedOnCall(item)
+                ? <span className="text-xs leading-[1.5] text-[var(--muted)]">Confirmed on the call</span>
+                : <PrefillHint fv={fv} fieldKey={item.keys} readOnly={readOnly || complete} />)}
             </Field>
           );
         })}

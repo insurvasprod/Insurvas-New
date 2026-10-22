@@ -4,6 +4,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { AGENT_ALERT_EVENTS, DEFAULT_AGENT_ALERT_SETTINGS, WORKSPACE_ALERT_EVENTS, WORKSPACE_ALERT_WINDOW_MS, eventTypeForKind, leadIdFromAlertLink, partitionAlertRows, type AgentAlertEvent, type AgentAlertSettings, type AudibleTreatment } from "./presentation";
 import { AUDIBLE } from "@/lib/notify/treatments";
 import { ALERT_CENTRE_WINDOW_MS, WORKSPACE_ALERT_KINDS, buildAlertCentre, type CentreNotificationRow, type CentreQueueRow } from "./centre";
+import { deliveryByKind } from "@/lib/notifications/preferences";
+import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
 
 // The generated database types are refreshed from the live project separately; this service keeps
 // the JSON preference boundary narrow while the migration is being promoted.
@@ -130,19 +132,33 @@ export function soundTreatmentsArePersisted() {
  * path did the claiming, because it is resolved here against the queue rather than by a hook in
  * each claim path. Notifications keep the ten-minute window (see `partitionAlertRows`).
  */
-export async function listAgentAlerts(tenantId: string, userId: string) {
+/**
+ * AG-0.5: `scope` (scopeFor, from the session). An alert is addressed to this person, but its link can
+ * name a lead; in an agency an alert about a lead that is now with a producer outside the session's
+ * scope is left out (a waiting, unassigned lead is nobody's and stays). Omitted / null = as before.
+ */
+export async function listAgentAlerts(tenantId: string, userId: string, scope: ProducerScope = null) {
   // Polled every few seconds by every open agent tab, so the two reads go out together.
   const since = new Date(Date.now() - WORKSPACE_ALERT_WINDOW_MS).toISOString();
   // Newest first so a backlog of old rows can never crowd today's out of the limit; flipped below.
-  const [settings, result] = await Promise.all([getAgentAlertSettings(tenantId, userId), db().from("agent_notifications").select("id, kind, title, body, link, source_key, created_at, read_at").eq("tenant_id", tenantId).eq("recipient_user_id", userId).is("read_at", null).gte("created_at", since).order("created_at", { ascending: false }).limit(200)]);
+  // LA-8.4: which alerts reach this person in the app is Settings › Notifications' to say (per event,
+  // registry default when untouched); the bell keeps only its sounds and do-not-disturb.
+  const [settings, delivery, result] = await Promise.all([getAgentAlertSettings(tenantId, userId), deliveryByKind(userId, tenantId), db().from("agent_notifications").select("id, kind, title, body, link, source_key, created_at, read_at").eq("tenant_id", tenantId).eq("recipient_user_id", userId).is("read_at", null).gte("created_at", since).order("created_at", { ascending: false }).limit(200)]);
   if (result.error) throw new Error(`Could not load alerts: ${result.error.message}`);
-  const rows = ((result.data ?? []) as AlertRow[]).reverse().flatMap((row) => {
+  const allowed = ((result.data ?? []) as AlertRow[]).reverse().flatMap((row) => {
     const eventType = eventTypeForKind(row.kind);
-    return eventType && settings.enabled_events[eventType] ? [{ ...row, event_type: eventType }] : [];
+    const choice = delivery.get(row.kind) ?? { in_app: true, push: true };
+    // `push`: whether the bell may raise a browser notification for it (the person's choice, quiet hours).
+    return eventType && choice.in_app ? [{ ...row, event_type: eventType, push: choice.push }] : [];
   });
+  // A narrowed agency session reads the alerts' queue rows ONCE per poll and answers both questions from it —
+  // whose lead it is now (scope) and whether it is still unclaimed — instead of one read for each.
+  const queue = scope === null ? null : await latestQueueRows(tenantId, allowed.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)));
+  const hiddenLeads = scope === null ? new Set<string>() : outsideScope(queue, scope, userId, allowed.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)));
+  const rows = hiddenLeads.size ? allowed.filter((row) => { const leadId = leadIdFromAlertLink(row.link); return !leadId || !hiddenLeads.has(leadId); }) : allowed;
 
   const leadIds = [...new Set(rows.flatMap((row) => (WORKSPACE_ALERT_EVENTS.includes(row.event_type) ? [leadIdFromAlertLink(row.link)] : [])).filter((id): id is string => Boolean(id)))];
-  const unclaimed = await unclaimedLeadIds(tenantId, leadIds);
+  const unclaimed = scope === null ? await unclaimedLeadIds(tenantId, leadIds) : queue && new Set(leadIds.filter((id) => queue.get(id)?.status === "unclaimed"));
   // A queue read that fails leaves every alert standing: hiding a live problem is the worse error.
   const { live, resolved } = partitionAlertRows(rows, unclaimed ?? new Set(leadIds), Date.now());
 
@@ -163,11 +179,14 @@ export async function listAgentAlerts(tenantId: string, userId: string) {
  * Unlike the feed, a failed queue read fails the page: the centre's whole job is to say which
  * alerts are open, and it cannot do that without the queue.
  */
-export async function listAlertCentre(tenantId: string, userId: string) {
+/** AG-0.5: `scope` as listAgentAlerts — an alert about a lead now with a producer outside it is left out. */
+export async function listAlertCentre(tenantId: string, userId: string, scope: ProducerScope = null) {
   const since = new Date(Date.now() - ALERT_CENTRE_WINDOW_MS).toISOString();
   const alerts = await db().from("agent_notifications").select("id, kind, title, body, link, created_at").eq("tenant_id", tenantId).eq("recipient_user_id", userId).in("kind", [...WORKSPACE_ALERT_KINDS]).gte("created_at", since).order("created_at", { ascending: false }).limit(500);
   if (alerts.error) throw new Error(`Could not load the alert centre: ${alerts.error.message}`);
-  const rows = (alerts.data ?? []) as CentreNotificationRow[];
+  const addressed = (alerts.data ?? []) as CentreNotificationRow[];
+  const hidden = scope === null ? new Set<string>() : await leadsOutsideScope(tenantId, scope, userId, addressed.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)));
+  const rows = hidden.size ? addressed.filter((row) => { const lead = leadIdFromAlertLink(row.link); return !lead || !hidden.has(lead); }) : addressed;
   const leadIds = [...new Set(rows.map((row) => leadIdFromAlertLink(row.link)).filter((id): id is string => Boolean(id)))];
   let queueRows: CentreQueueRow[] = [];
   if (leadIds.length) {
@@ -183,6 +202,36 @@ export async function listAlertCentre(tenantId: string, userId: string) {
     for (const user of (users.data ?? []) as { id: string; name: string | null }[]) if (user.name) names.set(user.id, user.name);
   }
   return buildAlertCentre(rows, queueRows, names);
+}
+
+/**
+ * AG-0.5: the leads among these whose latest queue item is with a producer outside `scope` (and not the
+ * viewer). A lead with no owner on its latest item is nobody's and is not hidden. A failed read hides
+ * them all: the scope closes rather than opens.
+ */
+async function leadsOutsideScope(tenantId: string, scope: readonly string[], viewerId: string, leadIds: string[]): Promise<Set<string>> {
+  return outsideScope(await latestQueueRows(tenantId, leadIds), scope, viewerId, leadIds);
+}
+
+type LatestQueueRow = { owner_user_id: string | null; status: string };
+
+/** Each lead's latest queue row (owner and status); null when the queue could not be read. */
+async function latestQueueRows(tenantId: string, leadIds: string[]): Promise<Map<string, LatestQueueRow> | null> {
+  const unique = [...new Set(leadIds)];
+  if (!unique.length) return new Map();
+  const result = await db().from("lead_queue").select("lead_id, owner_user_id, status, queued_at").eq("tenant_id", tenantId).in("lead_id", unique).order("queued_at", { ascending: false });
+  if (result.error) { console.error(`[agent-alerts] could not read the queue for alert scope: ${result.error.message}`); return null; }
+  const latest = new Map<string, LatestQueueRow>();
+  for (const row of (result.data ?? []) as { lead_id: string; owner_user_id: string | null; status: string }[]) {
+    if (!latest.has(row.lead_id)) latest.set(row.lead_id, { owner_user_id: row.owner_user_id, status: row.status });
+  }
+  return latest;
+}
+
+/** The leads among `leadIds` that are with a producer outside `scope`; every one of them when the queue was not read. */
+function outsideScope(latest: Map<string, LatestQueueRow> | null, scope: readonly string[], viewerId: string, leadIds: string[]): Set<string> {
+  if (latest === null) return new Set(leadIds);
+  return new Set([...latest].filter(([, row]) => row.owner_user_id !== null && row.owner_user_id !== viewerId && !rowVisible(scope, row.owner_user_id)).map(([leadId]) => leadId));
 }
 
 /** The leads among these whose latest queue item is still unclaimed. Null when the queue could not be read. */

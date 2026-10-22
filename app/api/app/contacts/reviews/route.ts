@@ -4,13 +4,16 @@ import { audit } from "@/lib/audit/log";
 import { reviewActionSchema } from "@/lib/contacts/schemas";
 import { ContactConflictError, SchemaNotReadyError, dismissReview, getReviewQueue } from "@/lib/contacts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
 
 /** The duplicate review queue, oldest first. `?index=` (0-based) picks the pair shown ("1 of N"). */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES);
+  const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Duplicate review");
+  if (refused) return refused;
   const index = Math.max(0, Math.floor(Number(request.nextUrl.searchParams.get("index") ?? 0) || 0));
   try { return NextResponse.json(await getReviewQueue(auth.context.tenantId, index)); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load the review queue" }, { status: 500 }); }
@@ -20,6 +23,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Duplicate review");
+  if (refused) return refused;
   const parsed = reviewActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a match to dismiss" }, { status: 400 });
   try {

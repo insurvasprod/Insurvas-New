@@ -12,16 +12,17 @@
  * through a short-lived signed link. Owners edit; producers read.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Callout, Pill, SettingsStack, st } from "@/components/app/settings/primitives";
+import { Callout, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { DISCLOSURES, SALES_CARRIERS } from "@/lib/applications/settingsFixtures";
 import { describeClause, type Clause } from "@/lib/salesSettings/editing";
 import type { DisclosureInput, DisclosureItem, DisclosureLibrary } from "@/lib/salesSettings/disclosures";
@@ -80,7 +81,7 @@ function StatusCell({ doc }: { doc: Doc }) {
   return (
     <span className="flex flex-wrap items-center gap-2">
       <LifecyclePill state="draft" />
-      {doc.live && <span className="text-[12px] text-[var(--muted)]">v{doc.live.version}{doc.live.platform ? " (Insurvas)" : ""} in use</span>}
+      {doc.live && <span className="text-xs text-[var(--muted)]">v{doc.live.version}{doc.live.platform ? " (Insurvas)" : ""} in use</span>}
     </span>
   );
 }
@@ -296,7 +297,7 @@ export function SalesDisclosures() {
             <Button type="button" variant="outline" disabled={busy} onClick={() => copyToAgency(open)}><Copy aria-hidden="true" />Copy to my agency</Button>
           ) : state ? (
             <span className="flex shrink-0 items-center gap-2">
-              <Pill tone={open?.platform ? "neutral" : "brand"}>v{open?.version}</Pill><LifecyclePill state={state} />
+              <StatusChip dot={false} tone={pillTone(open?.platform ? "neutral" : "brand")}>v{open?.version}</StatusChip><LifecyclePill state={state} />
               {state === "live" && canEdit && <Button type="button" variant="outline" disabled={busy || dirty} title={dirty ? "Save or discard your changes first." : undefined} onClick={() => setConfirmRetire(true)}>Retire</Button>}
             </span>
           ) : <LifecyclePill state="draft" />}
@@ -352,7 +353,9 @@ export function SalesDisclosures() {
         <>
           {!canEdit && <ReadOnlyNotice what="disclosures" />}
 
-          <TableCard
+          <PagedTableCard
+            total={docs.length}
+            noun="documents"
             title="The library"
             description="One row per document. A version is superseded, never overwritten."
             toolbar={
@@ -382,7 +385,7 @@ export function SalesDisclosures() {
                     <th scope="col" className={cn(st.th, "w-[210px] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {docs.map((d) => (
                     <tr key={d.code} className="m-row">
                       <td className={st.td}>
@@ -391,7 +394,7 @@ export function SalesDisclosures() {
                       </td>
                       <td className={st.td}>{listOr(d.shown.states, "All states")}</td>
                       <td className={st.td}>{listOr(d.shown.carrierIds.map(carrierName), "All carriers")}</td>
-                      <td className={st.td}><Pill tone={d.shown.platform ? "neutral" : "brand"}>v{d.shown.version}</Pill></td>
+                      <td className={st.td}><StatusChip dot={false} tone={pillTone(d.shown.platform ? "neutral" : "brand")}>v{d.shown.version}</StatusChip></td>
                       <td className={st.td}><StatusCell doc={d} /></td>
                       <td className={cn(st.td, "whitespace-nowrap text-right")}>
                         <span className="inline-flex gap-2">
@@ -403,20 +406,20 @@ export function SalesDisclosures() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
-          <TableCard title="What triggers them" description="Read top to bottom against the case. A document named twice is attached once.">
+          <PagedTableCard total={liveRules.length} noun="rules" title="What triggers them" description="Read top to bottom against the case. A document named twice is attached once.">
             {liveRules.length === 0 ? (
               <EmptyState title="No rules yet" hint="No published document has a rule, so none is required on its own. Open a document to add one." />
             ) : (
-              <ol className="m-0 list-none p-0">
+              <PagedBody as="ol" className="m-0 list-none p-0">
                 {liveRules.map(({ doc, item, rule, i }) => (
                   <li key={`${item.id}-${i}`} className="border-t border-[var(--border)] px-4 py-3 first:border-t-0">
                     <div className="flex flex-wrap items-center justify-between gap-4">
-                      <span className="min-w-0 text-[14px] leading-[1.5] text-[var(--body)]">
+                      <span className="min-w-0 text-sm leading-[1.5] text-[var(--body)]">
                         {rule.clauses.map((c, j) => (
                           <span key={j}>
                             {j > 0 && <span className="font-semibold text-[var(--muted)]"> AND </span>}
@@ -426,17 +429,17 @@ export function SalesDisclosures() {
                         <span className="text-[var(--muted)]"> → </span>
                         <strong className="font-semibold text-[var(--ink)]">{item.title}</strong>
                       </span>
-                      <Pill tone="error">Required</Pill>
+                      <StatusChip dot={false} tone="danger">Required</StatusChip>
                     </div>
-                    <div className="text-[12px] leading-[1.5] text-[var(--muted)]">
+                    <div className="text-xs leading-[1.5] text-[var(--muted)]">
                       {item.states.length ? `Only in ${item.states.join(", ")}` : "Every state"} · {item.carrierIds.length ? `only ${item.carrierIds.map(carrierName).join(", ")}` : "every carrier"} · v{item.version}{item.platform ? " (Insurvas)" : ""}
                       {doc.own[0] && doc.own[0].status === "draft" ? ` · draft v${doc.own[0].version} waiting to be published` : ""}
                     </div>
                   </li>
                 ))}
-              </ol>
+              </PagedBody>
             )}
-          </TableCard>
+          </PagedTableCard>
         </>
       )}
     </SettingsStack>

@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { actorOf, isUuid } from "@/lib/applications/http";
 import { leadStageState, reconcileLeadStage } from "@/lib/applications/stageSyncService";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
 
 /**
  * LA-3.23 · the leads board's reconcile hint. GET says where the lead's application puts the card and
@@ -16,6 +17,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That lead could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, id);
+  if (hidden) return hidden;
   try {
     const state = await leadStageState(actor.tenantId, id);
     return NextResponse.json({ state });
@@ -31,6 +35,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That lead could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, id);
+  if (hidden) return hidden;
   try {
     const result = await reconcileLeadStage(actor.tenantId, id, actor.userId);
     if (!result.moved) {

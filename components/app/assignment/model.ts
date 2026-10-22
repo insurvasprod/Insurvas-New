@@ -50,7 +50,7 @@ export function draftFromRule(rule: AssignmentRule): RuleDraft {
     campaignIds: rule.match_type === "campaign" ? listOf(values, "campaign_ids", "values") : [],
     licensedOnly: values.licensed_only === true,
     assigneeIds: rule.assignee_ids ?? [],
-    strategy: rule.strategy === "least_loaded" ? "least_loaded" : "round_robin",
+    strategy: rule.strategy === "least_loaded" || rule.strategy === "best_placement" ? rule.strategy : "round_robin",
     conditions: (rule.conditions ?? []).filter((condition) => CONDITION_TYPES.includes(condition.match_type)).map((condition, index) => conditionDraftFrom(condition, `${rule.id}-c${index}`)),
   };
 }

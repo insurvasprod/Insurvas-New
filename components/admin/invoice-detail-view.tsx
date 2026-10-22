@@ -19,14 +19,15 @@ import { StatusChip, invoiceTone, reconciliationTone } from "@/components/admin/
 import { fullDate, periodRange } from "@/components/admin/tenant-record/billing-format";
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { StatTile } from "@/components/ui/stat";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { INVOICE_LINE_KIND_LABELS, INVOICE_STATUS_LABELS } from "@/lib/invoices/constants";
 import { cn } from "@/lib/utils";
 
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
-const tf = "border-t border-[var(--border-strong)] px-3 py-2.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const tf = "border-t border-[var(--border-strong)] px-3 py-2.5 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
 const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
 
 const CREDIT_TONE: Record<string, "warning" | "info" | "neutral" | "good" | "danger"> = {
@@ -100,22 +101,26 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
   const timeline = activity.length === 0 ? (
-    <p className="text-[14px] text-[var(--muted)]">No provider events recorded{invoice.provider_payment_id ? "" : " — this invoice has no provider payment to match against"}.</p>
+    <p className="text-sm text-[var(--muted)]">No provider events recorded{invoice.provider_payment_id ? "" : " — this invoice has no provider payment to match against"}.</p>
   ) : (
-    <ol className="flex flex-col gap-3.5">
+    <PagedProvider>
+    <PagedBody as="ol" className="flex flex-col gap-3.5">
       {activity.map((item) => (
         <li key={item.key} className="flex gap-3">
           <span className={cn("mt-1.5 size-[7px] shrink-0 rounded-full", item.dot)} aria-hidden />
           <span className="min-w-0">
-            <span className="block text-[14px] font-semibold text-[var(--ink)]">{item.title}</span>
-            <span className="mt-0.5 block text-[12px] text-[var(--muted)] tabular-nums">{item.meta} · {formatUtcDateTime(item.at)}</span>
+            <span className="block text-sm font-semibold text-[var(--ink)]">{item.title}</span>
+            <span className="mt-0.5 block text-xs text-[var(--muted)] tabular-nums">{item.meta} · {formatUtcDateTime(item.at)}</span>
           </span>
         </li>
       ))}
-    </ol>
+    </PagedBody>
+    {activity.length > 10 && <div className="-mx-5 -mb-5 mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-2.5 text-xs text-[var(--muted)]"><PagedPager total={activity.length} noun="events" /></div>}
+    </PagedProvider>
   );
 
   const lineItems = (
+    <PagedProvider>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] border-collapse">
           <thead>
@@ -127,13 +132,13 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
               <th scope="col" className={cn(th, "w-[120px] text-right")}>Amount</th>
             </tr>
           </thead>
-          <tbody>
-            {lines.length === 0 && <tr><td colSpan={5} className={cn(td, "py-6 text-center text-[var(--muted)]")}>This invoice has no line items.</td></tr>}
+          {lines.length === 0 && <tbody><tr><td colSpan={5} className={cn(td, "py-6 text-center text-[var(--muted)]")}>This invoice has no line items.</td></tr></tbody>}
+          <PagedBody>
             {lines.map((line) => (
               <tr key={line.id}>
                 <td className={td}>
                   <span className="font-semibold text-[var(--ink)]">{line.label}</span>
-                  <span className="block text-[12px] text-[var(--muted)]">{INVOICE_LINE_KIND_LABELS[line.kind]}{line.included_qty !== null ? ` · ${Number(line.included_qty).toLocaleString()} included` : ""}</span>
+                  <span className="block text-xs text-[var(--muted)]">{INVOICE_LINE_KIND_LABELS[line.kind]}{line.included_qty !== null ? ` · ${Number(line.included_qty).toLocaleString()} included` : ""}</span>
                 </td>
                 <td className={cn(td, "whitespace-nowrap")}>{line.kind === "plan" || line.kind === "addon" ? periodRange(invoice.period_start, invoice.period_end, now) : "—"}</td>
                 <td className={cn(td, "text-right tabular-nums")}>{Number(line.quantity).toLocaleString()}</td>
@@ -141,7 +146,7 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
                 <td className={cn(td, "text-right tabular-nums")}>{formatCentsAsCurrency(line.amount_cents)}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
           <tfoot className="bg-[var(--surface-alt)]">
             {(invoice.discount_cents > 0 || invoice.tax_cents > 0) && (
               <>
@@ -156,28 +161,34 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
           </tfoot>
         </table>
       </div>
+      {lines.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-2.5 text-xs text-[var(--muted)]"><PagedPager total={lines.length} noun="line items" /></div>}
+    </PagedProvider>
   );
 
   const creditPanel = creditNotes.length === 0 ? (
-    <p className="px-5 py-6 text-[14px] text-[var(--muted)]">No credit note has been raised against this invoice.</p>
+    <p className="px-5 py-6 text-sm text-[var(--muted)]">No credit note has been raised against this invoice.</p>
   ) : (
+    <PagedProvider>
     <div className="overflow-x-auto">
       <table className="w-full min-w-[560px] border-collapse">
         <thead><tr className="bg-[var(--surface-alt)]"><th scope="col" className={th}>Credit note</th><th scope="col" className={th}>Type</th><th scope="col" className={th}>Raised</th><th scope="col" className={cn(th, "text-right")}>Amount</th><th scope="col" className={th}>Status</th></tr></thead>
-        <tbody>
+        <PagedBody>
           {creditNotes.map((note) => (
             <tr key={note.id}>
-              <td className={cn(td, "font-semibold text-[var(--ink)] tabular-nums")}>{note.number}{note.reason_text && <span className="block text-[12px] font-normal text-[var(--muted)]">{note.reason_text}</span>}</td>
+              <td className={cn(td, "font-semibold text-[var(--ink)] tabular-nums")}>{note.number}{note.reason_text && <span className="block text-xs font-normal text-[var(--muted)]">{note.reason_text}</span>}</td>
               <td className={cn(td, "capitalize")}>{note.type}</td>
               <td className={cn(td, "whitespace-nowrap tabular-nums")}>{fullDate(note.created_at)}</td>
               <td className={cn(td, "text-right tabular-nums")}>{formatCentsAsCurrency(note.amount_cents)}</td>
               <td className={td}><StatusChip tone={CREDIT_TONE[note.status] ?? "neutral"} dot>{note.status.replace(/_/g, " ")}</StatusChip></td>
             </tr>
           ))}
-        </tbody>
+        </PagedBody>
       </table>
-      <p className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-2.5 text-[12px] text-[var(--muted)]">Approvals and retries are on <Link href="/admin/credit-notes" className="font-semibold text-[var(--ink)] hover:underline">Refunds &amp; credits</Link>.</p>
     </div>
+    {creditNotes.length > 10
+      ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-2.5 text-xs text-[var(--muted)]"><PagedPager total={creditNotes.length} noun="credit notes" suffix={<>approvals and retries are on <Link href="/admin/credit-notes" className="font-semibold text-[var(--ink)] hover:underline">Refunds &amp; credits</Link></>} /></div>
+      : <p className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-2.5 text-xs text-[var(--muted)]">Approvals and retries are on <Link href="/admin/credit-notes" className="font-semibold text-[var(--ink)] hover:underline">Refunds &amp; credits</Link>.</p>}
+    </PagedProvider>
   );
 
   return (
@@ -237,7 +248,7 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
 
         <div className="flex min-w-0 flex-col gap-4">
           <section className={card} aria-labelledby="invoice-actions">
-            <h2 id="invoice-actions" className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Actions</h2>
+            <h2 id="invoice-actions" className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Actions</h2>
             {canAct ? (
               <div className="mt-3.5 flex flex-col gap-2.5">
                 {settleable ? (
@@ -245,7 +256,7 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
                 ) : (
                   <div>
                     <Button variant="outline" className="w-full" disabled>Mark paid</Button>
-                    <p className="mt-1.5 text-[12px] text-[var(--muted)]">{invoice.status === "void" ? "A voided invoice cannot be paid." : "Already paid in full."}</p>
+                    <p className="mt-1.5 text-xs text-[var(--muted)]">{invoice.status === "void" ? "A voided invoice cannot be paid." : "Already paid in full."}</p>
                   </div>
                 )}
                 {invoice.status === "paid" ? (
@@ -260,13 +271,13 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
                 ) : (
                   <div>
                     <Button variant="outline" className="w-full" disabled>Raise a credit note</Button>
-                    <p className="mt-1.5 text-[12px] text-[var(--muted)]">Only a paid invoice can be credited; this one is {INVOICE_STATUS_LABELS[invoice.status].toLowerCase()}.</p>
+                    <p className="mt-1.5 text-xs text-[var(--muted)]">Only a paid invoice can be credited; this one is {INVOICE_STATUS_LABELS[invoice.status].toLowerCase()}.</p>
                   </div>
                 )}
-                <VoidInvoiceDialog invoiceId={invoice.id} number={invoice.number} refusalReason={voidRefusalReason(invoice.status)} />
+                <VoidInvoiceDialog invoiceId={invoice.id} number={invoice.number} refusalReason={voidRefusalReason(invoice.status, paidCents)} />
               </div>
             ) : (
-              <p className="mt-3 text-[14px] text-[var(--muted)]">Only billing admins and super admins can record a payment, raise a credit note or void an invoice.</p>
+              <p className="mt-3 text-sm text-[var(--muted)]">Only billing admins and super admins can record a payment, raise a credit note or void an invoice.</p>
             )}
           </section>
         </div>

@@ -62,7 +62,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
   open: boolean; onOpenChange: (open: boolean) => void; existing: SubmissionView | null; extensionDetected: boolean; seed: CaptureSeed | null;
 }) {
   const { caseView, attempt, qa, sample, actions, updateAttempt, goTo } = useWorkspace();
-  const [kind, setKind] = useState<NonNullable<SubmissionView["referenceKind"]>>(existing?.referenceKind ?? "application_no");
+  const [chosenKind, setKind] = useState<NonNullable<SubmissionView["referenceKind"]> | null>(existing?.referenceKind ?? null);
   const [reference, setReference] = useState(existing?.carrierReference ?? seed?.reference ?? "");
   const [at, setAt] = useState(() => (existing ? toLocalInput(new Date(existing.submittedAt)) : seed?.submittedAt || toLocalInput(new Date())));
   const [via, setVia] = useState<SubmissionView["submittedVia"]>(existing?.submittedVia ?? (extensionDetected ? "extension" : "copy_assist"));
@@ -74,6 +74,10 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
   const [openedAt] = useState(() => Date.now());
   const ref = reference.trim();
   const check = useReferenceCheck(attempt.id, ref, sample);
+  // Until the agent picks a type, a reference in the carrier's policy-number format (its
+  // reference_pattern, LA-3.15 / LA-4.17) is taken as the policy number, so a carrier file can link
+  // to this sale by number (LA-4.8 step 2). Anything else defaults to the application number.
+  const kind: NonNullable<SubmissionView["referenceKind"]> = chosenKind ?? (ref && check.format === "match" ? "policy_no" : "application_no");
   const atValid = Boolean(at) && !Number.isNaN(new Date(at).getTime()) && new Date(at).getTime() <= openedAt + 10 * 60_000;
   const verdict = existing?.qaVerdict ?? qa.verdict;
   const canAttach = !existing?.hasConfirmation;
@@ -89,13 +93,13 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
       const file = confirmation.value?.file ?? null;
       if (existing) {
         if (sample) {
-          updateAttempt({ submissions: attempt.submissions.map((s) => (s.id === existing.id ? { ...s, carrierReference: ref || null, referenceKind: ref ? kind : null, hasConfirmation: s.hasConfirmation || Boolean(file) } : s)) });
+          updateAttempt({ submissions: attempt.submissions.map((s) => (s.id === existing.id ? { ...s, carrierReference: ref || null, referenceKind: ref ? kind : null, policyNumber: ref && kind === "policy_no" ? ref : s.policyNumber, hasConfirmation: s.hasConfirmation || Boolean(file) } : s)) });
           notify.done("Sample data — nothing was saved");
           onOpenChange(false);
           return;
         }
-        if (ref !== (existing.carrierReference ?? "")) {
-          const okRef = await actions.setReference(existing.id, { reference: ref || null, ...(kind === "policy_no" && ref ? { policyNumber: ref } : {}) });
+        if (ref !== (existing.carrierReference ?? "") || (ref && kind !== existing.referenceKind)) {
+          const okRef = await actions.setReference(existing.id, { reference: ref || null, referenceKind: kind, ...(kind === "policy_no" && ref ? { policyNumber: ref } : {}) });
           if (!okRef) { setError("The reference wasn't saved — it is still in the box. Try again."); return; }
         }
         if (file && canAttach) {
@@ -111,7 +115,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
       const recorded = await actions.recordSubmission({ reference: ref || null, referenceKind: kind, submittedAt: new Date(at).toISOString(), submittedVia: via });
       if (!recorded) { setError("The submission wasn't recorded — everything you typed is still here. Try again."); return; }
       if (sample) {
-        updateAttempt({ status: "submitted", submittedAt: new Date(at).toISOString(), submissions: [...attempt.submissions, { id: recorded.submissionId, attemptNo: attempt.attemptNo, carrierReference: ref || null, referenceKind: ref ? kind : null, policyNumber: null, submittedAt: new Date(at).toISOString(), submittedVia: via, hasConfirmation: Boolean(file), qaVerdict: verdict }] });
+        updateAttempt({ status: "submitted", submittedAt: new Date(at).toISOString(), submissions: [...attempt.submissions, { id: recorded.submissionId, attemptNo: attempt.attemptNo, carrierReference: ref || null, referenceKind: ref ? kind : null, policyNumber: ref && kind === "policy_no" ? ref : null, submittedAt: new Date(at).toISOString(), submittedVia: via, hasConfirmation: Boolean(file), qaVerdict: verdict }] });
         notify.done("Sample data — nothing was saved");
         onOpenChange(false);
         goTo("after");
@@ -173,7 +177,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
         <Field label="Submitted by" htmlFor="submission-by">
           <input id="submission-by" className={control} value="You" readOnly disabled title="The signed-in agent is recorded" />
         </Field>
-        <Field label="Reference type" htmlFor="submission-kind" hint="The policy number usually comes later, at issue.">
+        <Field label="Reference type" htmlFor="submission-kind" hint={!chosenKind && ref && check.format === "match" ? "Matches this carrier's policy number format." : "The policy number usually comes later, at issue."}>
           <select id="submission-kind" className={control} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
             {Object.entries(REFERENCE_KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>

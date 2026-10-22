@@ -103,6 +103,12 @@ export async function acceptPostedLead(input: {
   idempotencyKey: string | null;
   /** Set by the per-workspace URL (/api/post/<workspace>): the key must belong to that workspace. */
   workspaceId?: string | null;
+  /**
+   * LA-8.7: a post made with an integration API key (scope leads:write) names the vendor instead of
+   * presenting the vendor's key. The vendor's active posting key is then used by id — its field map,
+   * campaign, rate limit and log — exactly as if the vendor had posted. `key` is ignored.
+   */
+  vendorKey?: { tenantId: string; vendorId: string } | null;
 }): Promise<PostOutcome> {
   const startedAt = Date.now();
   const supabase = getSupabaseServiceClient();
@@ -110,7 +116,9 @@ export async function acceptPostedLead(input: {
   // ── the key ───────────────────────────────────────────────────────────────
   const hash = hashPostKey(input.key);
   const readKey = (columns: string) =>
-    supabase.from("tenant_vendor_post_keys").select(columns).eq("key_hash", hash).maybeSingle<KeyRow>();
+    input.vendorKey
+      ? supabase.from("tenant_vendor_post_keys").select(columns).eq("tenant_id", input.vendorKey.tenantId).eq("vendor_id", input.vendorKey.vendorId).eq("is_active", true).maybeSingle<KeyRow>()
+      : supabase.from("tenant_vendor_post_keys").select(columns).eq("key_hash", hash).maybeSingle<KeyRow>();
   let { data: keyRow, error: keyError } = await readKey("id, tenant_id, vendor_id, field_map, is_active, campaign_id");
   // Before the campaign-binding column exists every key is unbound, which is what it was.
   if (isMissingSchema(keyError)) ({ data: keyRow, error: keyError } = await readKey("id, tenant_id, vendor_id, field_map, is_active"));
@@ -121,6 +129,7 @@ export async function acceptPostedLead(input: {
   if (!keyRow || !keyRow.is_active) {
     // Same answer for "no such key" and "key disabled": telling the caller which one would let
     // somebody enumerate valid keys.
+    if (input.vendorKey) return { status: 422, outcome: "rejected", reasonCode: "unauthorised", leadId: null, message: "That vendor has no active posting key. Create one in Settings › Lead posting." };
     return { status: 401, outcome: "rejected", reasonCode: "unauthorised", leadId: null, message: "That posting key is not valid." };
   }
 

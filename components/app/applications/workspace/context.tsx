@@ -38,8 +38,8 @@ export type QuoteSave = {
 };
 
 export type WorkspaceActions = {
-  /** Reveal one sensitive value; writes the access record first. Null in sample mode. */
-  reveal: (fieldKey: string) => Promise<string | null>;
+  /** Reveal one sensitive value, saying why; writes the access record first. Null in sample mode. */
+  reveal: (fieldKey: string, reason: string) => Promise<string | null>;
   saveSsn: (value: string) => Promise<boolean>;
   savePayment: (input: PaymentSave) => Promise<boolean>;
   saveDraftDay: (input: { day: number | null; incomeType: string | null; incomeInputs: Record<string, unknown>; overrideReason?: string | null }) => Promise<boolean>;
@@ -52,7 +52,7 @@ export type WorkspaceActions = {
   selectQuote: (quoteId: string) => Promise<boolean>;
   transition: (to: "ready" | "draft" | "closed", extra?: { outcome?: ApplicationOutcome; reasonCode?: string | null; reasonText?: string | null; policyNumber?: string | null; issuedOn?: string | null }) => Promise<{ policy?: { linked: boolean; message: string | null } | null } | null>;
   recordSubmission: (input: { reference: string | null; referenceKind: "application_no" | "policy_no"; submittedAt: string | null; submittedVia: "extension" | "copy_assist" | "carrier_portal_manual"; notes?: string | null }) => Promise<{ submissionId: string; duplicate: { applicationId: string; caseId: string } | null } | null>;
-  setReference: (submissionId: string, input: { reference?: string | null; policyNumber?: string | null }) => Promise<boolean>;
+  setReference: (submissionId: string, input: { reference?: string | null; referenceKind?: "application_no" | "policy_no"; policyNumber?: string | null }) => Promise<boolean>;
   nextAttempt: () => Promise<boolean>;
   closeCase: (reasonCode: string, reasonText?: string | null) => Promise<boolean>;
   /** Re-read the case from the server. */
@@ -235,7 +235,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, children }: { ini
     }
     const ok = (x: unknown) => x !== null;
     return {
-      reveal: async (fieldKey) => (await run<{ value: string }>(() => call(`${aUrl}/reveal`, { method: "POST", body: { field_key: fieldKey } }), { reload: false }))?.value ?? null,
+      reveal: async (fieldKey, reason) => (await run<{ value: string }>(() => call(`${aUrl}/reveal`, { method: "POST", body: { field_key: fieldKey, reason } }), { reload: false }))?.value ?? null,
       saveSsn: async (value) => ok(await run(() => call(`${aUrl}/sensitive`, { method: "PUT", body: { field_key: "insured.ssn", value } }))),
       savePayment: async (input) => ok(await run(() => call(`${aUrl}/payment`, { method: "PUT", body: input }))),
       saveDraftDay: async (input) => ok(await run(() => call(`${aUrl}/draft-day`, { method: "PUT", body: { day: input.day, income_type: input.incomeType, income_inputs: input.incomeInputs, override_reason: input.overrideReason ?? null } }))),
@@ -251,7 +251,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, children }: { ini
       selectQuote: async (quoteId) => ok(await run(() => call(`/api/app/quotes/${quoteId}/select`, { method: "POST" }))),
       transition: async (to, extra = {}) => run(() => call(`${aUrl}/transition`, { method: "POST", body: { to, outcome: extra.outcome ?? null, reason_code: extra.reasonCode ?? null, reason_text: extra.reasonText ?? null, policy_number: extra.policyNumber ?? null, issued_on: extra.issuedOn ?? null } })),
       recordSubmission: async (input) => run(() => call(`${aUrl}/submissions`, { method: "POST", body: { reference: input.reference, reference_kind: input.referenceKind, submitted_at: input.submittedAt, submitted_via: input.submittedVia, notes: input.notes ?? null } })),
-      setReference: async (sid, input) => ok(await run(() => call(`${aUrl}/submissions/${sid}`, { method: "PATCH", body: { reference: input.reference, policy_number: input.policyNumber } }))),
+      setReference: async (sid, input) => ok(await run(() => call(`${aUrl}/submissions/${sid}`, { method: "PATCH", body: { reference: input.reference, reference_kind: input.referenceKind, policy_number: input.policyNumber } }))),
       nextAttempt: async () => {
         const r = await run<{ applicationId: string }>(() => call(`${aUrl}/next-attempt`, { method: "POST" }));
         if (r) navigate({ step: "quote", attemptNo: attempt.attemptNo + 1 });

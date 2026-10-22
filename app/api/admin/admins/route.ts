@@ -1,11 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import QRCode from "qrcode";
 
 import { audit } from "@/lib/audit/log";
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { createAdminSchema } from "@/lib/adminAuth/schemas";
 import { hashPassword } from "@/lib/password";
-import { generateTotpSecret, getTotpEnrollmentUri } from "@/lib/adminAuth/totp";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export async function GET() {
@@ -25,6 +23,17 @@ export async function GET() {
   return NextResponse.json({ admins });
 }
 
+/**
+ * Create a staff account. The account is born WITHOUT a second factor (`totp_secret = ''`), and
+ * the response carries no secret and no QR code.
+ *
+ * This used to generate the new admin's TOTP secret here and hand it, with its QR code, to the
+ * super_admin who made the account — so the creator held a working second factor for somebody
+ * else's account. Now the new admin enrols their own authenticator at first sign-in
+ * (POST /api/admin/auth/enroll-2fa, confirmed by a code in verify-2fa). 2FA stays mandatory: an
+ * unenrolled account cannot finish signing in without enrolling, and verify-2fa never accepts a
+ * code against the empty secret.
+ */
 export async function POST(request: NextRequest) {
   const auth = await requireAdminRole(["super_admin"]);
   if (auth instanceof NextResponse) return auth;
@@ -39,7 +48,6 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient();
 
   const passwordHash = await hashPassword(password);
-  const totpSecret = generateTotpSecret();
 
   const { data: created, error } = await supabase
     .from("admin_users")
@@ -48,15 +56,20 @@ export async function POST(request: NextRequest) {
       name,
       role,
       password_hash: passwordHash,
-      totp_secret: totpSecret,
+      // Not enrolled. The admin sets up their own authenticator at first sign-in.
+      totp_secret: "",
       is_active: true,
     })
     .select("id, email, name, role, is_active, created_at")
     .single();
 
   if (error) {
-    const message = error.code === "23505" ? "An admin with this email already exists" : "Could not create admin";
-    return NextResponse.json({ error: message }, { status: 409 });
+    // 409 only for the one conflict there is: the address is taken. Anything else is our failure.
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "An admin with this email already exists" }, { status: 409 });
+    }
+    console.error("[admins] create failed:", error.code, error.message);
+    return NextResponse.json({ error: "Could not create admin" }, { status: 500 });
   }
 
   await audit({
@@ -64,12 +77,9 @@ export async function POST(request: NextRequest) {
     action: "admin.created",
     targetType: "admin_user",
     targetId: created.id,
-    metadata: { email, role },
+    metadata: { email, role, totp_enrolment: "at_first_login" },
     request,
   });
 
-  const totpUri = getTotpEnrollmentUri(email, totpSecret);
-  const qrDataUrl = await QRCode.toDataURL(totpUri);
-
-  return NextResponse.json({ admin: created, totpUri, qrDataUrl }, { status: 201 });
+  return NextResponse.json({ admin: created, enrolment: "at_first_login" }, { status: 201 });
 }

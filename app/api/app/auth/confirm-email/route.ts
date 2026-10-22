@@ -4,6 +4,7 @@ import { getMaintenanceStatus } from "@/lib/system/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { hashInviteToken } from "@/lib/users/invitations";
 import { confirmEmailSchema } from "@/lib/users/schemas";
+import { recordSecurityEvent, sendSecurityNotice } from "@/lib/users/securityEvents";
 
 type ChangeRow = {
   id: string;
@@ -70,6 +71,8 @@ export async function POST(request: NextRequest) {
   if (!change) return NextResponse.json(INVALID, { status: 400 });
 
   const supabase = getSupabaseServiceClient();
+  // The address being replaced, read before it is: it is told about the change (LA-8.2).
+  const { data: before } = await supabase.from("users").select("email, name").eq("id", change.user_id).maybeSingle<{ email: string; name: string }>();
   const { error } = await supabase.rpc("consume_user_email_change_token", {
     p_token_hash: hashInviteToken(parsed.data.token),
   });
@@ -87,5 +90,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not confirm email address" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, email: change.new_email });
+  // Sign-in checks Supabase Auth's copy of the address, not users.email. Until LA-8.2 only the latter
+  // moved, so a confirmed change left the person unable to sign in with either address they knew.
+  const newEmail = change.new_email ?? "";
+  const authUpdate = await supabase.auth.admin.updateUserById(change.user_id, { email: newEmail, email_confirm: true });
+  if (authUpdate.error) {
+    console.error("[confirm-email] the sign-in address was not moved in Auth", authUpdate.error.message);
+    return NextResponse.json({ error: "Your new address was confirmed, but signing in with it could not be switched on yet. Contact support." }, { status: 500 });
+  }
+
+  await recordSecurityEvent({ userId: change.user_id, tenantId: null, type: "email_changed", detail: { from: before?.email ?? null, to: newEmail }, request });
+  // Both addresses are told: the new one that it works, the old one that it no longer signs in.
+  const name = before?.name ?? "there";
+  await Promise.all([
+    sendSecurityNotice({ to: newEmail, name, what: "Your sign-in email was changed", detail: `Sign in with ${newEmail} from now on.`, userId: change.user_id, tenantId: null }),
+    before?.email ? sendSecurityNotice({ to: before.email, name, what: "Your sign-in email was changed", detail: `This address no longer signs in; ${newEmail} does.`, userId: change.user_id, tenantId: null }) : Promise.resolve(),
+  ]);
+
+  return NextResponse.json({ ok: true, email: newEmail });
 }

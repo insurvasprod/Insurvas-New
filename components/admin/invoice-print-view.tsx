@@ -11,9 +11,9 @@ import { PrintButton } from "@/components/admin/print-button";
 
 const LONG = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const long = (iso: string | null) => (iso ? LONG.format(new Date(iso)) : "—");
-const bar = "inline-flex h-9 items-center justify-center rounded-[8px] border px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] no-underline";
-const th = "px-3 py-2 text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[#60646c] print:text-black";
-const td = "border-t border-[#ccd6e2] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[#33383f] print:text-black";
+const bar = "inline-flex h-9 items-center justify-center rounded-[8px] border px-4 text-sm leading-[1.43] font-semibold tracking-[-0.01em] no-underline";
+const th = "px-3 py-2 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[#60646c] print:text-black";
+const td = "border-t border-[#ccd6e2] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[#33383f] print:text-black";
 
 /**
  * SA-3.3 · The printable invoice (p-adm-invoice-print).
@@ -31,7 +31,7 @@ const td = "border-t border-[#ccd6e2] px-3 py-2 text-[14px] leading-[1.5] tracki
  * profile when it has one, and the owner's name and email. The board's sender address is not shown
  * — the platform stores no postal address of its own, and a printed invoice must not invent one.
  */
-export async function InvoicePrintView({ id }: { id: string }) {
+export async function InvoicePrintView({ id, back }: { id: string; back?: { href: string; label: string } }) {
   const detail = await fetchInvoiceDetail(id);
   if (!detail) notFound();
   const { invoice, lines } = detail;
@@ -58,20 +58,21 @@ export async function InvoicePrintView({ id }: { id: string }) {
   return (
     <div className="flex min-h-full flex-col bg-white p-6 text-[#15191e] sm:p-12 print:p-0">
       <div data-print-hide className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <Link href={`/admin/invoices/${invoice.id}`} className={`${bar} border-[#78838f] bg-white text-[#15191e] hover:bg-[#eef2f7]`}>Back to invoice</Link>
+        {/* LA-8.5: the agency owner prints the same document from Settings › Plan & billing. */}
+        <Link href={back?.href ?? `/admin/invoices/${invoice.id}`} className={`${bar} border-[#78838f] bg-white text-[#15191e] hover:bg-[#eef2f7]`}>{back?.label ?? "Back to invoice"}</Link>
         <PrintButton className={`${bar} border-transparent bg-[var(--primary)] text-[var(--on-primary)]`}>Print or save as PDF</PrintButton>
       </div>
 
       <article className="mx-auto w-full max-w-[760px]">
         <header className="flex flex-wrap items-start justify-between gap-8">
           <div>
-            <h1 className="m-0 text-[32px] leading-[1.13] font-semibold tracking-[-0.025em]">Insurvas</h1>
+            <h1 className="m-0 text-title-lg leading-[1.13] font-semibold tracking-[-0.025em]">Insurvas</h1>
           </div>
           <div className="text-right">
             {/* "Invoice" is the document's own name, so it labels the number rather than sitting under the sender's name. */}
-            <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[#60646c] print:text-black">Invoice</div>
-            <div className="mt-1 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] tabular-nums">{invoice.number}</div>
-            <p className="m-0 mt-3 text-[14px] leading-[1.5] text-[#33383f] tabular-nums print:text-black">
+            <div className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[#60646c] print:text-black">Invoice</div>
+            <div className="mt-1 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] tabular-nums">{invoice.number}</div>
+            <p className="m-0 mt-3 text-sm leading-[1.5] text-[#33383f] tabular-nums print:text-black">
               Issued {long(invoice.issued_at)}<br />
               Due {long(invoice.due_at)}
               {invoice.status !== "issued" && <><br />{INVOICE_STATUS_LABELS[invoice.status]}</>}
@@ -80,8 +81,8 @@ export async function InvoicePrintView({ id }: { id: string }) {
         </header>
 
         <section className="mt-8 border-t border-[#d5dbe3] pt-6">
-          <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[#60646c] print:text-black">Billed to</div>
-          <p className="m-0 mt-2 text-[14px] leading-[1.5] text-[#33383f] print:text-black">
+          <div className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[#60646c] print:text-black">Billed to</div>
+          <p className="m-0 mt-2 text-sm leading-[1.5] text-[#33383f] print:text-black">
             <span className="font-semibold text-[#15191e]">{billedName}</span>
             {billedLines.map((line) => <span key={line}><br />{line}</span>)}
           </p>
@@ -115,20 +116,20 @@ export async function InvoicePrintView({ id }: { id: string }) {
             {invoice.discount_cents > 0 && <tr><td colSpan={3} className={td}>Discount</td><td className={`${td} text-right tabular-nums`}>−{formatCentsAsCurrency(invoice.discount_cents)}</td></tr>}
             {invoice.tax_cents > 0 && <tr><td colSpan={3} className={td}>Tax</td><td className={`${td} text-right tabular-nums`}>{formatCentsAsCurrency(invoice.tax_cents)}</td></tr>}
             <tr>
-              <td colSpan={3} className="border-t border-[#78838f] px-3 py-2.5 text-[14px] leading-[1.5] font-semibold text-[#15191e]">{invoice.status === "paid" ? "Total paid" : "Total due"}</td>
-              <td className="border-t border-[#78838f] px-3 py-2.5 text-right text-[14px] leading-[1.5] font-semibold text-[#15191e] tabular-nums">{formatCentsAsCurrency(invoice.total_cents)} <span className="font-normal text-[#60646c] print:text-black">{invoice.currency.toUpperCase()}</span></td>
+              <td colSpan={3} className="border-t border-[#78838f] px-3 py-2.5 text-sm leading-[1.5] font-semibold text-[#15191e]">{invoice.status === "paid" ? "Total paid" : "Total due"}</td>
+              <td className="border-t border-[#78838f] px-3 py-2.5 text-right text-sm leading-[1.5] font-semibold text-[#15191e] tabular-nums">{formatCentsAsCurrency(invoice.total_cents)} <span className="font-normal text-[#60646c] print:text-black">{invoice.currency.toUpperCase()}</span></td>
             </tr>
           </tfoot>
         </table>
 
-        <p className="m-0 mt-8 text-[14px] leading-[1.5] text-[#33383f] print:text-black">
+        <p className="m-0 mt-8 text-sm leading-[1.5] text-[#33383f] print:text-black">
           {netDays !== null && netDays > 0 ? `Payment terms: net ${netDays}. ` : ""}
           {provider ? "Collected by the payment provider. " : ""}
           Questions: support@insurvas.com
         </p>
 
         {invoice.status === "void" && (
-          <p className="m-0 mt-6 text-[14px] font-semibold tracking-[0.12em] uppercase text-[#60646c] print:text-black">
+          <p className="m-0 mt-6 text-sm font-semibold tracking-[0.12em] uppercase text-[#60646c] print:text-black">
             Void{invoice.void_reason ? ` — ${invoice.void_reason}` : ""}
           </p>
         )}

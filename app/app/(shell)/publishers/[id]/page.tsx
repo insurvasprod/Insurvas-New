@@ -1,7 +1,7 @@
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PartnersWorkspace } from "@/components/app/partners-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 
 export default async function PublisherDetailPage({
   params,
@@ -14,11 +14,11 @@ export default async function PublisherDetailPage({
       <FeatureGateNotice
         guard={guard}
         featureLabel="Partners"
-        description="Manage publishers, marketing companies and affiliates without losing their history."
+        description="Manage publishers, marketing companies and affiliates."
       />
     );
   }
-  if (guard.role !== "owner" && guard.role !== "bookkeeper") {
+  if (!actAsPage(guard, ["owner", "bookkeeper"])) {
     return (
       <RoleGateNotice
         featureLabel="Partners"

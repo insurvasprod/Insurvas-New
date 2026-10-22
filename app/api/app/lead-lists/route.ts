@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { leadListsReport, listLeadsInList } from "@/lib/leadLists/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * The lead list — what was bought, and what is left of it.
@@ -18,8 +19,10 @@ const LIST_ROLES = ["owner", "producer", "assistant"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("lead_import", LIST_ROLES);
+  const auth = await requireFeatureRole("lead_import", LIST_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Lead lists");
+  if (refused) return refused;
 
   const params = request.nextUrl.searchParams;
   const campaignId = params.get("campaign_id");

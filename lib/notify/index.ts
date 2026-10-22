@@ -1,8 +1,11 @@
 "use client";
 
+import { createElement } from "react";
 import { toast } from "sonner";
 
 import { NOTIFY_OWNED_CLASS, playFor, setCallInProgress } from "./sound";
+import { detailFor } from "./suggest.ts";
+import { ToastCard } from "./toast-card";
 import type { Treatment } from "./treatments.ts";
 
 /**
@@ -45,23 +48,14 @@ const DURATION: Record<Treatment, number> = {
   fail: 10000,
 };
 
-type Kind = "success" | "info" | "warning" | "error";
-
-const KIND: Record<Treatment, Kind> = {
-  win: "success",
-  arrive: "info",
-  done: "success",
-  warn: "warning",
-  block: "error",
-  fail: "error",
-};
-
 function show(treatment: Treatment, title: string, options: NotifyOptions = {}) {
   playFor(treatment);
-  toast[KIND[treatment]](title, {
-    description: options.detail,
-    duration: options.durationMs ?? DURATION[treatment],
-    action: options.action ? { label: options.action.label, onClick: options.action.onClick } : undefined,
+  const duration = options.durationMs ?? DURATION[treatment];
+  // 2026-10-22: our own card (./toast-card) instead of sonner's coloured box, and a problem always
+  // says what to do next — the caller's detail, else a suggestion read from the title (./suggest).
+  const detail = detailFor(treatment, title, options.detail);
+  toast.custom((id) => createElement(ToastCard, { onDismiss: () => toast.dismiss(id), treatment, title, detail, action: options.action, durationMs: duration }), {
+    duration,
     // Claims this toast for the sound layer above. PortalFeedbackBridge watches the DOM and would
     // otherwise play a second, contradictory sound off the `data-type` — which cannot tell a `win`
     // from a `done`, and does not know whether a call is open. One authority, marked in the markup.
@@ -87,8 +81,8 @@ export const notify = {
 
   /**
    * Something broke and it is not the reader's fault — a 5xx, an RPC that is down, a dropped
-   * connection. Never sounds: a noise for infrastructure teaches people to feel responsible for
-   * it, and it would fire in bursts on exactly the days that is least welcome.
+   * connection. Since 2026-10-22 it plays the softest tone in the set (owner request), still capped
+   * by the rate limit so an outage cannot fire in bursts, and still silent during a live call.
    */
   fail: (title: string, options?: NotifyOptions) => show("fail", title, options),
 };

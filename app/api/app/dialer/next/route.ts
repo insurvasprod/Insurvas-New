@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { DialerWorkflowError, emptyQueueReason, serveNextLead } from "@/lib/dialerScripts/service";
+import { DialerWorkflowError, diagnoseAssignedQueue, emptyQueueReason, serveNextLead } from "@/lib/dialerScripts/service";
 import { capacityEmptyReason } from "@/lib/dialerScripts/display";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 // LA-2.12 audit. A setter's whole job is "work the outbound queue" and "record dispositions", and
 // permissions.ts has granted them `dialer.use` since the role was added — but every route here
@@ -28,6 +29,11 @@ export async function POST() {
   if (auth instanceof NextResponse) return auth;
 
   try {
+    // AG-0.5 / AG-0.10: every session is served by serve_next_lead. In an agency the database closes the
+    // unassigned pool to a producer, manager, assistant or setter (agent_can_take_pool_lead), so its weighted,
+    // scored draw runs over the leads assigned to him alone. The scope (from the session; null = solo or
+    // owner/admin) only decides how an empty queue is explained.
+    const scope = await scopeFor(auth.context);
     const { served, refused, atCapacity } = await serveNextLead({
       tenantId: auth.context.tenantId,
       agentId: auth.context.userId,
@@ -48,6 +54,9 @@ export async function POST() {
     const emptyReason = served
       ? null
       : refusal
+        // A scoped session never takes from the pool, so the ceiling is not why his queue is empty, and
+        // the agency-wide counts are not his to see (AG-0.5): the reason comes from his assigned work only.
+        ?? (scope ? (await diagnoseAssignedQueue(auth.context.tenantId, auth.context.userId).catch(() => null))?.message ?? null : null)
         // 20260925700000: at the open-lead ceiling the pool is closed to this agent; say so,
         // rather than blaming windows and timers for an empty screen they did not cause.
         ?? (atCapacity ? capacityEmptyReason(atCapacity.open, atCapacity.max) : null)
@@ -57,7 +66,7 @@ export async function POST() {
         served,
         refused: refused.length,
         emptyReason,
-        atCapacity: atCapacity ?? null,
+        atCapacity: scope ? null : atCapacity ?? null,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

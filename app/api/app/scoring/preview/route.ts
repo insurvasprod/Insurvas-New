@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scoringAgents, scoringQueuePreview } from "@/lib/scoring/service";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * GET /api/app/scoring/preview?agent=<user id> — "Preview the queue" on the scoring screen.
@@ -21,8 +22,10 @@ const SCORING_ROLES = ["owner", "producer"] as const;
 const querySchema = z.object({ agent: z.string().uuid().optional() });
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", SCORING_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Queue scoring");
+  if (refused) return refused;
   const parsed = querySchema.safeParse({ agent: request.nextUrl.searchParams.get("agent") || undefined });
   if (!parsed.success) return NextResponse.json({ error: "Choose an agent from the list" }, { status: 400 });
 

@@ -5,8 +5,10 @@ import { audit } from "@/lib/audit/log";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { resendTenantInvite } from "@/lib/tenantTeam/service";
 import { buildInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { sendTeamInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
+import { isAgencyTenant } from "@/lib/agency/audience";
+import { AGENCY_INVITE_TTL_MS } from "@/lib/agency/constants";
 
 /** Sends a teammate who has not accepted a fresh link, and retires the old one. */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
@@ -19,11 +21,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const token = generateInviteToken();
-  const expiresAt = await inviteExpiryFromNow();
+  // An agency invite is good for 7 days (AG-0.6); a resend used to cut it to the solo default.
+  const agency = await isAgencyTenant(auth.context.tenantId);
+  const expiresAt = agency ? new Date(Date.now() + AGENCY_INVITE_TTL_MS) : await inviteExpiryFromNow();
   try {
     const member = await resendTenantInvite({ tenantId: auth.context.tenantId, userId, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString() });
     const inviteUrl = buildInviteUrl(token, configuredAppOrigin("agent"));
-    const { delivered } = await sendInvitationEmail({ to: member.email, name: member.name, inviteUrl, expiresAt, userId, tenantId: auth.context.tenantId });
+    const { delivered } = await sendTeamInvitationEmail({ to: member.email, name: member.name, inviteUrl, expiresAt, userId, tenantId: auth.context.tenantId, inviterId: auth.context.userId, audience: agency ? "agency" : "individual" });
     await audit({
       actorType: "tenant",
       actorId: auth.context.userId,

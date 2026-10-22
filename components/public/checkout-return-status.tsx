@@ -67,7 +67,8 @@ export function CheckoutReturnStatus() {
           if (cancelled) return;
           if (response.ok && body?.status === "confirmed") {
             setPhase("activating");
-            router.replace("/app/dashboard?welcome=1");
+            // A new workspace starts on its walkthrough (Get set up, 2026-10-21).
+            router.replace("/app/setup");
             return;
           }
           if (response.ok && body?.status === "done") {

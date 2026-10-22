@@ -3,6 +3,11 @@ import type { Treatment } from "../notify/treatments.ts";
 /** The treatments a person can actually be given a switch for. */
 export type AudibleTreatment = Extract<Treatment, "win" | "arrive" | "warn" | "block">;
 
+/**
+ * The events the bell's own settings row (`agent_notification_settings.enabled_events`) has a key
+ * for. Which events reach the bell is now Settings › Notifications' to say (LA-8.4); these keys stay
+ * so the stored row and its PUT schema keep their shape.
+ */
 export const AGENT_ALERT_EVENTS = [
   "new_lead",
   "handoff_offered",
@@ -12,7 +17,29 @@ export const AGENT_ALERT_EVENTS = [
   "partner_message",
 ] as const;
 
-export type AgentAlertEvent = (typeof AGENT_ALERT_EVENTS)[number];
+export type AgentAlertSettingEvent = (typeof AGENT_ALERT_EVENTS)[number];
+
+/**
+ * Events registered after the bell was built (lib/notifications/events.ts). They reach the bell as
+ * notifications addressed to you; they have no key in the legacy settings row.
+ */
+export const REGISTRY_ALERT_EVENTS = [
+  "servicing_failed",
+  "reinstatement_closing",
+  "doi_deadline",
+  "credential_expiring",
+  "plan_payment_failed",
+  "webhook_disabled",
+  "allowance_near_cap",
+] as const;
+
+export type AgentAlertEvent = AgentAlertSettingEvent | (typeof REGISTRY_ALERT_EVENTS)[number];
+
+/**
+ * Registered as protected (cannot be switched off) — missing one causes harm that does not come
+ * back. The bell draws them as warnings. Kept in step with `is_protected` by presentation.test.mjs.
+ */
+export const PROTECTED_ALERT_EVENTS: readonly AgentAlertEvent[] = ["reinstatement_closing", "doi_deadline", "credential_expiring", "plan_payment_failed"];
 
 /**
  * Wrong with the workspace rather than addressed to a person, most severe first — the order the
@@ -66,7 +93,7 @@ export function partitionAlertRows<T extends { link: string; created_at: string;
 }
 
 export type AgentAlertSettings = {
-  enabled_events: Record<AgentAlertEvent, boolean>;
+  enabled_events: Record<AgentAlertSettingEvent, boolean>;
   do_not_disturb: boolean;
   sound_muted: boolean;
   sound_volume: number;
@@ -105,6 +132,8 @@ export function eventTypeForKind(kind: string): AgentAlertEvent | null {
   if (kind === "appointment_reminder") return "callback_due";
   if (kind === "lead_note_mention" || kind === "partner_message_mention") return "mentioned";
   if (kind === "partner_message") return "partner_message";
+  // One kind each, and the event is named after it (lib/notifications/events.ts).
+  if ((REGISTRY_ALERT_EVENTS as readonly string[]).includes(kind)) return kind as AgentAlertEvent;
   return null;
 }
 

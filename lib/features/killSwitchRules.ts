@@ -142,3 +142,31 @@ export function switchRefusalReason(input: {
   }
   return null;
 }
+
+/**
+ * The save named a feature_key the catalog does not have (Postgres 23503 on the foreign key).
+ * Carried as a class with the code, not as text inside a message: the route used to look for
+ * "23503" in the message, and the message setSwitch threw never contained it, so a typo got the
+ * generic "Could not save this switch" (audit, 2026-10-15).
+ */
+export class UnknownFeatureKeyError extends Error {
+  readonly code = "23503";
+  readonly featureKey: string;
+  constructor(featureKey: string) {
+    super(`No feature called "${featureKey}" exists in the catalog.`);
+    this.name = "UnknownFeatureKeyError";
+    this.featureKey = featureKey;
+  }
+}
+
+type DbError = { code?: string | null; message?: string | null; details?: string | null } | null | undefined;
+
+/**
+ * A foreign-key violation (23503) on the feature key — not on updated_by, the other foreign key on
+ * both switch tables, which would mean a missing admin row rather than a mistyped feature.
+ */
+export function isUnknownFeatureKeyViolation(error: DbError): boolean {
+  if (error?.code !== "23503") return false;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  return !/updated_by/.test(text);
+}

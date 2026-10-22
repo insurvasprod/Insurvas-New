@@ -1,9 +1,10 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { notify } from "@/lib/notify";
 
-import { Callout, Field, Pill, btn, control } from "@/components/app/settings/primitives";
+import { Callout, Field, btn, control, pillTone } from "@/components/app/settings/primitives";
 import { LoginProtectionPanel } from "@/components/admin/login-protection-panel";
 import { SETTING_DEFS, settingRefusalReason, type SettingDef, type SettingValue } from "@/lib/settings/constants";
 import {
@@ -22,7 +23,7 @@ export type SettingState = {
 
 /** The board's 140×38 store input: right-aligned figures, the strong edge every control carries. */
 const STORE_INPUT =
-  "box-border h-[38px] w-[140px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-right text-[16px] leading-[1.5] tracking-[-0.02em] tabular-nums text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)] disabled:cursor-not-allowed disabled:opacity-60";
+  "box-border h-[38px] w-[140px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-right text-base leading-[1.5] tracking-[-0.02em] tabular-nums text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)] disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
  * The Advanced screen (p-adm-advanced): a warning for any abuse control that has been loosened, the
@@ -143,7 +144,7 @@ export function SettingsForm({
             {saving ? "Saving…" : "Save"}
           </button>
         )}
-        <Pill tone={overridden ? "brand" : "neutral"}>{overridden ? "Overridden" : "Default"}</Pill>
+        <StatusChip dot={false} tone={pillTone(overridden ? "brand" : "neutral")}>{overridden ? "Overridden" : "Default"}</StatusChip>
         {overridden && (
           <button
             type="button"
@@ -172,9 +173,9 @@ export function SettingsForm({
 
       <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-          <h2 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Settings store</h2>
+          <h2 className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Settings store</h2>
           <span className="flex items-center gap-2.5">
-            <Pill tone={overriddenCount > 0 ? "brand" : "neutral"}>{overriddenCount} overridden</Pill>
+            <StatusChip dot={false} tone={pillTone(overriddenCount > 0 ? "brand" : "neutral")}>{overriddenCount} overridden</StatusChip>
           </span>
         </div>
 
@@ -188,14 +189,14 @@ export function SettingsForm({
               className={`flex flex-wrap items-center gap-4 px-4 py-3 ${index === 0 ? "" : "border-t border-[var(--border)]"}`}
             >
               <span className="block w-full min-w-0 sm:w-[300px] sm:shrink-0">
-                <label htmlFor={def.key} className="block font-mono text-[13px] break-all text-[var(--ink)]">
+                <label htmlFor={def.key} className="block font-mono text-sm break-all text-[var(--ink)]">
                   {def.key}
                 </label>
-                <span id={helpId} className="mt-1 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                <span id={helpId} className="mt-1 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                   {def.help}
                 </span>
                 {error && (
-                  <span id={errorId} role="alert" className="mt-1 block text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--error-ink)]">
+                  <span id={errorId} role="alert" className="mt-1 block text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--error-ink)]">
                     {error}
                   </span>
                 )}
@@ -230,7 +231,7 @@ export function SettingsForm({
                     onKeyDown={(e) => onFieldKey(def, e)}
                   />
                 )}
-                {def.unit && <span className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{def.unit}</span>}
+                {def.unit && <span className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{def.unit}</span>}
               </span>
 
               <span className="flex-1" aria-hidden="true" />
@@ -242,7 +243,7 @@ export function SettingsForm({
 
       {canManageLoginProtection && loginDefs.length > 0 ? (
         <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
-          <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Login protection</h2>
+          <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Login protection</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {loginDefs.map((def) => {
               const key = def.key as (typeof LOGIN_PROTECTION_KEYS)[number];
@@ -262,7 +263,7 @@ export function SettingsForm({
                     />
                   </Field>
                   <div className="mt-2 flex flex-wrap items-center gap-2.5">
-                    <code className="font-mono text-[12px] text-[var(--muted)]">{def.key}</code>
+                    <code className="font-mono text-xs text-[var(--muted)]">{def.key}</code>
                     <span className="flex-1" aria-hidden="true" />
                     {rowActions(def)}
                   </div>

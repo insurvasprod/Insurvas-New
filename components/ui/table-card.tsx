@@ -39,9 +39,9 @@ export function TableCard({
     <section
       data-slot="table-card"
       className={cn(
-        "rounded-lg border border-border bg-card",
+        // m-glass: the frosted surface shared with Card and StatStrip (app/globals.css, glass layer).
+        "m-glass rounded-lg border border-border",
         "[&>*:first-child]:rounded-t-[7px] [&>*:last-child]:rounded-b-[7px]",
-        "shadow-[0_1px_2px_rgba(16,20,26,.05)] dark:shadow-[0_1px_2px_rgba(0,0,0,.55)]",
         className
       )}
     >
@@ -56,7 +56,8 @@ export function TableCard({
       )}
 
       {toolbar && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-border bg-[var(--surface-alt)] px-4 py-3">
+        // A rule above and below: the filters read as their own band, apart from the column headers.
+        <div className="flex flex-wrap items-center gap-2 border-y border-border bg-[var(--surface-alt)] px-4 py-3">
           {toolbar}
         </div>
       )}

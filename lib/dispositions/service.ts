@@ -5,8 +5,10 @@ import type { Json } from "@/lib/supabase/database.types";
 import type { Disposition, DispositionFlow, DispositionNode, DispositionNodeType, DispositionOption, DispositionSettingsRow, DispositionWizard } from "./types";
 import { DISPOSITION_KEY_PATTERN, DISPOSITION_NODE_TYPES, DO_NOT_CALL_DISPOSITION_KEY } from "./types";
 import { isMissingSchema, SCHEMA_PENDING_MESSAGE } from "./schemaGap";
-import { customerName, customerTimezone } from "@/lib/callbacks/timezone";
+import { customerName, customerTimezone, resolveCustomerTimezone } from "@/lib/callbacks/timezone";
 import { ensureDefaultPublisherDispositionMappings } from "@/lib/pipelines/service";
+import { listPipelineOutcomeStages } from "@/lib/pipelines/outcomeStages";
+import { resolveOutcomeStages } from "@/lib/pipelines/outcomeResolution";
 import { derivedNextAction, endsDialing, validateNextAction, type NextActionSetting } from "./nextAction";
 import { checkCallbackInCallingWindow } from "./callbackWindow";
 
@@ -370,7 +372,7 @@ export async function answerDisposition(tenantId: string, userId: string, input:
   return result.data;
 }
 
-export async function completeDisposition(tenantId: string, userId: string, input: { work_item_id: unknown; walk_id: unknown; disposition_key: unknown; callback_subtype?: unknown; callback_local?: unknown; callback_assigned_to?: unknown; callback_idempotency_key?: unknown }) {
+export async function completeDisposition(tenantId: string, userId: string, input: { work_item_id: unknown; walk_id: unknown; disposition_key: unknown; callback_subtype?: unknown; callback_local?: unknown; callback_assigned_to?: unknown; callback_idempotency_key?: unknown; callback_timezone?: unknown }) {
   const subtype = input.callback_subtype == null || input.callback_subtype === "" ? null : text(input.callback_subtype, "Callback detail", 120);
   const dispositionKey = key(input.disposition_key, "Disposition key");
   const supabase = getSupabaseServiceClient();
@@ -388,10 +390,13 @@ export async function completeDisposition(tenantId: string, userId: string, inpu
         supabase.from("agent_leads").select("values").eq("tenant_id", tenantId).eq("id", queue.data.lead_id).single(),
       ]);
       if (lead.error || !lead.data) throw new DispositionError("lead_not_found", "That lead was not found.");
+      // Never a guessed zone: an unknown or split state needs the agent's choice (a coded 400).
+      const zone = resolveCustomerTimezone((lead.data.values ?? {}) as Record<string, unknown>, input.callback_timezone);
+      if (!zone.ok) throw new DispositionError(zone.code, zone.message);
       // Checked against the customer's calling window before anything is written.
-      const window = await checkCallbackInCallingWindow({ tenantId, leadId: queue.data.lead_id, callbackLocal: local, timezone: customerTimezone((lead.data.values ?? {}) as Record<string, unknown>), actorId: userId });
+      const window = await checkCallbackInCallingWindow({ tenantId, leadId: queue.data.lead_id, callbackLocal: local, timezone: zone.zone, actorId: userId });
       if (!window.ok) throw new DispositionError(window.status === 503 ? "disposition_unavailable" : "callback_outside_window", window.message);
-      return supabase.rpc("complete_disposition_with_callback", { p_tenant_id: tenantId, p_work_item_id: uuid(input.work_item_id, "work item"), p_user_id: userId, p_walk_id: uuid(input.walk_id, "walk"), p_callback_local: local, p_customer_timezone: customerTimezone((lead.data.values ?? {}) as Record<string, unknown>), p_assigned_to: assigned, p_callback_note: subtype, p_idempotency_key: callbackKey });
+      return supabase.rpc("complete_disposition_with_callback", { p_tenant_id: tenantId, p_work_item_id: uuid(input.work_item_id, "work item"), p_user_id: userId, p_walk_id: uuid(input.walk_id, "walk"), p_callback_local: local, p_customer_timezone: zone.zone, p_assigned_to: assigned, p_callback_note: subtype, p_idempotency_key: callbackKey });
     })()
     : await (async () => {
       const queue = await supabase.from("lead_queue").select("pipeline_id").eq("tenant_id", tenantId).eq("id", uuid(input.work_item_id, "work item")).single();
@@ -408,16 +413,22 @@ export async function completeDisposition(tenantId: string, userId: string, inpu
  * stage_dispositions. An active outcome with no live stage is left out — recording it would move
  * nothing (complete_disposition falls back to the current stage), which is what the outcome wizard
  * promises not to offer. Added for the inbound wizard; listDispositionConfig is unchanged.
+ *
+ * `pipelineId` (20261022200000): the lead's pipeline. Its own stage for an outcome wins over the
+ * agency-wide one, as complete_disposition resolves it. Omitted: the agency-wide stages only.
  */
-export async function listMappedOutcomes(tenantId: string): Promise<Array<Disposition & { mapped_stage: NonNullable<DispositionSettingsRow["mapped_stage"]> }>> {
+export async function listMappedOutcomes(tenantId: string, pipelineId: string | null = null): Promise<Array<Disposition & { mapped_stage: NonNullable<DispositionSettingsRow["mapped_stage"]> }>> {
   const supabase = getSupabaseServiceClient();
-  const [dispositions, mappings] = await Promise.all([
+  const [dispositions, agencyWide, own] = await Promise.all([
     selectDispositions(tenantId),
     supabase.from("stage_dispositions").select("stage_id, disposition_key").eq("tenant_id", tenantId),
+    pipelineId ? listPipelineOutcomeStages(tenantId) : Promise.resolve({ ready: false, rows: [] }),
   ]);
   if (dispositions.error) throw new DispositionError("disposition_unavailable", `Could not load call outcomes: ${dispositions.error.message}`);
-  if (mappings.error) throw new DispositionError("disposition_unavailable", `Could not load outcome stages: ${mappings.error.message}`);
-  const stageIds = [...new Set((mappings.data ?? []).map((mapping) => mapping.stage_id))];
+  if (agencyWide.error) throw new DispositionError("disposition_unavailable", `Could not load outcome stages: ${agencyWide.error.message}`);
+  // Both sets of stages are read; an archived own stage is not read, so it falls back to the agency-wide one.
+  const candidates = [...own.rows.filter((row) => row.pipeline_id === pipelineId), ...(agencyWide.data ?? [])];
+  const stageIds = [...new Set(candidates.map((mapping) => mapping.stage_id))];
   if (stageIds.length === 0) return [];
   const stages = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, stage_type, is_archived").in("id", stageIds).eq("is_archived", false);
   if (stages.error) throw new DispositionError("disposition_unavailable", `Could not load outcome stages: ${stages.error.message}`);
@@ -428,10 +439,9 @@ export async function listMappedOutcomes(tenantId: string): Promise<Array<Dispos
   const pipelineNames = new Map((pipelines.data ?? []).map((pipeline) => [pipeline.id as string, pipeline.name as string]));
   const stageById = new Map((stages.data ?? []).filter((stage) => pipelineNames.has(stage.pipeline_id)).map((stage) => [stage.id, stage]));
   const stageByKey = new Map<string, NonNullable<DispositionSettingsRow["mapped_stage"]>>();
-  for (const mapping of mappings.data ?? []) {
-    const stage = stageById.get(mapping.stage_id);
-    if (!stage) continue;
-    stageByKey.set(mapping.disposition_key, { id: stage.id, name: stage.name, stage_type: stage.stage_type, pipeline_id: stage.pipeline_id, pipeline_name: pipelineNames.get(stage.pipeline_id) ?? "Pipeline" });
+  for (const [dispositionKey, stageId] of resolveOutcomeStages(agencyWide.data ?? [], own.rows, pipelineId, (id) => stageById.has(id))) {
+    const stage = stageById.get(stageId)!;
+    stageByKey.set(dispositionKey, { id: stage.id, name: stage.name, stage_type: stage.stage_type, pipeline_id: stage.pipeline_id, pipeline_name: pipelineNames.get(stage.pipeline_id) ?? "Pipeline" });
   }
   return (dispositions.data ?? [])
     .filter((row) => row.is_active && stageByKey.has(row.disposition_key))

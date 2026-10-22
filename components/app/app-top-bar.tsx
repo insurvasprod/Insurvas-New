@@ -9,8 +9,11 @@ import {
 } from "lucide-react";
 
 import { useAgentAlertFeed, type AgentAlert } from "@/lib/agentAlerts/useAgentAlertFeed";
-import { WORKSPACE_ALERT_EVENTS, type AgentAlertEvent } from "@/lib/agentAlerts/presentation";
+import { WORKSPACE_ALERT_EVENTS } from "@/lib/agentAlerts/presentation";
+import { bellToneOf } from "@/lib/agentAlerts/bell";
 import { AgentAlertPreferences } from "@/components/app/agent-alert-preferences";
+import { NotificationCentrePanel, useBellCentre } from "@/components/app/agent-notification-centre";
+import { ThemeSwitch } from "@/components/public/theme-switch";
 import { KeyboardShortcutsDialog } from "@/components/app/keyboard-shortcuts-dialog";
 import { allMenuItems } from "@/lib/menu/definition";
 import { OPEN_ALERT_SETTINGS_EVENT } from "@/lib/agentAlerts/openAlertSettings";
@@ -53,6 +56,27 @@ function destinationLabel(link: string) {
 }
 
 type SearchHit = { group: string; title: string; meta: string; href: string };
+
+/**
+ * The last few results this person opened from search, in this browser (2026-10-09). A convenience
+ * only: storage can be missing or blocked, so every read and write is guarded and the box works
+ * without it. Keyed by the shell's search endpoint, so an agent's and a partner's recents never mix.
+ */
+const RECENT_LIMIT = 5;
+const recentKey = (endpoint: string) => `insurvas.search.recent.v1:${endpoint}`;
+function readRecent(endpoint: string): SearchHit[] {
+  try {
+    const raw = window.localStorage.getItem(recentKey(endpoint));
+    const parsed = raw ? (JSON.parse(raw) as SearchHit[]) : [];
+    return Array.isArray(parsed) ? parsed.filter((hit) => typeof hit?.href === "string" && typeof hit?.title === "string").slice(0, RECENT_LIMIT) : [];
+  } catch { return []; }
+}
+function writeRecent(endpoint: string, hit: SearchHit) {
+  try {
+    const next = [{ ...hit, group: "Recent" }, ...readRecent(endpoint).filter((row) => row.href !== hit.href)].slice(0, RECENT_LIMIT);
+    window.localStorage.setItem(recentKey(endpoint), JSON.stringify(next));
+  } catch { /* a recent list is a nicety; nothing breaks without it */ }
+}
 
 /** Addressed to the person; clears when read. `tone` picks the dot colour. */
 export type TopBarNotification = {
@@ -105,6 +129,12 @@ export type TopBarFeed = {
    * sent). The bar shows it next to the bell, so it is never on without the agent seeing it.
    */
   doNotDisturb?: boolean;
+  /**
+   * The agent bell only (2026-10-09 notification centre): draws the notifications panel's content
+   * (filters, groups, snooze) in place of the plain list. The partner and staff shells omit it and
+   * keep the list below. `notifications` still drives the badge.
+   */
+  renderNotifications?: (api: { close: () => void; openPreferences: (() => void) | null }) => ReactNode;
 };
 
 export type TopBarUser = {
@@ -112,6 +142,8 @@ export type TopBarUser = {
   email: string;
   roleLabel: string;
   workspaceName: string;
+  /** Set when the person has a profile picture; it versions the picture's address. */
+  avatarVersion?: string | null;
 };
 
 type TopBarWorkspace = { tenantId: string; name: string; roleLabel: string; current: boolean };
@@ -129,6 +161,13 @@ const PREFERENCES_BACK: Record<PreferencesOrigin, string> = {
   alerts: "Back to alerts",
   account: "Back to your account",
 };
+
+/** The profile picture when there is one (served by /api/app/profile/avatar), else the initials. */
+function AvatarFace({ user }: { user: TopBarUser }) {
+  if (!user.avatarVersion) return <>{initials(user.name)}</>;
+  // eslint-disable-next-line @next/next/no-img-element -- a session-bound redirect to a signed URL; next/image cannot optimise it
+  return <img src={`/api/app/profile/avatar?v=${encodeURIComponent(user.avatarVersion)}`} alt="" className="size-full rounded-full object-cover" />;
+}
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -224,6 +263,10 @@ export function TopBarShell({
   const [workspaces, setWorkspaces] = useState<TopBarWorkspace[]>([]);
   const [choosingWorkspace, setChoosingWorkspace] = useState(false);
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
+  // The box is useful before anything is typed (2026-10-09): recent picks and suggested actions.
+  const [focused, setFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState<SearchHit[] | null>(null);
+  const [recent, setRecent] = useState<SearchHit[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -234,8 +277,22 @@ export function TopBarShell({
   const trimmed = query.trim();
   // The panel opens on the first keystroke, as drawn. The query waits for a second character: one
   // letter would match half the workspace, so the panel says so instead of "Nothing matches".
-  const searchOpen = trimmed.length >= 1;
-  const tooShort = trimmed.length < 2;
+  const idleHits = useMemo(() => (trimmed ? [] : [...recent, ...(suggestions ?? []).filter((hit) => !recent.some((row) => row.href === hit.href)).map((hit) => ({ ...hit, group: "Suggested" }))]), [trimmed, recent, suggestions]);
+  const shown = trimmed ? hits : idleHits;
+  const searchOpen = trimmed.length >= 1 || (focused && idleHits.length > 0);
+  const tooShort = trimmed.length >= 1 && trimmed.length < 2;
+
+  function onSearchFocus() {
+    setFocused(true);
+    setRecent(readRecent(searchEndpoint));
+    setCursor(0);
+    if (suggestions !== null) return;
+    setSuggestions([]);
+    fetch(`${searchEndpoint}?q=&suggest=1`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { hits?: SearchHit[] } | null) => setSuggestions(body?.hits ?? []))
+      .catch(() => setSuggestions([]));
+  }
 
   // ---- the search itself -------------------------------------------------
   useEffect(() => {
@@ -246,9 +303,11 @@ export function TopBarShell({
       return () => window.clearTimeout(clear);
     }
     const controller = new AbortController();
+    let inFlight = false;
     // 180ms is long enough that a normal typist issues one request per word and short enough that
     // the list feels attached to the keyboard.
     const timer = window.setTimeout(async () => {
+      inFlight = true;
       setSearching(true);
       try {
         const response = await fetch(`${searchEndpoint}?q=${encodeURIComponent(trimmed)}`, {
@@ -261,14 +320,22 @@ export function TopBarShell({
         setTotal(body.total);
         setCursor(0);
       } catch (cause) {
-        if ((cause as Error)?.name === "AbortError") return;
+        // A superseded keystroke, not a failure. Checked on the signal rather than the error's name:
+        // the rejection's shape varies by browser and by whatever has wrapped fetch.
+        if (controller.signal.aborted || (cause as Error)?.name === "AbortError") return;
         setSearchError("Search is unavailable right now.");
         setHits([]);
       } finally {
-        setSearching(false);
+        inFlight = false;
+        if (!controller.signal.aborted) setSearching(false);
       }
     }, 180);
-    return () => { controller.abort(); window.clearTimeout(timer); };
+    return () => {
+      window.clearTimeout(timer);
+      // Only a request that actually left needs cancelling, and it gets a named reason: a bare
+      // abort() surfaced in the dev overlay as an uncaught "signal is aborted without reason".
+      if (inFlight) controller.abort(new DOMException("Search superseded", "AbortError"));
+    };
   }, [trimmed, searchEndpoint]);
 
   // ---- this person's workspaces: read once, drawn only when there is a choice ----
@@ -303,16 +370,19 @@ export function TopBarShell({
   }, [hasPreferences, openPreferences]);
 
   useEffect(() => {
-    if (!menu && !searchOpen) return;
+    if (!menu && !searchOpen && !focused) return;
     function onPointerDown(event: MouseEvent) {
+      // An InfoTip inside a panel opens in a portal; reading it is not a click outside the bar.
+      if ((event.target as Element | null)?.closest?.("[data-radix-popper-content-wrapper]")) return;
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         close();
         setQuery("");
+        setFocused(false);
       }
     }
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [menu, searchOpen, close]);
+  }, [menu, searchOpen, focused, close]);
 
   // ---- keyboard ----------------------------------------------------------
   useEffect(() => {
@@ -333,20 +403,20 @@ export function TopBarShell({
         const direction = listKeyDirection(event);
         if (direction && moveFocusInList(direction)) { event.preventDefault(); return; }
       }
-      if (event.key === "Escape") { close(); setQuery(""); }
+      if (event.key === "Escape") { close(); setQuery(""); setFocused(false); }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [close]);
 
   function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (!searchOpen || !hits.length) return;
-    if (event.key === "ArrowDown") { event.preventDefault(); setCursor((c) => (c + 1) % hits.length); }
-    else if (event.key === "ArrowUp") { event.preventDefault(); setCursor((c) => (c - 1 + hits.length) % hits.length); }
+    if (!searchOpen || !shown.length) return;
+    if (event.key === "ArrowDown") { event.preventDefault(); setCursor((c) => (c + 1) % shown.length); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setCursor((c) => (c - 1 + shown.length) % shown.length); }
     else if (event.key === "Enter") {
       event.preventDefault();
-      const hit = hits[cursor];
-      if (hit) go(hit.href);
+      const hit = shown[cursor];
+      if (hit) go(hit.href, hit);
     }
   }
 
@@ -355,8 +425,11 @@ export function TopBarShell({
    * hash rather than pushed: the settings rail and the lead list select from `hashchange`, which a
    * router push does not fire, so the click would otherwise land and change nothing.
    */
-  function go(href: string) {
+  function go(href: string, hit?: SearchHit) {
+    if (hit) writeRecent(searchEndpoint, hit);
     setQuery("");
+    setFocused(false);
+    inputRef.current?.blur();
     const [path, hash] = href.split("#");
     if (hash && path === window.location.pathname) window.location.hash = hash;
     else router.push(href);
@@ -392,12 +465,12 @@ export function TopBarShell({
   const grouped = useMemo(() => {
     const order: string[] = [];
     const byGroup = new Map<string, SearchHit[]>();
-    for (const hit of hits) {
+    for (const hit of shown) {
       if (!byGroup.has(hit.group)) { byGroup.set(hit.group, []); order.push(hit.group); }
       byGroup.get(hit.group)!.push(hit);
     }
     return order.map((group) => ({ group, rows: byGroup.get(group)! }));
-  }, [hits]);
+  }, [shown]);
 
   const currentWorkspaceIndex = workspaces.findIndex((workspace) => workspace.current);
   const canSwitch = workspaces.length > 1 && currentWorkspaceIndex >= 0 && Boolean(switchWorkspaceEndpoint);
@@ -423,6 +496,7 @@ export function TopBarShell({
           value={query}
           onChange={(event) => { setQuery(event.target.value); setMenu(null); }}
           onKeyDown={onSearchKeyDown}
+          onFocus={onSearchFocus}
           className="portal-top-search-input"
         />
         <span className="portal-top-search-keys" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
@@ -446,7 +520,7 @@ export function TopBarShell({
                         {...{ [KBD_ITEM_ATTRIBUTE]: "" }}
                         onMouseEnter={() => setCursor(index)}
                         onFocus={() => setCursor(index)}
-                        onClick={() => go(hit.href)}
+                        onClick={() => go(hit.href, hit)}
                         className="portal-top-hit m-row"
                       >
                         <span className="portal-top-hit-text">
@@ -466,7 +540,7 @@ export function TopBarShell({
                   <p className="portal-top-empty-body">Search starts at the second letter. {searchScope}</p>
                 </div>
               )}
-              {!tooShort && !hits.length && !searching && !searchError && (
+              {trimmed.length >= 2 && !hits.length && !searching && !searchError && (
                 <div className="portal-top-empty">
                   <p className="portal-top-empty-head">Nothing matches that</p>
                   <p className="portal-top-empty-body">{searchScope}</p>
@@ -481,7 +555,9 @@ export function TopBarShell({
             </div>
             <div className="portal-top-panel-foot">
               <span>
-                {tooShort
+                {!trimmed
+                  ? "Type to search leads, policies, pages and actions"
+                  : tooShort
                   ? "Type one more letter"
                   : searching
                   ? "Searching…"
@@ -497,7 +573,9 @@ export function TopBarShell({
 
       {/* ------------------------------------------------------- the right */}
       <div className="portal-top-actions">
-        {feed?.doNotDisturb && <span className="hidden text-[12px] leading-[1.5] font-semibold text-[var(--warning-ink)] sm:inline" title="Sound and browser alerts are muted. Escalation emails are still sent.">Do not disturb</span>}
+        {/* Light / dark, the landing page's switch and reveal, in front of the bell (owner, 2026-10-13). */}
+        <ThemeSwitch compact />
+        {feed?.doNotDisturb && <span className="hidden text-xs leading-[1.5] font-semibold text-[var(--warning-ink)] sm:inline" title="Sound and browser alerts are muted. Escalation emails are still sent.">Do not disturb</span>}
         {feed && <button
           type="button"
           aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
@@ -531,13 +609,18 @@ export function TopBarShell({
           onClick={() => toggle("account")}
           className="portal-top-account"
         >
-          <span className="portal-top-avatar" aria-hidden="true">{initials(user.name)}</span>
+          <span className="portal-top-avatar" aria-hidden="true"><AvatarFace user={user} /></span>
           <span className="portal-top-account-name">{user.name.split(/\s+/)[0]}</span>
           <ChevronDown className="size-3.5 text-[var(--muted)]" aria-hidden="true" />
         </button>
 
         {/* ------------------------------------------- notifications panel */}
-        {feed && menu === "notifications" && (
+        {feed?.renderNotifications && menu === "notifications" && (
+          <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
+            {feed.renderNotifications({ close, openPreferences: feed.preferences ? () => openPreferences("notifications") : null })}
+          </section>
+        )}
+        {feed && !feed.renderNotifications && menu === "notifications" && (
           <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
             <header className="portal-top-panel-head">
               <span>Notifications</span>
@@ -649,7 +732,7 @@ export function TopBarShell({
         {menu === "account" && (
           <section aria-label="Your account" className="portal-top-panel portal-top-panel-account m-swap">
             <div className="portal-top-identity">
-              <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true">{initials(user.name)}</span>
+              <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
               <span>
                 <span className="portal-top-identity-name">{user.name}</span>
                 <span className="portal-top-identity-email">{user.email}</span>
@@ -766,19 +849,13 @@ function TopBarSignOut({ endpoint, redirect }: { endpoint: string; redirect: str
 
 // ---------------------------------------------------------------- the agent
 
-const NOTIFICATION_TONE: Partial<Record<AgentAlertEvent, TopBarNotification["tone"]>> = {
-  handoff_offered: "success",
-  callback_due: "warning",
-  partner_message: "muted",
-};
-
 /** Splits the agent feed into what is addressed to you and what is wrong with the workspace. */
 function agentFeedLists(alerts: AgentAlert[]) {
   const notifications: TopBarNotification[] = [];
   const workspace: AgentAlert[] = [];
   for (const alert of alerts) {
     if (WORKSPACE_ALERT_EVENTS.includes(alert.event_type)) workspace.push(alert);
-    else notifications.push({ ...alert, tone: NOTIFICATION_TONE[alert.event_type] ?? "accent" });
+    else notifications.push({ ...alert, tone: bellToneOf(alert.event_type) });
   }
   // Newest first, as the board draws them ("just now", then "6m"). The feed arrives oldest first.
   notifications.sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -799,11 +876,17 @@ function agentFeedLists(alerts: AgentAlert[]) {
  * The agent's bar. Owns the one poller for the whole page — the alert centre used to own it, and
  * mounting both would mean two requests every 2.5 seconds and two toasts per alert.
  */
-export function AppTopBar({ user }: { user: TopBarUser }) {
+export function AppTopBar({ user, userId }: { user: TopBarUser; /** Keys this browser's snoozes to the person. */ userId?: string }) {
   const source = useAgentAlertFeed();
   const lists = useMemo(() => agentFeedLists(source.alerts), [source.alerts]);
+  // The notification centre (2026-10-09): the same feed, grouped, filtered and snoozable. Snoozed
+  // notifications leave the badge until their time.
+  const personal = useMemo(() => source.alerts.filter((alert) => !WORKSPACE_ALERT_EVENTS.includes(alert.event_type)), [source.alerts]);
+  const centre = useBellCentre(personal, userId, source.markRead);
   const feed: TopBarFeed = {
     ...lists,
+    notifications: lists.notifications.filter((item) => centre.badgeIds.has(item.id)),
+    renderNotifications: ({ close, openPreferences }) => <NotificationCentrePanel centre={centre} close={close} openPreferences={openPreferences} />,
     markRead: source.markRead,
     preferences: <AgentAlertPreferences feed={source} />,
     preferencesHint: "Which events reach you, and how",

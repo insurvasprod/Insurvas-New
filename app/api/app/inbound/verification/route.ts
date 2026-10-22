@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
+import { guardWorkItem } from "@/lib/transferInbox/scope";
 import { getVerificationContext } from "@/lib/verification/context";
 import { maskSensitivePanel } from "@/lib/verification/sensitive";
 import { getVerificationPanel, updateVerificationField, VerificationError } from "@/lib/verification/service";
@@ -35,11 +37,15 @@ async function screenPanel(panel: Panel, tenantId: string, userId: string, workI
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const workItemId = new URL(request.url).searchParams.get("work_item_id");
   const parsed = workItemSchema.safeParse(workItemId);
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid transfer" }, { status: 400 });
+  // AG-0.5: the panel itself is the holder's only (verification_owner_required); in an agency another
+  // producer's transfer answers 404 instead, so its existence is not confirmed. Null scope: unchanged.
+  const hidden = await guardWorkItem(auth.context, parsed.data, await scopeFor(auth.context));
+  if (hidden) return hidden;
   try {
     const panel = await getVerificationPanel(auth.context.tenantId, auth.context.userId, parsed.data);
     return NextResponse.json(await screenPanel(panel, auth.context.tenantId, auth.context.userId, parsed.data));
@@ -52,6 +58,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid field and verification state" }, { status: 400 });
+  const hidden = await guardWorkItem(auth.context, parsed.data.work_item_id, await scopeFor(auth.context));
+  if (hidden) return hidden;
   try {
     const updated = await updateVerificationField({
       tenantId: auth.context.tenantId,

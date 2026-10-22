@@ -1,11 +1,13 @@
 /**
- * LA-2.2-1 · an Excel workbook, read in the browser, turned into the SAME CSV text the importer
- * already checks — so mapping, validation, the scrub and the dedupe are unchanged, and the server
- * never sees anything but CSV (user decision: ExcelJS in the browser).
+ * LA-2.2-1 · an Excel workbook turned into the SAME CSV text the importer already checks, so
+ * mapping, validation, the scrub and the dedupe are unchanged. The lead importer reads workbooks in
+ * the browser and sends only CSV (user decision: ExcelJS in the browser). Carrier statements
+ * (LA-4.1) send the workbook itself; the server reads it with this same code, so the preview and
+ * the import see identical lines.
  *
  * Pure: the conversion takes plain cell values (what ExcelJS hands back) and a number format per
- * cell, so it is tested without a workbook. `readXlsxAsCsv` is the thin browser wrapper that loads
- * ExcelJS on demand and feeds it through.
+ * cell, so it is tested without a workbook. `readXlsxAsCsv` is the thin wrapper that loads ExcelJS
+ * on demand and feeds it through; it runs in the browser and on the server.
  */
 
 /** A cell as ExcelJS reports it: a primitive, a Date, or one of its object shapes. */
@@ -95,8 +97,36 @@ export function isXlsxFile(file: { name: string; type?: string }) {
 }
 
 /**
- * The first worksheet of an .xlsx file, as CSV text. Browser only: ExcelJS is loaded when the first
- * Excel file is chosen, so a CSV import never downloads it.
+ * Every worksheet of an .xlsx file as a grid of cell texts, in workbook order, for the carrier-file
+ * raw layer: every line kept where it is (blank ones too) and every cell of the widest row, so a
+ * title row above the header never narrows the table. Unlike rowsToCsv, which shapes a lead list for
+ * the importer, nothing here is dropped or trimmed.
+ */
+export async function readXlsxSheets(buffer: ArrayBuffer): Promise<Array<{ name: string; hidden: boolean; grid: string[][] }>> {
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  if (!workbook.worksheets.length) throw new Error("This workbook has no worksheet to import.");
+  return workbook.worksheets.map((sheet) => {
+    // The declared width can be narrower than the rows (a stale dimension tag): measure every row.
+    let columns = Math.max(sheet.columnCount, sheet.actualColumnCount);
+    sheet.eachRow({ includeEmpty: false }, (row) => { columns = Math.max(columns, row.cellCount); });
+    const grid: string[][] = [];
+    sheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+      const cells: string[] = [];
+      for (let column = 1; column <= columns; column++) {
+        const cell = row.getCell(column);
+        cells.push(cellText({ value: cell.value, numFmt: cell.numFmt ?? null }));
+      }
+      grid[rowNumber - 1] = cells;
+    });
+    for (let index = 0; index < grid.length; index++) grid[index] ??= [];
+    return { name: sheet.name, hidden: sheet.state !== "visible", grid };
+  });
+}
+/**
+ * The first visible worksheet of an .xlsx file, as CSV text. ExcelJS is loaded on demand, so a
+ * browser importing a CSV never downloads it. The statement import also calls this on the server.
  */
 export async function readXlsxAsCsv(buffer: ArrayBuffer): Promise<{ csv: string; sheetName: string; sheets: number }> {
   const ExcelJS = (await import("exceljs")).default;

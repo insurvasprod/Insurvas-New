@@ -85,7 +85,7 @@ export default async function LegalPage({ params, searchParams }: Params) {
             <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--accent-ink)]">
               Version {doc.version} · effective {longDate(doc.effective_date)}
             </div>
-            <h1 className="mt-2.5 text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+            <h1 className="mt-2.5 text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
               {doc.title}
             </h1>
 

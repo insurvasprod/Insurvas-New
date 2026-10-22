@@ -122,7 +122,7 @@ export async function getVendorCostPerPolicy(tenantId: string, filters: { from?:
   return { available: report.upgraded, from: report.from, to: report.to, persistDays: report.persist_days, rows: report.vendor_rows };
 }
 
-export const DRILL_PAGE_SIZE = 100;
+export const DRILL_PAGE_SIZE = 10;
 const SLOT = /^[a-z][a-z_]{0,39}$/;
 
 /**

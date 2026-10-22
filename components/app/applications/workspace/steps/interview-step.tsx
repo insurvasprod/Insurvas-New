@@ -25,6 +25,8 @@ import { InterviewQuestionList, interviewLayout, interviewProgress } from "@/com
 import { MedicationTable, newMedicationRow } from "@/components/app/applications/workspace/interview/medication-table";
 import { questionDomId } from "@/components/app/applications/workspace/interview/question-input";
 import { AutosaveChip, calendarDate } from "./step-bits";
+import { IncomeCapture } from "@/components/app/retention/income-capture";
+import { INTERVIEW_PROMPT } from "@/lib/retention/income";
 
 export function InterviewStep() {
   const { interview, attempt, readOnly, sample, updateInterview, actions, goTo } = useWorkspace();
@@ -134,6 +136,18 @@ export function InterviewStep() {
           </div>
           <InterviewQuestionList questions={asked} answers={answers} readOnly={readOnly} onAnswers={(next) => updateInterview({ answers: Object.fromEntries(Object.entries(next).filter(([key]) => !notAsked.has(key))) })} />
         </StepCard>
+
+        {/* LA-5.10 · optional, asked as part of affordability; kept on the client, not the interview. */}
+        {!sample && (
+          <StepCard title="Monthly income" chips={<StatusChip tone="neutral">Optional</StatusChip>}>
+            <IncomeCapture
+              readUrl={`/api/app/applications/attempts/${attempt.id}/income?surface=interview`}
+              save={(income) => fetch(`/api/app/applications/attempts/${attempt.id}/income`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surface: "interview", income }) })}
+              prompt={INTERVIEW_PROMPT}
+              readOnly={readOnly}
+            />
+          </StepCard>
+        )}
 
         {medicationQuestion && (
           <StepCard

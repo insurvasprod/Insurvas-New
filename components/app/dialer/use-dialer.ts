@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { notify, setCallInProgress } from "@/lib/notify";
+import { withFrom } from "@/lib/applications/backLink";
 
 import { openSlots, type PickerContext } from "@/lib/appointments/calendarMath";
 import { insideWindow, STATE_NAMES } from "@/lib/callbacks/windowFacts";
@@ -112,9 +113,9 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
         const body = await response.json().catch(() => null);
         if (!active) return;
         if (response.ok && body?.served) { setServed(body.served); setSelectedId(body.served.leadId); }
-        else setEmptyReason(`That lead could not be opened: ${errorText(body, "the server refused it.")} Press Serve next lead for the next one in the queue.`);
+        else setEmptyReason(`Serve the next lead — that one could not be opened: ${errorText(body, "the server refused it.")}`);
         setQueueReload((n) => n + 1);
-      }).catch(() => { if (active) setEmptyReason("That lead could not be opened. Press Serve next lead for the next one in the queue."); }).finally(() => { if (active) setLoading(false); });
+      }).catch(() => { if (active) setEmptyReason("Serve the next lead — that one could not be opened."); }).finally(() => { if (active) setLoading(false); });
       return () => { active = false; };
     }
     void fetch("/api/app/dialer/next", { method: "POST" }).then(async (response) => {
@@ -157,8 +158,9 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
    * Book the qualified lead onto an agent's calendar. The server owns every rule — the customer's
    * legal window at the booked instant, working hours, blocked time, the daily cap and the slot race.
    */
-  async function bookAppointment() {
-    if (!panel || !bookAgent || !bookSlot || booking) return;
+  /** True when the appointment was booked (the booking pop-up closes on it). */
+  async function bookAppointment(): Promise<boolean> {
+    if (!panel || !bookAgent || !bookSlot || booking) return false;
     setBooking(true);
     try {
       const response = await fetch("/api/app/appointments", {
@@ -167,10 +169,11 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
         body: JSON.stringify({ lead_id: panel.lead.id, agent_user_id: bookAgent, starts_at_utc: bookSlot, notes: bookNotes.trim() || null }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { notify.block("Could not book the appointment", { detail: errorText(body, "The server refused the slot.") }); return; }
+      if (!response.ok) { notify.block("Could not book the appointment", { detail: errorText(body, "The server refused the slot.") }); return false; }
       notify.win("Appointment booked", { detail: body.appointment?.reason ?? undefined });
       setBookSlot(""); setBookNotes("");
-    } catch { notify.fail("Could not book the appointment"); }
+      return true;
+    } catch { notify.fail("Could not book the appointment"); return false; }
     finally { setBooking(false); }
   }
 
@@ -199,7 +202,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ work_item_id: panel.lead.workItemId, product_line: panel.lead.productCode || undefined }),
       }).then((r) => (r.ok ? r.json() : null)).catch(() => null) as { href?: string } | null;
-      router.push(workspace?.href ?? `/app/leads/${panel.lead.id}`);
+      router.push(workspace?.href ? withFrom(workspace.href, window.location.pathname) : `/app/leads/${panel.lead.id}`);
     } catch { notify.fail("Could not start the application"); }
     finally { setStarting(false); }
   }

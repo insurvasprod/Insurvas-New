@@ -5,12 +5,15 @@ import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { SchemaGapError } from "@/lib/appointments/schemaGap";
 import { FEDERAL_MINUTES, minuteLabel, type MinuteWindow } from "@/lib/callingWindow/engine";
+import { recordSettingsChanges, type SettingsChange } from "@/lib/settingsAudit/record";
 import {
   getCallingWindows,
   saveCallingWindowOptions,
   saveCampaignCallingWindow,
   saveTenantCallingWindow,
 } from "@/lib/callingWindow/service";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-2.4 · the hours this agency is willing to dial in.
@@ -61,12 +64,16 @@ function toMinuteWindow(window: z.infer<typeof windowSchema>): MinuteWindow | nu
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", READ_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", READ_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
-    const settings = await getCallingWindows(auth.context.tenantId);
+    const [settings, scope] = await Promise.all([getCallingWindows(auth.context.tenantId), scopeFor(auth.context)]);
+    // AG-0.5: the windows, switches and state rules are the agency's configuration and every dialer
+    // needs them. `dialingStates` is the one part built from rows — every live lead's state, whoever owns
+    // it — so a narrow session inside an agency gets null, and the board falls back to the states whose
+    // rule bites (statesToList's "notable" basis).
     return NextResponse.json(
-      { ...settings, canEdit: auth.context.role === "owner" },
+      { ...settings, ...(scope === null ? {} : { dialingStates: null }), canEdit: auth.context.role === "owner" },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
@@ -80,6 +87,8 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", WRITE_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Calling windows");
+  if (refused) return refused;
 
   const parsed = saveSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
@@ -122,6 +131,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Say which campaign", code: "campaign_required" }, { status: 400 });
 
   try {
+    const before = await getCallingWindows(auth.context.tenantId).catch(() => null);
     if (scope === "tenant") {
       await saveTenantCallingWindow({ tenantId: auth.context.tenantId, userId: auth.context.userId, window });
     } else if (scope === "campaign") {
@@ -155,7 +165,27 @@ export async function PUT(request: NextRequest) {
       },
       request,
     });
-    return NextResponse.json(await getCallingWindows(auth.context.tenantId));
+    const saved = await getCallingWindows(auth.context.tenantId);
+    // LA-8.8: the settings history, as hours a person reads.
+    const hours = (w: { startHour: number | null; endHour: number | null; startMinute?: number | null; endMinute?: number | null } | null | undefined) => {
+      const start = w ? w.startMinute ?? (w.startHour === null ? null : w.startHour * 60) : null;
+      const end = w ? w.endMinute ?? (w.endHour === null ? null : w.endHour * 60) : null;
+      return start === null || end === null ? null : `${minuteLabel(start)}–${minuteLabel(end)}`;
+    };
+    const changes: SettingsChange[] = [];
+    if (scope === "tenant") changes.push({ key: "agency_hours", label: "Agency calling hours", from: hours(before?.tenant), to: hours(saved.tenant) });
+    if (scope === "campaign") {
+      const id = parsed.data.campaignId as string;
+      const was = before?.campaigns.find((c) => c.id === id);
+      const now = saved.campaigns.find((c) => c.id === id);
+      changes.push({ key: `campaign:${id}`, label: `Calling hours — ${now?.name ?? was?.name ?? "campaign"}`, from: hours(was), to: hours(now) });
+    }
+    if (parsed.data.options && scope !== "campaign") {
+      const labels = { noSunday: "No calls on Sundays", noFederalHolidays: "No calls on federal holidays", campaignOverrides: "Campaigns may narrow the hours" } as const;
+      for (const key of Object.keys(labels) as (keyof typeof labels)[]) changes.push({ key, label: labels[key], from: before ? before.options[key] : null, to: saved.options[key] });
+    }
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "calling-windows", changes, reason: scope === "campaign" ? parsed.data.reason ?? null : null });
+    return NextResponse.json(saved);
   } catch (error) {
     if (error instanceof SchemaGapError)
       return NextResponse.json({ error: error.message, code: "schema_pending" }, { status: 503 });

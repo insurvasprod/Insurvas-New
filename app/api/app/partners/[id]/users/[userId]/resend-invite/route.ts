@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendExistingPartnerInvitationEmail, sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { sendPartnerInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { resendPartnerInvite } from "@/lib/partnerUsers/service";
@@ -22,9 +22,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const result = await resendPartnerInvite({ tenantId: auth.context.tenantId, partnerId, userId, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString() });
     const inviteUrl = result.has_existing_password ? buildExistingPartnerInviteUrl(token, origin) : buildPartnerInviteUrl(token, origin);
-    const { delivered } = result.has_existing_password
-      ? await sendExistingPartnerInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId })
-      : await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId });
+    const { delivered } = await sendPartnerInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId, partnerId, existingAccount: result.has_existing_password });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_user_invite_resent", targetType: "partner_user", targetId: userId, metadata: { partnerId, delivered, actorPlane: "agent" }, request });
     return NextResponse.json({ ok: true, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered, mode: result.has_existing_password ? "existing_account" : "set_password" } });
   } catch (error) {

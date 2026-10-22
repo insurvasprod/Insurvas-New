@@ -22,7 +22,7 @@ import { trustedFormCertificateId } from "./capture";
  * no locker, because it would be reassuring and wrong.
  */
 
-type Result<T> = { data: T | null; error: { message: string; code?: string } | null };
+type Result<T> = { data: T | null; error: { message: string; code?: string } | null; count?: number | null };
 type Row = Record<string, unknown>;
 type Query = {
   select(columns: string, options?: { count?: "exact"; head?: boolean }): Query;
@@ -35,6 +35,9 @@ type Query = {
   then(resolve: (value: Result<Row[]>) => unknown, reject?: (reason: unknown) => unknown): Promise<unknown>;
 };
 type Db = { from(table: string): Query };
+
+/** The statuses the locker tallies, each read as its own head count. */
+const CONSENT_COUNTED: ConsentStatus[] = ["pending", "claimed", "expired", "failed"];
 
 function db(): Db {
   return getSupabaseServiceClient() as unknown as Db;
@@ -87,7 +90,16 @@ export async function getConsentLocker(input: {
     // Counted separately and over every row, because the page above is capped. A tally derived
     // from the page would shrink as soon as a filter was applied and read as "we have fewer
     // certificates" rather than "you are looking at fewer".
-    client.from("tenant_consent_artefacts").select("capture_status").eq("tenant_id", input.tenantId).limit(10000),
+    // One head count per status: reading the rows to tally them stopped at the API's 1,000-row page
+    // (a .limit(10000) does not lift it), so a tenant with more certificates saw a short tally.
+    Promise.all(
+      CONSENT_COUNTED.map((status) => {
+        const counted = client.from("tenant_consent_artefacts").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId);
+        // A row with no status reads as pending below, so it is counted as pending here too.
+        const query = status === "pending" ? counted.or("capture_status.eq.pending,capture_status.is.null") : counted.eq("capture_status", status);
+        return query as unknown as PromiseLike<Result<Row[]>>;
+      }),
+    ),
     client
       // The percentage columns are `claimed_coverage_pct` and `any_coverage_pct`. This asked for
       // `claimed_pct`, which does not exist, so every request failed with 42703 — and the screen
@@ -177,10 +189,9 @@ export async function getConsentLocker(input: {
     throw new Error(`Could not read per-vendor consent coverage: ${coverage.error.message}`);
 
   const counts: Record<ConsentStatus, number> = { pending: 0, claimed: 0, expired: 0, failed: 0 };
-  for (const row of statusRows.data ?? []) {
-    const status = (text(row.capture_status) || "pending") as ConsentStatus;
-    if (status in counts) counts[status] += 1;
-  }
+  CONSENT_COUNTED.forEach((status, at) => {
+    counts[status] = statusRows[at].count ?? 0;
+  });
 
   return {
     artefacts: filtered.slice(0, limit),

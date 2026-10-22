@@ -19,11 +19,11 @@ import { INVOICE_STATUSES, INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/l
 import type { InvoiceListRow, InvoiceTotals } from "@/lib/invoices/queries";
 import { cn } from "@/lib/utils";
 
-const PAGE = 25;
+const PAGE = 10;
 type Lens = "all" | "overdue" | "mismatched";
 
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 /** Whole days past due, measured against the moment the page was rendered (passed in, so the server and the browser agree). */
 function daysOverdue(dueAt: string | null, status: InvoiceStatus, now: number): number | null {
@@ -161,7 +161,7 @@ export function InvoicesTable({
                   <td className={cn(td, "whitespace-nowrap tabular-nums")}>{fullDate(invoice.due_at)}</td>
                   <td className={cn(td, "whitespace-nowrap text-right tabular-nums")}>
                     <span className="font-semibold text-[var(--ink)]">{formatCentsAsCurrency(invoice.total_cents)}</span>
-                    {mismatched && <span className="block text-[12px] text-[var(--error-ink)]">charged {invoice.provider_total_cents === null ? "unknown" : formatCentsAsCurrency(invoice.provider_total_cents)}</span>}
+                    {mismatched && <span className="block text-xs text-[var(--error-ink)]">charged {invoice.provider_total_cents === null ? "unknown" : formatCentsAsCurrency(invoice.provider_total_cents)}</span>}
                   </td>
                   <td className={td}>
                     <span className="flex flex-wrap items-center gap-1.5">

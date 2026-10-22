@@ -11,6 +11,7 @@ import {
   MAINTENANCE_REASON_MIN,
 } from "@/lib/system/adminFormat";
 import { getMaintenanceStatus, setMaintenance } from "@/lib/system/service";
+import { CAN_MANAGE_SETTINGS } from "@/lib/settings/permissions";
 
 const REASON_ERROR = `Give a reason of ${MAINTENANCE_REASON_MIN}–${MAINTENANCE_REASON_MAX} characters; it is recorded in the audit log`;
 
@@ -28,6 +29,17 @@ const schema = z.object({
   // Required whenever the new level is locked (checked below), including while it already is.
   confirmPhrase: z.string().max(100).optional(),
 });
+
+/** The current level, for whoever may read the system screen (the same reach as GET /api/admin/system). */
+export async function GET() {
+  const auth = await requireAdminRole(CAN_MANAGE_SETTINGS);
+  if (auth instanceof NextResponse) return auth;
+  try {
+    return NextResponse.json({ maintenance: await getMaintenanceStatus() }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load the maintenance level" }, { status: 500 });
+  }
+}
 
 /**
  * Maintenance changes every customer's access at once, so it is super_admin only (it used to be

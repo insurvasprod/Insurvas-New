@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { audit } from "@/lib/audit/log";
 import { fetchAllSwitches, fetchSwitchReasons, setSwitch } from "@/lib/features/killSwitch";
-import { SWITCH_STATES, switchRefusalReason, OFF_MESSAGE_MAX } from "@/lib/features/killSwitchRules";
+import { SWITCH_STATES, switchRefusalReason, OFF_MESSAGE_MAX, UnknownFeatureKeyError } from "@/lib/features/killSwitchRules";
 
 // super_admin only, and narrower than the feature catalog beside it on the same screen.
 //
@@ -76,10 +76,12 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: true, featureSwitch: change.to, reason: recorded });
   } catch (error) {
     // 23503 = the feature_key does not exist in the catalog. Worth naming, because the most likely
-    // cause is a typo or a feature that was renamed rather than archived.
-    const message = error instanceof Error && error.message.includes("23503")
-      ? `No feature called "${feature_key}" exists in the catalog.`
-      : "Could not save this switch";
-    return NextResponse.json({ error: message }, { status: 400 });
+    // cause is a typo or a feature that was renamed rather than archived. setSwitch raises it as a
+    // typed error carrying the code; anything else is our failure, not the admin's input.
+    if (error instanceof UnknownFeatureKeyError) {
+      return NextResponse.json({ error: error.message, code: "unknown_feature" }, { status: 400 });
+    }
+    console.error("[feature-switches] save failed", error);
+    return NextResponse.json({ error: "Could not save this switch" }, { status: 500 });
   }
 }

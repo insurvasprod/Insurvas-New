@@ -1,8 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { X } from "lucide-react";
 import { notify } from "@/lib/notify";
 import {
   CAMPAIGN_STATUSES,
@@ -20,7 +19,9 @@ import {
 } from "@/lib/campaigns/constants";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DetailPanel } from "@/components/ui/detail-panel";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
@@ -28,9 +29,14 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager } from "@/components/ui/pager";
-import { NewVendorPanel, VendorRoster } from "@/components/app/vendor-roster";
+import { NewVendorPanel, SIDE_PANEL_FRAME, VendorRoster } from "@/components/app/vendor-roster";
 import { Callout } from "@/components/app/settings/primitives";
 import { vendorCampaignWarning, vendorTakesCampaigns } from "@/lib/vendors/types";
+import { cn } from "@/lib/utils";
+import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
+
+/** Campaigns and vendors, one at a time (2026-10-06 redesign). */
+type View = "campaigns" | "vendors";
 
 type Campaign = {
   campaign_id: string; vendor_id: string; name: string; lead_type: string; product_code: string | null;
@@ -83,7 +89,6 @@ function money2(cents: number | null | undefined) {
 // and `running`, which it never does, so a campaign mid-scrub showed the raw word.
 const STATUS_LABEL = CAMPAIGN_STATUS_LABEL;
 const STATUS_ORDER = CAMPAIGN_STATUS_ORDER;
-const PAGE_SIZE = 25;
 const SCRUB_LABEL = SCRUB_STATUS_LABEL;
 /** The focus ring the page wrapper used to give the form fields (they keep their global field class). */
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
@@ -143,6 +148,20 @@ export function CampaignWorkspace() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [view, setView] = useState<View>("campaigns");
+  // Header, strip, tab row, toolbar, column heads, totals row and pager around the campaign rows.
+  const pageSize = useFittingRows(470, 45);
+  const closePanel = useCallback(() => setOpenId(null), []);
+  // The filter popover closes on a click outside it or Esc, like the inbox's.
+  const filtersRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onPointer = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setFiltersOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
+  }, [filtersOpen]);
   // Campaigns concept audit (LA-2 §5). Each is null when its migration is not applied, and the line
   // that shows it is then left out rather than drawn as a zero.
   const [progress, setProgress] = useState<Record<string, CampaignProgress> | null>(null);
@@ -157,6 +176,8 @@ export function CampaignWorkspace() {
   const [driving, setDriving] = useState<string | null>(null);
   const [scrubError, setScrubError] = useState<{ campaignId: string; message: string } | null>(null);
   const stopRequested = useRef(false);
+  /** "Pause the scrub": the loop in runScrub stops after the batch in flight. */
+  const stopScrub = useCallback(() => { stopRequested.current = true; }, []);
 
   const load = useCallback(() => Promise.all([
     fetch("/api/app/campaigns", { cache: "no-store" }),
@@ -276,6 +297,12 @@ export function CampaignWorkspace() {
 
   async function createCampaign() {
     if (!newCampaign || creating) return;
+    // Checked before anything is created: "abc" in Total spend used to save the campaign at $0.00
+    // without a word, and the cost of a lead is the number this product is for (QA 2026-10-22).
+    const spendText = newCampaign.total_spend.replace(/[$,\s]/g, "");
+    const purchasedText = newCampaign.records_purchased.replace(/[,\s]/g, "");
+    if (spendText && !/^\d+(\.\d{1,2})?$/.test(spendText)) { notify.block("Total spend must be an amount in dollars, like 1750.00."); return; }
+    if (purchasedText && !/^\d+$/.test(purchasedText)) { notify.block("Records purchased must be a whole number."); return; }
     setCreating(true);
     try {
       const created = await fetch("/api/app/campaigns", {
@@ -296,8 +323,8 @@ export function CampaignWorkspace() {
       // The money is a second call, because `POST /campaigns` deliberately does not take it — the
       // cost fields belong to the same PATCH that the cost editor uses, so there is one place where
       // spend changes and one place that re-derives cost per record.
-      const spend = Math.round(Number(newCampaign.total_spend) * 100);
-      const purchased = Number(newCampaign.records_purchased);
+      const spend = Math.round(Number(spendText || 0) * 100);
+      const purchased = Number(purchasedText || 0);
       const weight = Number(newCampaign.mixing_weight) || 1;
       if (Number.isFinite(spend) && spend >= 0 && Number.isInteger(purchased) && purchased >= 0) {
         await fetch(`/api/app/campaigns/${body.campaign.id}`, {
@@ -355,9 +382,9 @@ export function CampaignWorkspace() {
   // Active campaigns the scrub gate is holding back — what the board's gate banner names.
   const gated = campaigns.filter((campaign) => campaign.status === "active" && !campaignServes(campaign.status, campaign.scrub_status));
   const filterCount = statusFilter.size + (typeFilter === "all" ? 0 : 1);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
-  const shown = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const shown = filtered.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
   const sumRecords = filtered.reduce((sum, campaign) => sum + campaign.records_purchased, 0);
   const sumLeads = funnel || progress ? filtered.reduce((sum, campaign) => sum + (funnel?.[campaign.campaign_id]?.leads_received ?? progress?.[campaign.campaign_id]?.leads_received ?? 0), 0) : null;
   const sumDialable = funnel ? filtered.reduce((sum, campaign) => sum + (funnel[campaign.campaign_id]?.dialable_leads ?? 0), 0) : filtered.some((campaign) => campaign.records_usable !== null) ? filtered.reduce((sum, campaign) => sum + (campaign.records_usable ?? 0), 0) : null;
@@ -377,22 +404,41 @@ export function CampaignWorkspace() {
   const activeUsage = limits.find((item) => item.key === "max_active_campaigns") ?? null;
   const activeLimit = activeUsage && activeUsage.limit !== null ? activeUsage : null;
   const atActiveLimit = activeLimit !== null && activeLimit.usage >= (activeLimit.limit ?? 0);
+  const filtersOn = needle !== "" || vendorFilter !== "all" || filterCount > 0;
+  const clearFilters = () => { setSearch(""); setVendorFilter("all"); setStatusFilter(new Set()); setTypeFilter("all"); setPage(0); };
+  const selected = openId ? campaigns.find((campaign) => campaign.campaign_id === openId) ?? null : null;
+  // While the panel is open the table keeps the columns that identify a campaign and what it cost.
+  const wide = selected === null;
+  const openNewCampaign = (vendorId?: string, leadType = "list") => {
+    setNewVendor(null);
+    setNewCampaign({ vendor_id: vendorId ?? vendors.find((vendor) => vendorTakesCampaigns(vendor.status))?.id ?? "", name: "", lead_type: leadType, product_code: "", total_spend: "", records_purchased: "", mixing_weight: "1" });
+  };
+  const openNewVendor = () => { setNewCampaign(null); setNewVendor({ name: "", lead_type: "list", return_window_days: "30", terms: "" }); };
+  const tabs: { key: View; label: string; count: number }[] = [
+    { key: "campaigns", label: "Campaigns", count: campaigns.length },
+    { key: "vendors", label: "Vendors", count: vendors.length },
+  ];
 
-  return <div className="m-stagger flex flex-col gap-6 text-[var(--ink)]">
-    <PageHeader
-      title="Vendors & campaigns"
-      actions={<>
-        <Button type="button" variant="outline" onClick={() => { setNewCampaign(null); setNewVendor({ name: "", lead_type: "list", return_window_days: "30", terms: "" }); }}>New vendor</Button>
-        <Button type="button" disabled={vendors.length === 0} title={vendors.length === 0 ? "Add a vendor first — a campaign belongs to one" : undefined} onClick={() => { setNewVendor(null); setNewCampaign({ vendor_id: vendors.find((vendor) => vendorTakesCampaigns(vendor.status))?.id ?? "", name: "", lead_type: "list", product_code: "", total_spend: "", records_purchased: "", mixing_weight: "1" }); }}>New campaign</Button>
-      </>}
-    />
+  // The campaign open in the side panel, and what its panel shows.
+  const campaign = selected;
+  const dirty = campaign ? Boolean(edits[campaign.campaign_id]) : false;
+  const servingShare = campaign && campaign.status === "active" && weightTotal > 0 ? Math.round((campaign.mixing_weight / weightTotal) * 100) : null;
+  const lead = campaign ? progress?.[campaign.campaign_id] ?? null : null;
+  const worked = workedPercent(lead);
+  const outcome = campaign ? outcomes?.[campaign.campaign_id] ?? null : null;
+  const run = campaign ? scrubRuns?.[campaign.campaign_id] ?? null : null;
+  const isTest = campaign ? testBatches?.[campaign.campaign_id] ?? false : false;
+  const fact = (term: string, value: ReactNode, className?: string) => <div><dt className="text-xs text-muted-foreground">{term}</dt><dd className={cn("mt-0.5 font-semibold tabular-nums text-foreground", className)}>{value}</dd></div>;
+
+  return <div className="m-stagger flex w-full min-w-0 flex-col gap-6 text-[var(--ink)]">
+    <PageHeader title="Vendors & campaigns" />
     <StatStrip label="Campaign totals">
       <StatTile label="Vendors" value={vendors.length} footnote={`${buyingVendors} buying now`} />
       <StatTile label="Active campaigns" value={activeWeights.length} footnote={activeLimit ? `${activeLimit.usage} of ${activeLimit.limit} allowed · ${draftCampaigns} draft` : activeUsage ? `${activeUsage.usage} counted · no plan limit · ${draftCampaigns} draft` : `${draftCampaigns} draft`} valueTone={atActiveLimit ? "danger" : undefined} />
       <StatTile label="Spend this period" value={money(spendCents)} footnote={`across ${spendingVendors} vendor${spendingVendors === 1 ? "" : "s"}`} />
       <StatTile label="Effective cost per dialable lead" value={money2(effectiveCostCents)} valueTone={effectiveCostCents === null ? undefined : "primary"} footnote="after suppression" />
     </StatStrip>
-    {atActiveLimit && activeLimit && <Callout tone="error" title={`${activeLimit.label}: ${activeLimit.usage} of ${activeLimit.limit} active — pause a finished campaign to free a slot, or upgrade your plan.`} />}
+    {atActiveLimit && activeLimit && <Callout tone="error" title={`Pause a finished campaign or upgrade your plan to activate another — ${activeLimit.usage} of ${activeLimit.limit} in use.`} />}
     {/* Said once, at the top, rather than as a "—" in eleven cells that each look like a bug. */}
     {pending.length > 0 && <Callout tone="warning" title="Some measurements are not available yet">{pending.map((item) => item.detail).join(" ")}</Callout>}
     {faults.length > 0 && <Callout tone="error" title="Part of this page could not be loaded">
@@ -408,183 +454,214 @@ export function CampaignWorkspace() {
       </>}
     />}
 
+    {/* Campaigns and vendors as tabs on the left, the two create actions on the right (2026-10-06 redesign). */}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="Vendors and campaigns" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+        {tabs.map((item) => (
+          <button key={item.key} type="button" role="tab" id={`campaigns-tab-${item.key}`} aria-controls={`campaigns-view-${item.key}`} aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+            {item.label}
+            <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{item.count}</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" onClick={openNewVendor}>New vendor</Button>
+        <Button type="button" disabled={vendors.length === 0} title={vendors.length === 0 ? "Add a vendor first — a campaign belongs to one" : undefined} onClick={() => openNewCampaign()}>New campaign</Button>
+      </div>
+    </div>
+
     {/* Vendors region (vendor-roster.tsx): the form gained category, status, renewal and contact. */}
     {newVendor && <NewVendorPanel onClose={() => setNewVendor(null)} onCreated={load} />}
 
-    {newCampaign && <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5" aria-labelledby="new-campaign-heading">
-      <div className="portal-campaigns-form-head"><h2 id="new-campaign-heading">New campaign</h2><Button type="button" variant="ghost" onClick={() => setNewCampaign(null)}><X className="size-4" aria-hidden="true" />Cancel</Button></div>
-      <div className="portal-campaigns-form-grid">
-        {/* Active and under-review vendors take new campaigns (user decision); under review warns below. */}
-        <label className="portal-campaigns-field" htmlFor="campaign-vendor"><span>Vendor</span><select id="campaign-vendor" className={focusRing} value={newCampaign.vendor_id} onChange={(event) => setNewCampaign({ ...newCampaign, vendor_id: event.target.value })}>{vendors.filter((vendor) => vendorTakesCampaigns(vendor.status)).map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
-        <label className="portal-campaigns-field"><span>Name</span><input className={focusRing} value={newCampaign.name} onChange={(event) => setNewCampaign({ ...newCampaign, name: event.target.value })} placeholder="Apex Term Life · September" /></label>
-        <label className="portal-campaigns-field"><span>Lead type</span><select className={focusRing} value={newCampaign.lead_type} onChange={(event) => setNewCampaign({ ...newCampaign, lead_type: event.target.value })}><option value="list">List</option><option value="realtime">Real-time</option><option value="aged">Aged</option></select></label>
-        <label className="portal-campaigns-field"><span>Product code</span><input className={focusRing} value={newCampaign.product_code} onChange={(event) => setNewCampaign({ ...newCampaign, product_code: event.target.value })} placeholder="Optional" /></label>
-        <label className="portal-campaigns-field"><span>Total spend ($)</span><input className={focusRing} inputMode="decimal" value={newCampaign.total_spend} onChange={(event) => setNewCampaign({ ...newCampaign, total_spend: event.target.value })} placeholder="1750.00" /></label>
-        <label className="portal-campaigns-field"><span>Records purchased</span><input className={focusRing} inputMode="numeric" value={newCampaign.records_purchased} onChange={(event) => setNewCampaign({ ...newCampaign, records_purchased: event.target.value })} placeholder="5000" /></label>
-        <label className="portal-campaigns-field"><span>Mixing weight</span><input className={focusRing} inputMode="numeric" value={newCampaign.mixing_weight} onChange={(event) => setNewCampaign({ ...newCampaign, mixing_weight: event.target.value })} /></label>
-      </div>
-      {(() => {
-        const picked = vendors.find((vendor) => vendor.id === newCampaign.vendor_id);
-        const warning = picked ? vendorCampaignWarning(picked.status, picked.name) : null;
-        return warning ? <Callout tone="warning" title={warning} /> : null;
-      })()}
-      <div className="flex items-center justify-end gap-3">
-        <span className="text-xs text-muted-foreground">Created as a draft</span>
-        <Button type="button" disabled={!newCampaign.vendor_id || !newCampaign.name.trim() || creating} onClick={() => void createCampaign()}>{creating ? "Creating…" : "Create campaign"}</Button>
-      </div>
-    </section>}
+    <Dialog open={newCampaign !== null} onOpenChange={(open) => { if (!open) setNewCampaign(null); }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>New campaign</DialogTitle>
+          <DialogDescription>Created as a draft. Activate it when the list is scrubbed.</DialogDescription>
+        </DialogHeader>
+        {newCampaign && <>
+          <div className="portal-campaigns-form-grid">
+            {/* Active and under-review vendors take new campaigns (user decision); under review warns below. */}
+            <label className="portal-campaigns-field" htmlFor="campaign-vendor"><span>Vendor</span><select id="campaign-vendor" className={focusRing} value={newCampaign.vendor_id} onChange={(event) => setNewCampaign({ ...newCampaign, vendor_id: event.target.value })}>{vendors.filter((vendor) => vendorTakesCampaigns(vendor.status)).map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
+            <label className="portal-campaigns-field"><span>Name</span><input className={focusRing} value={newCampaign.name} onChange={(event) => setNewCampaign({ ...newCampaign, name: event.target.value })} placeholder="Apex Term Life · September" /></label>
+            <label className="portal-campaigns-field"><span>Lead type</span><select className={focusRing} value={newCampaign.lead_type} onChange={(event) => setNewCampaign({ ...newCampaign, lead_type: event.target.value })}><option value="list">List</option><option value="realtime">Real-time</option><option value="aged">Aged</option></select></label>
+            <label className="portal-campaigns-field"><span>Product code</span><input className={focusRing} value={newCampaign.product_code} onChange={(event) => setNewCampaign({ ...newCampaign, product_code: event.target.value })} placeholder="Optional" /></label>
+            <label className="portal-campaigns-field"><span>Total spend ($)</span><input className={focusRing} inputMode="decimal" value={newCampaign.total_spend} onChange={(event) => setNewCampaign({ ...newCampaign, total_spend: event.target.value })} placeholder="1750.00" /></label>
+            <label className="portal-campaigns-field"><span>Records purchased</span><input className={focusRing} inputMode="numeric" value={newCampaign.records_purchased} onChange={(event) => setNewCampaign({ ...newCampaign, records_purchased: event.target.value })} placeholder="5000" /></label>
+            <label className="portal-campaigns-field"><span>Mixing weight</span><input className={focusRing} inputMode="numeric" value={newCampaign.mixing_weight} onChange={(event) => setNewCampaign({ ...newCampaign, mixing_weight: event.target.value })} /></label>
+          </div>
+          {(() => {
+            const picked = vendors.find((vendor) => vendor.id === newCampaign.vendor_id);
+            const warning = picked ? vendorCampaignWarning(picked.status, picked.name) : null;
+            return warning ? <Callout tone="warning" title={warning} /> : null;
+          })()}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setNewCampaign(null)}>Cancel</Button>
+            <Button type="button" disabled={!newCampaign.vendor_id || !newCampaign.name.trim() || creating} onClick={() => void createCampaign()}>{creating ? "Creating…" : "Create campaign"}</Button>
+          </DialogFooter>
+        </>}
+      </DialogContent>
+    </Dialog>
 
-    <TableCard
-      className="portal-campaigns-table"
-      toolbar={<>
-        <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
-          <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search campaigns" />
-          <select aria-label="Vendor" className={toolbarControl} value={vendorFilter} onChange={(event) => { setVendorFilter(event.target.value); setPage(0); }}>
-            <option value="all">All vendors</option>
-            {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
-          </select>
-          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((value) => !value)} count={filterCount} />
-        </DataToolbar>
-        {filtersOpen && <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 text-sm" role="group" aria-label="Filter campaigns">
-          <span className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Status</span>
-          {CAMPAIGN_STATUSES.map((status) => <label key={status} className="inline-flex items-center gap-2"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={statusFilter.has(status)} onChange={() => toggleStatus(status)} />{STATUS_LABEL[status]}</label>)}
-          <span className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Lead type</span>
-          <select aria-label="Lead type" className={toolbarControl} value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(0); }}><option value="all">Any</option><option value="list">List</option><option value="realtime">Real-time</option><option value="aged">Aged</option></select>
-          {filterCount > 0 && <button type="button" className="font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setStatusFilter(new Set()); setTypeFilter("all"); setPage(0); }}>Clear filters</button>}
-        </div>}
-      </>}
-      footer={!loadError && filtered.length > 0 ? <Pager page={currentPage + 1} total={filtered.length} noun="campaigns" pageSize={PAGE_SIZE} onPage={(next) => setPage(next - 1)} suffix="draft campaigns first" /> : undefined}
-    >
-      {loadError ? <ErrorState title="Campaigns did not load" detail={`This is not a statement that you have none. ${loadError}`} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
-        : campaigns.length === 0 ? <EmptyState title="No campaigns yet" hint={vendors.length === 0 ? "Start with a vendor — a campaign belongs to one." : "Create a campaign before importing a list, so its leads carry a cost."} />
-        : filtered.length === 0 ? <NoMatches noun="campaigns" onClear={() => { setSearch(""); setVendorFilter("all"); setStatusFilter(new Set()); setTypeFilter("all"); setPage(0); }} />
-        : <Table>
-            <TableHeader><TableRow>
-              <TableHead>Campaign</TableHead>
-              <TableHead className="w-[160px]">Vendor</TableHead>
-              <TableHead className="w-[110px]">Status</TableHead>
-              <TableHead className="w-[80px] text-right">Leads</TableHead>
-              <TableHead className="w-[84px] text-right">Dialable</TableHead>
-              <TableHead className="w-[90px] text-right">Contacts</TableHead>
-              <TableHead className="w-[90px] text-right">Records</TableHead>
-              <TableHead className="w-[110px] text-right">Spend</TableHead>
-              <TableHead className="w-[110px] text-right">Cost/record</TableHead>
-              <TableHead className="w-[110px] text-right">Effective</TableHead>
-              <TableHead className="w-[80px] text-right">Weight</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {shown.map((campaign) => {
-                const open = openId === campaign.campaign_id;
-                const dirty = Boolean(edits[campaign.campaign_id]);
-                const servingShare = campaign.status === "active" && weightTotal > 0 ? Math.round((campaign.mixing_weight / weightTotal) * 100) : null;
-                const lead = progress?.[campaign.campaign_id] ?? null;
-                const worked = workedPercent(lead);
-                const outcome = outcomes?.[campaign.campaign_id] ?? null;
-                const run = scrubRuns?.[campaign.campaign_id] ?? null;
-                const isTest = testBatches?.[campaign.campaign_id] ?? false;
-                const reach = funnel?.[campaign.campaign_id] ?? null;
-                const leadsIn = reach?.leads_received ?? lead?.leads_received ?? null;
-                const dialable = reach?.dialable_leads ?? campaign.records_usable;
-                return <Fragment key={campaign.campaign_id}>
-                  <TableRow className={`portal-campaigns-row${open ? " is-open" : ""}`} onClick={() => setOpenId(open ? null : campaign.campaign_id)}>
-                    <TableCell><button type="button" className="portal-campaigns-name" aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpenId(open ? null : campaign.campaign_id); }}>{campaign.name}</button></TableCell>
-                    <TableCell>{vendorName.get(campaign.vendor_id) ?? "Unknown vendor"}</TableCell>
-                    <TableCell>
-                      <span className="flex flex-col items-start gap-1">
-                        <span className={`portal-status-chip ${campaign.status === "active" ? "is-success" : campaign.status === "draft" ? "is-warning" : "is-neutral"}`}><span aria-hidden="true" />{STATUS_LABEL[campaign.status] ?? campaign.status}</span>
-                        {/* The scrub gate as a state, not a badge: an unscrubbed campaign's leads are not servable. */}
-                        {(campaign.status === "active" || campaign.status === "draft") && campaign.scrub_status !== "scrubbed" && <span className={`portal-status-chip ${campaign.scrub_status === "failed" ? "is-error" : campaign.scrub_status === "scrubbing" ? "is-info" : "is-warning"}`}><span aria-hidden="true" />{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? campaign.scrub_status}</span>}
-                      </span>
-                    </TableCell>
+    {view === "campaigns" && <div role="tabpanel" id="campaigns-view-campaigns" aria-labelledby="campaigns-tab-campaigns" className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <TableCard
+        className={`portal-campaigns-table ${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-300px)] min-w-0 flex-1`}
+        toolbar={
+          <DataToolbar actions={<>
+            {filtersOn && <ClearFiltersButton onClick={clearFilters} />}
+            <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+          </>}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search campaigns" />
+            <select aria-label="Vendor" className={toolbarControl} value={vendorFilter} onChange={(event) => { setVendorFilter(event.target.value); setPage(0); }}>
+              <option value="all">All vendors</option>
+              {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
+            </select>
+            <div ref={filtersRef} className="relative">
+              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((value) => !value)} count={filterCount} />
+              {filtersOpen && <div role="group" aria-label="Filter campaigns" className="absolute top-[calc(100%+6px)] left-0 z-30 grid w-[300px] gap-3 rounded-xl border border-[var(--border-strong)] bg-card p-4 text-sm shadow-[var(--shadow-overlay)]">
+                <span className="text-xs font-semibold text-muted-foreground">Status</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {CAMPAIGN_STATUSES.map((status) => <label key={status} className="inline-flex items-center gap-2"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={statusFilter.has(status)} onChange={() => toggleStatus(status)} />{STATUS_LABEL[status]}</label>)}
+                </div>
+                <label className="grid gap-1.5"><span className="text-xs font-semibold text-muted-foreground">Lead type</span>
+                  <select aria-label="Lead type" className={toolbarControl} value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(0); }}><option value="all">Any</option><option value="list">List</option><option value="realtime">Real-time</option><option value="aged">Aged</option></select>
+                </label>
+                <div className="flex justify-end gap-2">
+                  {filterCount > 0 && <Button type="button" variant="ghost" onClick={() => { setStatusFilter(new Set()); setTypeFilter("all"); setPage(0); }}>Clear filters</Button>}
+                  <Button type="button" variant="outline" onClick={() => setFiltersOpen(false)}>Done</Button>
+                </div>
+              </div>}
+            </div>
+          </DataToolbar>
+        }
+        footer={!loadError && filtered.length > 0 ? <Pager page={currentPage + 1} total={filtered.length} noun="campaigns" pageSize={pageSize} onPage={(next) => setPage(next - 1)} suffix="draft campaigns first" /> : undefined}
+      >
+        {loadError ? <ErrorState title="Campaigns did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
+          : campaigns.length === 0 ? (vendors.length === 0
+            ? <EmptyState title="No campaigns yet" hint="Add the vendor you buy from first." action={<Button type="button" onClick={openNewVendor}>New vendor</Button>} />
+            : <EmptyState title="No campaigns yet" hint="Add one before importing a list, so leads carry a cost." action={<Button type="button" onClick={() => openNewCampaign()}>New campaign</Button>} />)
+          : filtered.length === 0 ? <NoMatches noun="campaigns" onClear={clearFilters} />
+          : <Table>
+              <TableHeader><TableRow>
+                <TableHead>Campaign</TableHead>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Scrub</TableHead>
+                <TableHead className="text-right">Leads</TableHead>
+                <TableHead className="text-right">Dialable</TableHead>
+                {wide && <TableHead className="text-right">Contacts</TableHead>}
+                {wide && <TableHead className="text-right">Contact rate</TableHead>}
+                {wide && <TableHead className="text-right">Records</TableHead>}
+                {wide && <TableHead className="text-right">Worked</TableHead>}
+                <TableHead className="text-right">Spend</TableHead>
+                {wide && <TableHead className="text-right">Cost/record</TableHead>}
+                <TableHead className="text-right">Effective</TableHead>
+                {wide && <TableHead className="text-right">Weight</TableHead>}
+              </TableRow></TableHeader>
+              <TableBody>
+                {shown.map((campaign) => {
+                  const open = openId === campaign.campaign_id;
+                  const lead = progress?.[campaign.campaign_id] ?? null;
+                  const worked = workedPercent(lead);
+                  const reach = funnel?.[campaign.campaign_id] ?? null;
+                  const leadsIn = reach?.leads_received ?? lead?.leads_received ?? null;
+                  const dialable = reach?.dialable_leads ?? campaign.records_usable;
+                  const vendor = vendorName.get(campaign.vendor_id) ?? "Unknown vendor";
+                  const scrubShown = (campaign.status === "active" || campaign.status === "draft") && campaign.scrub_status !== "scrubbed";
+                  return <TableRow key={campaign.campaign_id} className={`portal-campaigns-row${open ? " is-open" : ""}`} onClick={() => setOpenId(open ? null : campaign.campaign_id)}>
+                    <TableCell className="max-w-[260px]"><button type="button" className="portal-campaigns-name block max-w-full truncate" title={campaign.name} aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpenId(open ? null : campaign.campaign_id); }}>{campaign.name}</button></TableCell>
+                    <TableCell className="max-w-[180px] truncate" title={vendor}>{vendor}</TableCell>
+                    <TableCell><span className={`portal-status-chip ${campaign.status === "active" ? "is-success" : campaign.status === "draft" ? "is-warning" : "is-neutral"}`}><span aria-hidden="true" />{STATUS_LABEL[campaign.status] ?? campaign.status}</span></TableCell>
+                    {/* The scrub gate as a state, not a badge: an unscrubbed campaign's leads are not servable. */}
+                    <TableCell>{scrubShown ? <span className={`portal-status-chip ${campaign.scrub_status === "failed" ? "is-error" : campaign.scrub_status === "scrubbing" ? "is-info" : "is-warning"}`}><span aria-hidden="true" />{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? campaign.scrub_status}</span> : <span className="text-[var(--muted)]">{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? "—"}</span>}</TableCell>
                     <TableCell className="text-right tabular-nums">{count(leadsIn)}</TableCell>
                     <TableCell className="text-right tabular-nums">{count(dialable)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {count(reach?.contacted_leads)}
-                      {reach && reach.dialed_leads > 0 && <span className="block text-[12px] leading-[1.4] font-normal text-[var(--muted)]">{Math.round((100 * reach.contacted_leads) / reach.dialed_leads)}% of {reach.dialed_leads.toLocaleString()} dialled</span>}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {campaign.records_purchased > 0 ? campaign.records_purchased.toLocaleString() : "—"}
-                      {worked !== null && <span className="block text-[12px] leading-[1.4] font-normal text-[var(--muted)]">{worked}% worked</span>}
-                    </TableCell>
+                    {wide && <TableCell className="text-right tabular-nums">{count(reach?.contacted_leads)}</TableCell>}
+                    {wide && <TableCell className="text-right tabular-nums" title={reach && reach.dialed_leads > 0 ? `${reach.contacted_leads.toLocaleString()} of ${reach.dialed_leads.toLocaleString()} dialled` : undefined}>{reach && reach.dialed_leads > 0 ? `${Math.round((100 * reach.contacted_leads) / reach.dialed_leads)}%` : "—"}</TableCell>}
+                    {wide && <TableCell className="text-right tabular-nums">{campaign.records_purchased > 0 ? campaign.records_purchased.toLocaleString() : "—"}</TableCell>}
+                    {wide && <TableCell className="text-right tabular-nums">{worked !== null ? `${worked}%` : "—"}</TableCell>}
                     <TableCell className="text-right tabular-nums">{money(campaign.total_spend_cents)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money2(campaign.cost_per_record_cents)}</TableCell>
+                    {wide && <TableCell className="text-right tabular-nums">{money2(campaign.cost_per_record_cents)}</TableCell>}
                     <TableCell className="text-right tabular-nums">{money2(campaign.cost_per_usable_record_cents)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{campaign.mixing_weight}</TableCell>
-                  </TableRow>
-                  {open && <TableRow className="portal-campaigns-detail-row"><TableCell colSpan={11}>
-                    <div className="portal-campaigns-detail">
-                      <dl>
-                        <div><dt>Lead type</dt><dd>{campaign.lead_type}{campaign.product_code ? ` · ${campaign.product_code}` : ""}</dd></div>
-                        {/* LA-2.3's gate, surfaced: only a scrubbed campaign serves leads. */}
-                        <div><dt>Scrub</dt><dd>{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? campaign.scrub_status}</dd></div>
-                        <div><dt>Rejected at scrub</dt><dd className={(campaign.records_rejected ?? 0) > 0 ? "text-[var(--error-ink)]" : ""}>{count(campaign.records_rejected)}</dd></div>
-                        <div><dt>Usable</dt><dd>{count(campaign.records_usable)}</dd></div>
-                        <div><dt>Effective after credits</dt><dd>{perRecord(campaign.effective_cost_per_record_cents)}</dd></div>
-                        {servingShare !== null && <div><dt>Share of serving</dt><dd>{servingShare}%</dd></div>}
-                        {lead && <div><dt>Imported</dt><dd>{lead.first_import_at ? (day(lead.first_import_at) === day(lead.last_import_at) ? day(lead.first_import_at) : `${day(lead.first_import_at)} – ${day(lead.last_import_at)}`) : "Nothing imported yet"}</dd></div>}
-                        {lead && <div><dt>Worked</dt><dd>{worked === null ? "—" : `${worked}% · ${lead.leads_dialed.toLocaleString()} of ${lead.leads_received.toLocaleString()} dialled`}</dd></div>}
-                        {lead && <div><dt>Workable</dt><dd>{lead.leads_workable.toLocaleString()}</dd></div>}
-                        {outcome && <div><dt>Issued</dt><dd>{outcome.issued.toLocaleString()}</dd></div>}
-                        {outcome && <div><dt>Cost / issued</dt><dd>{money2(outcome.costPerIssuedCents)}</dd></div>}
-                        {lead && <div><dt>Cadence</dt><dd>{lead.own_cadence_rules > 0 ? `Its own · ${lead.own_cadence_rules} ${lead.own_cadence_rules === 1 ? "rule" : "rules"}` : "The agency default"}</dd></div>}
-                      </dl>
-                      <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-[14px]">
-                        <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/lead-lists/${campaign.campaign_id}`}>Open the list</Link>
-                        <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/settings?cadenceCampaign=${campaign.campaign_id}#cadence`}>{lead && lead.own_cadence_rules > 0 ? "Edit its cadence" : "Give it its own cadence"}</Link>
-                      </p>
-                      <ScrubLine campaign={campaign} run={run} canScrub={canScrub && scrubRuns !== null} driving={driving} leads={lead?.leads_received ?? null} error={scrubError?.campaignId === campaign.campaign_id ? scrubError.message : null} onRun={() => void runScrub(campaign)} onStop={() => { stopRequested.current = true; }} />
-                      {hasNoWorkableLeads(lead) && campaign.status !== "exhausted" && <p className="portal-campaigns-claim">No workable leads left in {campaign.name} — mark it exhausted when you are done with it.</p>}
-                      {(campaign.records_rejected ?? 0) > 0 && <p className="portal-campaigns-claim">{count(campaign.records_rejected)} purchased row{campaign.records_rejected === 1 ? "" : "s"} could never be dialed — about {money(campaign.rejected_spend_cents)} to claim back from the vendor.</p>}
-                      <div className="flex flex-wrap items-end gap-3">
-                        <label className="portal-campaigns-field w-40"><span>Total spend ($)</span><input className={focusRing} inputMode="decimal" value={editValue(campaign, "total_spend_cents")} onChange={(event) => setEdit(campaign, "total_spend_cents", event.target.value)} /></label>
-                        <label className="portal-campaigns-field w-40"><span>Records purchased</span><input className={focusRing} inputMode="numeric" value={editValue(campaign, "records_purchased")} onChange={(event) => setEdit(campaign, "records_purchased", event.target.value)} /></label>
-                        <label className="portal-campaigns-field w-40"><span>Mixing weight</span><input className={focusRing} inputMode="numeric" value={editValue(campaign, "mixing_weight")} onChange={(event) => setEdit(campaign, "mixing_weight", event.target.value)} /></label>
-                        <Button type="button" disabled={!dirty || busy === campaign.campaign_id} onClick={() => {
-                          const row = edits[campaign.campaign_id];
-                          const spend = Math.round(Number(row.total_spend_cents) * 100);
-                          const purchased = Number(row.records_purchased);
-                          const weight = Number(row.mixing_weight);
-                          if (!Number.isFinite(spend) || spend < 0) { notify.block("Enter a valid spend"); return; }
-                          if (!Number.isInteger(purchased) || purchased < 0) { notify.block("Enter a whole number of records"); return; }
-                          if (!Number.isInteger(weight) || weight < 1) { notify.block("Mixing weight must be 1 or more"); return; }
-                          void patchCampaign(campaign.campaign_id, { total_spend_cents: spend, records_purchased: purchased, mixing_weight: weight }, "Campaign cost updated");
-                        }}>Save cost</Button>
-                        {campaign.status === "active"
-                          ? <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "paused" }, `${campaign.name} paused — its leads stopped being served`)}>Pause</Button>
-                          : <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "active" }, (result) => result.serving === false || !campaignServes("active", campaign.scrub_status) ? `${campaign.name} is active, but it will not serve leads until it is scrubbed.` : `${campaign.name} is serving again`)}>Activate</Button>}
-                        {campaign.status !== "exhausted" && <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "exhausted" }, `${campaign.name} marked exhausted — its leads are no longer served.`)}>Mark exhausted</Button>}
-                        {testBatches !== null && <label className="flex items-center gap-2 text-[14px] text-[var(--body)]"><input type="checkbox" checked={isTest} disabled={busy === campaign.campaign_id} onChange={(event) => void patchCampaign(campaign.campaign_id, { is_test_batch: event.target.checked }, event.target.checked ? `${campaign.name} marked as a test batch.` : `${campaign.name} is no longer a test batch.`)} />Test batch</label>}
-                      </div>
-                    </div>
-                  </TableCell></TableRow>}
-                </Fragment>;
-              })}
-            </TableBody>
-            <tfoot className="portal-campaigns-foot">
-              <tr>
-                <td>{filtered.length} campaign{filtered.length === 1 ? "" : "s"}</td>
-                <td /><td />
-                <td className="text-right tabular-nums">{count(sumLeads)}</td>
-                <td className="text-right tabular-nums">{count(sumDialable)}</td>
-                <td className="text-right tabular-nums">{count(sumContacts)}</td>
-                <td className="text-right tabular-nums">{sumRecords.toLocaleString()}</td>
-                <td className="text-right tabular-nums">{money(sumSpend)}</td>
-                <td className="text-right tabular-nums">{money2(sumRecords > 0 ? sumSpend / sumRecords : null)}</td>
-                <td className="text-right tabular-nums">{money2(sumUsable > 0 ? sumUsableSpend / sumUsable : null)}</td>
-                <td />
-              </tr>
-            </tfoot>
-          </Table>}
-    </TableCard>
+                    {wide && <TableCell className="text-right tabular-nums">{campaign.mixing_weight}</TableCell>}
+                  </TableRow>;
+                })}
+              </TableBody>
+              <tfoot className="portal-campaigns-foot">
+                <tr>
+                  <td>{filtered.length} campaign{filtered.length === 1 ? "" : "s"}</td>
+                  <td /><td /><td />
+                  <td className="text-right tabular-nums">{count(sumLeads)}</td>
+                  <td className="text-right tabular-nums">{count(sumDialable)}</td>
+                  {wide && <td className="text-right tabular-nums">{count(sumContacts)}</td>}
+                  {wide && <td />}
+                  {wide && <td className="text-right tabular-nums">{sumRecords.toLocaleString()}</td>}
+                  {wide && <td />}
+                  <td className="text-right tabular-nums">{money(sumSpend)}</td>
+                  {wide && <td className="text-right tabular-nums">{money2(sumRecords > 0 ? sumSpend / sumRecords : null)}</td>}
+                  <td className="text-right tabular-nums">{money2(sumUsable > 0 ? sumUsableSpend / sumUsable : null)}</td>
+                  {wide && <td />}
+                </tr>
+              </tfoot>
+            </Table>}
+      </TableCard>
+
+      {campaign && <DetailPanel mode="split" className={SIDE_PANEL_FRAME} title={campaign.name} subtitle={`${vendorName.get(campaign.vendor_id) ?? "Unknown vendor"} · ${STATUS_LABEL[campaign.status] ?? campaign.status}`} onClose={closePanel}>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            {fact("Lead type", `${campaign.lead_type}${campaign.product_code ? ` · ${campaign.product_code}` : ""}`)}
+            {/* LA-2.3's gate, surfaced: only a scrubbed campaign serves leads. */}
+            {fact("Scrub", SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? campaign.scrub_status)}
+            {fact("Rejected at scrub", count(campaign.records_rejected), (campaign.records_rejected ?? 0) > 0 ? "text-[var(--error-ink)]" : undefined)}
+            {fact("Usable", count(campaign.records_usable))}
+            {fact("Effective after credits", perRecord(campaign.effective_cost_per_record_cents))}
+            {servingShare !== null && fact("Share of serving", `${servingShare}%`)}
+            {lead && fact("Imported", lead.first_import_at ? (day(lead.first_import_at) === day(lead.last_import_at) ? day(lead.first_import_at) : `${day(lead.first_import_at)} – ${day(lead.last_import_at)}`) : "Nothing imported yet")}
+            {lead && fact("Worked", worked === null ? "—" : `${worked}% · ${lead.leads_dialed.toLocaleString()} of ${lead.leads_received.toLocaleString()} dialled`)}
+            {lead && fact("Workable", lead.leads_workable.toLocaleString())}
+            {outcome && fact("Issued", outcome.issued.toLocaleString())}
+            {outcome && fact("Cost / issued", money2(outcome.costPerIssuedCents))}
+            {lead && fact("Cadence", lead.own_cadence_rules > 0 ? `Its own · ${lead.own_cadence_rules} ${lead.own_cadence_rules === 1 ? "rule" : "rules"}` : "The agency default")}
+          </dl>
+          <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/lead-lists/${campaign.campaign_id}`}>Open the list</Link>
+            <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/settings?cadenceCampaign=${campaign.campaign_id}#cadence`}>{lead && lead.own_cadence_rules > 0 ? "Edit its cadence" : "Give it its own cadence"}</Link>
+          </p>
+          <ScrubLine campaign={campaign} run={run} canScrub={canScrub && scrubRuns !== null} driving={driving} leads={lead?.leads_received ?? null} error={scrubError?.campaignId === campaign.campaign_id ? scrubError.message : null} onRun={() => void runScrub(campaign)} onStop={stopScrub} />
+          {hasNoWorkableLeads(lead) && campaign.status !== "exhausted" && <p className="portal-campaigns-claim">No workable leads left. Mark it exhausted when you are done.</p>}
+          {(campaign.records_rejected ?? 0) > 0 && <p className="portal-campaigns-claim">{count(campaign.records_rejected)} purchased row{campaign.records_rejected === 1 ? "" : "s"} could never be dialed — about {money(campaign.rejected_spend_cents)} to claim back from the vendor.</p>}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="portal-campaigns-field"><span>Total spend ($)</span><input className={focusRing} inputMode="decimal" value={editValue(campaign, "total_spend_cents")} onChange={(event) => setEdit(campaign, "total_spend_cents", event.target.value)} /></label>
+            <label className="portal-campaigns-field"><span>Records purchased</span><input className={focusRing} inputMode="numeric" value={editValue(campaign, "records_purchased")} onChange={(event) => setEdit(campaign, "records_purchased", event.target.value)} /></label>
+            <label className="portal-campaigns-field"><span>Mixing weight</span><input className={focusRing} inputMode="numeric" value={editValue(campaign, "mixing_weight")} onChange={(event) => setEdit(campaign, "mixing_weight", event.target.value)} /></label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" disabled={!dirty || busy === campaign.campaign_id} onClick={() => {
+              const row = edits[campaign.campaign_id];
+              const spend = Math.round(Number(row.total_spend_cents) * 100);
+              const purchased = Number(row.records_purchased);
+              const weight = Number(row.mixing_weight);
+              if (!Number.isFinite(spend) || spend < 0) { notify.block("Enter a valid spend"); return; }
+              if (!Number.isInteger(purchased) || purchased < 0) { notify.block("Enter a whole number of records"); return; }
+              if (!Number.isInteger(weight) || weight < 1) { notify.block("Mixing weight must be 1 or more"); return; }
+              void patchCampaign(campaign.campaign_id, { total_spend_cents: spend, records_purchased: purchased, mixing_weight: weight }, "Campaign cost updated");
+            }}>Save cost</Button>
+            {campaign.status === "active"
+              ? <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "paused" }, `${campaign.name} paused — its leads stopped being served`)}>Pause</Button>
+              : <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "active" }, (result) => result.serving === false || !campaignServes("active", campaign.scrub_status) ? `${campaign.name} is active, but it will not serve leads until it is scrubbed.` : `${campaign.name} is serving again`)}>Activate</Button>}
+            {campaign.status !== "exhausted" && <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "exhausted" }, `${campaign.name} marked exhausted — its leads are no longer served.`)}>Mark exhausted</Button>}
+            {testBatches !== null && <label className="flex items-center gap-2 text-sm text-[var(--body)]"><input type="checkbox" checked={isTest} disabled={busy === campaign.campaign_id} onChange={(event) => void patchCampaign(campaign.campaign_id, { is_test_batch: event.target.checked }, event.target.checked ? `${campaign.name} marked as a test batch.` : `${campaign.name} is no longer a test batch.`)} />Test batch</label>}
+          </div>
+      </DetailPanel>}
+    </div>}
 
     {/* Not on the board, and kept: speed to lead and consent evidence per vendor are LA-2.5/2.6's
         acceptance figures and appear nowhere else. A cheap list nobody dials fast is not cheap.
         Vendors region (vendor-roster.tsx): the concept board's cost per policy, claimable returns,
         trial and drop facts are added to this table; the layout is the same table. */}
     {/* The failure is checked before the empty case: "no vendor rows" and "could not look" are
-        different facts. The campaigns table above already says why the load failed. */}
-    {loadError ? null
-      : rollup.length === 0 ? (vendors.length === 0 && !loading && !loadError ? <section className="rounded-lg border border-border bg-card"><EmptyState title="No vendors yet" hint="Add the one you buy from with New vendor, and its costs, speed and returns collect here." /></section> : null)
+        different facts. The campaigns tab already says why the load failed. */}
+    {view === "vendors" && <div role="tabpanel" id="campaigns-view-vendors" aria-labelledby="campaigns-tab-vendors">{loadError ? <TableCard><ErrorState title="Vendors did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} /></TableCard>
+      : rollup.length === 0 ? (vendors.length === 0 && !loading && !loadError ? <TableCard><EmptyState title="No vendors yet" hint="Add the vendor you buy leads from." action={<Button type="button" onClick={openNewVendor}>New vendor</Button>} /></TableCard> : <TableCard><EmptyState title="No vendor figures yet" hint="Figures appear once a vendor has a campaign." action={<Button type="button" onClick={() => openNewCampaign()}>New campaign</Button>} /></TableCard>)
       : <VendorRoster
       vendors={vendors}
       rollup={rollup}
@@ -593,16 +670,14 @@ export function CampaignWorkspace() {
       onChanged={load}
       onNewCampaign={(vendorId, leadType) => {
         // "Order another": the New campaign form with this vendor chosen. Nothing is bought.
-        setNewVendor(null);
-        setNewCampaign({ vendor_id: vendorId, name: "", lead_type: leadType, product_code: "", total_spend: "", records_purchased: "", mixing_weight: "1" });
-        requestAnimationFrame(() => document.getElementById("new-campaign-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        openNewCampaign(vendorId, leadType);
       }}
       onShowCampaigns={(vendorId) => {
         setVendorFilter(vendorId);
         setPage(0);
-        requestAnimationFrame(() => document.querySelector(".portal-campaigns-table")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        setView("campaigns");
       }}
-    />}
+    />}</div>}
   </div>;
 }
 
@@ -635,17 +710,17 @@ function ScrubLine({ campaign, run, canScrub, driving, leads, error, onRun, onSt
   else if (run?.status === "scrubbed") status = `Last scrubbed ${new Date(run.finished_at ?? run.last_progress_at).toLocaleString("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })} — ${counts}.`;
 
   const label = open ? "Resume the scrub" : campaign.scrub_status === "scrubbed" ? "Scrub again" : "Run the scrub";
-  const cannot = !canScrub ? "Only an owner can run a scrub — it bills screening lookups." : leads === 0 ? "Nothing has been imported into this campaign yet." : elsewhere ? "Another window is running this scrub." : null;
+  const cannot = !canScrub ? "Ask an owner to run the scrub — it bills screening lookups." : leads === 0 ? "Import a list into this campaign first." : elsewhere ? "Another window is running this scrub." : null;
 
   if (!status && !canScrub && !error) return null;
-  return <div className="flex flex-col gap-2 text-[14px] leading-[1.5] text-[var(--body)]">
+  return <div className="flex flex-col gap-2 text-sm leading-normal text-[var(--body)]">
     {status && <p className="m-0" role={here ? "status" : undefined}>{status}</p>}
     {error && <p className="m-0 text-[var(--error-ink)]" role="alert">{error}</p>}
     {canScrub && <div className="flex flex-wrap items-center gap-2">
       {here
         ? <Button type="button" variant="outline" size="sm" onClick={onStop}>Pause the scrub</Button>
         : <Button type="button" variant="outline" size="sm" disabled={Boolean(cannot) || driving !== null} title={cannot ?? (driving !== null ? "Another campaign is being scrubbed from this page." : undefined)} onClick={onRun}>{label}</Button>}
-      {!here && cannot && <span className="text-[12px] text-[var(--muted)]">{cannot}</span>}
+      {!here && cannot && <span className="text-xs text-[var(--muted)]">{cannot}</span>}
     </div>}
   </div>;
 }

@@ -5,6 +5,7 @@ import { syncHouseholdFromPrimary } from "@/lib/applications/household";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { demoteIfFailing, saveDraftDay } from "@/lib/applications/mutations";
 import { draftDaySchema } from "@/lib/applications/schemas";
+import { guardAttempt } from "@/lib/agency/guards";
 
 /**
  * LA-3.9 · the draft day. The recommendation is recomputed on the server; a day that differs from it
@@ -17,6 +18,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const input = await body(request, draftDaySchema);
   if (input instanceof NextResponse) return input;
   try {

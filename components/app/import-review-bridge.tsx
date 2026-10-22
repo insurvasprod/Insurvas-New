@@ -54,10 +54,10 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
       <ImportStepper current={3} />
       <DashedCard
         icon={<FileWarning className="size-4" aria-hidden />}
-        title="This review is no longer holding your file"
+        title="Upload the file again to review it"
         action={<Button asChild variant="outline"><Link href="/app/import">Upload the file again</Link></Button>}
       >
-        Upload it again with the same campaign and cost. Nothing was imported, and the scrub is not charged twice.
+        Use the same campaign and cost. Nothing was imported, and the scrub is not charged twice.
       </DashedCard>
     </div>;
 
@@ -197,9 +197,9 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
         caption={`${pct}%${minutes !== null && left > 0 ? ` · about ${minutes.toLocaleString()} min left` : ""}`}
         ariaLabel={`Screening: ${pct}% of numbers checked`}
       />
-      <p role="status" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+      <p role="status" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
         {left > 0
-          ? "Progress is saved as it goes; you can leave this page."
+          ? "Saved as it goes — you can leave this page."
           : "Every number has an answer. Building the review…"}
       </p>
     </SettingsCard>
@@ -211,10 +211,11 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
     </Callout>}
     {needsFile && <DashedCard
       icon={<FileWarning className="size-4" aria-hidden />}
-      title="Every number is checked, but this tab no longer holds the file"
+      title="Upload the file again to finish the review"
       action={<Button asChild variant="outline"><Link href="/app/import">Upload the file again</Link></Button>}
     >
-      Upload it again with the same campaign and cost. The answers are saved, so nothing is screened or charged twice.
+      Use the same campaign and cost. Every number is already checked, so nothing is screened or charged twice.
+
     </DashedCard>}
   </div>;
 }

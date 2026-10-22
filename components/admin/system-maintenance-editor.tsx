@@ -48,7 +48,7 @@ const LEVEL_CARDS: { value: EffectiveMaintenanceLevel; title: string; body: Reac
     title: "Read only",
     body: (
       <>
-        Writes are refused with <code className="font-mono text-[12px]">maintenance_read_only</code> (503). Reading continues
+        Writes are refused with <code className="font-mono text-xs">maintenance_read_only</code> (503). Reading continues
         everywhere.
       </>
     ),
@@ -224,8 +224,8 @@ export function SystemMaintenanceEditor({
                   )}
                 />
                 <span>
-                  <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{card.title}</span>
-                  <span className="mt-1 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{card.body}</span>
+                  <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{card.title}</span>
+                  <span className="mt-1 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{card.body}</span>
                 </span>
               </label>
             );
@@ -273,13 +273,13 @@ export function SystemMaintenanceEditor({
         </div>
 
         {formError && (
-          <p role="alert" className="m-0 mt-4 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+          <p role="alert" className="m-0 mt-4 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
             {formError}
           </p>
         )}
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-          <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+          <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
             {canChange ? null : "Read-only. Only a super admin can change maintenance mode."}
           </span>
           <span className="flex items-center gap-2">
@@ -309,41 +309,41 @@ export function SystemMaintenanceEditor({
         <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-5 text-center" aria-live="polite">
           {draft.level === "locked" ? (
             <>
-              <div className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">We&rsquo;ll be back shortly</div>
-              <p className="m-0 mt-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+              <div className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">We&rsquo;ll be back shortly</div>
+              <p className="m-0 mt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
                 Insurvas is offline for scheduled maintenance. Nothing has been lost.
               </p>
-              <p className="m-0 mt-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)] break-words">
+              <p className="m-0 mt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] break-words">
                 {draft.message.trim() || <span className="text-[var(--muted)]">Your message appears here.</span>}
               </p>
-              <p className="m-0 mt-2.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
+              <p className="m-0 mt-2.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
                 {endIso ? `Expected back by ${utcDateTime(endIso)}` : "No end time has been published yet"}
               </p>
             </>
           ) : off ? (
             <>
-              <div className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Nothing is shown</div>
-              <p className="m-0 mt-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+              <div className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Nothing is shown</div>
+              <p className="m-0 mt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
                 Customers use the product as normal.
               </p>
             </>
           ) : (
             <>
-              <div className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
+              <div className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
                 {PREVIEW_TITLE[draft.level as "banner_only" | "read_only"]}
               </div>
-              <p className="m-0 mt-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)] break-words">
+              <p className="m-0 mt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] break-words">
                 {draft.message.trim() || <span className="text-[var(--muted)]">Your message appears here.</span>}
               </p>
               {draft.level === "read_only" && endIso && (
-                <p className="m-0 mt-2.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
+                <p className="m-0 mt-2.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
                   Expected end: {utcDateTime(endIso)}
                 </p>
               )}
             </>
           )}
           {futureStart && draft.level !== "banner_only" && (
-            <p className="m-0 mt-2.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+            <p className="m-0 mt-2.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
               Until {utcDateTime(futureStart)} customers see only the banner.
             </p>
           )}
@@ -355,7 +355,7 @@ export function SystemMaintenanceEditor({
           <form onSubmit={submit} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{dialogTitle}</DialogTitle>
-              <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+              <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
                 {levelChanged ? `${LEVEL_LABEL[baseline.level]} → ${LEVEL_LABEL[draft.level]}` : `Stays ${LEVEL_LABEL[draft.level].toLowerCase()}; the details change.`}
                 {!off && endIso ? ` · ends ${utcDateTime(endIso)}` : ""}
               </DialogDescription>
@@ -408,7 +408,7 @@ export function SystemMaintenanceEditor({
             )}
 
             {saveError && (
-              <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+              <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
                 {saveError}
               </p>
             )}

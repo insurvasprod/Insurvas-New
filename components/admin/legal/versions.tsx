@@ -1,12 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
-import { TableCard } from "@/components/ui/table-card";
-import { Callout, KeyValues, Pill, st } from "@/components/app/settings/primitives";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { Callout, KeyValues, st } from "@/components/app/settings/primitives";
 import { LEGAL_DOC_LABELS, LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
 import { parseLegalMarkdown } from "@/lib/legal/markdown";
 import { legalDateTime, legalDay, type AdminLegalVersion } from "@/lib/legal/adminTypes";
@@ -23,7 +24,7 @@ export function DocSwitch({ value, onChange }: { value: LegalDocType; onChange: 
           aria-pressed={value === type}
           title={LEGAL_DOC_LABELS[type]}
           className={cn(
-            "h-full rounded-[6px] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap",
+            "h-full rounded-[6px] px-3.5 text-sm leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap",
             value === type ? "bg-[var(--brand-50)] text-[var(--accent-ink)]" : "text-[var(--body)] hover:bg-[var(--surface-alt)]",
           )}
         >
@@ -60,8 +61,8 @@ export function VersionRow({
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
-        <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{meta}</span>
+        <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
+        <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{meta}</span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">{pills}</span>
     </button>
@@ -94,24 +95,24 @@ export function VersionView({
     <>
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-          <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+          <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
             Version {version.version} &mdash; {isCurrent ? "published" : "superseded"}
           </span>
           <span className="flex flex-wrap items-center gap-2.5">
-            {version.is_draft && <Pill tone="warning">Unreviewed text</Pill>}
+            {version.is_draft && <StatusChip dot={false} tone="warning">Unreviewed text</StatusChip>}
             {isCurrent ? (
-              <Pill tone="success" dot>
+              <StatusChip tone="good" dot>
                 Visible to customers
-              </Pill>
+              </StatusChip>
             ) : (
-              <Pill tone="neutral" dot>
+              <StatusChip tone="neutral" dot>
                 Kept as the record
-              </Pill>
+              </StatusChip>
             )}
             <Link
               href={`/legal/${doc}?v=${version.version}`}
               target="_blank"
-              className="text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] underline"
+              className="text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] underline"
             >
               Read it
             </Link>
@@ -123,8 +124,8 @@ export function VersionView({
       </section>
 
       <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
-        <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Change summary</h2>
-        <p className="mt-4 mb-5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+        <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Change summary</h2>
+        <p className="mt-4 mb-5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
           {version.change_summary ?? "No summary was written for this version."}
         </p>
         <KeyValues
@@ -169,7 +170,7 @@ export function VersionView({
 
 export function HistoryTable({ versions, stats }: { versions: AdminLegalVersion[]; stats: Stat[] }) {
   return (
-    <TableCard title="Every published version">
+    <PagedTableCard total={versions.length} noun="versions" title="Every published version">
       <div className="min-w-0 overflow-x-auto">
         <table className={st.table}>
           <thead>
@@ -182,7 +183,7 @@ export function HistoryTable({ versions, stats }: { versions: AdminLegalVersion[
               <th scope="col" className={st.th}>What changed</th>
             </tr>
           </thead>
-          <tbody>
+          <PagedBody>
             {versions.length === 0 ? (
               <tr>
                 <td colSpan={6} className={cn(st.td, "p-0")}>
@@ -197,7 +198,7 @@ export function HistoryTable({ versions, stats }: { versions: AdminLegalVersion[
                   <tr key={doc.id}>
                     <td className={cn(st.td, st.strong)}>
                       {LEGAL_DOC_LABELS[doc.doc_type as LegalDocType]}
-                      {doc.is_draft && <span className="ml-2 text-[12px] font-semibold text-[var(--warning-ink)]">Unreviewed text</span>}
+                      {doc.is_draft && <span className="ml-2 text-xs font-semibold text-[var(--warning-ink)]">Unreviewed text</span>}
                     </td>
                     <td className={st.td}>
                       <Link href={`/legal/${doc.doc_type}?v=${doc.version}`} target="_blank" className="text-[var(--accent-ink)] underline">
@@ -212,10 +213,10 @@ export function HistoryTable({ versions, stats }: { versions: AdminLegalVersion[
                 );
               })
             )}
-          </tbody>
+          </PagedBody>
         </table>
       </div>
-    </TableCard>
+    </PagedTableCard>
   );
 }
 
@@ -260,15 +261,15 @@ export function Inline({ text }: { text: string }) {
 export function LegalText({ content }: { content: string }) {
   const blocks = parseLegalMarkdown(content);
   return (
-    <div className="max-w-[72ch] text-[14px] leading-[1.6] tracking-[-0.02em] text-[var(--body)]">
+    <div className="max-w-[72ch] text-sm leading-[1.6] tracking-[-0.02em] text-[var(--body)]">
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
           return block.level === 1 ? (
-            <h3 key={index} className="mt-5 mb-2 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)] first:mt-0">
+            <h3 key={index} className="mt-5 mb-2 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)] first:mt-0">
               <Inline text={block.text} />
             </h3>
           ) : (
-            <h4 key={index} className="mt-4 mb-1.5 text-[16px] leading-[1.4] font-semibold tracking-[-0.02em] text-[var(--ink)] first:mt-0">
+            <h4 key={index} className="mt-4 mb-1.5 text-base leading-[1.4] font-semibold tracking-[-0.02em] text-[var(--ink)] first:mt-0">
               <Inline text={block.text} />
             </h4>
           );

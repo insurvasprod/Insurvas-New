@@ -1,13 +1,15 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useState } from "react";
 import { Unlock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Pill, btn, st } from "@/components/app/settings/primitives";
+import { btn, st, pillTone } from "@/components/app/settings/primitives";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 
 type Lockout = {
@@ -29,6 +31,7 @@ export function LoginProtectionPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,10 +72,12 @@ export function LoginProtectionPanel() {
   }
 
   const locked = lockouts.filter((entry) => entry.locked_until).length;
+  const { current, rows: pageRows } = paginate(lockouts, page);
 
   return (
     <TableCard
       title="Login lockouts"
+      footer={loading ? undefined : <Pager page={current} total={lockouts.length} noun="lockouts" onPage={setPage} />}
       toolbar={
         <DataToolbar
           actions={
@@ -85,14 +90,14 @@ export function LoginProtectionPanel() {
             />
           }
         >
-          {!loading && <Pill tone={locked > 0 ? "error" : "neutral"}>{locked} locked</Pill>}
+          {!loading && <StatusChip dot={false} tone={pillTone(locked > 0 ? "error" : "neutral")}>{locked} locked</StatusChip>}
         </DataToolbar>
       }
     >
       {loading ? (
         <SectionLoading rows={3} columns={5} label="Loading current lockouts" />
       ) : lockouts.length === 0 ? (
-        <p className="m-0 px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No recorded login lockouts.</p>
+        <p className="m-0 px-4 py-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No recorded login lockouts.</p>
       ) : (
         <table className={`${st.table} min-w-[640px]`}>
           <caption className="sr-only">Current login lockouts</caption>
@@ -107,7 +112,7 @@ export function LoginProtectionPanel() {
             </tr>
           </thead>
           <tbody>
-            {lockouts.map((entry) => (
+            {pageRows.map((entry) => (
               <tr key={entry.scope_key}>
                 <td className={`${st.td} ${st.strong}`}>{entry.email}</td>
                 <td className={`${st.td} capitalize`}>{entry.actor_type}</td>

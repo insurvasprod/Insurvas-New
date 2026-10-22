@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { ChevronLeft, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -12,7 +12,12 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { defaultPartnerQualityPeriod, percentChange, percentOf, pointChange, screeningFlags } from "@/lib/partnerQuality/metrics";
 import type { PartnerQualityDetail, PartnerQualityDetailLead, PartnerQualityMember, PartnerQualityMetric, PartnerQualityPeriodMetrics } from "@/lib/partnerQuality/types";
+import { cn } from "@/lib/utils";
 import { count, dateText, dispositionText, downloadCsv, humanize, MetricCell, metricLabel, paginate, Pager, partnerTypeLabel, percent, PeriodInputs, periodQuery, periodText, Prior, productText, useDrilldown, type Period } from "./partner-quality-parts";
+import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
+
+/** The partner's sections, one at a time (2026-10-06 redesign: five stacked tables became tabs). */
+type DetailTab = "leads" | "outcomes" | "team" | "agents" | "daily";
 
 type LeadFilter = "all" | "unclaimed" | "claimed" | "worked" | "submitted" | "flagged" | "duplicate" | "disqualified";
 const LEAD_FILTERS: { value: LeadFilter; label: string }[] = [
@@ -63,6 +68,9 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
   const [filter, setFilter] = useState<LeadFilter>("all");
   const [leadPage, setLeadPage] = useState(1);
   const [dayPage, setDayPage] = useState(1);
+  const [tab, setTab] = useState<DetailTab>("leads");
+  // Back link, header, strip, tab row, toolbar, column heads and pager around the rows.
+  const pageSize = useFittingRows(480, 45);
   const drilldown = useDrilldown(data?.disposition_labels);
 
   const load = useCallback(async (next: Period) => {
@@ -106,9 +114,11 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
     label: `${extra.member?.name ?? name} · ${extra.disposition ? dispositionText(extra.disposition, labels) : metricLabel(metric)}`,
     partnerId: data.partner.id, metric, period: active, disposition: extra.disposition, partnerUserId: extra.member?.user_id,
   });
-  const { current: leadCurrent, rows: leadRows } = paginate(shownLeads, leadPage);
-  const { current: dayCurrent, rows: dayRows } = paginate(data.daily, dayPage);
+  const { current: leadCurrent, rows: leadRows } = paginate(shownLeads, leadPage, pageSize);
+  const { current: dayCurrent, rows: dayRows } = paginate(data.daily, dayPage, pageSize);
   const section = (content: ReactNode, columns = 4) => loading ? <SectionLoading rows={4} columns={columns} /> : content;
+  const leadsFiltered = filter !== "all" || search.trim() !== "";
+  const clearLeadFilters = () => { setSearch(""); setFilter("all"); setLeadPage(1); };
 
   function exportLeads() {
     downloadCsv(`${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-leads-${active.from}-to-${active.to}.csv`,
@@ -124,70 +134,101 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
     { label: "Invalid phone", value: now.screening.invalid, prior: prev.screening.invalid, metric: "invalid" },
     { label: "Disqualified", value: now.disqualified, prior: prev.disqualified, metric: "disqualified" },
     { label: "Duplicates", value: now.duplicates, prior: prev.duplicates, metric: "duplicate" },
+    // LA-6.2: transfers the gate rejected (never billable, never in deal flow), and accepts whose
+    // checks only ran at submit, with a closer already on the line.
+    { label: "Rejected at transfer", value: data.gate.current.rejected, prior: data.gate.previous.rejected },
+    { label: "Screened only at submit", value: data.gate.current.screenedLate, prior: data.gate.previous.screenedLate },
+    // LA-6.4: a partner generating complaints is a partner about to cost the agent a licence.
+    { label: "Complaints", value: data.gate.current.complaints, prior: data.gate.previous.complaints },
   ];
+  const tabs: { key: DetailTab; label: string; count?: number }[] = [
+    { key: "leads", label: "Leads sent", count: data.leads.length },
+    { key: "outcomes", label: "Outcomes & screening" },
+    { key: "team", label: "Team", count: data.team.length },
+    { key: "agents", label: "By agent", count: data.agents.length },
+    { key: "daily", label: "Daily volume" },
+  ];
+  const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`;
 
-  return <div className="m-stagger portal-partner-quality-page flex flex-col gap-6">
+  return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     {back}
     <PageHeader title={name} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />
 
+    {/* Four figures (2026-10-06 redesign): claimed and worked ride on Sent's footnote, duplicates
+        on DQ's. Every count is still in the Team and Daily tabs, and opens its leads there. */}
     <StatStrip label={`${name} totals`}>
-      <StatTile label="Sent" value={count(now.sent)} delta={countDelta(now.sent, prev.sent)} footnote={`prev ${count(prev.sent)}`} />
-      <StatTile label="Claimed" value={count(now.claimed)} delta={countDelta(now.claimed, prev.claimed)} footnote={`prev ${count(prev.claimed)}`} />
-      <StatTile label="Worked" value={count(now.worked)} delta={countDelta(now.worked, prev.worked)} footnote={`prev ${count(prev.worked)}`} />
-      <StatTile label="Submitted" value={count(now.submitted)} delta={countDelta(now.submitted, prev.submitted)} footnote={`prev ${count(prev.submitted)}`} />
-      <StatTile label="Conversion" value={rate(now.conversion_rate, now.sent)} delta={rateDelta(now.conversion_rate, prev.conversion_rate)} footnote={`prev ${rate(prev.conversion_rate, prev.sent)}`} />
+      <StatTile label="Sent" value={count(now.sent)} delta={countDelta(now.sent, prev.sent)} footnote={`prev ${count(prev.sent)} · ${count(now.claimed)} claimed · ${count(now.worked)} worked`} />
+      <StatTile label="Conversion" value={rate(now.conversion_rate, now.sent)} delta={rateDelta(now.conversion_rate, prev.conversion_rate)} footnote={`${count(now.submitted)} submitted · prev ${rate(prev.conversion_rate, prev.sent)}`} />
       <StatTile label="Screening" labelTitle="Screening pass rate: sent leads with no TCPA, DNC or invalid-phone flag" value={rate(now.screening_pass_rate, now.sent)} valueTone={now.screening_pass_rate != null && now.screening_pass_rate < 90 ? "warning" : undefined} delta={rateDelta(now.screening_pass_rate, prev.screening_pass_rate)} footnote={`prev ${rate(prev.screening_pass_rate, prev.sent)}`} />
-      <StatTile label="Duplicates" value={count(now.duplicates)} delta={countDelta(now.duplicates, prev.duplicates, "down")} footnote={`prev ${count(prev.duplicates)}`} />
-      <StatTile label="DQ %" value={rate(now.disqualification_rate, now.sent)} delta={rateDelta(now.disqualification_rate, prev.disqualification_rate, "down")} footnote={`prev ${rate(prev.disqualification_rate, prev.sent)}`} />
+      <StatTile label="DQ %" value={rate(now.disqualification_rate, now.sent)} delta={rateDelta(now.disqualification_rate, prev.disqualification_rate, "down")} footnote={`${count(now.duplicates)} duplicates · prev ${rate(prev.disqualification_rate, prev.sent)}`} />
     </StatStrip>
 
-    <TableCard
-      title="Leads sent"
-      toolbar={<>
+    {/* Sections as tabs on the left, the period (which every tab reads) on the right. */}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="Partner sections" className="inline-flex h-9 w-fit flex-wrap gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+        {tabs.map((item) => (
+          <button key={item.key} type="button" role="tab" id={`partner-tab-${item.key}`} aria-controls="partner-view" aria-selected={tab === item.key} onClick={() => setTab(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", tab === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+            {item.label}
+            {item.count !== undefined && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count(item.count)}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <PeriodInputs value={active} onChange={changePeriod} />
+        <RefreshButton onClick={() => void load(period)} refreshing={loading} />
+      </div>
+    </div>
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
+    {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
+    <div key={tab} role="tabpanel" id="partner-view" aria-labelledby={`partner-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
+    {tab === "leads" && <TableCard
+      className={fill}
+      toolbar={
         <DataToolbar actions={<>
+          {leadsFiltered && <ClearFiltersButton onClick={clearLeadFilters} />}
           <Button type="button" variant="outline" onClick={exportLeads} disabled={shownLeads.length === 0}><Download aria-hidden="true" />Export</Button>
-          <RefreshButton onClick={() => void load(period)} refreshing={loading} />
         </>}>
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setLeadPage(1); }} placeholder="Search leads" />
-          <PeriodInputs value={active} onChange={changePeriod} />
           <select aria-label="Show leads" className={toolbarControl} value={filter} onChange={(event) => { setFilter(event.target.value as LeadFilter); setLeadPage(1); }}>
             {LEAD_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </DataToolbar>
-        {error && <p role="alert" className="w-full text-sm text-destructive">{error}</p>}
-      </>}
-      footer={<Pager page={leadCurrent} total={shownLeads.length} noun="leads" onPage={setLeadPage} suffix={data.leads_truncated ? `newest ${count(data.leads.length)} of ${count(now.sent)} listed` : undefined} />}
+      }
+      footer={<Pager page={leadCurrent} total={shownLeads.length} pageSize={pageSize} noun="leads" onPage={setLeadPage} suffix={data.leads_truncated ? `newest ${count(data.leads.length)} of ${count(now.sent)} listed` : undefined} />}
     >
       {section(data.leads.length === 0
         ? <EmptyState title="No leads in this period" hint="Widen the period to see earlier leads." />
         : shownLeads.length === 0
-          ? <NoMatches noun="leads" onClear={() => { setSearch(""); setFilter("all"); setLeadPage(1); }} />
-          : <table className="portal-lead-table w-full min-w-[1080px] text-left text-sm">
-              <thead><tr><th className="w-[120px]">Received</th><th>Customer</th><th className="w-[70px]">State</th><th>Product</th><th>Screening</th><th>Submitted by</th><th>Claimed by</th><th>Status</th><th className="w-[84px] text-right"><span className="sr-only">Open</span></th></tr></thead>
+          ? <NoMatches noun="leads" onClear={clearLeadFilters} />
+          : <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
+              <thead><tr><th>Received</th><th>Customer</th><th>Phone</th><th>State</th><th>Product</th><th>Screening</th><th>Duplicate</th><th>Submitted by</th><th>Claimed by</th><th>Status</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
               <tbody className="m-seq">
                 {leadRows.map((lead) => (
                   <tr key={lead.lead_id} className="m-row">
-                    <td className="tabular-nums">{dateText(lead.date)}</td>
-                    <td><span className="block font-semibold">{lead.full_name}</span><span className="block text-xs text-muted-foreground tabular-nums">{lead.phone ?? "No phone"}</span></td>
+                    <td className="whitespace-nowrap tabular-nums">{dateText(lead.date)}</td>
+                    <td className="max-w-[220px]"><span className="block truncate font-semibold" title={lead.full_name}>{lead.full_name}</span></td>
+                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{lead.phone ?? "No phone"}</td>
                     <td>{lead.state ?? "—"}</td>
-                    <td>{productText(lead.product)}</td>
-                    <td><span className={FLAGGED.has(lead.screening) || lead.screening === "Disqualified" ? "font-semibold text-[var(--warning-ink)]" : undefined}>{lead.screening}</span>{lead.duplicate && <span className="block text-xs text-muted-foreground">Duplicate</span>}</td>
-                    <td>{lead.submitted_by ?? <span className="text-muted-foreground">—</span>}</td>
-                    <td>{lead.agent_name ?? <span className="text-muted-foreground">Unclaimed</span>}</td>
-                    <td>{leadStatus(lead, labels)}</td>
+                    <td className="whitespace-nowrap">{productText(lead.product)}</td>
+                    <td className="whitespace-nowrap"><span className={FLAGGED.has(lead.screening) || lead.screening === "Disqualified" ? "font-semibold text-[var(--warning-ink)]" : undefined}>{lead.screening}</span></td>
+                    <td>{lead.duplicate ? "Duplicate" : <span className="text-muted-foreground">—</span>}</td>
+                    <td className="max-w-[180px] truncate" title={lead.submitted_by ?? undefined}>{lead.submitted_by ?? <span className="text-muted-foreground">—</span>}</td>
+                    <td className="max-w-[180px] truncate" title={lead.agent_name ?? undefined}>{lead.agent_name ?? <span className="text-muted-foreground">Unclaimed</span>}</td>
+                    <td className="whitespace-nowrap">{leadStatus(lead, labels)}</td>
                     <td className="text-right"><Button asChild variant="outline" size="sm"><Link href={`/app/leads/${lead.lead_id}`} aria-label={`Open ${lead.full_name}`}>Open</Link></Button></td>
                   </tr>
                 ))}
               </tbody>
             </table>, 6)}
-    </TableCard>
+    </TableCard>}
 
-    <div className="grid items-start gap-6 lg:grid-cols-2">
+    {tab === "outcomes" && <div className="grid items-start gap-6 lg:grid-cols-2">
       <TableCard title="Outcomes">
         {section(now.sent === 0
           ? <EmptyState title="No outcomes" hint="Nothing was sent in this period." />
           : <table className="portal-lead-table w-full min-w-0! text-left text-sm">
-              <thead><tr><th>Disposition</th><th className="w-[100px] text-right">Leads</th><th className="w-[110px] text-right">Of sent</th></tr></thead>
+              <thead><tr><th>Disposition</th><th className="text-right">Leads</th><th className="text-right">Of sent</th></tr></thead>
               <tbody>
                 {data.dispositions.map((item) => (
                   <tr key={item.key}>
@@ -203,7 +244,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
 
       <TableCard title="Screening">
         {section(<table className="portal-lead-table w-full min-w-0! text-left text-sm">
-          <thead><tr><th>Result</th><th className="w-[100px] text-right">Leads</th><th className="w-[100px] text-right">Of sent</th><th className="w-[90px] text-right">Prev</th></tr></thead>
+          <thead><tr><th>Result</th><th className="text-right">Leads</th><th className="text-right">Of sent</th><th className="text-right">Prev</th></tr></thead>
           <tbody>
             {screeningRows.map((row) => (
               <tr key={row.label}>
@@ -216,19 +257,21 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
           </tbody>
         </table>, 4)}
       </TableCard>
-    </div>
+    </div>}
 
-    <TableCard title="Team">
+    {tab === "team" && <TableCard className={fill}>
       {section(data.team.length === 0 && data.unattributed.sent === 0
-        ? <EmptyState title="No partner users" hint="This partner has no portal accounts." />
-        : <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
-            <thead><tr><th>Member</th><th>Role</th><th>Reports to</th><th className="w-[96px] text-right">Sent</th><th className="w-[100px] text-right">Claimed</th><th className="w-[96px] text-right">Worked</th><th className="w-[110px] text-right">Submitted</th><th className="w-[116px] text-right">Conversion</th></tr></thead>
+        ? <EmptyState title="No partner users" hint="Invite them from the partner's record." action={<Button asChild variant="outline"><Link href={`/app/publishers/${data.partner.id}`}>Open partner</Link></Button>} />
+        : <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
+            <thead><tr><th>Member</th><th>Email</th><th>Role</th><th>Access</th><th>Reports to</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Conversion</th></tr></thead>
             <tbody>
               {data.team.map((member) => (
                 <tr key={member.id}>
-                  <td><span className="block font-semibold">{member.name}</span><span className="block text-xs text-muted-foreground">{member.email}</span></td>
-                  <td>{member.role === "partner_admin" ? "Partner admin" : "Partner user"}{member.status === "revoked" && <span className="block text-xs text-muted-foreground">Revoked</span>}</td>
-                  <td>{member.role === "partner_admin" ? "—" : member.partner_admin_name ?? "Unassigned"}</td>
+                  <td className="max-w-[200px]"><span className="block truncate font-semibold" title={member.name}>{member.name}</span></td>
+                  <td className="max-w-[220px] truncate text-muted-foreground" title={member.email ?? undefined}>{member.email}</td>
+                  <td className="whitespace-nowrap">{member.role === "partner_admin" ? "Partner admin" : "Partner user"}</td>
+                  <td className="whitespace-nowrap">{member.status === "revoked" ? <span className="text-muted-foreground">Revoked</span> : "Active"}</td>
+                  <td className="whitespace-nowrap">{member.role === "partner_admin" ? "—" : member.partner_admin_name ?? "Unassigned"}</td>
                   <td className="text-right"><MetricCell label={`${member.name}: sent ${member.sent}; open leads`} onClick={() => open("sent", { member })}>{count(member.sent)}</MetricCell><Prior label="Sent" value={count(member.previous.sent)} /></td>
                   <td className="text-right"><MetricCell label={`${member.name}: claimed ${member.claimed}; open leads`} onClick={() => open("claimed", { member })}>{count(member.claimed)}</MetricCell><Prior label="Claimed" value={count(member.previous.claimed)} /></td>
                   <td className="text-right"><MetricCell label={`${member.name}: worked ${member.worked}; open leads`} onClick={() => open("worked", { member })}>{count(member.worked)}</MetricCell><Prior label="Worked" value={count(member.previous.worked)} /></td>
@@ -239,46 +282,45 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
               {data.unattributed.sent > 0 && <UnattributedRow metrics={data.unattributed} />}
             </tbody>
           </table>, 6)}
-    </TableCard>
+    </TableCard>}
 
-    <div className="grid items-start gap-6 lg:grid-cols-2">
-      <TableCard title="By agent">
-        {section(data.agents.length === 0
-          ? <EmptyState title="No leads claimed yet" hint="Agents appear here once they claim this partner's leads." />
-          : <table className="portal-lead-table w-full min-w-0! text-left text-sm">
-              <thead><tr><th>Agent</th><th className="w-[80px] text-right">Leads</th><th className="w-[84px] text-right">Worked</th><th className="w-[100px] text-right">Submitted</th><th className="w-[110px] text-right">Conversion</th></tr></thead>
-              <tbody>
-                {data.agents.map((agent) => (
-                  <tr key={agent.user_id}>
-                    <td className="font-semibold">{agent.name}</td>
-                    <td className="text-right tabular-nums">{count(agent.leads)}</td>
-                    <td className="text-right tabular-nums">{count(agent.worked)}</td>
-                    <td className="text-right tabular-nums">{count(agent.submitted)}</td>
-                    <td className="text-right tabular-nums">{percent(agent.conversion_rate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>, 5)}
-      </TableCard>
+    {tab === "agents" && <TableCard className={fill}>
+      {section(data.agents.length === 0
+        ? <EmptyState title="No leads claimed yet" hint="Agents appear here once they claim this partner's leads." />
+        : <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
+            <thead><tr><th>Agent</th><th className="text-right">Leads</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Conversion</th></tr></thead>
+            <tbody>
+              {data.agents.map((agent) => (
+                <tr key={agent.user_id}>
+                  <td className="font-semibold">{agent.name}</td>
+                  <td className="text-right tabular-nums">{count(agent.leads)}</td>
+                  <td className="text-right tabular-nums">{count(agent.worked)}</td>
+                  <td className="text-right tabular-nums">{count(agent.submitted)}</td>
+                  <td className="text-right tabular-nums">{percent(agent.conversion_rate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>, 5)}
+    </TableCard>}
 
-      <TableCard title="Daily volume" footer={<Pager page={dayCurrent} total={data.daily.length} noun="days" onPage={setDayPage} />}>
-        {section(<table className="portal-lead-table w-full min-w-0! text-left text-sm">
-          <thead><tr><th>Date</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Flagged</th><th className="text-right">Dupes</th></tr></thead>
-          <tbody>
-            {dayRows.map((day) => (
-              <tr key={day.date} className={day.sent === 0 ? "text-muted-foreground" : undefined}>
-                <td className="tabular-nums">{shortDate(day.date)}</td>
-                <td className="text-right tabular-nums">{count(day.sent)}</td>
-                <td className="text-right tabular-nums">{count(day.claimed)}</td>
-                <td className="text-right tabular-nums">{count(day.worked)}</td>
-                <td className="text-right tabular-nums">{count(day.submitted)}</td>
-                <td className="text-right tabular-nums">{count(day.flagged)}</td>
-                <td className="text-right tabular-nums">{count(day.duplicates)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>, 7)}
-      </TableCard>
+    {tab === "daily" && <TableCard className={fill} footer={<Pager page={dayCurrent} total={data.daily.length} pageSize={pageSize} noun="days" onPage={setDayPage} />}>
+      {section(<table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
+        <thead><tr><th>Date</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Flagged</th><th className="text-right">Dupes</th></tr></thead>
+        <tbody>
+          {dayRows.map((day) => (
+            <tr key={day.date} className={day.sent === 0 ? "text-muted-foreground" : undefined}>
+              <td className="tabular-nums">{shortDate(day.date)}</td>
+              <td className="text-right tabular-nums">{count(day.sent)}</td>
+              <td className="text-right tabular-nums">{count(day.claimed)}</td>
+              <td className="text-right tabular-nums">{count(day.worked)}</td>
+              <td className="text-right tabular-nums">{count(day.submitted)}</td>
+              <td className="text-right tabular-nums">{count(day.flagged)}</td>
+              <td className="text-right tabular-nums">{count(day.duplicates)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>, 7)}
+    </TableCard>}
     </div>
     {drilldown.drawer}
   </div>;
@@ -287,7 +329,9 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
 /** Leads no partner account submitted (API posts, agency imports), so the team rows add up to Sent. */
 function UnattributedRow({ metrics }: { metrics: PartnerQualityPeriodMetrics }) {
   return <tr className="text-muted-foreground">
-    <td>Other sources<span className="block text-xs">API or agency import</span></td>
+    <td className="whitespace-nowrap">Other sources</td>
+    <td>API or agency import</td>
+    <td>—</td>
     <td>—</td>
     <td>—</td>
     <td className="text-right tabular-nums"><span className="px-1">{count(metrics.sent)}</span></td>

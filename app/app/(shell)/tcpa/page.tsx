@@ -1,7 +1,8 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { SuppressionWorkspace } from "@/components/app/suppression-workspace";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-2.3 · `/app/tcpa`.
@@ -18,13 +19,15 @@ export default async function TcpaPage() {
       <FeatureGateNotice
         guard={guard}
         featureLabel="TCPA / DNC"
-        description="The numbers your agency must never call, why each one is on the list, and a check you can run before dialling."
+        description="Numbers you must never call, and a check before dialling."
       />
     );
   // A setter needs to be able to answer "are we allowed to call this person" mid-shift, so reading
   // is theirs. Adding is not: a suppression cannot be undone without a migration.
-  if (!["owner", "producer", "assistant", "setter"].includes(guard.role))
+  if (!actAsPage(guard, ["owner", "producer", "assistant", "setter"]))
     return <RoleGateNotice featureLabel="TCPA / DNC" detail="Your role cannot see the suppression list." />;
+  // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="TCPA / DNC" detail="In an agency, the owner and admins keep the suppression list. The dialer still checks every number before it rings." />;
 
   // The header is drawn by the workspace: its Suppress a number action opens the workspace's form.
   return <SuppressionWorkspace />;

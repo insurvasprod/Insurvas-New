@@ -15,7 +15,7 @@ export default function VerificationFailedPage() {
     <div className="m-stagger flex min-h-screen items-center justify-center bg-[var(--canvas)] p-6 sm:p-10">
       <div className="w-full max-w-[580px]">
         <div className="rounded-xl border border-border bg-card p-6 sm:p-10">
-          <h1 className="text-center text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+          <h1 className="text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
             That link no longer works
           </h1>
           <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">

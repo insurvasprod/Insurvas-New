@@ -5,6 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { callbackReminderEmail } from "@/lib/email/templates";
 import { sendEmail } from "@/lib/email/transport";
 import { formatInTimezone } from "./timezone";
+import { shouldEmail } from "@/lib/notifications/preferences";
 
 export async function processCallbackReminders() {
   const minutes = await callbackReminderLeadMinutes();
@@ -32,8 +33,11 @@ export async function processCallbackReminders() {
     const values = (lead?.values ?? {}) as Record<string, unknown>;
     const name = String(values.full_name ?? values.name ?? ([values.first_name, values.last_name].filter(Boolean).join(" ") || "Customer"));
     const body = callbackReminderEmail({ name: user.name, customerName: name, customerTime: formatInTimezone(row.scheduled_at_utc, row.customer_timezone), customerTimezone: row.customer_timezone, note: row.note, callbacksUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/app/callbacks` });
-    const delivery = await sendEmail({ ...body, to: user.email, userId: user.id, tenantId: row.tenant_id, templateKey: "callback.reminder", dedupeKey: `callback-reminder:${row.id}` });
-    if (delivery.delivered) delivered += 1;
+    // LA-8.4: the person's own choice for "Callback due" (email off, or quiet hours) — the in-app row is written either way.
+    if (await shouldEmail({ userId: user.id, tenantId: row.tenant_id, eventKey: "callback_due", title: `Callback reminder: ${name}`, link: `/app/leads/${row.lead_id}` })) {
+      const delivery = await sendEmail({ ...body, to: user.email, userId: user.id, tenantId: row.tenant_id, templateKey: "callback.reminder", dedupeKey: `callback-reminder:${row.id}` });
+      if (delivery.delivered) delivered += 1;
+    }
     await supabase.from("agent_notifications").upsert({ tenant_id: row.tenant_id, recipient_user_id: user.id, kind: "callback_reminder", title: `Callback reminder: ${name}`, body: `Callback at ${formatInTimezone(row.scheduled_at_utc, row.customer_timezone)} (${row.customer_timezone}).`, link: `/app/leads/${row.lead_id}`, source_key: `callback-reminder:${row.id}` }, { onConflict: "tenant_id,recipient_user_id,source_key" });
   }
   return { claimed: rows.length, delivered };

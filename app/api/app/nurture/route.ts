@@ -4,6 +4,7 @@ import { z } from "zod";
 import { RecyclingNotApplied, RecyclingRefused, saveNurtureRule, screenRecycleChunk, startRecycleBatch } from "@/lib/nurture/service";
 import { nurtureReport } from "@/lib/nurture/report";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const ROLES = ["owner", "producer"] as const;
 const ruleSchema = z.object({ action: z.literal("save_rule"), campaign_id: z.string().uuid(), wait_days: z.number().int(), allowed_dispositions: z.array(z.string()), max_recycles: z.number().int() });
@@ -13,8 +14,10 @@ const startSchema = z.object({ action: z.literal("start_batch"), campaign_id: z.
 const chunkSchema = z.object({ action: z.literal("screen_chunk"), batch_id: z.string().uuid() });
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Nurture");
+  if (refused) return refused;
   // The report carries the campaigns (same shape as before) plus the figures the board shows around them.
   try { const report = await nurtureReport(auth.context.tenantId, { userId: auth.context.userId, role: auth.context.role }); return NextResponse.json({ ...report, readOnly: auth.entitlement.access === "read_only" }, { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load nurture" }, { status: 400 }); }
@@ -23,6 +26,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Nurture");
+  if (refused) return refused;
   const body = await request.json().catch(() => null);
   const parsed = ruleSchema.safeParse(body);
   const start = startSchema.safeParse(body);

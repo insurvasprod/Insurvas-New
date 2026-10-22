@@ -39,6 +39,27 @@ import {
 } from "@/lib/money";
 import type { SubscriptionRow } from "@/lib/subscriptions/queries";
 
+/** SA-2.7: every subscription change is audit-logged with a reason; the server refuses one under 5 characters. */
+const REASON_MIN = 5;
+const reasonOk = (reason: string) => reason.trim().length >= REASON_MIN;
+
+function ReasonField({ id, value, onChange, placeholder }: { id: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>Reason</Label>
+      <textarea
+        id={id}
+        rows={2}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      />
+      <p className="text-xs text-muted-foreground">Required, and recorded in the audit log.</p>
+    </div>
+  );
+}
+
 export type AssignablePlan = {
   id: string;
   code: string;
@@ -68,6 +89,7 @@ export function SubscriptionPanel({
   const [assignOpen, setAssignOpen] = useState(false);
   const [changeOpen, setChangeOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [reasonFor, setReasonFor] = useState<null | "pause" | "resume">(null);
 
   async function post(url: string, body: unknown, successMessage: string) {
     setBusy(true);
@@ -110,8 +132,8 @@ export function SubscriptionPanel({
           onClose={() => setAssignOpen(false)}
           plans={plans}
           busy={busy}
-          onAssign={(planId, cycle) =>
-            post("/api/admin/subscriptions", { tenant_id: tenantId, plan_id: planId, billing_cycle: cycle }, "Plan assigned").then(
+          onAssign={(planId, cycle, reason) =>
+            post("/api/admin/subscriptions", { tenant_id: tenantId, plan_id: planId, billing_cycle: cycle, reason }, "Plan assigned").then(
               (ok) => {
                 if (ok) setAssignOpen(false);
               },
@@ -212,13 +234,7 @@ export function SubscriptionPanel({
                 size="sm"
                 variant="outline"
                 disabled={busy}
-                onClick={() =>
-                  post(
-                    `/api/admin/subscriptions/${subscription.id}`,
-                    { action: "pause", reason: "Paused by administrator" },
-                    "Subscription paused",
-                  )
-                }
+                onClick={() => setReasonFor("pause")}
               >
                 Pause
               </Button>
@@ -228,9 +244,7 @@ export function SubscriptionPanel({
                 size="sm"
                 variant="outline"
                 disabled={busy}
-                onClick={() =>
-                  post(`/api/admin/subscriptions/${subscription.id}`, { action: "resume" }, "Subscription resumed")
-                }
+                onClick={() => setReasonFor("resume")}
               >
                 Resume
               </Button>
@@ -256,13 +270,28 @@ export function SubscriptionPanel({
         }
         periodEnd={subscription.current_period_end}
         busy={busy}
-        onChange={(planId, applyNow) =>
+        onChange={(planId, applyNow, reason) =>
           post(
             `/api/admin/subscriptions/${subscription.id}`,
-            { action: "change_plan", plan_id: planId, apply_now: applyNow },
+            { action: "change_plan", plan_id: planId, apply_now: applyNow, reason },
             applyNow ? "Plan changed" : "Plan change queued for period end",
           ).then((ok) => {
             if (ok) setChangeOpen(false);
+          })
+        }
+      />
+
+      <ReasonDialog
+        mode={reasonFor}
+        onClose={() => setReasonFor(null)}
+        busy={busy}
+        onConfirm={(mode, reason) =>
+          post(
+            `/api/admin/subscriptions/${subscription.id}`,
+            { action: mode, reason },
+            mode === "pause" ? "Subscription paused" : "Subscription resumed",
+          ).then((ok) => {
+            if (ok) setReasonFor(null);
           })
         }
       />
@@ -297,10 +326,11 @@ export function AssignDialog({
   onClose: () => void;
   plans: AssignablePlan[];
   busy: boolean;
-  onAssign: (planId: string, cycle: BillingCycle) => void;
+  onAssign: (planId: string, cycle: BillingCycle, reason: string) => void;
 }) {
   const [planId, setPlanId] = useState("");
   const [cycle, setCycle] = useState<BillingCycle | "">("");
+  const [reason, setReason] = useState("");
 
   const plan = plans.find((p) => p.id === planId);
   const cycles = availableBillingCycles(plan?.prices ?? null);
@@ -358,10 +388,12 @@ export function AssignDialog({
               </p>
             )}
           </div>
+
+          <ReasonField id="assign-reason" value={reason} onChange={setReason} placeholder="e.g. Signed the annual agreement on the call" />
         </div>
 
         <DialogFooter>
-          <Button disabled={busy || !planId || !cycle} onClick={() => onAssign(planId, cycle as BillingCycle)}>
+          <Button disabled={busy || !planId || !cycle || !reasonOk(reason)} onClick={() => onAssign(planId, cycle as BillingCycle, reason.trim())}>
             {busy ? "Assigning…" : "Assign plan"}
           </Button>
         </DialogFooter>
@@ -389,7 +421,7 @@ export function ChangePlanDialog({
   currentPrice: number | null;
   periodEnd: string | null;
   busy: boolean;
-  onChange: (planId: string, applyNow: boolean) => void;
+  onChange: (planId: string, applyNow: boolean, reason: string) => void;
   /** Seat limit per plan id (null = unlimited). When given, each option says what it allows. */
   seatLimits?: Record<string, number | null>;
   /** Extra context above the picker, e.g. why seats are changed by changing plan. */
@@ -397,12 +429,14 @@ export function ChangePlanDialog({
 }) {
   const [planId, setPlanId] = useState("");
   const [override, setOverride] = useState<boolean | null>(null);
+  const [reason, setReason] = useState("");
 
   const plan = plans.find((p) => p.id === planId);
   const newPrice = plan ? priceForCycle(plan.prices, cycle) : null;
 
   // Upgrade = costs more on the same cycle -> immediate. Otherwise queued to period end, so the
-  // customer keeps what they already paid for. The admin can override either way.
+  // customer keeps what they already paid for. The server decides (20261015600000): a downgrade is
+  // always queued, so "now" is not offered for one; an upgrade or a same-price move can be queued.
   //
   // Same price is its own case. It used to fall through to "a downgrade", so moving a tenant to the
   // next version of their plan at an unchanged price was announced as a downgrade. The timing is
@@ -416,7 +450,8 @@ export function ChangePlanDialog({
           ? "downgrade"
           : "same";
   const inferredUpgrade = direction === "upgrade";
-  const applyNow = override ?? inferredUpgrade;
+  const canApplyNow = direction !== "downgrade";
+  const applyNow = canApplyNow && (override ?? inferredUpgrade);
   const sellableOnCycle = newPrice !== null;
   const DIRECTION_LABEL = {
     upgrade: "an upgrade",
@@ -436,8 +471,8 @@ export function ChangePlanDialog({
         <DialogHeader>
           <DialogTitle>Change plan</DialogTitle>
           <DialogDescription>
-            Upgrades apply immediately; downgrades wait for period end so nothing already paid for is
-            taken away.
+            Upgrades apply immediately; downgrades always wait for period end so nothing already paid
+            for is taken away.
           </DialogDescription>
         </DialogHeader>
 
@@ -484,20 +519,26 @@ export function ChangePlanDialog({
                   ? "Takes effect immediately."
                   : `Takes effect ${periodEnd ? new Date(periodEnd).toLocaleDateString() : "at period end"}.`}
               </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setOverride(!applyNow)}
-              >
-                {applyNow ? "Queue for period end instead" : "Apply immediately instead"}
-              </Button>
+              {canApplyNow ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOverride(!applyNow)}
+                >
+                  {applyNow ? "Queue for period end instead" : "Apply immediately instead"}
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">A downgrade cannot apply before the period it was paid for ends.</p>
+              )}
             </div>
           )}
+
+          <ReasonField id="change-reason" value={reason} onChange={setReason} placeholder="e.g. Customer asked to move to the yearly plan" />
         </div>
 
         <DialogFooter>
-          <Button disabled={busy || !planId || !sellableOnCycle} onClick={() => onChange(planId, applyNow)}>
+          <Button disabled={busy || !planId || !sellableOnCycle || !reasonOk(reason)} onClick={() => onChange(planId, applyNow, reason.trim())}>
             {busy ? "Saving…" : applyNow ? "Change now" : "Queue change"}
           </Button>
         </DialogFooter>
@@ -570,6 +611,53 @@ export function CancelDialog({
             onClick={() => onCancel(reason, immediate)}
           >
             {busy ? "Cancelling…" : immediate ? "Cancel now" : "Cancel at period end"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Pause and resume: one reason, recorded in the audit log like every other subscription change. */
+export function ReasonDialog({
+  mode,
+  onClose,
+  busy,
+  onConfirm,
+}: {
+  mode: "pause" | "resume" | null;
+  onClose: () => void;
+  busy: boolean;
+  onConfirm: (mode: "pause" | "resume", reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const pausing = mode === "pause";
+
+  return (
+    <Dialog open={mode !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{pausing ? "Pause subscription" : "Resume subscription"}</DialogTitle>
+          <DialogDescription>
+            {pausing
+              ? "They keep read access to their book of business but cannot dial, import or sell until it is resumed."
+              : "Full access returns immediately."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-2">
+          <ReasonField
+            id="pause-reason"
+            value={reason}
+            onChange={setReason}
+            placeholder={pausing ? "e.g. Customer on leave until March" : "e.g. Customer back from leave"}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Keep as is
+          </Button>
+          <Button disabled={busy || !mode || !reasonOk(reason)} onClick={() => mode && onConfirm(mode, reason.trim())}>
+            {busy ? "Saving…" : pausing ? "Pause" : "Resume"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -4,6 +4,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { TENANT_ROLE_LABELS } from "@/lib/tenantAuth/roles";
 import type { TenantContext } from "@/lib/tenantAuth/requireTenant";
 import { cleanLicenceNumbers, licenceNumbersFromRow, type OwnProfile, type OwnProfileInput } from "./ownProfile";
+import { readAvatar } from "./avatar";
+import { forgetPersonalTimezone, getPersonalTimezone } from "./viewerTimezone";
 
 // The producer-profile table arrives with 20260924200000 and is not in the generated types yet;
 // access stays untyped here and nowhere else.
@@ -28,11 +30,15 @@ export class OwnProfileError extends Error {
  * "not available yet" instead of failing the page, so name and phone always load.
  */
 export async function readOwnProfile(context: TenantContext): Promise<OwnProfile> {
-  const [user, tenant, states, producer] = await Promise.all([
+  const [user, tenant, states, producer, avatar, displayTimezone] = await Promise.all([
     db().from("users").select("name, email, phone").eq("id", context.userId).maybeSingle(),
     db().from("tenants").select("name").eq("id", context.tenantId).maybeSingle(),
     db().from("tenant_user_licensed_states").select("state").eq("tenant_id", context.tenantId).eq("user_id", context.userId).order("state"),
     db().from("tenant_user_producer_profiles").select("npn, state_licence_numbers").eq("tenant_id", context.tenantId).eq("user_id", context.userId).maybeSingle(),
+    // Its own read, so a missing picture column (before 20261005120000) never fails the page.
+    readAvatar(context.userId),
+    // Its own read too: before 20261015310000 there is no column, and the profile still loads.
+    getPersonalTimezone(context.userId).catch(() => null),
   ]);
   if (user.error || !user.data) throw new OwnProfileError("Your profile could not be loaded.", 503);
   if (states.error && !isMissingRelation(states.error)) throw new OwnProfileError("Your licensed states could not be loaded.", 503);
@@ -49,6 +55,8 @@ export async function readOwnProfile(context: TenantContext): Promise<OwnProfile
     npn: producer.error ? null : (producer.data as { npn?: string | null } | null)?.npn ?? null,
     licenceNumbers: producer.error ? {} : licenceNumbersFromRow((producer.data as { state_licence_numbers?: unknown } | null)?.state_licence_numbers),
     licenceNumbersReady: !producer.error,
+    avatarVersion: avatar?.version ?? null,
+    displayTimezone,
   };
 }
 
@@ -72,6 +80,15 @@ export async function saveOwnProfile(context: TenantContext, input: OwnProfileIn
 
   const updated = await db().from("users").update({ name: input.name, phone: input.phone ?? null }).eq("id", context.userId).select("id").maybeSingle();
   if (updated.error || !updated.data) throw new OwnProfileError("Your name and phone could not be saved.", 503);
+
+  // LA-8.2: the display timezone, on its own write — a pending migration never stops a phone fix.
+  if (input.displayTimezone !== undefined) {
+    const zone = await db().from("users").update({ display_timezone: input.displayTimezone }).eq("id", context.userId);
+    if (zone.error) {
+      throw new OwnProfileError(isMissingRelation(zone.error) ? "Your name and phone were saved. Your display timezone needs a database update first." : "Your name and phone were saved, but your display timezone could not be.", 503);
+    }
+    forgetPersonalTimezone(context.userId);
+  }
 
   if (wantsNumbers) {
     const write = await db().from("tenant_user_producer_profiles").upsert({

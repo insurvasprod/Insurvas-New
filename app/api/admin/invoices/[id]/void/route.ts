@@ -2,8 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
-import { CAN_VOID_INVOICES, voidRefusalReason } from "@/lib/invoices/permissions";
+import { CAN_VOID_INVOICES } from "@/lib/invoices/permissions";
+import { voidInvoiceWith, type VoidableInvoice } from "@/lib/invoices/voidFlow";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { buildProvider } from "@/lib/payments/registry";
+import { WhopProvider } from "@/lib/payments/whop/provider";
 import { audit } from "@/lib/audit/log";
 
 const schema = z.object({
@@ -25,23 +28,50 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const supabase = getSupabaseServiceClient();
   const { data: invoice } = await supabase
     .from("platform_invoices")
-    .select("id, number, status, tenant_id, total_cents")
+    .select("id, number, status, tenant_id, total_cents, provider_invoice_id, pay_online_url")
     .eq("id", id)
-    .maybeSingle<{ id: string; number: string; status: string; tenant_id: string; total_cents: number }>();
+    .maybeSingle<VoidableInvoice>();
 
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-  const refusal = voidRefusalReason(invoice.status);
-  if (refusal) return NextResponse.json({ error: refusal }, { status: 409 });
-
   // Voiding changes the status only. The number, the lines and the amounts are untouched — the
-  // record of what was billed survives, and the number is never reissued.
-  const { error } = await supabase
-    .from("platform_invoices")
-    .update({ status: "void", voided_at: new Date().toISOString(), void_reason: parsed.data.reason })
-    .eq("id", id);
+  // record of what was billed survives, and the number is never reissued. The provider's copy is
+  // voided first so its pay link dies with ours; see lib/invoices/voidFlow.ts.
+  const outcome = await voidInvoiceWith(invoice, parsed.data.reason, {
+    async paidCents(invoiceId) {
+      const { data, error } = await supabase
+        .from("payments")
+        .select("amount_cents")
+        .eq("invoice_id", invoiceId)
+        .eq("status", "succeeded");
+      if (error) throw new Error(`Could not read the payments on this invoice: ${error.message}`);
+      return (data ?? []).reduce((sum, payment) => sum + payment.amount_cents, 0);
+    },
+    voidProviderInvoice: process.env.WHOP_API_KEY
+      ? async (providerInvoiceId, tenantId) => {
+          const provider = buildProvider("whop", { tenantId });
+          if (!(provider instanceof WhopProvider)) throw new Error("Voiding a pay-online invoice requires the Whop provider");
+          await provider.voidInvoice(providerInvoiceId);
+        }
+      : undefined,
+    async markVoid({ id: invoiceId, expectedStatus, reason, voidedAt }) {
+      // Conditional on the status the refusal check read: an invoice paid in between is not
+      // voided over its payment. The pay link goes with it.
+      const { data, error } = await supabase
+        .from("platform_invoices")
+        .update({ status: "void", voided_at: voidedAt, void_reason: reason, pay_online_url: null })
+        .eq("id", invoiceId)
+        .eq("status", expectedStatus as never)
+        .select("id");
+      if (error) throw new Error(error.message);
+      return data?.length ?? 0;
+    },
+  }).catch((error: unknown) => {
+    console.error("[invoices] void failed", id, error);
+    return { ok: false as const, status: 500 as const, error: "Could not void the invoice" };
+  });
 
-  if (error) return NextResponse.json({ error: "Could not void the invoice" }, { status: 500 });
+  if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: outcome.status });
 
   await audit({
     actorId: auth.session.sub,
@@ -49,7 +79,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     targetType: "invoice",
     targetId: id,
     reason: parsed.data.reason,
-    metadata: { number: invoice.number, tenantId: invoice.tenant_id, totalCents: invoice.total_cents },
+    metadata: {
+      number: invoice.number,
+      tenantId: invoice.tenant_id,
+      totalCents: invoice.total_cents,
+      providerInvoiceId: invoice.provider_invoice_id,
+      providerVoided: outcome.providerVoided,
+    },
     request,
   });
 

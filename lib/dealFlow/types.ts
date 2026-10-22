@@ -12,7 +12,7 @@ export type DealFlowStageType = (typeof DEAL_FLOW_STAGE_TYPES)[number];
 export const STAGE_TYPE_LABEL: Record<DealFlowStageType, string> = { open: "In progress", won: "Won", lost: "Lost" };
 
 /** The board pages the production table 25 at a time. */
-export const DEAL_FLOW_PAGE_SIZE = 25;
+export const DEAL_FLOW_PAGE_SIZE = 10;
 
 /** Shown wherever a write or a field needs migration 20260924320000 and it is not applied yet. */
 export const DEAL_FLOW_SCHEMA_PENDING = "This setting needs a database update that has not been applied yet.";

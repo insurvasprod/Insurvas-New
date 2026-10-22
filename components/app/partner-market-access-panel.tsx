@@ -7,6 +7,7 @@ import { notify } from "@/lib/notify";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { cn } from "@/lib/utils";
 
 type Market = { carrier_id: string; carrier_name: string; state: string };
@@ -148,7 +149,7 @@ export function PartnerMarketAccessPanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="size-4 text-[var(--color-blue)]" />
+              <ShieldCheck className="size-4 text-[var(--color-brand)]" />
               Carrier &amp; State access
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -164,15 +165,16 @@ export function PartnerMarketAccessPanel({
         </div>
       </CardHeader>
       <CardContent className={cn("space-y-4 p-4", compact && "p-0 pt-3")}>
-        <div className="flex items-start gap-2 rounded-md border border-[var(--color-blue)]/20 bg-[var(--color-blue-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
+        <div className="flex items-start gap-2 rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
           <MapPin className="mt-0.5 size-4 shrink-0" />
           <p>
-            Partners must select <strong>Product, Carrier, and State</strong>
+            Partners must select <strong>Product, Carrier, and State</strong>{" "}
             before submitting. The Partner Portal receives only the pairs saved
             here.
           </p>
         </div>
         {eligible.length ? (
+          <PagedProvider>
           <div className="overflow-x-auto rounded-lg border">
             <table className="min-w-[720px] w-full text-left text-sm">
               <thead className="bg-muted/30 text-xs text-muted-foreground">
@@ -186,7 +188,7 @@ export function PartnerMarketAccessPanel({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <PagedBody className="divide-y">
                 {carriers.map((carrier) => (
                   <tr key={carrier.id}>
                     <th className="px-3 py-3 font-medium">{carrier.name}</th>
@@ -204,7 +206,7 @@ export function PartnerMarketAccessPanel({
                               className={cn(
                                 "mx-auto flex size-8 cursor-pointer items-center justify-center rounded-md border transition-colors",
                                 checked
-                                  ? "border-[var(--color-orange)] bg-[var(--color-orange-faint)] text-[var(--color-orange)]"
+                                  ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]"
                                   : "border-input hover:bg-muted/50",
                               )}
                               title={`${carrier.name} in ${state}`}
@@ -231,9 +233,15 @@ export function PartnerMarketAccessPanel({
                     })}
                   </tr>
                 ))}
-              </tbody>
+              </PagedBody>
             </table>
+            {carriers.length > 10 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                <PagedPager total={carriers.length} noun="carriers" />
+              </div>
+            )}
           </div>
+          </PagedProvider>
         ) : (
           <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
             No active carrier appointments are available. Add agency contracts

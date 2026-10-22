@@ -64,7 +64,7 @@ export function CarrierDeactivateDialog({
           <form onSubmit={submit} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>Deactivate {carrier.name}?</DialogTitle>
-              <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+              <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
                 {usage ? blockingSentence(carrier.name, usage) : `Tenants still use ${carrier.name}.`}{" "}
                 {canOverride
                   ? "It can only be deactivated with a reason, which is recorded in the audit log."
@@ -102,7 +102,7 @@ export function CarrierDeactivateDialog({
             )}
 
             {error && (
-              <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+              <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
                 {error}
               </p>
             )}

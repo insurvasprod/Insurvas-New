@@ -1,11 +1,14 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ChevronDown, Download } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -28,8 +31,11 @@ import {
   type VendorReturnsPageData,
 } from "@/lib/vendorScorecard/returnModel";
 import { Pager } from "@/components/ui/pager";
+import { cn } from "@/lib/utils";
+import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
 
-const PAGE_SIZE = 25;
+/** One view at a time (2026-10-06 redesign): the three stacked tables became tabs. */
+type View = "claims" | "claimable" | "undialable";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function dollars(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(cents / 100); }
 /** A cost per record, which is often a fraction of a cent over a whole dollar amount. */
@@ -49,6 +55,8 @@ const STATUS: Record<VendorReturnClaim["status"], { label: string; tone: StatusT
   accepted: { label: "Reconciled", tone: "good" },
   rejected: { label: "Rejected", tone: "danger" },
 };
+/** What makes a row claimable, said where a list of them is empty. */
+const CLAIMABLE_HINT = "Scrub hits and wrong-number or disconnected calls land here.";
 const unreconciled = (claim: VendorReturnClaim) => claim.status === "draft" || claim.status === "submitted";
 // Calendar days in the tenant's zone, counted by the service (LA-2.19-2): 1 is "Closes tomorrow".
 const daysText = (days: number | null) => closesLabel(days);
@@ -107,7 +115,7 @@ function ClaimOutcome({ claim, onSaved }: { claim: VendorReturnClaim; onSaved: (
   async function save() {
     const cents = status === "rejected" ? 0 : Math.round(Number(amount) * 100);
     if (status !== "rejected" && (!Number.isFinite(cents) || cents < 0 || cents > claim.amount_claimed_cents)) { setError(`The credit is a dollar amount from $0.00 to ${dollars(claim.amount_claimed_cents)}.`); return; }
-    if (status === "rejected" && !reason.trim()) { setError("Say why the vendor rejected it — the reason is what the next claim argues against."); return; }
+    if (status === "rejected" && !reason.trim()) { setError("Add why the vendor rejected it."); return; }
     setBusy(true); setError(null);
     try {
       const response = await fetch(`/api/app/vendor-returns/claims/${claim.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resolve", status, amount_credited_cents: cents, replacement_leads_count: Math.max(0, Math.round(Number(replacements) || 0)), rejection_reason: reason, notes }) });
@@ -151,10 +159,10 @@ function ClaimPreview({ entry, cost, busy, fallback, onCreate, onCancel }: {
   const rows = chosen.reduce((sum, row) => sum + row.rows, 0);
   const amount = claimAmountCents(rows, entry.unit_cost_cents);
   const toggle = (reason: ClaimReason) => setOff((current) => { const next = new Set(current); if (next.has(reason)) next.delete(reason); else next.add(reason); return next; });
-  return <div className="grid gap-3 border-t border-border bg-[var(--canvas)] px-4 py-4">
+  return <div className="grid gap-3">
     <p className="max-w-[80ch] text-sm leading-normal text-[var(--body)]">
       {entry.unit_cost_cents == null
-        ? "This campaign has no cost per record yet. Enter its spend and records purchased on Vendors & campaigns first."
+        ? <>Enter this campaign&rsquo;s spend and records purchased first. <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href="/app/campaigns">Open campaigns</Link></>
         : <>Each row is priced at <strong className="tabular-nums text-foreground">{perRecord(entry.unit_cost_cents)}</strong>.</>}
     </p>
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -198,10 +206,10 @@ function ClaimPreview({ entry, cost, busy, fallback, onCreate, onCancel }: {
 
 /** The rows behind one campaign's line, soonest window first. */
 function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: number } | "loading" | { error: string } | undefined }) {
-  if (state === undefined || state === "loading") return <div className="border-t border-border"><SectionLoading rows={3} columns={4} /></div>;
-  if ("error" in state) return <p role="alert" className="border-t border-border px-4 py-3 text-sm text-[var(--error-ink)]">{state.error}</p>;
-  if (!state.rows.length) return <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">No row is waiting on this campaign any more.</p>;
-  return <div className="overflow-x-auto border-t border-border">
+  if (state === undefined || state === "loading") return <SectionLoading rows={3} columns={4} />;
+  if ("error" in state) return <p role="alert" className="text-sm text-[var(--error-ink)]">{state.error}</p>;
+  if (!state.rows.length) return <p className="text-sm text-muted-foreground">Nothing left to claim on this campaign.</p>;
+  return <div className="overflow-x-auto rounded-lg border border-border">
     <table className="w-full min-w-[620px] border-collapse text-left">
       <thead><tr><th scope="col" className={th}>Row</th><th scope="col" className={th}>Reason</th><th scope="col" className={th}>Evidence</th><th scope="col" className={th}>Window</th></tr></thead>
       <tbody>{state.rows.map((item) => {
@@ -230,14 +238,14 @@ function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: 
  * "New claim" opens a preview of one campaign's claimable rows (scrub hits and wrong-number or
  * disconnected dispositions on its leads, and the rows the scrub removed at import, still inside the
  * return window): per reason the rows, the dollars and the evidence, with a toggle each. The draft
- * is one claim per campaign. Candidates stay listed below the claims, per campaign, with their value,
+ * is one claim per campaign. Candidates are listed on their own tab, per campaign, with their value,
  * what already lapsed and the window counting down. Nothing is sent to a vendor from here: a claim
  * is exported as evidence, marked submitted, then reconciled by hand. `?vendor=<id>` opens the page
  * filtered to one vendor (Vendors links its claimable line here).
  *
- * Laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): header with New claim, one
- * strip of figures, the claims table with its search and filters in its own toolbar, then the
- * claimable rows and the undialable share as further tables.
+ * Laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): the header, one
+ * strip of figures, then one row of tabs (claims, claimable rows, undialable share) with New claim on
+ * its right; each tab is one table with its own toolbar, and a claim or a preview opens in a dialog.
  */
 export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: string }) {
   const [report, setReport] = useState<VendorReturnsPageData | null>(null);
@@ -248,6 +256,9 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "open" | "resolved">("");
   const [page, setPage] = useState(0);
+  const [view, setView] = useState<View>("claims");
+  // Header, strip, view row, toolbar, column heads and pager around the claim rows.
+  const pageSize = useFittingRows(470, 41);
   const [openClaim, setOpenClaim] = useState<string | null>(null);
   const [openCampaign, setOpenCampaign] = useState<string | null>(null);
   const [previewCampaign, setPreviewCampaign] = useState<string | null>(null);
@@ -314,7 +325,6 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
     setNewOpen(false);
     setPreviewCampaign(campaignId);
     void ensureCost(campaignId);
-    window.setTimeout(() => document.getElementById(`returns-campaign-${campaignId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
   }
 
   function toggleClaim(claim: VendorReturnClaim) {
@@ -378,9 +388,9 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
       // Oldest unreconciled first: the claim that has waited longest is the one to chase.
       .sort((a, b) => (unreconciled(a) === unreconciled(b) ? (unreconciled(a) ? a.created_at.localeCompare(b.created_at) : (b.resolved_at ?? b.created_at).localeCompare(a.resolved_at ?? a.created_at)) : unreconciled(a) ? -1 : 1));
   }, [claims, vendorId, statusFilter, search]);
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
-  const shown = rows.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const shown = rows.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
   const sum = (list: VendorReturnClaim[], pick: (claim: VendorReturnClaim) => number) => list.reduce((total, claim) => total + pick(claim), 0);
 
   // The four figures, over every claim — the filters narrow the table, not the ledger.
@@ -393,12 +403,42 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
   if (loading && !report) return <PageLoading />;
 
   const clearFilters = () => { setSearch(""); setStatusFilter(""); chooseVendor(""); };
+  const filtered = search.trim() !== "" || statusFilter !== "" || vendorId !== "";
+  const detail = openClaim ? claims.find((claim) => claim.id === openClaim) ?? null : null;
+  const previewEntry = previewCampaign ? (report?.summary ?? []).find((entry) => entry.campaign_id === previewCampaign) ?? null : null;
+  const rowsEntry = openCampaign ? (report?.summary ?? []).find((entry) => entry.campaign_id === openCampaign) ?? null : null;
+  const tabs: { key: View; label: string; count: number | null }[] = [
+    { key: "claims", label: "Claims", count: claims.length },
+    { key: "claimable", label: "Claimable rows", count: draftable.length },
+    { key: "undialable", label: "Undialable", count: undialable === null ? null : undialable.length },
+  ];
+  const vendorSelect = <select aria-label="Vendor" className={toolbarControl} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
+    <option value="">All vendors</option>
+    {vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+  </select>;
+  const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader
-      title="Vendor returns"
-      description="Evidence-backed return claims, and what the vendor actually credited."
-      actions={<div className="relative" ref={newRef}>
+    <PageHeader title="Vendor returns" description="Return claims, and what each vendor credited." />
+
+    <StatStrip label="Vendor return totals">
+      <StatTile label="Open claims" value={openClaims} footnote={`${draftCount} draft`} />
+      <StatTile label="Claimed" value={dollars(claimedCents)} footnote={`${claims.length} claim${claims.length === 1 ? "" : "s"}`} />
+      <StatTile label="Credited" value={dollars(creditedCents)} valueTone={creditedCents > 0 ? "good" : undefined} footnote={claimedCents > 0 ? `${((creditedCents / claimedCents) * 100).toFixed(1)}% of claimed` : undefined} reserveFootnote />
+      <StatTile label="Outstanding" value={dollars(outstandingCents)} valueTone={outstandingCents > 0 ? "warning" : undefined} footnote="unreconciled" />
+    </StatStrip>
+
+    {/* Views on the left, New claim on the right — one row (2026-10-06 redesign). */}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="Vendor return views" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+        {tabs.map((item) => (
+          <button key={item.key} type="button" role="tab" id={`returns-tab-${item.key}`} aria-controls="returns-view" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+            {item.label}
+            {item.count !== null && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count(item.count)}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="relative" ref={newRef}>
         <Button aria-expanded={newOpen} disabled={!report || Boolean(busy)} onClick={() => setNewOpen((open) => !open)}>New claim<ChevronDown aria-hidden="true" /></Button>
         {newOpen && <div className={`${panel} right-0 w-[340px]`} role="menu" aria-label="Draft a claim for">
           <span className={panelLabel}>Review a claim for</span>
@@ -408,24 +448,20 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
               <span className={`shrink-0 text-xs font-semibold tabular-nums ${entry.days_left !== null && entry.days_left <= 3 ? "text-[var(--error-ink)]" : "text-muted-foreground"}`}>{entry.days_left === 0 ? "closes today" : entry.days_left === 1 ? "closes tomorrow" : `${entry.days_left}d left`}</span>
             </button>)}
         </div>}
-      </div>}
-    />
+      </div>
+    </div>
 
-    <StatStrip label="Vendor return totals">
-      <StatTile label="Open claims" value={openClaims} footnote={`${draftCount} draft`} />
-      <StatTile label="Claimed" value={dollars(claimedCents)} footnote={`${claims.length} claim${claims.length === 1 ? "" : "s"}`} />
-      <StatTile label="Credited" value={dollars(creditedCents)} valueTone={creditedCents > 0 ? "good" : undefined} footnote={claimedCents > 0 ? `${((creditedCents / claimedCents) * 100).toFixed(1)}% of claimed` : undefined} reserveFootnote />
-      <StatTile label="Outstanding" value={dollars(outstandingCents)} valueTone={outstandingCents > 0 ? "warning" : undefined} footnote="unreconciled" />
-    </StatStrip>
-
-    <TableCard
+    {/* The selected view, as the tab panel: it fades in when the tab changes (2026-10-09). */}
+    <div key={view} role="tabpanel" id="returns-view" aria-labelledby={`returns-tab-${view}`} className="flex min-w-0 flex-col gap-6">
+    {view === "claims" && <TableCard
+      className={fill}
       toolbar={
-        <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
+        <DataToolbar actions={<>
+          {filtered && <ClearFiltersButton onClick={clearFilters} />}
+          <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+        </>}>
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search claims" />
-          <select aria-label="Vendor" className={toolbarControl} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
-            <option value="">All vendors</option>
-            {vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
+          {vendorSelect}
           <select aria-label="Status" className={toolbarControl} value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(0); }}>
             <option value="">Any status</option>
             <option value="open">Unreconciled (draft or awaiting)</option>
@@ -433,121 +469,120 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
           </select>
         </DataToolbar>
       }
-      footer={<>
-        <Pager page={currentPage + 1} total={rows.length} pageSize={PAGE_SIZE} noun={rows.length === 1 ? "claim" : "claims"} suffix="oldest unreconciled first" onPage={(next) => setPage(next - 1)} />
-      </>}
+      footer={<Pager page={currentPage + 1} total={rows.length} pageSize={pageSize} noun={rows.length === 1 ? "claim" : "claims"} suffix={`oldest unreconciled first${rows.length ? ` · ${dollars(sum(rows, (claim) => claim.amount_claimed_cents))} claimed, ${dollars(sum(rows, (claim) => claim.amount_credited_cents))} credited, ${dollars(sum(rows, (claim) => claim.amount_claimed_cents - claim.amount_credited_cents))} variance` : ""}`} onPage={(next) => setPage(next - 1)} />}
     >
       {error && !report ? <ErrorState title="Vendor returns did not load" detail={error} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
         : rows.length === 0 ? (claims.length
           ? <NoMatches noun="claims" onClear={clearFilters} />
-          : <EmptyState title="No claims yet" hint={draftable.length ? "Review one from the claimable rows below, or with New claim." : "A row becomes claimable when a scrub flags it or a call is dispositioned wrong number or disconnected."} />)
-        : <table className="w-full min-w-[1010px] table-fixed border-collapse text-left">
+          : draftable.length
+            ? <EmptyState title="No claims yet" hint="Some rows are ready to claim." action={<Button type="button" variant="outline" onClick={() => setView("claimable")}>Review claimable rows</Button>} />
+            : <EmptyState title="No claims yet" hint={CLAIMABLE_HINT} action={<Button asChild variant="outline"><Link href="/app/campaigns">Open campaigns</Link></Button>} />)
+        : <table className="w-full min-w-[1180px] border-collapse text-left">
           <thead><tr>
             <th scope="col" className={th}>Vendor</th>
-            <th scope="col" className={`${th} w-[130px]`}>Period</th>
-            <th scope="col" className={`${th} w-[120px] text-right`}>Claimed</th>
-            <th scope="col" className={`${th} w-[120px] text-right`}>Credited</th>
-            <th scope="col" className={`${th} w-[120px] text-right`}>Variance</th>
-            <th scope="col" className={`${th} w-[150px]`}>Status</th>
-            <th scope="col" className={`${th} w-[170px] text-right`}><span className="sr-only">Evidence</span></th>
+            <th scope="col" className={th}>Campaign</th>
+            <th scope="col" className={`${th} text-right`}>Rows</th>
+            <th scope="col" className={th}>Reason</th>
+            <th scope="col" className={th}>Period</th>
+            <th scope="col" className={`${th} text-right`}>Claimed</th>
+            <th scope="col" className={`${th} text-right`}>Credited</th>
+            <th scope="col" className={`${th} text-right`}>Variance</th>
+            <th scope="col" className={th}>Status</th>
+            <th scope="col" className={`${th} text-right`}><span className="sr-only">Evidence</span></th>
           </tr></thead>
           <tbody>
             {shown.map((claim) => {
               const open = openClaim === claim.id;
               const status = STATUS[claim.status];
-              return <Fragment key={claim.id}>
-                <tr className={`m-row cursor-pointer ${open ? "bg-[var(--soft-orange-surface)]" : ""}`} onClick={() => toggleClaim(claim)}>
-                  <td className={td}>
-                    <button type="button" aria-expanded={open} className="text-left hover:underline" onClick={(event) => { event.stopPropagation(); toggleClaim(claim); }}>
-                      <span className="block font-semibold text-foreground">{claim.vendor_name ?? "Unnamed vendor"}</span>
-                      <span className="block text-xs text-muted-foreground">{claim.campaign_name ?? "Campaign"} &middot; {claim.lead_count} row{claim.lead_count === 1 ? "" : "s"} &middot; {claim.reason.replaceAll("_", " ")}</span>
-                    </button>
-                  </td>
-                  <td className={`${td} tabular-nums`}>{period(claim.period_from, claim.period_to)}</td>
-                  <td className={`${td} text-right tabular-nums`}>{dollars(claim.amount_claimed_cents)}</td>
-                  <td className={`${td} text-right tabular-nums`}>{claim.status === "draft" || claim.status === "submitted" ? "—" : dollars(claim.amount_credited_cents)}</td>
-                  <td className={`${td} text-right font-semibold tabular-nums text-foreground`}>{dollars(claim.amount_claimed_cents - claim.amount_credited_cents)}</td>
-                  <td className={td}><StatusChip tone={status.tone}>{status.label}</StatusChip></td>
-                  <td className={`${td} text-right`} onClick={(event) => event.stopPropagation()}><Button asChild variant="outline" size="sm"><a href={`/api/app/vendor-returns/claims/${claim.id}?format=csv`}><Download aria-hidden="true" />Evidence CSV</a></Button></td>
-                </tr>
-                {open && <tr><td colSpan={7} className="border-t border-border bg-[var(--canvas)] px-4 py-4">
-                  <div className="grid gap-3">
-                    {claim.status === "draft" && <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm leading-normal text-[var(--body)]">Send the evidence CSV to the vendor, then mark the claim submitted.</p>
-                      <Button type="button" disabled={busy === `submit:${claim.id}`} onClick={() => void submitClaim(claim.id)}>{busy === `submit:${claim.id}` ? "Saving…" : "Mark submitted"}</Button>
-                    </div>}
-                    {claim.status === "submitted" && <ClaimOutcome claim={claim} onSaved={() => { setOpenClaim(null); setCosts((current) => { const next = { ...current }; delete next[claim.campaign_id]; return next; }); void load(); }} />}
-                    {(claim.status === "accepted" || claim.status === "partial" || claim.status === "rejected") && <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4">
-                      <div><dt className={label}>Resolved</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{claim.resolved_at ? dayMonthYear(claim.resolved_at, viewerTimeZone()) : "—"}</dd></div>
-                      <div><dt className={label}>Replacement leads</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{claim.replacement_leads_count}</dd></div>
-                      <div className="sm:col-span-2"><dt className={label}>{claim.status === "rejected" ? "Why it was rejected" : "Vendor reference"}</dt><dd className="mt-1 text-sm text-foreground">{(claim.status === "rejected" ? claim.rejection_reason : claim.notes) || "—"}</dd></div>
-                    </dl>}
-                    {unreconciled(claim) && claim.amount_claimed_cents > 0 && <CostPerPolicyLine cost={costs[claim.campaign_id]} creditCents={claim.amount_claimed_cents} />}
-                    {(claim.status === "accepted" || claim.status === "partial") && <CostPerPolicyLine cost={costs[claim.campaign_id]} creditCents={claim.amount_credited_cents} landed />}
-                  </div>
-                </td></tr>}
-              </Fragment>;
+              return <tr key={claim.id} className={`m-row cursor-pointer ${open ? "bg-[var(--primary-soft)]" : ""}`} onClick={() => toggleClaim(claim)}>
+                <td className={`${td} max-w-[220px]`}>
+                  <button type="button" aria-expanded={open} title={claim.vendor_name ?? undefined} className="block max-w-full truncate text-left font-semibold text-foreground hover:underline" onClick={(event) => { event.stopPropagation(); toggleClaim(claim); }}>{claim.vendor_name ?? "Unnamed vendor"}</button>
+                </td>
+                <td className={`${td} max-w-[220px] truncate`} title={claim.campaign_name ?? undefined}>{claim.campaign_name ?? "Campaign"}</td>
+                <td className={`${td} text-right tabular-nums`}>{count(claim.lead_count)}</td>
+                <td className={`${td} whitespace-nowrap capitalize`}>{claim.reason.replaceAll("_", " ")}</td>
+                <td className={`${td} whitespace-nowrap tabular-nums`}>{period(claim.period_from, claim.period_to)}</td>
+                <td className={`${td} text-right tabular-nums`}>{dollars(claim.amount_claimed_cents)}</td>
+                <td className={`${td} text-right tabular-nums`}>{claim.status === "draft" || claim.status === "submitted" ? "—" : dollars(claim.amount_credited_cents)}</td>
+                <td className={`${td} text-right font-semibold tabular-nums text-foreground`}>{dollars(claim.amount_claimed_cents - claim.amount_credited_cents)}</td>
+                <td className={`${td} whitespace-nowrap`}><StatusChip tone={status.tone}>{status.label}</StatusChip></td>
+                <td className={`${td} text-right`} onClick={(event) => event.stopPropagation()}><Button asChild variant="outline" size="sm"><a href={`/api/app/vendor-returns/claims/${claim.id}?format=csv`}><Download aria-hidden="true" />Evidence CSV</a></Button></td>
+              </tr>;
             })}
           </tbody>
-          <tfoot><tr>
-            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-sm font-semibold text-foreground">{rows.length} claim{rows.length === 1 ? "" : "s"}</td>
-            <td className="border-t border-border bg-[var(--surface-alt)]" />
-            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_claimed_cents))}</td>
-            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_credited_cents))}</td>
-            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_claimed_cents - claim.amount_credited_cents))}</td>
-            <td className="border-t border-border bg-[var(--surface-alt)]" colSpan={2} />
-          </tr></tfoot>
         </table>}
-    </TableCard>
-
-    {report && campaigns.length > 0 && <TableCard
-      title="Claimable rows, by campaign"
-      action={<span className="text-sm tabular-nums text-[var(--body)]">
-        <strong className="font-semibold text-foreground">{dollars(claimableCents)}</strong> claimable now
-        {expiredCents > 0 && <> &middot; <span className="text-[var(--warning-ink)]">{dollars(expiredCents)} lapsed unclaimed</span></>}
-      </span>}
-    >
-      {report.summaryFallback && <p className="border-t border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground">Rows removed at import are not listed until a pending database update is applied; claim them from the lead list.</p>}
-      {campaigns.map((entry) => {
-        const open = openCampaign === entry.campaign_id;
-        const previewing = previewCampaign === entry.campaign_id;
-        const reasons = reasonTotals(entry.reasons);
-        const waiting = reasons.filter((row) => row.rows > 0).map((row) => `${count(row.rows)} ${REASON_LABEL[row.reason]}`).join(" · ");
-        const facts = [
-          entry.first_import_at ? `Imported ${dayMonthYear(entry.first_import_at, viewerTimeZone())}` : null,
-          `${entry.return_window_days}-day window`,
-          entry.unit_cost_cents == null ? "no cost per record entered" : `${perRecord(entry.unit_cost_cents)} a record`,
-        ].filter(Boolean).join(" · ");
-        return <div key={entry.campaign_id} id={`returns-campaign-${entry.campaign_id}`} className="border-t border-border">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-            <button type="button" aria-expanded={open} className="min-w-0 flex-grow text-left" onClick={() => toggleRows(entry.campaign_id)}>
-              <span className="block text-sm font-semibold text-foreground">{entry.vendor_name} &middot; {entry.campaign_name}</span>
-              <span className="block text-xs text-muted-foreground">{waiting || "Nothing claimable left"}</span>
-              <span className="block text-xs text-muted-foreground">{facts}</span>
-              {entry.expired_rows > 0 && <span className="block text-xs text-[var(--warning-ink)]">{dollars(entry.expired_cents)} lapsed unclaimed &middot; {count(entry.expired_rows)} row{entry.expired_rows === 1 ? "" : "s"} past the window</span>}
-            </button>
-            {entry.claimable_rows > 0 && entry.unit_cost_cents != null && <span className="text-sm font-semibold tabular-nums text-foreground">{dollars(entry.claimable_cents)}</span>}
-            <span className={`text-sm font-semibold tabular-nums ${entry.days_left === null ? "text-muted-foreground" : entry.days_left <= 3 ? "text-[var(--error-ink)]" : entry.days_left <= 14 ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]"}`}>
-              {daysText(entry.days_left)}
-            </span>
-            {entry.claimable_rows > 0 && <Button type="button" variant="outline" size="sm" aria-expanded={previewing} disabled={busy === `create:${entry.campaign_id}`} onClick={() => (previewing ? setPreviewCampaign(null) : openPreview(entry.campaign_id))}>{previewing ? "Close preview" : `Review claim (${count(entry.claimable_rows)})`}</Button>}
-          </div>
-          {previewing && <ClaimPreview key={`${entry.campaign_id}-${entry.claimable_rows}`} entry={entry} cost={costs[entry.campaign_id]} busy={busy === `create:${entry.campaign_id}`} fallback={report.summaryFallback} onCreate={(chosen) => void createClaim(entry.campaign_id, chosen)} onCancel={() => setPreviewCampaign(null)} />}
-          {open && <CandidateRows state={candidateRows[entry.campaign_id]} />}
-        </div>;
-      })}
     </TableCard>}
 
-    {report && (undialable === null
-      ? <p className="text-xs leading-normal text-muted-foreground">The undialable share per vendor appears here once a pending database update is applied.</p>
-      : undialable.length > 0 && <TableCard title="Undialable, by vendor" description="Share of every record bought that could never be dialed.">
-        <table className="w-full min-w-[760px] border-collapse text-left">
+    {view === "claimable" && <TableCard
+      className={fill}
+      toolbar={
+        <DataToolbar actions={<>
+          <span className="text-sm tabular-nums text-[var(--body)]">
+            <strong className="font-semibold text-foreground">{dollars(claimableCents)}</strong> claimable now
+            {expiredCents > 0 && <> &middot; <span className="text-[var(--warning-ink)]">{dollars(expiredCents)} lapsed unclaimed</span></>}
+          </span>
+          {vendorId && <ClearFiltersButton onClick={() => chooseVendor("")} />}
+          <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+        </>}>
+          {vendorSelect}
+        </DataToolbar>
+      }
+    >
+      {report?.summaryFallback && <p className="flex items-center gap-1 border-b border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground">Claim rows removed at import from the lead list for now.<InfoTip label="Why they are missing">They are listed here once a pending database update is applied.</InfoTip></p>}
+      {campaigns.length === 0
+        ? (vendorId ? <NoMatches noun="claimable campaigns" onClear={() => chooseVendor("")} /> : <EmptyState title="Nothing claimable" hint={CLAIMABLE_HINT} action={<Button asChild variant="outline"><Link href="/app/campaigns">Open campaigns</Link></Button>} />)
+        : <table className="w-full min-w-[1240px] border-collapse text-left">
+          <thead><tr>
+            <th scope="col" className={th}>Campaign</th>
+            <th scope="col" className={th}>Vendor</th>
+            <th scope="col" className={th}>Waiting</th>
+            <th scope="col" className={th}>Imported</th>
+            <th scope="col" className={`${th} text-right`}>Window</th>
+            <th scope="col" className={`${th} text-right`}>Per record</th>
+            <th scope="col" className={`${th} text-right`}>Lapsed</th>
+            <th scope="col" className={`${th} text-right`}>Claimable</th>
+            <th scope="col" className={th}>Closes</th>
+            <th scope="col" className={`${th} text-right`}><span className="sr-only">Actions</span></th>
+          </tr></thead>
+          <tbody>{campaigns.map((entry) => {
+            const previewing = previewCampaign === entry.campaign_id;
+            const waiting = reasonTotals(entry.reasons).filter((row) => row.rows > 0).map((row) => `${count(row.rows)} ${REASON_LABEL[row.reason]}`).join(" · ");
+            return <tr key={entry.campaign_id} id={`returns-campaign-${entry.campaign_id}`} className={`m-row ${previewing || openCampaign === entry.campaign_id ? "bg-[var(--primary-soft)]" : ""}`}>
+              <td className={`${td} max-w-[220px] truncate font-semibold text-foreground`} title={entry.campaign_name}>{entry.campaign_name}</td>
+              <td className={`${td} max-w-[180px] truncate`} title={entry.vendor_name}>{entry.vendor_name}</td>
+              <td className={`${td} max-w-[260px] truncate`} title={waiting || undefined}>{waiting || <span className="text-muted-foreground">Nothing claimable left</span>}</td>
+              <td className={`${td} whitespace-nowrap tabular-nums`}>{entry.first_import_at ? dayMonthYear(entry.first_import_at, viewerTimeZone()) : "—"}</td>
+              <td className={`${td} whitespace-nowrap text-right tabular-nums`}>{entry.return_window_days}-day</td>
+              <td className={`${td} whitespace-nowrap text-right tabular-nums`}>{entry.unit_cost_cents == null ? <span className="text-muted-foreground" title="No cost per record entered">—</span> : perRecord(entry.unit_cost_cents)}</td>
+              <td className={`${td} whitespace-nowrap text-right tabular-nums`} title={entry.expired_rows > 0 ? `${count(entry.expired_rows)} row${entry.expired_rows === 1 ? "" : "s"} past the window` : undefined}>{entry.expired_rows > 0 ? <span className="text-[var(--warning-ink)]">{dollars(entry.expired_cents)}</span> : "—"}</td>
+              <td className={`${td} whitespace-nowrap text-right font-semibold tabular-nums text-foreground`}>{entry.claimable_rows > 0 && entry.unit_cost_cents != null ? dollars(entry.claimable_cents) : "—"}</td>
+              <td className={`${td} whitespace-nowrap font-semibold tabular-nums ${entry.days_left === null ? "text-muted-foreground" : entry.days_left <= 3 ? "text-[var(--error-ink)]" : entry.days_left <= 14 ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]"}`}>{daysText(entry.days_left)}</td>
+              <td className={`${td} whitespace-nowrap text-right`}>
+                <span className="inline-flex gap-2">
+                  <Button type="button" variant="outline" size="sm" aria-expanded={openCampaign === entry.campaign_id} onClick={() => toggleRows(entry.campaign_id)}>Rows</Button>
+                  {entry.claimable_rows > 0 && <Button type="button" variant="outline" size="sm" aria-expanded={previewing} disabled={busy === `create:${entry.campaign_id}`} onClick={() => (previewing ? setPreviewCampaign(null) : openPreview(entry.campaign_id))}>{`Review claim (${count(entry.claimable_rows)})`}</Button>}
+                </span>
+              </td>
+            </tr>;
+          })}</tbody>
+        </table>}
+    </TableCard>}
+
+    {view === "undialable" && (undialable === null
+      ? <TableCard><EmptyState title="Not available yet" hint="Waits on a pending database update." /></TableCard>
+      : <TableCard
+        className={fill}
+        toolbar={<DataToolbar actions={<>{vendorId && <ClearFiltersButton onClick={() => chooseVendor("")} />}<RefreshButton onClick={() => void refresh()} refreshing={refreshing} /></>}>{vendorSelect}</DataToolbar>}
+      >
+        {undialable.length === 0 ? <EmptyState title="No undialable records" hint="Every record bought in scope could be dialed." />
+          : <table className="w-full min-w-[900px] border-collapse text-left">
           <thead><tr>
             <th scope="col" className={th}>Vendor</th>
             <th scope="col" className={`${th} text-right`}>Records bought</th>
             <th scope="col" className={`${th} text-right`}>Removed at import</th>
             <th scope="col" className={`${th} text-right`}>Found later</th>
-            <th scope="col" className={`${th} text-right`}>Undialable</th>
+            <th scope="col" className={`${th} text-right`}>Undialable rows</th>
+            <th scope="col" className={`${th} text-right`}><span className="inline-flex items-center gap-1">Undialable<InfoTip label="About undialable share" side="bottom">Share of every record bought that could never be dialed.</InfoTip></span></th>
             <th scope="col" className={`${th} text-right`}>Undialable spend</th>
           </tr></thead>
           <tbody>{undialable.map((row) => <tr key={row.vendor_id} className="m-row">
@@ -555,10 +590,67 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
             <td className={`${td} text-right tabular-nums`}>{count(row.records_purchased)}</td>
             <td className={`${td} text-right tabular-nums`}>{count(row.removed_at_import)}</td>
             <td className={`${td} text-right tabular-nums`}>{count(row.undialable_leads)}</td>
-            <td className={`${td} text-right tabular-nums`}><span className="font-semibold text-foreground">{row.undialable_percent == null ? "—" : `${row.undialable_percent.toFixed(1)}%`}</span><span className="block text-xs text-muted-foreground">{count(row.undialable_rows)} of {count(row.records_purchased)}</span></td>
+            <td className={`${td} text-right tabular-nums`}>{count(row.undialable_rows)}</td>
+            <td className={`${td} text-right font-semibold tabular-nums text-foreground`}>{row.undialable_percent == null ? "—" : `${row.undialable_percent.toFixed(1)}%`}</td>
             <td className={`${td} text-right tabular-nums`}>{dollars(row.undialable_cents)}</td>
           </tr>)}</tbody>
-        </table>
+        </table>}
       </TableCard>)}
+    </div>
+
+    {/* A claim's next step, in a dialog rather than a row that pushes the table down. */}
+    <Dialog open={detail !== null} onOpenChange={(next) => { if (!next) setOpenClaim(null); }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        {detail && <>
+          <DialogHeader>
+            <DialogTitle>{detail.vendor_name ?? "Unnamed vendor"} &middot; {detail.campaign_name ?? "Campaign"}</DialogTitle>
+            <DialogDescription>{count(detail.lead_count)} row{detail.lead_count === 1 ? "" : "s"} &middot; {detail.reason.replaceAll("_", " ")} &middot; {dollars(detail.amount_claimed_cents)} claimed &middot; {STATUS[detail.status].label}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            {detail.status === "draft" && <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm leading-normal text-[var(--body)]">Send the evidence CSV to the vendor, then mark the claim submitted.</p>
+              <span className="flex flex-wrap gap-2">
+                <Button asChild variant="outline"><a href={`/api/app/vendor-returns/claims/${detail.id}?format=csv`}><Download aria-hidden="true" />Evidence CSV</a></Button>
+                <Button type="button" disabled={busy === `submit:${detail.id}`} onClick={() => void submitClaim(detail.id)}>{busy === `submit:${detail.id}` ? "Saving…" : "Mark submitted"}</Button>
+              </span>
+            </div>}
+            {detail.status === "submitted" && <ClaimOutcome claim={detail} onSaved={() => { setOpenClaim(null); setCosts((current) => { const next = { ...current }; delete next[detail.campaign_id]; return next; }); void load(); }} />}
+            {(detail.status === "accepted" || detail.status === "partial" || detail.status === "rejected") && <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4">
+              <div><dt className={label}>Resolved</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{detail.resolved_at ? dayMonthYear(detail.resolved_at, viewerTimeZone()) : "—"}</dd></div>
+              <div><dt className={label}>Replacement leads</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{detail.replacement_leads_count}</dd></div>
+              <div className="sm:col-span-2"><dt className={label}>{detail.status === "rejected" ? "Why it was rejected" : "Vendor reference"}</dt><dd className="mt-1 text-sm text-foreground">{(detail.status === "rejected" ? detail.rejection_reason : detail.notes) || "—"}</dd></div>
+            </dl>}
+            {unreconciled(detail) && detail.amount_claimed_cents > 0 && <CostPerPolicyLine cost={costs[detail.campaign_id]} creditCents={detail.amount_claimed_cents} />}
+            {(detail.status === "accepted" || detail.status === "partial") && <CostPerPolicyLine cost={costs[detail.campaign_id]} creditCents={detail.amount_credited_cents} landed />}
+          </div>
+        </>}
+      </DialogContent>
+    </Dialog>
+
+    {/* The preview before a draft. Nothing is sent to a vendor from here. */}
+    <Dialog open={previewEntry !== null} onOpenChange={(next) => { if (!next) setPreviewCampaign(null); }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        {previewEntry && report && <>
+          <DialogHeader>
+            <DialogTitle>Review a claim: {previewEntry.vendor_name} &middot; {previewEntry.campaign_name}</DialogTitle>
+            <DialogDescription>{count(previewEntry.claimable_rows)} claimable row{previewEntry.claimable_rows === 1 ? "" : "s"} &middot; {daysText(previewEntry.days_left)}</DialogDescription>
+          </DialogHeader>
+          <ClaimPreview key={`${previewEntry.campaign_id}-${previewEntry.claimable_rows}`} entry={previewEntry} cost={costs[previewEntry.campaign_id]} busy={busy === `create:${previewEntry.campaign_id}`} fallback={report.summaryFallback} onCreate={(chosen) => void createClaim(previewEntry.campaign_id, chosen)} onCancel={() => setPreviewCampaign(null)} />
+        </>}
+      </DialogContent>
+    </Dialog>
+
+    {/* The rows behind one campaign's line, soonest window first. */}
+    <Dialog open={rowsEntry !== null} onOpenChange={(next) => { if (!next) setOpenCampaign(null); }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        {rowsEntry && <>
+          <DialogHeader>
+            <DialogTitle>{rowsEntry.vendor_name} &middot; {rowsEntry.campaign_name}</DialogTitle>
+            <DialogDescription>{rowsEntry.return_window_days}-day window{rowsEntry.expired_rows > 0 ? ` · ${dollars(rowsEntry.expired_cents)} lapsed unclaimed, ${count(rowsEntry.expired_rows)} row${rowsEntry.expired_rows === 1 ? "" : "s"} past the window` : ""}</DialogDescription>
+          </DialogHeader>
+          <CandidateRows state={candidateRows[rowsEntry.campaign_id]} />
+        </>}
+      </DialogContent>
+    </Dialog>
   </div>;
 }

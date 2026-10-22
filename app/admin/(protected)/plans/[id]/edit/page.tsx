@@ -27,6 +27,8 @@ export default async function PlanVersionEditPage({ params }: { params: Promise<
         initialPrices={data.prices}
         initialLimits={data.limits}
         subscriberCount={data.subscriberCount}
+        nextVersion={data.nextVersion}
+        meters={data.meters}
       />
     </div>
   );

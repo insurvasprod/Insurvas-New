@@ -5,6 +5,13 @@ import { isSubscribedEvent, parseEnvelope } from "@/lib/payments/whop/events";
 import { markFailed, markProcessed, recordWebhookEvent } from "@/lib/payments/whop/store";
 import { createInvoiceFromPayment, isBenignNoInvoice } from "@/lib/invoices/generate";
 import { applyProviderEvent } from "@/lib/subscriptions/applyProviderEvent";
+import {
+  recordUnmatchedPayment,
+  settleInvoiceFromProviderPayment,
+  settleUnmarkedInvoiceByAmount,
+  type ProviderSettlement,
+} from "@/lib/invoices/settleFromProvider";
+import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 
 // This route must read the raw body to verify the signature, so it cannot be statically analysed
 // or cached.
@@ -62,14 +69,46 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
+  if (stored.inFlight) {
+    // The same webhook-id is being handled right now by a concurrent delivery. Running it twice in
+    // parallel is what produced the unique-violation 500 (billing audit, 2026-10-15). The first
+    // delivery owns the outcome: if it fails, its own 500 brings Whop back with this id.
+    return NextResponse.json({ ok: true, duplicate: true, inFlight: true });
+  }
+
   if (!isSubscribedEvent(envelope.type)) {
     // Signed, stored, and not something we act on. Mark it handled so retries stop.
-    await markProcessed(stored.id);
+    try {
+      await markProcessed(stored.id);
+    } catch (error) {
+      // Stored but not marked: ask for the retry rather than acknowledging a row that still reads
+      // as unprocessed work. The retry is harmless — there is nothing to do but mark it.
+      console.error(`[whop-webhook] could not mark ignored ${envelope.type} ${stored.id} processed:`, error);
+      return NextResponse.json({ error: "Could not record event" }, { status: 500 });
+    }
     return NextResponse.json({ ok: true, ignored: envelope.type });
   }
 
   try {
     if (envelope.type === "payment.succeeded") {
+      // One of OUR pay-online invoices (custom or period), named by the marker collect.ts writes
+      // onto the Whop plan, or by Whop's invoice id. It settles that invoice — never a new one —
+      // and the access consequence is the invoice's own (the subscription it belongs to).
+      const invoicePayment = await settleInvoiceFromProviderPayment(envelope, stored.tenantId);
+      if (invoicePayment.matched) {
+        await finishInvoiceSettlement(invoicePayment.settlement, envelope);
+        await markProcessed(stored.id);
+        return NextResponse.json({ ok: true, type: envelope.type, tenantId: invoicePayment.settlement.tenantId, invoice: invoicePayment.settlement.invoiceNumber });
+      }
+      if (invoicePayment.referenced) {
+        // Names an invoice we do not hold — another environment sharing the Whop account, say.
+        // Not ours: acknowledge, keep the event, change nobody's books or access.
+        console.error(`[whop-webhook] payment ${String(envelope.data?.id ?? "?")} names an invoice that is not ours; acknowledged without effect`);
+        if (stored.tenantId) await recordUnmatchedPayment(envelope, stored.tenantId);
+        await markProcessed(stored.id);
+        return NextResponse.json({ ok: true, ignored: "invoice_not_ours" });
+      }
+
       // SA-3.2. Idempotent on the provider payment id, so a redelivery cannot bill twice.
       const outcome = await createInvoiceFromPayment(envelope, stored.tenantId);
 
@@ -77,6 +116,20 @@ export async function POST(request: NextRequest) {
         if (outcome.invoice.created) {
           console.log(`[whop-webhook] invoice ${outcome.invoice.number} created (${outcome.invoice.reconciliation})`);
         }
+      } else if (outcome.reason === "plan_not_ours" && stored.tenantId) {
+        // No plan metadata of ours. Either a pay-online invoice sent before the marker existed —
+        // settled when exactly one open invoice of this tenant matches the amount — or a payment
+        // for something we do not sell. The second is acknowledged and recorded, not retried for
+        // three days: nothing we can do will make it ours.
+        const legacy = await settleUnmarkedInvoiceByAmount(envelope, stored.tenantId);
+        if (legacy) {
+          await finishInvoiceSettlement(legacy, envelope);
+        } else {
+          console.warn(`[whop-webhook] payment for tenant ${stored.tenantId} matches nothing we bill (${outcome.detail}); recorded without an invoice`);
+          await recordUnmatchedPayment(envelope, stored.tenantId);
+        }
+        await markProcessed(stored.id);
+        return NextResponse.json({ ok: true, type: envelope.type, tenantId: stored.tenantId, invoice: legacy?.invoiceNumber ?? null });
       } else if (isBenignNoInvoice(outcome.reason)) {
         // No tenant could be resolved — the shape of Whop's own dashboard test event, which
         // carries placeholder ids and no metadata. Nothing was collected from anyone, so
@@ -119,6 +172,25 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, type: envelope.type, tenantId: stored.tenantId });
+}
+
+/**
+ * After an invoice settled from a provider payment: the entitlement cache follows a reactivated
+ * subscription, and money that moved somewhere it should not have is said out loud.
+ */
+async function finishInvoiceSettlement(settlement: ProviderSettlement, envelope: { data?: Record<string, unknown> }) {
+  console.log(
+    `[whop-webhook] invoice ${settlement.invoiceNumber} ${settlement.settled ? "settled" : `now ${settlement.status}`} by payment ${String(envelope.data?.id ?? "?")} (${settlement.paidCents} cents received)`,
+  );
+  if (settlement.anomaly) {
+    console.error(`[whop-webhook] invoice ${settlement.invoiceNumber} for tenant ${settlement.tenantId}: ${settlement.anomaly} — needs a refund or a credit`);
+  }
+  if (settlement.subscriptionActivated) {
+    // Outside the settlement transaction on purpose, as in the manual mark-paid route: the
+    // entitlement is a cache, and failing the money because the cache could not be rebuilt would
+    // be worse. rebuildEntitlement logs loudly on its own.
+    await rebuildEntitlement(settlement.tenantId, "subscription.plan_changed");
+  }
 }
 
 /** Whop only ever POSTs. A GET here is someone poking at the URL. */

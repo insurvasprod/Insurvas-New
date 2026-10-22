@@ -3,10 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { comparisonCadenceCaveat } from "@/lib/cadence/historyService";
 import { ComparisonPeriodError, getCampaignComparison } from "@/lib/vendorScorecard/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Campaign comparison");
+  if (refused) return refused;
   try {
     const p = request.nextUrl.searchParams;
     const comparison = await getCampaignComparison(auth.context.tenantId, { campaignAId: p.get("campaign_a_id"), campaignBId: p.get("campaign_b_id"), fromA: p.get("from_a"), toA: p.get("to_a"), fromB: p.get("from_b"), toB: p.get("to_b"), metric: p.get("metric") });

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+
 import { NotificationSoundSettings } from "@/components/app/notification-sound-settings";
-import { AGENT_ALERT_EVENTS, type AgentAlertEvent, type AgentAlertSettings } from "@/lib/agentAlerts/presentation";
+import type { AgentAlertSettings } from "@/lib/agentAlerts/presentation";
 
 /**
  * An agent's notification preferences, drawn inside the top bar's preferences panel.
@@ -9,16 +11,11 @@ import { AGENT_ALERT_EVENTS, type AgentAlertEvent, type AgentAlertSettings } fro
  * Moved out of the bar unchanged when the bar stopped being agent-only: the partner and staff
  * shells draw their own preferences in the same panel, and the bar no longer needs to know what an
  * agent's events are called.
+ *
+ * LA-8.4: which alerts reach you, by which channel, is Settings › Notifications' alone — one place
+ * for one setting. This panel keeps what belongs to the bell itself: sound, do-not-disturb and the
+ * browser's permission.
  */
-
-const EVENT_LABELS: Record<AgentAlertEvent, string> = {
-  new_lead: "New unclaimed leads",
-  handoff_offered: "Handoffs offered to me",
-  unclaimed_escalation: "Unclaimed escalations",
-  callback_due: "Callbacks due",
-  mentioned: "Mentions in notes or chat",
-  partner_message: "Partner messages",
-};
 
 export type AgentAlertPreferencesFeed = {
   settings: AgentAlertSettings | null;
@@ -43,17 +40,7 @@ export function AgentAlertPreferences({ feed }: { feed: AgentAlertPreferencesFee
   return (
     <div className="portal-top-settings">
       <p className="portal-top-settings-note">These controls apply only to you.</p>
-      {AGENT_ALERT_EVENTS.map((event) => (
-        <label key={event} className="portal-top-settings-row">
-          <span>{EVENT_LABELS[event]}</span>
-          <input
-            type="checkbox"
-            checked={settings.enabled_events[event]}
-            disabled={feed.saving}
-            onChange={() => void feed.save({ ...settings, enabled_events: { ...settings.enabled_events, [event]: !settings.enabled_events[event] } })}
-          />
-        </label>
-      ))}
+      <Link href="/app/settings#alerts" className="portal-top-settings-button">Choose which alerts reach you</Link>
       <div className="portal-top-settings-group">
         <label className="portal-top-settings-row">
           <span>Do not disturb</span>

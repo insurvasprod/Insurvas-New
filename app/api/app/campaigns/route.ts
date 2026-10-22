@@ -6,6 +6,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { assertOutboundLimit, outboundLimitResponse, outboundLimitSnapshot } from "@/lib/metering/outbound";
 import { isSchemaGap, type SchemaGapNotice } from "@/lib/supabase/schemaGap";
 import { campaignExtras } from "@/lib/campaigns/extras";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const roles = ["owner", "producer"] as const;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -65,9 +66,17 @@ async function campaignFunnel(tenantId: string): Promise<{ rows: Record<string, 
   return { rows, pending: null };
 }
 
+/** A failed snapshot throws where it used to: after the list, only on the path that returns it. */
+function unwrapLimits<T>(result: { ok: true; value: T } | { ok: false; error: unknown }): T {
+  if (!result.ok) throw result.error;
+  return result.value;
+}
+
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", roles);
+  const auth = await requireFeatureRole("outbound_dialing", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Campaigns");
+  if (refused) return refused;
   const db = getSupabaseServiceClient() as unknown as Db;
   // Read from `tenant_campaign_costs`, not `tenant_campaigns`. The view carries the same rows plus
   // the three numbers LA-2.1 and LA-2.2 are actually about: how many rows were rejected at scrub,
@@ -75,7 +84,8 @@ export async function GET() {
   // cost-per-record column ended up captured and never displayed.
   // The concept audit's per-campaign facts (worked, workable, cadence, scrub run, cost per issued,
   // test batch) ride alongside, each tolerant of its own migration not being applied yet.
-  const [full, extras, funnel] = await Promise.all([
+  // The limit snapshot needs nothing the list returns, so it rides in the same round trip.
+  const [full, extras, funnel, limits] = await Promise.all([
     db.from("tenant_campaign_costs").select(COST_COLUMNS).eq("tenant_id", auth.context.tenantId).order("name"),
     campaignExtras(auth.context.tenantId, auth.entitlement),
     // A failure here costs the contacts column, not the campaign list: it is said, not swallowed.
@@ -83,11 +93,12 @@ export async function GET() {
       rows: null,
       pending: { missing: ["contacted_leads"], detail: error instanceof Error ? error.message : "Contacts per campaign could not be loaded." } as SchemaGapNotice,
     })),
+    outboundLimitSnapshot(auth.context.tenantId).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error })),
   ]);
   const shared = { ...extras, funnel: funnel.rows, canScrub: auth.context.role === "owner", ...(funnel.pending ? { funnelPending: funnel.pending } : {}) };
   if (!full.error)
     return NextResponse.json(
-      { campaigns: full.data ?? [], limits: await outboundLimitSnapshot(auth.context.tenantId), ...shared },
+      { campaigns: full.data ?? [], limits: unwrapLimits(limits), ...shared },
       { headers: { "Cache-Control": "no-store" } },
     );
 
@@ -108,7 +119,7 @@ export async function GET() {
     rejected_spend_cents: null,
   }));
   return NextResponse.json(
-    { campaigns: rows, limits: await outboundLimitSnapshot(auth.context.tenantId), pending: USABLE_BASIS_MISSING, ...shared },
+    { campaigns: rows, limits: unwrapLimits(limits), pending: USABLE_BASIS_MISSING, ...shared },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -116,6 +127,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Campaigns");
+  if (refused) return refused;
   const parsed = campaignSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid campaign details" }, { status: 400 });
   try {

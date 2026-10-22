@@ -6,6 +6,15 @@ import { getEntitlement } from "./get";
 import { DISABLED_FOR_TENANT_MESSAGE, canWrite, hasFeature, isDisabledForTenant, type Entitlement } from "./types";
 import { featureKillState } from "@/lib/features/killSwitch";
 import { getMaintenanceStatus } from "@/lib/system/service";
+import { rememberScope, visibleProducerUserIds, type ProducerScope } from "@/lib/agency/visibility";
+
+/** Why a write was refused, in the words of the account's state (LA-8.5 adds cancelled). */
+function readOnlyMessage(status: Entitlement["status"]): string {
+  if (status === "suspended") return "Your account is suspended. You can still view your book of business, but not make changes.";
+  if (status === "paused") return "Your account is paused. You can still view your book of business, but not make changes.";
+  if (status === "cancelled") return "Your subscription has ended. You can still view and export your book of business, but not make changes.";
+  return "Your account is read-only right now.";
+}
 
 export type EntitledContext = {
   context: TenantContext;
@@ -22,12 +31,13 @@ export type EntitledContext = {
  *   if (auth instanceof NextResponse) return auth;
  *   const { context, entitlement } = auth;
  *
- * `write: true` additionally refuses when the subscription is suspended or paused — those keep
+ * `write: true` additionally refuses when the subscription is suspended, paused or cancelled — those keep
  * READ access to the book of business but must not permit new work.
  */
 export async function requireFeature(
   featureKey: string,
-  options: { write?: boolean } = {},
+  /** `prefetchScope`: the route will ask `scopeFor(auth.context)`; start that read in this round trip. */
+  options: { write?: boolean; prefetchScope?: boolean } = {},
 ): Promise<EntitledContext | NextResponse> {
   // ── Four reads, one round trip ──────────────────────────────────────────────
   //
@@ -62,11 +72,15 @@ export async function requireFeature(
       (error: unknown) => ({ ok: false as const, error }),
     );
 
-  const [auth, maintenance, entitlementSettled, killSettled] = await Promise.all([
+  // The producer scope (AG-0.4) is keyed by the same two signed ids, so a route that will need it can have
+  // it read here, beside the rest, instead of in a second trip after. It is only handed to `scopeFor` for
+  // this request's own context object, once authorisation has passed; any failure leaves `scopeFor` to read.
+  const [auth, maintenance, entitlementSettled, killSettled, scopeSettled] = await Promise.all([
     requireTenant(),
     getMaintenanceStatus(),
     settle(getEntitlement(session.tenantId)),
     settle(featureKillState(featureKey, session.tenantId)),
+    options.prefetchScope ? settle<ProducerScope>(visibleProducerUserIds(session.tenantId, session.sub)) : null,
   ]);
 
   if (auth instanceof NextResponse) return auth;
@@ -137,10 +151,7 @@ export async function requireFeature(
   if (options.write && !canWrite(entitlement)) {
     return NextResponse.json(
       {
-        error:
-          entitlement.status === "suspended"
-            ? "Your account is suspended. You can still view your book of business, but not make changes."
-            : "Your account is paused. You can still view your book of business, but not make changes.",
+        error: readOnlyMessage(entitlement.status),
         code: "read_only",
         status: entitlement.status,
       },
@@ -148,6 +159,9 @@ export async function requireFeature(
     );
   }
 
+  if (scopeSettled?.ok && auth.context.tenantId === session.tenantId && auth.context.userId === session.sub) {
+    rememberScope(auth.context, scopeSettled.value);
+  }
   return { context: auth.context, entitlement };
 }
 
@@ -190,7 +204,7 @@ export async function requireWriteAccess(): Promise<EntitledContext | NextRespon
 
   if (!canWrite(entitlement)) {
     return NextResponse.json(
-      { error: "Your account is read-only right now.", code: "read_only", status: entitlement.status },
+      { error: readOnlyMessage(entitlement.status), code: "read_only", status: entitlement.status },
       { status: 403 },
     );
   }

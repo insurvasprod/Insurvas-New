@@ -6,6 +6,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getMaintenanceStatus } from "@/lib/system/service";
 import { fetchTrials } from "@/lib/trials/queries";
 import { heldSeat } from "@/lib/tenantTeam/seats";
+import { listUsageMonitor } from "@/lib/creditsLimits/service";
+import { isCreditMeterKey } from "@/lib/creditsLimits/constants";
 import {
   STAFF_NOTIFICATION_ACTIONS, STAFF_NOTIFICATION_WINDOW_DAYS,
   buildStaffAlerts, buildStaffNotifications,
@@ -102,6 +104,14 @@ async function seatLimited() {
     .sort((a, b) => a.tenantName.localeCompare(b.tenantName));
 }
 
+/** SA-4.9: credit meters at or past the warn threshold, from the usage monitor's own rows (over80). */
+async function creditUsage() {
+  const rows = await listUsageMonitor(true);
+  return rows
+    .filter((row) => isCreditMeterKey(row.meter_key) && typeof row.included_qty === "number")
+    .map((row) => ({ tenantId: row.tenant_id, tenantName: row.tenant_name, meterLabel: row.meter_label, used: row.used_qty, limit: row.included_qty as number }));
+}
+
 async function auditEvents(now: number): Promise<StaffEventInput["audit"]> {
   const since = new Date(now - STAFF_NOTIFICATION_WINDOW_DAYS * 86_400_000).toISOString();
   const result = await db().from("audit_log").select("id, action, ts, reason, metadata").in("action", [...STAFF_NOTIFICATION_ACTIONS]).gte("ts", since).order("ts", { ascending: false }).limit(100);
@@ -136,7 +146,7 @@ async function auditEvents(now: number): Promise<StaffEventInput["audit"]> {
 
 async function platformState(now: number) {
   if (stateCache && now - stateCache.at < STATE_CACHE_MS) return stateCache.value;
-  const [webhooks, sources, maintenance, run, pastDue, seats, trials, audit] = await Promise.all([
+  const [webhooks, sources, maintenance, run, pastDue, seats, trials, audit, credits] = await Promise.all([
     settle(stuckWebhooks(), "webhooks"),
     settle(failingSources(now), "compliance sources"),
     settle(getMaintenanceStatus(), "maintenance"),
@@ -145,6 +155,7 @@ async function platformState(now: number) {
     settle(seatLimited(), "seat limits"),
     settle(fetchTrials(), "trials"),
     settle(auditEvents(now), "audit events"),
+    settle(creditUsage(), "credit usage"),
   ]);
   const value = {
     stuckWebhooks: webhooks,
@@ -153,11 +164,17 @@ async function platformState(now: number) {
     billingRun: run,
     pastDueCount: pastDue,
     seatLimited: seats,
+    creditUsage: credits,
     trials: (trials ?? []).map((row) => ({ subscriptionId: row.subscription_id, tenantId: row.tenant_id, tenantName: row.tenant_name, trialEndsAt: row.trial_ends_at, startedAt: row.started_at, daysRemaining: row.days_remaining, hasPaymentMethod: row.has_payment_method })),
     audit: audit ?? [],
   };
   stateCache = { at: now, value };
   return value;
+}
+
+/** The same shared, minute-cached platform reads, for the admin home's daily checks (lib/adminDashboard/dailyQueries.ts). */
+export async function readPlatformState(now = Date.now()) {
+  return platformState(now);
 }
 
 /** Whether read marks can be stored: false until 20260924200100 is applied. */

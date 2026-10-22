@@ -15,7 +15,7 @@ const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leadi
  * land — the link can be opened on a phone — and moves on by itself, which is the promise the first
  * line of "What to expect" makes.
  */
-export function VerifyEmailPanel({ ttlHours }: { ttlHours: number }) {
+export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: number; noPayment?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -93,7 +93,9 @@ export function VerifyEmailPanel({ ttlHours }: { ttlHours: number }) {
   const steps = [
     "Open the link on any device. You will return here automatically once it is verified.",
     `The link expires after ${ttlHours} hours, and after the first use.`,
-    "Nothing was charged. Payment happens at checkout, after the business profile.",
+    noPayment
+      ? "Nothing is charged. After the business profile you confirm your plan and your workspace opens."
+      : "Nothing was charged. Payment happens at checkout, after the business profile.",
   ];
 
   return (

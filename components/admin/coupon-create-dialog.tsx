@@ -19,7 +19,7 @@ import { endOfUtcDay, planLabel, type CouponPlanRef } from "@/lib/coupons/format
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
-const HINT = "text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
+const HINT = "text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
 type Cycle = "any" | "monthly" | "quarterly" | "yearly";
 
@@ -251,7 +251,7 @@ export function CouponCreateDialog({ plans }: { plans: CouponPlanRef[] | null })
               ) : (
                 <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto rounded-[8px] border border-[var(--border)] p-2.5">
                   {plans.map((plan) => (
-                    <label key={plan.id} className="flex cursor-pointer items-center gap-2 text-[14px] leading-[1.5] text-[var(--ink)]">
+                    <label key={plan.id} className="flex cursor-pointer items-center gap-2 text-sm leading-[1.5] text-[var(--ink)]">
                       <input
                         type="checkbox"
                         checked={form.plan_ids.includes(plan.id)}
@@ -270,7 +270,7 @@ export function CouponCreateDialog({ plans }: { plans: CouponPlanRef[] | null })
             </fieldset>
 
             {error && (
-              <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">
+              <p role="alert" className="m-0 text-sm leading-[1.5] text-[var(--error-ink)]">
                 {error}
               </p>
             )}

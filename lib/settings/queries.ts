@@ -165,6 +165,16 @@ export function refundApprovalThresholdCents(): Promise<number> {
   return getSetting<number>("billing.refund_approval_threshold_cents");
 }
 
+/** LA-8.5: how long a cancelled agency keeps read-only access. SQL reads the same key (cancelled_retention_days). */
+export function cancelledRetentionDays(): Promise<number> {
+  return getSetting<number>("billing.cancelled_retention_days");
+}
+
+/** SA-4.4/SA-5.2: the trial length used when a plan's price row does not set one (lib/checkout/trialDays.ts). */
+export function defaultTrialDays(): Promise<number> {
+  return getSetting<number>("billing.default_trial_days");
+}
+
 /** The stored value is a percentage; callers compare against a ratio. */
 export async function meterWarnThreshold(): Promise<number> {
   return (await getSetting<number>("usage.warn_percent")) / 100;

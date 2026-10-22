@@ -6,7 +6,7 @@
 //
 // Run only with deliberate external-delivery opt-in: EMAIL_DELIVERY_MODE=smtp npm run email:test -- you@your-domain.com
 import { verifyEmailConnection, sendEmail, emailConfigProblems, isReservedTestRecipient } from "../lib/email/transport.ts";
-import { escapeHtml } from "../lib/email/templates.ts";
+import { emailButton, emailShell } from "../lib/email/layout.ts";
 
 const to = process.argv[2];
 if (!to || !to.includes("@")) {
@@ -55,15 +55,11 @@ process.stdout.write(`Sending to ${to}… `);
 const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/partner/login`;
 const rendered = {
   subject: "Insurvas SMTP delivery test",
-  html:
-    `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#1a1b1c;line-height:1.6;max-width:560px">` +
-    `<h2 style="margin:0 0 16px;font-size:20px;font-weight:800;color:#00407f">Insurvas SMTP test</h2>` +
-    `<p>This message confirms that Insurvas can authenticate with SMTP and deliver mail.</p>` +
-    `<p><a href="${escapeHtml(portalUrl)}" style="display:inline-block;background:#00407f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700">Open partner portal</a></p>` +
-    `<p style="font-size:12px;color:#64748b">If the button does not work, paste this into your browser:<br>` +
-    `<span style="word-break:break-all">${escapeHtml(portalUrl)}</span></p>` +
-    `<p style="margin-top:28px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">Insurvas SMTP configuration test.</p>` +
-    `</div>`,
+  html: emailShell(
+    "Insurvas can send mail",
+    `<p>This message confirms that Insurvas can authenticate with SMTP and deliver mail.</p>` + emailButton(portalUrl, "Open the partner portal"),
+    { eyebrow: "SMTP configuration test", accent: "send mail", preheader: "SMTP works: Insurvas authenticated and delivered this message.", footerNote: "Insurvas SMTP configuration test." },
+  ),
   text: `Insurvas SMTP test\n\nThis message confirms that Insurvas can authenticate with SMTP and deliver mail.\n\nOpen the partner portal: ${portalUrl}\n`,
 };
 

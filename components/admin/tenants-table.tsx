@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -7,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { TenantsListDate } from "@/components/admin/tenants-list-date";
-import { Pill, st } from "@/components/app/settings/primitives";
+import { st, pillTone } from "@/components/app/settings/primitives";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
 import {
@@ -23,7 +24,7 @@ import {
 } from "@/lib/tenantsList/present";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const NO_PLAN = "__none__";
 
 type StatusFilter = "all" | ListStatus;
@@ -183,14 +184,14 @@ export function TenantsTable({ rows }: { rows: TenantListRow[] }) {
                     {row.name}
                   </Link>
                   <br />
-                  <span className="text-[12px] text-[var(--muted)]" title={row.owner ? `${row.owner.name} · ${row.owner.email}` : undefined}>
+                  <span className="text-xs text-[var(--muted)]" title={row.owner ? `${row.owner.name} · ${row.owner.email}` : undefined}>
                     {row.owner ? row.owner.email : "No owner yet"}
                   </span>
                 </td>
                 <td className={st.td}>
-                  <Pill tone={LIST_STATUS_TONES[row.status]} dot>
+                  <StatusChip tone={pillTone(LIST_STATUS_TONES[row.status])} dot>
                     {LIST_STATUS_LABELS[row.status]}
-                  </Pill>
+                  </StatusChip>
                 </td>
                 <td className={st.td}>
                   {row.plan ? (
@@ -200,7 +201,7 @@ export function TenantsTable({ rows }: { rows: TenantListRow[] }) {
                   )}
                 </td>
                 <td className={st.td}>
-                  <Pill tone={onboardingTone(row.onboardingState)}>{onboardingLabel(row.onboardingState)}</Pill>
+                  <StatusChip dot={false} tone={pillTone(onboardingTone(row.onboardingState))}>{onboardingLabel(row.onboardingState)}</StatusChip>
                 </td>
                 <td className={st.td}>
                   <TenantsListDate iso={row.createdAt} />

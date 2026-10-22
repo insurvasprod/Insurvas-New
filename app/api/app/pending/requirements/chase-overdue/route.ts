@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { actorOf, failure } from "@/lib/applications/http";
 import { chaseOverdue } from "@/lib/applications/pending";
+import { scopeFor } from "@/lib/agency/visibility";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -13,7 +14,8 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   try {
-    return NextResponse.json(await chaseOverdue(actor));
+    // AG-0.5 · a producer chases his own overdue requirements, never another producer's.
+    return NextResponse.json(await chaseOverdue(actor, Date.now(), await scopeFor(auth.context)));
   } catch (error) {
     return failure(error);
   }

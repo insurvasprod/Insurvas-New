@@ -8,6 +8,7 @@
 
 // Relative .ts imports so node's test runner can load this module directly.
 import { STATE_CODES, US_STATES } from "../appointments/constants.ts";
+import { csvCellMinimal, csvUnguard } from "../csv/cell.ts";
 import { isPlaceholderDisclosure, type DisclosureProposal, type StateDisclosure } from "./constants.ts";
 
 export type ScopeProduct = { code: string; name: string; inCatalog: boolean };
@@ -156,7 +157,7 @@ export function wordingPreview(text: string): string {
 export const PACK_COLUMNS = ["state", "product_code", "effective_from", "required_text"] as const;
 
 function csvCell(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  return csvCellMinimal(value);
 }
 
 /**
@@ -277,7 +278,8 @@ export function parsePack(text: string, earliest: string): ParsedPack {
     const state = (cells[index.state] ?? "").trim().toUpperCase();
     const product = (cells[index.product_code] ?? "").trim();
     const date = (cells[index.effective_from] ?? "").trim();
-    const wording = (cells[index.required_text] ?? "").trim();
+    // An edited export: drop the apostrophe its csvCell put before wording starting with = + - @.
+    const wording = csvUnguard((cells[index.required_text] ?? "").trim());
 
     if (!wording) {
       skipped += 1;

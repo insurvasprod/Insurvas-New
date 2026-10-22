@@ -11,10 +11,10 @@ import { TableCard } from "@/components/ui/table-card";
 import { ACTIVITY_PAGE_SIZE, type LoginEventRow } from "@/lib/loginEvents/constants";
 import {
   ACTIVITY_SEARCH_MAX,
-  ACTOR_OPTIONS,
   DEFAULT_ACTIVITY_FILTERS,
   OUTCOME_OPTIONS,
   RANGE_OPTIONS,
+  actorOptionsFor,
   countLine,
   type ActivityActor,
   type ActivityFilters,
@@ -36,7 +36,9 @@ function sameFilters(a: ActivityFilters, b: ActivityFilters) {
  * belong to the filters on screen: while a request is out the old rows are dimmed, and if it fails
  * they are replaced by the error — never left standing under a filter they do not match.
  */
-export function ActivityFeed({ initial }: { initial: Loaded }) {
+export function ActivityFeed({ initial, viewerRole }: { initial: Loaded; viewerRole: string }) {
+  // Staff sign-ins are super_admin only (the API enforces it); nobody else is offered the choice.
+  const actorOptions = actorOptionsFor(viewerRole);
   const [data, setData] = useState<Loaded>(initial);
   const [filters, setFilters] = useState<ActivityFilters>(DEFAULT_ACTIVITY_FILTERS);
   const [search, setSearch] = useState("");
@@ -170,7 +172,7 @@ export function ActivityFeed({ initial }: { initial: Loaded }) {
             value={filters.actor}
             onChange={(event) => update({ actor: event.target.value as ActivityActor })}
           >
-            {ACTOR_OPTIONS.map((option) => (
+            {actorOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

@@ -20,7 +20,7 @@ import { credentialAction } from "@/lib/adminUsers/credential";
 import type { UserListRow } from "@/lib/users/list";
 
 const DANGER = "border-[var(--error)] text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]";
-const NOTE = "m-0 mt-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
+const NOTE = "m-0 mt-3 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
 type Transition = "activate" | "deactivate" | "unsuspend";
 
@@ -177,7 +177,7 @@ export function UserDetailActions({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="sign-out-reason" className="text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">Reason</label>
+            <label htmlFor="sign-out-reason" className="text-sm leading-[1.5] font-semibold text-[var(--ink)]">Reason</label>
             <textarea
               id="sign-out-reason"
               value={signOutReason}
@@ -185,10 +185,10 @@ export function UserDetailActions({
               rows={3}
               maxLength={500}
               placeholder="e.g. Lost laptop reported by the agency owner"
-              className="w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[14px] leading-[1.5] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+              className="w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-sm leading-[1.5] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
             />
-            <p className="m-0 text-[12px] leading-[1.5] text-[var(--muted)]">Recorded in the audit log with your name.</p>
-            {signOutError && <p role="alert" className="m-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{signOutError}</p>}
+            <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">Recorded in the audit log with your name.</p>
+            {signOutError && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{signOutError}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSignOutOpen(false)} disabled={busy}>Cancel</Button>

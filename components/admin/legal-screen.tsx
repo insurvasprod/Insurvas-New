@@ -7,11 +7,13 @@
 // document. Drafts live in legal_document_drafts (20260924363000) and no customer surface reads
 // them; publishing a draft is what customers see, and it is confirmed with its consequence first.
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 import { PageHeader } from "@/components/ui/page-header";
-import { btn, Pill } from "@/components/app/settings/primitives";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { btn } from "@/components/app/settings/primitives";
 import { LEGAL_DOC_LABELS, type LegalDocType } from "@/lib/legal/constants";
 import { LEGAL_MIN_CONTENT_LENGTH, legalDay, nextLegalVersion, type AdminLegalVersion, type LegalDraft } from "@/lib/legal/adminTypes";
 import { CARD_TITLE, DRAFT_KEY, type EditorState, type Lookup, type Stat, VISIBLE_VERSIONS, fromDraft, plural, post, sameEditor } from "@/components/admin/legal/model";
@@ -202,16 +204,27 @@ export function LegalScreen({
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader title="Legal" actions={<DocSwitch value={doc} onChange={switchDoc} />} />
 
+      <StatStrip label={LEGAL_DOC_LABELS[doc]}>
+        <StatTile label="Live version" value={current ? `v${current.version}` : "None"} footnote={current ? `effective ${legalDay(current.effective_date)}` : "nothing published"} />
+        <StatTile
+          label="Accepted"
+          value={stat && stat.eligible_users > 0 ? `${Math.round((stat.accepted_count / stat.eligible_users) * 100)}%` : "—"}
+          footnote={stat ? `${stat.accepted_count.toLocaleString("en-US")} of ${stat.eligible_users.toLocaleString("en-US")} active users` : "not counted"}
+        />
+        <StatTile label="Versions" value={docVersions.length.toLocaleString("en-US")} footnote={current?.requires_reacceptance ? "live one needs re-acceptance" : "published so far"} />
+        <StatTile label="Draft" value={draft ? "Saved" : "None"} valueSize="text" footnote={draftsSupported ? (draft ? "ready to publish" : "start one to edit") : "drafts not set up"} />
+      </StatStrip>
+
       <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
         {/* ── left column ───────────────────────────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-5 lg:w-[340px] lg:shrink-0">
           <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
             <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-              <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{CARD_TITLE[doc]}</span>
+              <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{CARD_TITLE[doc]}</span>
               <span className="flex items-center gap-2.5">
                 {stat && (
                   <span
-                    className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums"
+                    className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums"
                     title={`${stat.accepted_count.toLocaleString("en-US")} of ${stat.eligible_users.toLocaleString("en-US")} active users accepted version ${stat.version}`}
                   >
                     {stat.eligible_users === 0 ? "No active users" : `${Math.round((stat.accepted_count / stat.eligible_users) * 100)}% accepted`}
@@ -236,9 +249,9 @@ export function LegalScreen({
                           : "No draft yet"
                   }
                   pills={
-                    <Pill tone="warning" dot>
+                    <StatusChip tone="warning" dot>
                       Draft
-                    </Pill>
+                    </StatusChip>
                   }
                 />
               )}
@@ -256,15 +269,15 @@ export function LegalScreen({
                     pills={
                       <>
                         {isCurrent ? (
-                          <Pill tone="success" dot>
+                          <StatusChip tone="good" dot>
                             Published
-                          </Pill>
+                          </StatusChip>
                         ) : (
-                          <Pill tone="neutral" dot>
+                          <StatusChip tone="neutral" dot>
                             Superseded
-                          </Pill>
+                          </StatusChip>
                         )}
-                        {version.is_draft && <Pill tone="warning">Unreviewed text</Pill>}
+                        {version.is_draft && <StatusChip dot={false} tone="warning">Unreviewed text</StatusChip>}
                       </>
                     }
                   />
@@ -281,8 +294,8 @@ export function LegalScreen({
 
               {docVersions.length === 0 && !draft && (
                 <div className="px-4 py-[11px]">
-                  <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Nothing published yet</span>
-                  <span className="mt-0.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                  <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Nothing published yet</span>
+                  <span className="mt-0.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                     {doc === "dpa"
                       ? "Signup does not require a Data Processing Agreement. Once a version is published, everyone is asked to accept it."
                       : "Signup is blocked until a Terms of Service and a Privacy Policy both exist. Nobody can be asked to agree to a document that does not exist."}
@@ -336,8 +349,8 @@ export function LegalScreen({
             />
           ) : (
             <section className="rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center">
-              <div className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Nothing to show yet</div>
-              <p className="mx-auto mt-1.5 max-w-[46ch] text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+              <div className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Nothing to show yet</div>
+              <p className="mx-auto mt-1.5 max-w-[46ch] text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
                 No version of the {LEGAL_DOC_LABELS[doc]} has been published. Only a super admin can write and publish one.
               </p>
             </section>

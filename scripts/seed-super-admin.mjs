@@ -6,11 +6,18 @@ import bcrypt from "bcryptjs";
 import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
 
+import { sealAdminTotpSecret } from "../lib/adminAuth/totpSecret.ts";
+
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const email = process.env.SEED_SUPER_ADMIN_EMAIL;
 const name = process.env.SEED_SUPER_ADMIN_NAME ?? "Super Admin";
 const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
+
+if (!process.env.APPLICATION_DATA_ENCRYPTION_KEY) {
+  console.error("Missing APPLICATION_DATA_ENCRYPTION_KEY in .env.local (the TOTP secret is stored sealed with it)");
+  process.exit(1);
+}
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
@@ -44,17 +51,26 @@ if (count && count > 0) {
 const passwordHash = await bcrypt.hash(password, 12);
 const totpSecret = new OTPAuth.Secret({ size: 20 }).base32;
 
-const { error: insertError } = await supabase.from("admin_users").insert({
+const { data: created, error: insertError } = await supabase.from("admin_users").insert({
   email: email.toLowerCase(),
   name,
   role: "super_admin",
   password_hash: passwordHash,
-  totp_secret: totpSecret,
   is_active: true,
-});
+}).select("id").single();
 
 if (insertError) {
   console.error("Could not create super_admin:", insertError.message);
+  process.exit(1);
+}
+
+// Sealed with the application data key and bound to the new row's id (lib/adminAuth/totpSecret.ts).
+const { error: sealError } = await supabase
+  .from("admin_users")
+  .update({ totp_secret: sealAdminTotpSecret(created.id, totpSecret) })
+  .eq("id", created.id);
+if (sealError) {
+  console.error("Created the super_admin but could not store its TOTP secret:", sealError.message);
   process.exit(1);
 }
 

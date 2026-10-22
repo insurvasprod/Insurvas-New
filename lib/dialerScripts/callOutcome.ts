@@ -7,7 +7,8 @@ import { verificationStatus } from "@/lib/dispositions/applicationGate";
 import { isApplicationOutcome } from "@/lib/dispositions/applicationOutcome";
 import { dialConsequence } from "@/lib/dispositions/callConsequence";
 import { derivedNextAction, DO_NOT_CALL_KEY } from "@/lib/dispositions/nextAction";
-import { DispositionError, getDispositionWizard, listDispositionConfig } from "@/lib/dispositions/service";
+import { DispositionError, getDispositionWizard, listDispositionConfig, listMappedOutcomes } from "@/lib/dispositions/service";
+import { leadPipelineId } from "@/lib/pipelines/outcomeStages";
 import type { DispositionWizard } from "@/lib/dispositions/types";
 import { DialerWorkflowError } from "./service";
 import type { DialOutcomeRow } from "./dialOutcomeKey";
@@ -84,8 +85,13 @@ async function defaultEndsCall(keys: string[]): Promise<Map<string, boolean>> {
  * Every outcome call mode offers — the tenant's active outcomes, then the attempt-only ones — each
  * described by what complete_existing_dial_disposition does with it.
  */
-async function callOutcomeOptions(tenantId: string, verification: { complete: boolean } | null): Promise<CallOutcomeOption[]> {
-  const config = await listDispositionConfig(tenantId);
+async function callOutcomeOptions(tenantId: string, verification: { complete: boolean } | null, pipelineId: string | null): Promise<CallOutcomeOption[]> {
+  const [config, mapped] = await Promise.all([
+    listDispositionConfig(tenantId),
+    // Where each outcome takes THIS lead: its pipeline's own stage first (20261022200000).
+    pipelineId ? listMappedOutcomes(tenantId, pipelineId).catch(() => null) : Promise.resolve(null),
+  ]);
+  const stageFor = mapped ? new Map(mapped.map((row) => [row.disposition_key, row.mapped_stage])) : null;
   // The inbound return call is the customer's call, offered only on the search path, never here.
   const active = config.dispositions.filter((row) => row.is_active && row.disposition_key !== INBOUND_RETURN_CALL);
   const known = new Set(config.dispositions.map((row) => row.disposition_key));
@@ -96,7 +102,7 @@ async function callOutcomeOptions(tenantId: string, verification: { complete: bo
   const options: CallOutcomeOption[] = active.map((row) => {
     const endsCall = row.ends_call ?? defaults.get(row.disposition_key) ?? false;
     const next = row.next ?? derivedNextAction(row.disposition_key, endsCall);
-    const stage = row.mapped_stage;
+    const stage = stageFor ? stageFor.get(row.disposition_key) ?? null : row.mapped_stage;
     // The gate's own test: an application is a MAPPED active outcome whose stage or flags say so.
     const application = Boolean(stage) && isApplicationOutcome(row, stage);
     const needsVerification = application && verification?.complete !== true;
@@ -175,8 +181,11 @@ export async function getCallModeWizard(input: { tenantId: string; userId: strin
     wizard = await flowlessWizard(input.tenantId, workItemId);
     walkAvailable = false;
   }
-  const verification = await verificationStatus(input.tenantId, workItemId).catch(() => null);
-  const outcomeOptions = await callOutcomeOptions(input.tenantId, verification);
+  const [verification, pipelineId] = await Promise.all([
+    verificationStatus(input.tenantId, workItemId).catch(() => null),
+    leadPipelineId(input.tenantId, wizard.lead.id).catch(() => null),
+  ]);
+  const outcomeOptions = await callOutcomeOptions(input.tenantId, verification, pipelineId);
   const earlierWalk = wizard.walk.status === "completed";
   return {
     ...wizard,

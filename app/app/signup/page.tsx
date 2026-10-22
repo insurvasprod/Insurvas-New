@@ -1,14 +1,10 @@
-import { TenantAuthWorkspace } from "@/components/app/tenant-auth-workspace";
-import { fetchPublicPlans } from "@/lib/plans/public";
-import { getMaintenanceStatus } from "@/lib/system/service";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function TenantSignupPage() {
-  const [plans, maintenance] = await Promise.all([
-    fetchPublicPlans().catch(() => []),
-    getMaintenanceStatus().catch(() => null),
-  ]);
-
-  return <TenantAuthWorkspace plans={plans} initialMode="sign-up" maintenance={maintenance} />;
+/**
+ * One way to sign up: the public flow at /signup (/api/public/signup), which verifies the email,
+ * records legal acceptance, refuses disposable addresses and sends the owner to Whop checkout, where
+ * the card for the trial is taken. This door used the legacy /api/app/signup, which skipped all of it.
+ */
+export default function TenantSignupPage(): never {
+  redirect("/signup");
 }

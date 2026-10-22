@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCellMinimal } from "@/lib/csv/cell";
 
 import { bestEvidence, consentGivenAt, type EvidenceArtefact, type EvidenceFilter, type EvidenceLevel } from "./evidence";
 
@@ -123,19 +124,25 @@ export async function getConsentEvidence(input: {
   const leadRows = (rows.data ?? []) as LeadRow[];
   const partnerIds = [...new Set(leadRows.map((row) => row.partner_id).filter((id): id is string => Boolean(id)))];
   const campaignIds = [...new Set(leadRows.map((row) => row.campaign_id).filter((id): id is string => Boolean(id)))];
-  const [partners, campaigns] = await Promise.all([
-    partnerIds.length ? db.from("partners").select("id, name").eq("tenant_id", input.tenantId).in("id", partnerIds) : Promise.resolve({ data: [], error: null }),
-    campaignIds.length ? db.from("tenant_campaigns").select("id, name, vendor_id, lead_type").eq("tenant_id", input.tenantId).in("id", campaignIds) : Promise.resolve({ data: [], error: null }),
-  ]);
-  const campaignRows = (campaigns.error ? [] : campaigns.data ?? []) as Array<{ id: string; name: string; vendor_id: string | null; lead_type: string | null }>;
-  const vendorIds = [...new Set(campaignRows.map((row) => row.vendor_id).filter((id): id is string => Boolean(id)))];
-  const vendors = vendorIds.length ? await db.from("tenant_lead_vendors").select("id, name").eq("tenant_id", input.tenantId).in("id", vendorIds) : { data: [], error: null };
   // A partner-submitted lead without a certificate may still carry the partner's attestation of
-  // documented consent (Submit lead's consent step), kept on its submission audit entry.
+  // documented consent (Submit lead's consent step), kept on its submission audit entry. It needs only
+  // this page's leads, so it is read beside the names rather than after the vendors.
   const attestable = leadRows.filter((row) => row.partner_id && !(row.all ?? []).length).map((row) => row.id);
-  const attestations = attestable.length
-    ? await db.from("audit_log").select("target_id, metadata").eq("action", "tenant.partner_lead_submitted").in("target_id", attestable)
-    : { data: [], error: null };
+  type CampaignRow = { id: string; name: string; vendor_id: string | null; lead_type: string | null };
+  const campaignsThenVendors = async () => {
+    const campaigns = campaignIds.length ? await db.from("tenant_campaigns").select("id, name, vendor_id, lead_type").eq("tenant_id", input.tenantId).in("id", campaignIds) : { data: [], error: null };
+    const campaignRows = (campaigns.error ? [] : campaigns.data ?? []) as CampaignRow[];
+    const vendorIds = [...new Set(campaignRows.map((row) => row.vendor_id).filter((id): id is string => Boolean(id)))];
+    const vendors = vendorIds.length ? await db.from("tenant_lead_vendors").select("id, name").eq("tenant_id", input.tenantId).in("id", vendorIds) : { data: [], error: null };
+    return { campaignRows, vendors };
+  };
+  const [partners, { campaignRows, vendors }, attestations] = await Promise.all([
+    partnerIds.length ? db.from("partners").select("id, name").eq("tenant_id", input.tenantId).in("id", partnerIds) : Promise.resolve({ data: [], error: null }),
+    campaignsThenVendors(),
+    attestable.length
+      ? db.from("audit_log").select("target_id, metadata").eq("action", "tenant.partner_lead_submitted").in("target_id", attestable)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
   const attestedAt = new Map<string, string>();
   for (const entry of (attestations.error ? [] : attestations.data ?? []) as Array<{ target_id: string; metadata: { consentAttestedAt?: string; replayed?: boolean } | null }>) {
     const at = entry.metadata?.consentAttestedAt;
@@ -202,9 +209,7 @@ export async function getConsentEvidence(input: {
 const CSV_HEADER = ["Lead", "Phone", "Provider", "Captured", "Consent given (UTC)", "Evidence", "Certificate id", "IP address"];
 function csvCell(value: string | null) {
   // A cell a spreadsheet would run as a formula is neutralised: lead values arrive from vendors.
-  const raw = value ?? "";
-  const v = /^[=+\-@\t\r]/.test(raw) ? "'" + raw : raw;
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  return csvCellMinimal(value);
 }
 export function evidenceCsv(rows: EvidenceRow[], label: (level: EvidenceLevel) => string): string {
   return [CSV_HEADER.join(","), ...rows.map((row) => [row.name, row.phone, row.providerName, row.captured, row.consentGivenAt, label(row.level), row.certificateId, row.ip].map(csvCell).join(","))].join("\n");

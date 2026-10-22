@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCell } from "@/lib/csv/cell";
 import type { Json } from "@/lib/supabase/database.types";
 import { getEntitlement } from "@/lib/entitlements/get";
 import {
@@ -12,6 +13,7 @@ import {
 } from "@/lib/compliance/screening";
 import { assertOutboundLimit } from "@/lib/metering/outbound";
 import { getUsPhone10Digits } from "@/lib/compliance/scrub";
+import { LeadPhoneScreeningError, leadPhoneValue, phoneEditNeedsScreening, phoneEditVerdict } from "@/lib/compliance/phoneEdit";
 import { linkLeadsToContacts } from "@/lib/contacts/leadLink";
 import { fetchTemplateVersion } from "@/lib/templates/queries";
 import {
@@ -31,12 +33,19 @@ import { effectiveTemplateForm, sectionAvailabilityError } from "@/lib/templates
 import {
   partnerTypeForLead,
   resolvePartnerEntryStage,
+  resolveProductEntryStage,
   resolveRuntimeStage,
+  syncTemplatePipeline,
   assertUuid,
 } from "@/lib/pipelines/service";
 import { isRequiredLeadImportField, parseLeadCsv, sanitizeImportMapping, US_STATE_CODES, type ImportDateOrder, type LeadImportRow } from "./csv";
 import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents } from "./importCommit";
+import { existingLeadsByPhone } from "./existingLeadPhones";
+import { chooseProductTemplate, newerVersionOfCopy, type TemplateCandidate } from "./templateChoice";
+import { isMissingSchema } from "@/lib/pipelines/schemaGap";
+import { importScrubDecision } from "@/lib/campaigns/importScrubMark";
 import { trustedFormCertificateId } from "@/lib/consent/capture";
+import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 const PRODUCT_CODE = "term_life";
 // Each screening is ~10 sequential round trips; this bounds how many a CSV import runs at once.
@@ -80,6 +89,7 @@ type LooseQuery<T = unknown> = PromiseLike<LooseResult<T>> & {
   eq(column: string, value: unknown): LooseQuery<T>;
   in(column: string, values: unknown[]): LooseQuery<T>;
   order(column: string, options?: { ascending?: boolean }): LooseQuery<T>;
+  limit(count: number): LooseQuery<T>;
   maybeSingle(): Promise<LooseResult<T | null>>;
   single(): Promise<LooseResult<T>>;
   insert(values: unknown): LooseQuery<T>;
@@ -93,6 +103,124 @@ type LooseDb = {
     args: Record<string, unknown>,
   ): Promise<LooseResult<unknown>>;
 };
+
+/* ── AG-0.5 · which leads a narrowed agency session may see ────────────────────────────────────── */
+
+type QueueRow = { lead_id: string; owner_user_id: string | null; created_at: string };
+type QueueQuery = PromiseLike<LooseResult<QueueRow[] | null>> & {
+  eq(column: string, value: unknown): QueueQuery;
+  in(column: string, values: readonly unknown[]): QueueQuery;
+  order(column: string, options?: { ascending?: boolean }): QueueQuery;
+  range(from: number, to: number): QueueQuery;
+};
+type QueueDb = { from(table: string): { select(columns: string): QueueQuery } };
+
+/** A uuid is 36 characters; 150 of them keep a request line well under PostgREST's limit. */
+export const LEAD_ID_CHUNK = 150;
+
+export function chunkIds(ids: readonly string[], size = LEAD_ID_CHUNK): string[][] {
+  const chunks: string[][] = [];
+  for (let start = 0; start < ids.length; start += size) chunks.push(ids.slice(start, start + size));
+  return chunks;
+}
+
+/**
+ * The leads a producer scope may see (decision D1): a lead belongs to the owner of its LATEST lead_queue
+ * row — the same rule guardLead applies to one lead. Two reads, both along tenant-leading indexes:
+ *   1. the queue rows the scope owns (lead_queue_tenant_owner_idx) — every lead that could be visible;
+ *   2. every queue row of those leads, to drop one that has since been handed to someone outside the scope.
+ * A lead with no queue row (typed in by hand, a manual deal) belongs to its creator, agent_leads.created_by —
+ * read along agent_leads_tenant_created_id_idx — until it gets a queue row.
+ *
+ * Pass a scope from scopeFor(auth.context) — never from the request. A null scope is not accepted here:
+ * the callers keep their unfiltered path for it, so solo tenants and owners run exactly today's query.
+ */
+export async function visibleLeadIds(tenantId: string, scope: readonly string[]): Promise<string[]> {
+  if (!scope.length) return [];
+  const db = getSupabaseServiceClient() as unknown as QueueDb;
+  const candidates = new Set<string>();
+  const PAGE = 1000;
+  // The two reads are independent, so they run side by side; each still pages in order (offset paging over an unknown total).
+  const readQueue = async () => {
+    for (let from = 0; ; from += PAGE) {
+      const page = await scopeQuery(db.from("lead_queue").select("lead_id").eq("tenant_id", tenantId), "owner_user_id", scope)
+        .order("queued_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (page.error) throw new Error(`Could not load your leads: ${page.error.message}`);
+      for (const row of page.data ?? []) if (row.lead_id) candidates.add(row.lead_id);
+      if (!page.data || page.data.length < PAGE) break;
+    }
+  };
+  // A lead with NO queue row — typed in by hand, or a manual deal — belongs to whoever created it
+  // (agent_leads.created_by, D1's "the user column the row already has"); once it has a queue row, the queue
+  // decides. Read along agent_leads_tenant_created_id_idx, tenant first.
+  const created = new Set<string>();
+  const leadsDb = getSupabaseServiceClient() as unknown as CreatedDb;
+  const readCreated = async () => {
+    for (let from = 0; ; from += PAGE) {
+      const page = await scopeQuery(leadsDb.from("agent_leads").select("id").eq("tenant_id", tenantId), "created_by", scope)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (page.error) throw new Error(`Could not load your leads: ${page.error.message}`);
+      for (const row of page.data ?? []) if (row.id) created.add(row.id);
+      if (!page.data || page.data.length < PAGE) break;
+    }
+  };
+  await Promise.all([readQueue(), readCreated()]);
+  const all = new Set([...candidates, ...created]);
+  if (!all.size) return [];
+  const owners = await latestLeadOwners(tenantId, [...all]);
+  const visible = new Set(scope);
+  return [...all].filter((id) => {
+    if (!owners.has(id)) return created.has(id); // no queue row: its creator's
+    const owner = owners.get(id);
+    return Boolean(owner) && visible.has(owner as string);
+  });
+}
+
+type CreatedQuery = {
+  eq(column: string, value: string): CreatedQuery;
+  in(column: string, values: readonly string[]): CreatedQuery;
+  order(column: string, options: { ascending: boolean }): CreatedQuery;
+  range(from: number, to: number): PromiseLike<{ data: Array<{ id: string }> | null; error: { message: string } | null }>;
+};
+type CreatedDb = { from(table: string): { select(columns: string): CreatedQuery } };
+
+/** Each lead's producer (D1): the owner of its latest lead_queue row; absent when it has no queue row. */
+export async function latestLeadOwners(tenantId: string, leadIds: readonly string[]): Promise<Map<string, string | null>> {
+  const db = getSupabaseServiceClient() as unknown as QueueDb;
+  const latest = new Map<string, QueueRow>();
+  await mapWithConcurrency(chunkIds([...new Set(leadIds)]), 6, async (ids) => {
+    const result = await db.from("lead_queue").select("lead_id, owner_user_id, created_at").eq("tenant_id", tenantId).in("lead_id", ids);
+    if (result.error) throw new Error(`Could not load who holds these leads: ${result.error.message}`);
+    for (const row of result.data ?? []) {
+      const seen = latest.get(row.lead_id);
+      if (!seen || row.created_at > seen.created_at) latest.set(row.lead_id, row);
+    }
+  });
+  return new Map([...latest].map(([id, row]) => [id, row.owner_user_id]));
+}
+
+/** visibleLeadIds as a set, or null (no filter) for a null scope. */
+export async function visibleLeadSet(tenantId: string, scope: ProducerScope): Promise<Set<string> | null> {
+  return scope === null ? null : new Set(await visibleLeadIds(tenantId, scope));
+}
+
+/**
+ * Reads rows for a list of lead ids in chunks (a few at a time), concatenated in chunk order. The caller
+ * re-sorts: each chunk is ordered on its own.
+ */
+export async function readByLeadIds<T>(ids: readonly string[], read: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, label: string): Promise<T[]> {
+  const pages = await mapWithConcurrency(chunkIds(ids), 6, async (chunk) => {
+    const result = await read(chunk);
+    if (result.error) throw new Error(`Could not load ${label}: ${result.error.message}`);
+    return result.data ?? [];
+  });
+  return pages.flat();
+}
+
 type ImportedLead = {
   id: string;
   values: Record<string, unknown>;
@@ -329,20 +457,27 @@ async function assertAllowedProduct(tenantId: string, productCode: string) {
     throw new Error(`Your plan does not include the ${productCode} product`);
 }
 
-async function loadLatestTemplate(productCode = PRODUCT_CODE) {
-  const { data, error } = await getSupabaseServiceClient()
-    .from("templates")
-    .select(
-      "id, name, product_code, version, description, is_active, created_by, created_at, updated_at",
-    )
-    .eq("product_code", productCode)
-    .eq("is_active", true)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error)
-    throw new Error(`Could not load active template: ${error.message}`);
-  return data;
+const PRODUCT_TEMPLATE_COLUMNS =
+  "id, name, product_code, version, description, is_active, created_by, created_at, updated_at";
+
+/**
+ * Every active platform template for a product, with what chooseProductTemplate needs. is_default
+ * arrives with 20261015610000 and published_at with 20260925504000; before either is applied the
+ * read drops them and the choice falls back to the most recently updated template.
+ */
+async function loadProductTemplates(productCode = PRODUCT_CODE): Promise<TemplateCandidate[]> {
+  const read = (columns: string) =>
+    getSupabaseServiceClient()
+      .from("templates")
+      .select(columns)
+      .eq("product_code", productCode)
+      .eq("is_active", true) as unknown as PromiseLike<{ data: TemplateCandidate[] | null; error: { code?: string; message: string } | null }>;
+  let result = await read(`${PRODUCT_TEMPLATE_COLUMNS}, published_at, is_default`);
+  if (isMissingSchema(result.error)) result = await read(`${PRODUCT_TEMPLATE_COLUMNS}, published_at`);
+  if (isMissingSchema(result.error)) result = await read(PRODUCT_TEMPLATE_COLUMNS);
+  if (result.error)
+    throw new Error(`Could not load active template: ${result.error.message}`);
+  return result.data ?? [];
 }
 async function resolveSource(templateId: string, version: number) {
   const source = await fetchTemplateVersion(templateId, version);
@@ -358,18 +493,27 @@ export async function getAgentTemplateForProduct(
 ): Promise<AgentTemplate> {
   // loadCopy filters on product_code, so copy.product_code === productCode and the latest-template
   // and product-name reads need not wait for it. This path runs on every leads GET/POST/PATCH.
-  const [loadedCopy, latest, name] = await Promise.all([
+  const [loadedCopy, candidates, name] = await Promise.all([
     loadCopy(tenantId, productCode),
-    loadLatestTemplate(productCode),
+    loadProductTemplates(productCode),
     productName(productCode),
   ]);
   let copy = loadedCopy;
   if (!copy) {
-    const source = latest;
+    // The product's designated template (SA-4.7): the platform default, else the most recently
+    // published — never "the highest version number" across different templates.
+    const source = chooseProductTemplate(candidates);
     if (!source)
       throw new Error(`No active ${productCode} template is available`);
     await assertAllowedProduct(tenantId, source.product_code);
-    await applyTemplate(tenantId, userId, source.id, source.version);
+    try {
+      await applyTemplate(tenantId, userId, source.id, source.version);
+    } catch (error) {
+      // A new workspace's first screen asks twice at once (List import does), and both requests find
+      // no copy. The one that loses the race hits the copy's unique key — the copy it wanted now
+      // exists, so it reads that one rather than answering 500 (QA 2026-10-22).
+      if (!/tenant_templates_tenant_id_template_id_template_version_key|duplicate key/i.test(error instanceof Error ? error.message : String(error))) throw error;
+    }
     copy = await loadCopy(tenantId, productCode);
     if (!copy) throw new Error("Could not resolve the tenant template copy");
   }
@@ -383,10 +527,12 @@ export async function getAgentTemplateForProduct(
       product_code: copy.product_code,
     },
     template: templateRow(copy, name),
-    latest:
-      latest && latest.version > copy.template_version
-        ? { id: latest.id, version: latest.version, name: latest.name }
-        : null,
+    // Only a newer version of the template this copy came from; another template for the same
+    // product, whatever its version number, is not an update to this one (audit, 2026-10-15).
+    latest: (() => {
+      const newer = newerVersionOfCopy(copy, candidates);
+      return newer ? { id: newer.id, version: newer.version, name: newer.name } : null;
+    })(),
   };
 }
 
@@ -917,6 +1063,10 @@ export async function applyTemplate(
   );
   if (error || !data)
     throw new Error(error?.message ?? "Could not apply template");
+  // SA-4.7: the template's pipeline reaches the board. The copy above holds the stages; the board
+  // reads tenant_pipeline_stages, so the product's pipeline is built or merged from the same merged
+  // stage list (existing stages and their disposition mappings untouched; see the migration).
+  await syncTemplatePipeline(tenantId, source.product_code, source.product_name || source.product_code, merged.stages);
   return {
     tenant_template_id: data,
     preview: await previewTemplateApplication(
@@ -1091,21 +1241,32 @@ export async function listAgentLeads(
   filterValue: string,
   sortField: string,
   direction: "asc" | "desc",
+  /** AG-0.5: the session's producer scope (scopeFor). Null — the default — reads the whole book as before. */
+  scope: ProducerScope = null,
 ) {
   const allowedFields = new Set(
     template.template.fields.map((field) => field.field_key),
   );
   const safeFilterField = allowedFields.has(filterField) ? filterField : "";
   const safeSortField = allowedFields.has(sortField) ? sortField : "";
-  const { data, error } = await getSupabaseServiceClient()
+  const columns = "id, product_line, pipeline_id, stage_id, values, created_by, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at";
+  const base = () => getSupabaseServiceClient()
     .from("agent_leads")
-    .select(
-      "id, product_line, pipeline_id, stage_id, values, created_by, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at",
-    )
+    .select(columns)
     .eq("tenant_id", tenantId)
-    .eq("tenant_template_id", template.tenant_template_id)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(`Could not load leads: ${error.message}`);
+    .eq("tenant_template_id", template.tenant_template_id);
+  let data: Awaited<ReturnType<typeof base>>["data"];
+  if (scope === null) {
+    const result = await base().order("created_at", { ascending: false });
+    if (result.error) throw new Error(`Could not load leads: ${result.error.message}`);
+    data = result.data;
+  } else {
+    // A narrowed agency session: only the leads its producers hold, read by id so the list (which the
+    // board counts and totals from) never contains another producer's lead.
+    const ids = await visibleLeadIds(tenantId, scope);
+    data = (await readByLeadIds(ids, (chunk) => base().in("id", chunk), "leads"))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
   const normalizedSearch = search.toLocaleLowerCase();
   const normalizedFilter = filterValue.toLocaleLowerCase();
   const leads = (data ?? [])
@@ -1161,6 +1322,8 @@ export async function searchAgentLeads(
   template: AgentTemplate,
   search: string,
   limit = 40,
+  /** AG-0.5: the session's producer scope (scopeFor). Null — the default — searches the whole book. */
+  scope: ProducerScope = null,
 ) {
   const normalized = search
     .replace(/[^a-zA-Z0-9@+ _-]/g, " ")
@@ -1170,7 +1333,7 @@ export async function searchAgentLeads(
     throw new Error("Enter at least two characters to search");
   const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit)));
   const pattern = `*${normalized.replace(/[*]/g, " ")}*`;
-  const { data, error } = await getSupabaseServiceClient()
+  const query = () => getSupabaseServiceClient()
     .from("agent_leads")
     .select(
       "id, product_line, pipeline_id, stage_id, values, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at",
@@ -1186,10 +1349,20 @@ export async function searchAgentLeads(
         `values->>phone_number.ilike.${pattern}`,
         `values->>email.ilike.${pattern}`,
       ].join(","),
-    )
-    .order("created_at", { ascending: false })
-    .limit(safeLimit);
-  if (error) throw new Error(`Could not search leads: ${error.message}`);
+    );
+  let data: Awaited<ReturnType<typeof query>>["data"];
+  if (scope === null) {
+    const result = await query().order("created_at", { ascending: false }).limit(safeLimit);
+    if (result.error) throw new Error(`Could not search leads: ${result.error.message}`);
+    data = result.data;
+  } else {
+    // A narrowed agency session searches its producers' leads only: each id chunk is searched with the
+    // same limit, then the newest `safeLimit` of the union are kept — the same answer as one query.
+    const ids = await visibleLeadIds(tenantId, scope);
+    data = (await readByLeadIds(ids, (chunk) => query().in("id", chunk).order("created_at", { ascending: false }).limit(safeLimit), "leads"))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, safeLimit);
+  }
   return (data ?? []).map((lead) => ({
     ...lead,
     values: (lead.values ?? {}) as Record<string, unknown>,
@@ -1227,11 +1400,15 @@ export async function createAgentLead(
       .maybeSingle();
     if (!pipeline) throw new Error("Choose a valid pipeline stage");
     stage = { pipelineId: pipeline.id, stage: runtimeStage };
-  } else
-    stage = await resolveRuntimeStage(
-      tenantId,
-      stageKey ?? template.template.stages[0]?.stage_key ?? "new",
-    );
+  } else {
+    // SA-4.7: a product whose template built a pipeline (syncTemplatePipeline) takes its leads
+    // there, on the stage named like the template stage asked for; otherwise the legacy lookup.
+    const key = stageKey ?? template.template.stages[0]?.stage_key ?? "new";
+    const label = template.template.stages.find((item) => item.stage_key === key)?.label ?? null;
+    stage =
+      (await resolveProductEntryStage(tenantId, template.template.product_code, label)) ??
+      (await resolveRuntimeStage(tenantId, key));
+  }
   const { data, error } = await getSupabaseServiceClient()
     .from("agent_leads")
     .insert({
@@ -1269,6 +1446,20 @@ type ImportedLeadResult = {
  * cannot tell a clean 4,820-row file from a 5,000-row file with 180 numbers Ray paid for and can
  * never dial. The second number is the one that funds the vendor credit claim in LA-2.19.
  */
+/**
+ * The campaign's scrub status, and whether it held any lead, before an import commits — the two
+ * facts importScrubDecision needs. Null when either cannot be read (the mark is then not written).
+ * The lead probe rides the (tenant_id, campaign_id, created_at) index and stops at one row.
+ */
+async function readImportCampaignState(db: LooseDb, tenantId: string, campaignId: string): Promise<{ scrubStatus: string | null; hadLeadsBefore: boolean; status: string | null } | null> {
+  const [campaign, lead] = await Promise.all([
+    db.from("tenant_campaigns").select("status, scrub_status").eq("tenant_id", tenantId).eq("id", campaignId).maybeSingle() as Promise<LooseResult<{ status: string | null; scrub_status: string | null } | null>>,
+    db.from("agent_leads").select("id").eq("tenant_id", tenantId).eq("campaign_id", campaignId).limit(1) as unknown as Promise<LooseResult<Array<{ id: string }> | null>>,
+  ]);
+  if (campaign.error || !campaign.data || lead.error) return null;
+  return { scrubStatus: campaign.data.scrub_status ?? null, hadLeadsBefore: Array.isArray(lead.data) && lead.data.length > 0, status: campaign.data.status ?? null };
+}
+
 export async function importAgentLeads(
   tenantId: string,
   userId: string,
@@ -1294,7 +1485,18 @@ export async function importAgentLeads(
       : undefined,
     dateOrder,
   );
+  // A row whose phone can't be read is not validated here: screening rejects it on its own as
+  // invalid_phone below, so one bad number never fails the whole file.
+  const phoneReadable = (row: LeadImportRow) => {
+    try {
+      getUsPhone10Digits(row.values.phone ?? row.values.phone_number);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const validationErrors = rows
+    .filter(phoneReadable)
     .map((row) => ({
       row,
       error: validateImportValues(template.template.fields, row.values),
@@ -1389,7 +1591,9 @@ export async function importAgentLeads(
       phoneDigits: decision.phoneDigits,
       outcome:
         decision.outcome === "invalid_phone" ? "invalid" : decision.outcome,
-      detail: decision.message || decision.outcome,
+      // The screening message for a DNC hit is written for an ACCEPTED lead ("…accepted with a
+      // compliance warning"); here the row was rejected, so it says so.
+      detail: decision.outcome === "dnc" ? "This number is on a do-not-call list, so the row was not imported." : decision.message || decision.outcome,
     });
   }
 
@@ -1427,25 +1631,28 @@ export async function importAgentLeads(
     };
   });
   const db = getSupabaseServiceClient() as unknown as LooseDb;
-  const existing = (await db
-    .from("agent_leads")
-    .select(
-      "id, values, product_line, pipeline_id, stage_id, created_at, updated_at",
-    )
-    .eq("tenant_id", tenantId)) as LooseResult<ImportedLead[]>;
-  if (existing.error)
+  // Matched by the numbers in THIS file (import_existing_lead_phones), not by loading the tenant's
+  // leads: that unpaged read was capped at PostgREST's 1,000 rows, so on a large tenant the dedupe
+  // checked the first thousand leads and imported everyone else's duplicates as new people. The
+  // review path (importPreflight.ts) uses the same helper.
+  const filePhones = [
+    ...new Set(
+      (rows as LeadImportRow[]).flatMap((row) => {
+        try {
+          return [getUsPhone10Digits(row.values.phone ?? row.values.phone_number)];
+        } catch {
+          return [];
+        }
+      }),
+    ),
+  ];
+  let phoneMap: Map<string, string>;
+  try {
+    phoneMap = await existingLeadsByPhone(db, tenantId, filePhones);
+  } catch (error) {
     throw new Error(
-      `Could not check existing imported people: ${existing.error.message}`,
+      `Could not check existing imported people: ${error instanceof Error ? error.message : "unknown error"}`,
     );
-  const phoneMap = new Map<string, ImportedLead>();
-  for (const lead of existing.data ?? []) {
-    const raw = lead.values?.phone ?? lead.values?.phone_number;
-    try {
-      const digits = getUsPhone10Digits(raw);
-      if (!phoneMap.has(digits)) phoneMap.set(digits, lead);
-    } catch {
-      /* leads without a usable phone cannot be identity-matched */
-    }
   }
   // The rejection evidence (record_campaign_scrub_rejections) is written INSIDE the commit's
   // transaction now (LA-2.2-9, 20260925709610): it used to go first, as its own round trip, so a
@@ -1517,17 +1724,17 @@ export async function importAgentLeads(
     if (rejectedRow.has(index)) continue;
     const row = rows[index];
     const rawPhone = row.values.phone ?? row.values.phone_number;
-    let matched: ImportedLead | undefined;
+    let matchedId: string | undefined;
     try {
-      matched = phoneMap.get(getUsPhone10Digits(rawPhone));
+      matchedId = phoneMap.get(getUsPhone10Digits(rawPhone));
     } catch {
-      matched = undefined;
+      matchedId = undefined;
     }
-    if (matched) {
+    if (matchedId) {
       const pendingIndex =
         pending.push({
           rowNumber: row.rowNumber,
-          matchedId: matched.id,
+          matchedId,
           // Only the certificate: this vendor's evidence for a person someone else sold first.
           insert: { consent: row.consent ?? null },
           created: false,
@@ -1576,6 +1783,11 @@ export async function importAgentLeads(
     return { imported: [] as ImportedLeadResult[], rejected };
   }
 
+  // What the campaign was BEFORE this import, so the scrub mark below can only claim what the import
+  // actually scrubbed (lib/campaigns/importScrubMark.ts). Read before the commit: afterwards the
+  // campaign always holds leads, and "held leads before" could no longer be told apart.
+  const priorCampaign = campaignId ? await readImportCampaignState(db, tenantId, campaignId) : null;
+
   // One transaction: the ledger, then the leads (import_agent_lead_batch inside
   // commit_reviewed_lead_import), their zones and certificates.
   const committed = await commit(
@@ -1607,19 +1819,35 @@ export async function importAgentLeads(
   // A failure here does not throw: the leads are committed, and reporting the whole import as
   // failed would be a lie that also loses the row ids. It is returned instead, so the caller can
   // say what actually happened rather than the screen implying the list is ready to dial.
+  //
+  // Only when the import scrubbed EVERY lead the campaign holds (importScrubDecision): a campaign
+  // whose last scrub failed, that is mid-scrub, or that already held leads awaiting a (re-)scrub
+  // keeps its blocking status — only the new rows were scrubbed. The write is conditional on the
+  // status read before the commit, so a re-scrub requested in between is not overwritten.
   let scrubMarked = false;
+  let scrubWarning: string | null = null;
   if (campaignId) {
-    const marked = await db
-      .from("tenant_campaigns")
-      .update({ scrub_status: "scrubbed", scrubbed_at: new Date().toISOString(), scrub_error: null })
-      .eq("tenant_id", tenantId)
-      .eq("id", campaignId)
-      .select("id");
-    scrubMarked = !marked.error;
-    if (marked.error)
-      console.error(
-        `[import] leads committed but campaign ${campaignId} could not be marked scrubbed; they will not be served until it is: ${marked.error.message}`,
-      );
+    const decision = priorCampaign
+      ? importScrubDecision(priorCampaign)
+      : { mark: false as const, reason: "The leads imported, but this campaign's scrub status could not be read, so it was not marked as scrubbed and the dialer will not serve these yet." };
+    if (!decision.mark) {
+      scrubWarning = decision.reason;
+    } else {
+      const marked = (await db
+        .from("tenant_campaigns")
+        .update({ scrub_status: "scrubbed", scrubbed_at: new Date().toISOString(), scrub_error: null })
+        .eq("tenant_id", tenantId)
+        .eq("id", campaignId)
+        .eq("scrub_status", priorCampaign?.scrubStatus ?? "unscrubbed")
+        .select("id")) as LooseResult<Array<{ id: string }> | null>;
+      scrubMarked = !marked.error && Array.isArray(marked.data) && marked.data.length > 0;
+      if (marked.error)
+        console.error(
+          `[import] leads committed but campaign ${campaignId} could not be marked scrubbed; they will not be served until it is: ${marked.error.message}`,
+        );
+      else if (!scrubMarked)
+        scrubWarning = "The leads imported, but this campaign's scrub status changed during the import (a re-scrub was requested), so it was not marked as scrubbed. Its leads are served when that scrub completes.";
+    }
   }
   const loaded = (await db
     .from("agent_leads")
@@ -1652,7 +1880,7 @@ export async function importAgentLeads(
   // `scrubMarked` travels with the result so a screen can distinguish "imported and dialable" from
   // "imported, but nothing will be served yet". Those look identical from a row count alone, and
   // the second one is the state that used to be permanent.
-  return { imported, rejected, scrubMarked };
+  return { imported, rejected, scrubMarked, scrubWarning };
 }
 export async function updateAgentLead(
   tenantId: string,
@@ -1660,6 +1888,7 @@ export async function updateAgentLead(
   template: AgentTemplate,
   values: unknown,
   stageIdentifier: string,
+  actorId: string,
 ) {
   const normalized = normalizeFormValues(
     template.template.fields,
@@ -1667,6 +1896,23 @@ export async function updateAgentLead(
     values,
   );
   if (normalized.error) throw new Error(normalized.error);
+  // A changed phone number is screened as import and intake screen one (lib/compliance/phoneEdit.ts):
+  // a hit or an outage refuses the whole edit, so the number never lands on the lead unscreened.
+  const before = await getSupabaseServiceClient()
+    .from("agent_leads")
+    .select("values")
+    .eq("id", leadId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (before.error) throw new Error(`Could not read the lead: ${before.error.message}`);
+  if (!before.data) throw new Error("Lead not found");
+  let screening: Pick<ScreeningDecision, "resultId" | "version" | "outcome" | "warning" | "checkedAt"> | null = null;
+  if (phoneEditNeedsScreening(before.data.values, normalized.values)) {
+    const decision = await screenPartnerPhone({ tenantId, partnerId: null, userId: actorId, phone: leadPhoneValue(normalized.values), leadId });
+    const verdict = phoneEditVerdict(decision);
+    if (!verdict.allowed) throw new LeadPhoneScreeningError(verdict);
+    screening = decision;
+  }
   let pipelineId: string;
   let stageId: string;
   if (stageIdentifier && /^[0-9a-f-]{36}$/i.test(stageIdentifier)) {
@@ -1699,6 +1945,16 @@ export async function updateAgentLead(
       definition_version: template.assignment.definition_version,
       pipeline_id: pipelineId,
       stage_id: stageId,
+      // The lead carries its latest screening, the same columns the import and the re-scrub stamp.
+      ...(screening
+        ? {
+            screening_result_id: screening.resultId,
+            screening_version: screening.version,
+            screening_outcome: screening.outcome,
+            screening_warning: screening.warning?.message ?? null,
+            screening_checked_at: screening.checkedAt,
+          }
+        : {}),
     })
     .eq("id", leadId)
     .eq("tenant_id", tenantId)
@@ -1824,6 +2080,10 @@ function normalizeFormValues(
         values: {},
         error: `${field.label} must be a valid ${field.type === "currency" ? "integer-cent amount" : "number"}`,
       };
+    // A money field is never below zero (coverage, premium, income). Verification accepted a
+    // coverage correction of -5 before 2026-10-22: the templates carry no minimum.
+    if (field.type === "currency" && typeof value === "number" && value < 0)
+      return { values: {}, error: `${field.label} can't be negative` };
     if (field.type === "boolean") {
       if (value === "Yes") value = true;
       else if (value === "No") value = false;
@@ -2727,10 +2987,13 @@ export async function exportAgentLeads(
   filterValue: string,
   sortField: string,
   direction: "asc" | "desc",
+  /** AG-0.5: the session's producer scope (scopeFor). Null — the default — exports the whole book. */
+  scope: ProducerScope = null,
 ) {
   type ExportLead = { id: string; stage_id: string; values: Record<string, unknown> | null; created_at: string };
   type PageQuery = PromiseLike<LooseResult<ExportLead[] | null>> & {
     eq(column: string, value: unknown): PageQuery;
+    in(column: string, values: readonly unknown[]): PageQuery;
     or(filters: string): PageQuery;
     order(column: string, options?: { ascending?: boolean }): PageQuery;
     range(from: number, to: number): PageQuery;
@@ -2742,7 +3005,19 @@ export async function exportAgentLeads(
   const product = template.template.product_code.replace(/[^a-z0-9_]/gi, "");
   const PAGE = 1000;
   const leads: Array<ExportLead & { values: Record<string, unknown> }> = [];
-  for (let from = 0; ; from += PAGE) {
+  if (scope !== null) {
+    // A narrowed agency session exports its producers' leads only, read by id (the same product rule).
+    const ids = await visibleLeadIds(tenantId, scope);
+    const rows = await readByLeadIds(ids, (chunk) => db
+      .from("agent_leads")
+      .select("id, stage_id, values, created_at")
+      .eq("tenant_id", tenantId)
+      .or(`tenant_template_id.eq.${template.tenant_template_id},and(tenant_template_id.is.null,product_line.eq.${product})`)
+      .in("id", chunk), "leads");
+    rows.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+    for (const lead of rows) leads.push({ ...lead, values: (lead.values ?? {}) as Record<string, unknown> });
+  }
+  for (let from = 0; scope === null; from += PAGE) {
     const page = await db
       .from("agent_leads")
       .select("id, stage_id, values, created_at")
@@ -2771,15 +3046,8 @@ export function csvForLeads(
   leads: Array<{ id?: string; stage_id: string; values: Record<string, unknown> }>,
   consentByLead?: Map<string, LeadConsentExport>,
 ) {
-  const escape = (value: unknown) => {
-    const text = Array.isArray(value)
-      ? value.join("|")
-      : value === null || value === undefined
-        ? ""
-        : String(value);
-    const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
-    return `"${safe.replaceAll('"', '""')}"`;
-  };
+  const escape = (value: unknown) =>
+    csvCell(Array.isArray(value) ? value.join("|") : value);
   // The consent columns are appended only when the caller supplied the evidence, so an export that
   // does not need them keeps its existing shape and any saved spreadsheet template still opens.
   const consentColumns: Array<[string, (value: LeadConsentExport | undefined) => unknown]> = [

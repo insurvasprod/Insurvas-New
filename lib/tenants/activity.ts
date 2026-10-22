@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /** Rows per page on the tenant record's Activity tab. */
-export const TENANT_ACTIVITY_PAGE_SIZE = 50;
+export const TENANT_ACTIVITY_PAGE_SIZE = 10;
 
 export type TenantActivityRow = {
   id: string;

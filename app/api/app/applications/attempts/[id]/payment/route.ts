@@ -5,6 +5,7 @@ import { syncHouseholdFromPrimary } from "@/lib/applications/household";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { demoteIfFailing, savePayment } from "@/lib/applications/mutations";
 import { paymentSchema } from "@/lib/applications/schemas";
+import { guardAttempt } from "@/lib/agency/guards";
 
 /**
  * LA-3.19 · how the client pays. The schema is strict, so a card security code is refused as an
@@ -16,6 +17,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const input = await body(request, paymentSchema);
   if (input instanceof NextResponse) return input;
   try {

@@ -34,7 +34,9 @@ export function verificationProgress(states: VerificationFieldState[], requiredK
   const required = requiredKeys.filter((key) => visible.has(key));
   if (required.length === 0) return 100;
   const confirmed = states.filter((field) => required.includes(field.field_key) && ["confirmed", "corrected"].includes(field.state)).length;
-  return Math.round((confirmed / required.length) * 100);
+  // Floored, never rounded (LA-1 audit): 199 of 200 is 99%, so 100 — and "complete" — means every
+  // required field is confirmed. Same rule as update_verification_field (20261015596000).
+  return Math.floor((confirmed / required.length) * 100);
 }
 
 export function sectionComplete(states: VerificationFieldState[], keys: string[]) {

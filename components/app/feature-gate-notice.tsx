@@ -1,4 +1,4 @@
-import { CircleSlash, Wrench } from "lucide-react";
+import { CircleSlash, EyeOff, Wrench } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { UpgradePrompt } from "@/components/app/upgrade-prompt";
@@ -45,6 +45,28 @@ export function FeatureGateNotice({
                   not. Never an invented explanation — a made-up reason is worse than none. */}
               <p>{guard.notice ?? "We've switched this off for everyone while we work on it. Nothing you need to do."}</p>
               <p>This is not a change to your plan, and you have not lost anything.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Hidden for this person by their agency (custom team access). Not for sale and not an outage: their owner
+  // chose it, so the notice says who can change it.
+  if (guard.hidden) {
+    return (
+      <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
+        <PageHeader title={featureLabel} />
+
+        <div className="flex min-h-0 flex-grow items-center justify-center">
+          <div className="portal-gate-card">
+            <div className="portal-gate-lead">
+              <span className="portal-gate-icon is-info">
+                <EyeOff className="size-6" aria-hidden="true" />
+              </span>
+              <h2>{featureLabel} is hidden for you</h2>
+              <p>Your agency chose the pages you see. The owner or an admin can show this page again in Settings › Team.</p>
             </div>
           </div>
         </div>

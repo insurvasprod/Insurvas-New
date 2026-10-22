@@ -32,7 +32,19 @@ export type DashboardTile = {
   icon: string;
   required_feature?: string;
   required_roles?: readonly TenantRole[];
+  /**
+   * The figure is the same for everyone who opens the page: a queue or calendar the whole agency
+   * works from (the inbox, the floor, the callbacks calendar). Every other tile's figure
+   * (lib/dashboard/summaries) is agency-wide, so only an owner sees it; anyone else gets the way in
+   * without it — never the agency's number dressed as theirs.
+   */
+  shared?: boolean;
 };
+
+/** Whether this reader sees the tile's live figure (see `shared`). */
+export function tileFigureShown(tile: Pick<DashboardTile, "shared">, role: TenantRole): boolean {
+  return role === "owner" || tile.shared === true;
+}
 
 /**
  * The tiles a dashboard can show.
@@ -86,6 +98,7 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
     icon: "phone-incoming",
     required_feature: "inbound_transfers",
     required_roles: ["owner", "producer", "assistant"],
+    shared: true,
   },
   {
     key: "work.floor",
@@ -97,6 +110,7 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
     icon: "radio-tower",
     required_feature: "inbound_transfers",
     required_roles: ["owner", "producer", "assistant"],
+    shared: true,
   },
 
   // ── LA-2. Outbound work. ───────────────────────────────────────────────────────────────────
@@ -145,6 +159,7 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
     icon: "calendar-check",
     required_feature: "callback_calendar",
     required_roles: ["owner", "producer", "assistant"],
+    shared: true,
   },
   {
     key: "work.leads",

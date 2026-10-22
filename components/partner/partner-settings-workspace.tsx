@@ -11,8 +11,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TableCard } from "@/components/ui/table-card";
+import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { partnerRoleLabel, type PartnerRole } from "@/lib/partnerAuth/roles";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
@@ -141,13 +141,13 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
       </Card>
     </div>
 
-    <TableCard title="Approved products" action={<StatusChip>Read-only</StatusChip>}>
+    <PagedTableCard total={settings?.products.length ?? 0} noun="products" title="Approved products" action={<StatusChip>Read-only</StatusChip>}>
       {loading && !settings ? <SectionLoading rows={3} columns={5} />
         : settings?.products.length ? <Table aria-label="Approved partner submission products">
           <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Form</TableHead><TableHead>Daily cap</TableHead><TableHead>Monthly cap</TableHead><TableHead>Managed by</TableHead></TableRow></TableHeader>
-          <TableBody>{settings.products.map((product) => <TableRow key={product.code}><TableCell className="font-medium">{product.name}</TableCell><TableCell>{product.formVersion ? `v${product.formVersion}` : "Not published"}</TableCell><TableCell className="text-muted-foreground">Not exposed</TableCell><TableCell className="text-muted-foreground">Not exposed</TableCell><TableCell className="text-muted-foreground">{product.managedBy}</TableCell></TableRow>)}</TableBody>
+          <PagedBody className="m-seq [&_tr:last-child]:border-0">{settings.products.map((product) => <TableRow key={product.code}><TableCell className="font-medium">{product.name}</TableCell><TableCell>{product.formVersion ? `v${product.formVersion}` : "Not published"}</TableCell><TableCell className="text-muted-foreground">Not exposed</TableCell><TableCell className="text-muted-foreground">Not exposed</TableCell><TableCell className="text-muted-foreground">{product.managedBy}</TableCell></TableRow>)}</PagedBody>
         </Table>
         : <EmptyState title="No approved products yet" hint={`${settings?.agency?.name ?? "Your agent"} controls which products and forms this partner can submit.`} />}
-    </TableCard>
+    </PagedTableCard>
   </div>;
 }

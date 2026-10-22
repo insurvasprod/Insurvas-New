@@ -11,6 +11,7 @@ import Link from "next/link";
 import { FileCheck, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { withFrom } from "@/lib/applications/backLink";
 
 export function LeadApplicationEntry({ leadId, workItemId, canStart, className }: { leadId: string; workItemId: string | null; canStart: boolean; className?: string }) {
   const [state, setState] = useState<{ loaded: boolean; allowed: boolean; caseId: string | null }>({ loaded: false, allowed: false, caseId: null });
@@ -30,7 +31,7 @@ export function LeadApplicationEntry({ leadId, workItemId, canStart, className }
   if (state.caseId) {
     return (
       <Button asChild variant="outline" className={className}>
-        <Link href={`/app/applications/${state.caseId}`}><FileCheck className="size-4" aria-hidden="true" />Open application</Link>
+        <Link href={withFrom(`/app/applications/${state.caseId}`, `/app/leads/${leadId}`)}><FileCheck className="size-4" aria-hidden="true" />Open application</Link>
       </Button>
     );
   }
@@ -50,7 +51,7 @@ export function LeadApplicationEntry({ leadId, workItemId, canStart, className }
             const r = await fetch("/api/app/applications/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId }) });
             const body = (await r.json().catch(() => null)) as { href?: string; error?: string } | null;
             if (!r.ok || !body?.href) { setError(body?.error ?? "Could not start the application."); return; }
-            window.location.assign(body.href);
+            window.location.assign(withFrom(body.href, `/app/leads/${leadId}`));
           } catch {
             setError("Could not start the application — check your connection.");
           } finally {

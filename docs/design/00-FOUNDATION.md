@@ -13,10 +13,11 @@ The contract every page inherits. Read this once; every page prompt assumes it.
 
 ## 1. There are two visual identities, and that is deliberate
 
-> **Updated (2026-10-03):** still two identities, but drawn differently than the table below says.
-> Orange (`app/globals.css` `:root`) covers the agent and partner apps and the public site. Blue
-> covers the admin console only, as token overrides in `app/admin/admin-plane.css` (user
-> decision 1). The hex values and the "marketing and legal are blue" row below are out of date.
+> **Updated (2026-10-05): the 2026 brand.** See [BRAND.md](BRAND.md).
+> - The agent and partner apps and the public site use bright green `#07d6a0` with deep olive
+>   `#0d4037` (`app/globals.css`).
+> - The admin console uses the app's colours, rail, top bar and page spacing, with a blue accent (owner decisions 2026-10-13); `app/admin/admin-plane.css` re-points the accent tokens only.
+> - The orange and every hex value in the table below are out of date.
 
 This is the single most important fact about the design system, and the thing most likely to be
 broken by someone redesigning "consistently".
@@ -104,7 +105,7 @@ do not undo it by styling inputs with `border-border`.
 
 ## 3. Type
 
-Inter, weights 400 and 600 only. Avoid 700+ except for a compact numeric status label. Tracking
+*(2026-10-05: the typeface is now **Montserrat**, see [BRAND.md](BRAND.md); the weights rule stands.)* Inter, weights 400 and 600 only. Avoid 700+ except for a compact numeric status label. Tracking
 tightens as size grows — this is the Brex voice and a headline at `0em` is wrong.
 
 | Role | Size | Weight | Tracking | Use |

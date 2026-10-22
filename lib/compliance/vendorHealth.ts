@@ -13,6 +13,17 @@
 /** The provider_calls method that records a hand-off to the next vendor, not a vendor call. */
 export const FALLBACK_METHOD = "fallback";
 
+/**
+ * The provider_calls method the admin's "Test connection" button records (SA-4.8). A test is the
+ * admin poking the vendor, not the platform using it: it never counts toward the gate's health
+ * window or the vendor's "last success" (audit, 2026-10-15) — otherwise one passing test would
+ * reopen a DNC gate whose real lookups are all failing, and one failing test would close it.
+ */
+export const TEST_CONNECTION_METHOD = "test_connection";
+
+/** Methods that are never vendor work, for every health read. */
+export const NON_HEALTH_METHODS = [FALLBACK_METHOD, TEST_CONNECTION_METHOD] as const;
+
 /** How far back "Last checked" looks for a vendor's latest call (the health window stays 24h). */
 export const LAST_CHECK_LOOKBACK_DAYS = 7;
 
@@ -38,13 +49,13 @@ export type CountSource = {
 };
 
 /**
- * Head counts of one vendor's calls since `since`, fallback hand-offs excluded. failures = all - ok,
+ * Head counts of one vendor's calls since `since`, fallback hand-offs and admin connection tests excluded. failures = all - ok,
  * so a null/other status still counts as a failure, exactly as before.
  */
 export async function countVendorCalls(db: CountSource, provider: string, since: string): Promise<VendorCallCounts> {
   const calls = () =>
     db.from("provider_calls").select("id", { count: "exact", head: true })
-      .eq("provider", provider).gte("ts", since).neq("method", FALLBACK_METHOD);
+      .eq("provider", provider).gte("ts", since).neq("method", FALLBACK_METHOD).neq("method", TEST_CONNECTION_METHOD);
   const [all, ok] = await Promise.all([calls(), calls().eq("status", "ok")]);
   const error = all.error ?? ok.error;
   if (error) throw new Error(`Could not load compliance vendor health: ${error.message}`);

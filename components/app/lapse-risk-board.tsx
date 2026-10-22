@@ -5,15 +5,18 @@ import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { useFittingPageSize } from "@/components/app/book-views";
 import { RecordLapseSignal, refreshLapseSignalAccess } from "@/components/app/record-lapse-signal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -57,24 +60,29 @@ function date(value: string) {
   return dayMonthYear(value.slice(0, 10));
 }
 
+/** The amount a lapse today would charge back; its window has its own column (Clawback). */
 function Exposure({ exposure }: { exposure: CommissionExposed }) {
   if (exposure.state === "exposed") {
-    return (
-      <>
-        <span className="block text-sm font-semibold tabular-nums text-foreground">{formatCentsAsCurrency(exposure.cents)}</span>
-        <span className="block text-xs text-muted-foreground">
-          {exposure.clawbackType === "prorated" ? "prorated" : "full"} clawback to {date(exposure.clawbackEndsOn)}
-        </span>
-      </>
-    );
+    return <span className="font-semibold tabular-nums text-foreground">{formatCentsAsCurrency(exposure.cents)}</span>;
   }
   const copy =
     exposure.state === "outside_window" ? "Outside the clawback window" : exposure.state === "not_issued" ? "Not issued yet" : "No commission rule on file";
   return (
-    <span className="text-xs text-muted-foreground" title={exposure.state === "no_rule" ? exposure.reason : undefined}>
+    <span className="text-muted-foreground" title={exposure.state === "no_rule" ? exposure.reason : undefined}>
       {copy}
     </span>
   );
+}
+
+function Clawback({ exposure }: { exposure: CommissionExposed }) {
+  if (exposure.state !== "exposed") return <span className="text-muted-foreground">—</span>;
+  return <span className="tabular-nums">{exposure.clawbackType === "prorated" ? "Prorated" : "Full"} to {date(exposure.clawbackEndsOn)}</span>;
+}
+
+/** Everything a signal says, for its chip's tooltip. */
+function signalDetail(signal: AtRiskPolicy["signals"][number]) {
+  const source = signal.source === "feed" ? "from a carrier feed" : `recorded by ${signal.recordedByName ?? "a former user"}`;
+  return `${LAPSE_SIGNAL_LABELS[signal.kind]} · ${date(signal.occurredOn)} · ${source}${signal.note ? ` · ${signal.note}` : ""}`;
 }
 
 function ResolveAction({ policy, onDone }: { policy: AtRiskPolicy; onDone: () => void }) {
@@ -171,10 +179,12 @@ export function LapseRiskBoard({
   policies,
   totals,
   readOnly,
+  tabs,
 }: {
   policies: AtRiskPolicy[];
   totals: AtRiskTotals;
   readOnly: boolean;
+  tabs?: React.ReactNode;
 }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -185,6 +195,8 @@ export function LapseRiskBoard({
   const openSignals = policies.reduce((sum, policy) => sum + policy.signals.length, 0);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"all" | LapseSignalKind>("all");
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return policies.filter((policy) =>
@@ -192,6 +204,9 @@ export function LapseRiskBoard({
       (!needle || [policy.policyNumber, policy.insuredName, policy.carrier, policy.product].some((value) => value?.toLowerCase().includes(needle))),
     );
   }, [policies, query, kind]);
+  const filtered = query.trim() !== "" || kind !== "all";
+  const clearFilters = () => { setQuery(""); setKind("all"); setPage(1); };
+  const { current, rows: pageRows } = paginate(visible, page, pageSize);
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
@@ -199,6 +214,7 @@ export function LapseRiskBoard({
         title="Lapse risk"
         actions={readOnly ? undefined : <RecordLapseSignal />}
       />
+      {tabs}
 
       {readOnly && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">Your account is read-only. Recording and resolving lapse signals is unavailable.</div>}
 
@@ -214,73 +230,83 @@ export function LapseRiskBoard({
       </StatStrip>
 
       <TableCard
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-290px)] flex-col [&>*:nth-child(2)]:flex-1"
         toolbar={
-          <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
-            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search policy, insured, carrier" />
-            <select aria-label="Filter by signal" className={toolbarControl} value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
+          <DataToolbar actions={<>
+            {filtered && <ClearFiltersButton onClick={clearFilters} />}
+            <RefreshButton onClick={refresh} refreshing={refreshing} />
+          </>}>
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search policy, insured, carrier" />
+            <select aria-label="Filter by signal" className={toolbarControl} value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setPage(1); }}>
               <option value="all">All signals</option>
               {(Object.keys(KIND_TONE) as LapseSignalKind[]).map((key) => <option key={key} value={key}>{LAPSE_SIGNAL_LABELS[key]}</option>)}
             </select>
           </DataToolbar>
         }
-        footer={<span>{visible.length.toLocaleString()} of {policies.length.toLocaleString()} {policies.length === 1 ? "policy" : "policies"} · {URGENCY_RULE}</span>}
+        footer={<Pager page={current} total={visible.length} pageSize={pageSize} noun={visible.length === 1 ? "policy" : "policies"} onPage={setPage} suffix={<span title={URGENCY_RULE}>{filtered ? `filtered from ${policies.length} · ` : ""}{URGENCY_RULE}</span>} />}
       >
         {visible.length === 0 ? (
-          <NoMatches noun="policies" onClear={() => { setQuery(""); setKind("all"); }} />
+          <NoMatches noun="policies" onClear={clearFilters} />
         ) : (
-        <Table>
+        <Table className="min-w-[1240px]">
           <TableHeader>
             <TableRow>
               <TableHead>Policy</TableHead>
+              <TableHead>Insured</TableHead>
+              <TableHead>Carrier</TableHead>
+              <TableHead>Product</TableHead>
               <TableHead>Signals</TableHead>
+              <TableHead>Oldest signal</TableHead>
+              <TableHead>Note</TableHead>
               <TableHead className="text-right">Premium</TableHead>
               <TableHead className="text-right">Commission exposed</TableHead>
+              <TableHead>Clawback</TableHead>
               {!readOnly && <TableHead className="text-right"><span className="sr-only">Actions</span></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visible.map((policy) => (
-              <TableRow key={policy.policyId}>
-                <TableCell className="align-top">
-                  <span className="block text-sm font-semibold text-foreground">{policy.policyNumber}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {policy.insuredName} · {policy.carrier} · {policy.product}
-                    {policy.status === "pending" ? " · pending" : ""}
-                  </span>
-                </TableCell>
-                <TableCell className="align-top whitespace-normal">
-                  <ul className="grid gap-1.5">
-                    {policy.signals.map((signal) => (
-                      <li key={signal.id} className="min-w-[240px] max-w-[420px]">
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${KIND_TONE[signal.kind].ink}`}>
+            {pageRows.map((policy) => {
+              const oldest = policy.signals.reduce((first, signal) => (signal.occurredOn < first.occurredOn ? signal : first), policy.signals[0]);
+              const notes = policy.signals.filter((signal) => signal.note).map((signal) => `${LAPSE_SIGNAL_LABELS[signal.kind]}: ${signal.note}`);
+              return (
+                <TableRow key={policy.policyId}>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="font-semibold text-foreground">{policy.policyNumber}</span>
+                      {policy.status === "pending" && <StatusChip tone="warning">Pending</StatusChip>}
+                    </span>
+                  </TableCell>
+                  <TableCell className="max-w-[180px] truncate" title={policy.insuredName}>{policy.insuredName}</TableCell>
+                  <TableCell className="max-w-[150px] truncate" title={policy.carrier}>{policy.carrier}</TableCell>
+                  <TableCell className="max-w-[140px] truncate" title={policy.product}>{policy.product}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-3">
+                      {policy.signals.map((signal) => (
+                        <span key={signal.id} title={signalDetail(signal)} className={`inline-flex items-center gap-1.5 text-xs font-semibold ${KIND_TONE[signal.kind].ink}`}>
                           <span className={`size-1.5 shrink-0 rounded-full ${KIND_TONE[signal.kind].dot}`} aria-hidden="true" />
                           {LAPSE_SIGNAL_LABELS[signal.kind]}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {" "}· {date(signal.occurredOn)} · {signal.source === "feed" ? "from a carrier feed" : `recorded by ${signal.recordedByName ?? "a former user"}`}
-                        </span>
-                        {signal.note && <span className="block text-xs text-[var(--body)]">{signal.note}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </TableCell>
-                <TableCell className="align-top text-right">
-                  <span className="block text-sm tabular-nums text-foreground">{formatCentsAsCurrency(policy.monthlyPremiumCents)}/mo</span>
-                  <span className="block text-xs tabular-nums text-muted-foreground">{formatCentsAsCurrency(policy.annualPremiumCents)} a year</span>
-                </TableCell>
-                <TableCell className="align-top text-right">
-                  <Exposure exposure={policy.exposure} />
-                </TableCell>
-                {!readOnly && (
-                  <TableCell className="align-top text-right">
-                    <span className="inline-flex items-center justify-end gap-2">
-                      <RecordLapseSignal policy={{ id: policy.policyId, status: policy.status }} label="Add signal" showAtRisk={false} />
-                      <ResolveAction policy={policy} onDone={refresh} />
+                      ))}
                     </span>
                   </TableCell>
-                )}
-              </TableRow>
-            ))}
+                  <TableCell className="max-w-[220px] truncate" title={oldest ? signalDetail(oldest) : undefined}>
+                    {oldest ? <><span className="tabular-nums">{date(oldest.occurredOn)}</span><span className="text-muted-foreground"> · {oldest.source === "feed" ? "carrier feed" : oldest.recordedByName ?? "a former user"}</span></> : "—"}
+                  </TableCell>
+                  <TableCell className="max-w-[220px] truncate" title={notes.join("\n") || undefined}>{notes.length ? notes.join(" · ") : <span className="text-muted-foreground">—</span>}</TableCell>
+                  <TableCell className="text-right tabular-nums" title={`${formatCentsAsCurrency(policy.annualPremiumCents)} a year`}>{formatCentsAsCurrency(policy.monthlyPremiumCents)}/mo</TableCell>
+                  <TableCell className="text-right"><Exposure exposure={policy.exposure} /></TableCell>
+                  <TableCell><Clawback exposure={policy.exposure} /></TableCell>
+                  {!readOnly && (
+                    <TableCell className="text-right">
+                      <span className="inline-flex items-center justify-end gap-2">
+                        <RecordLapseSignal policy={{ id: policy.policyId, status: policy.status }} label="Add signal" showAtRisk={false} />
+                        <ResolveAction policy={policy} onDone={refresh} />
+                      </span>
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         )}

@@ -1,8 +1,9 @@
+import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { subscriptionTone, type StatusTone } from "@/components/admin/status-chip";
-import { Pill, type PillTone } from "@/components/app/settings/primitives";
+import { type PillTone, pillTone } from "@/lib/ui/pillTone";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TenantSuspensionControl } from "@/components/admin/tenant-record/suspension-control";
@@ -72,7 +73,7 @@ export function TenantRecordFrame({
       <div>
         <Link
           href="/admin/tenants"
-          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           <ArrowLeft className="size-[13px] stroke-[2.4]" aria-hidden="true" />
           Back to tenants
@@ -84,17 +85,17 @@ export function TenantRecordFrame({
               <span role="group" className="flex flex-wrap items-center gap-2" aria-label="Agency state">
                 {tenant.status !== "active" && (
                   <span title={suspended && suspensionReason ? `Reason: ${suspensionReason}` : undefined}>
-                    <Pill tone={suspended || tenant.status === "cancelled" ? "error" : "info"} dot>
+                    <StatusChip tone={pillTone(suspended || tenant.status === "cancelled" ? "error" : "info")} dot>
                       {sentenceCase(tenant.status)}
-                    </Pill>
+                    </StatusChip>
                   </span>
                 )}
                 {subscription ? (
-                  <Pill tone={PILL_FOR[subscriptionTone(subscription.status)]} dot>
+                  <StatusChip tone={pillTone(PILL_FOR[subscriptionTone(subscription.status)])} dot>
                     {statusLabel}
-                  </Pill>
+                  </StatusChip>
                 ) : (
-                  <Pill tone="neutral">No subscription</Pill>
+                  <StatusChip dot={false} tone="neutral">No subscription</StatusChip>
                 )}
               </span>
               {canSuspend && tenant.status !== "cancelled" && (
@@ -137,7 +138,7 @@ export function TenantRecordFrame({
                   aria-current={active ? "page" : undefined}
                   scroll={false}
                   className={cn(
-                    "inline-flex h-10 items-center border-b-2 px-1 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap no-underline transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+                    "inline-flex h-10 items-center border-b-2 px-1 text-sm leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap no-underline transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)]",
                     active
                       ? "border-[var(--primary)] text-[var(--ink)]"
                       : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",

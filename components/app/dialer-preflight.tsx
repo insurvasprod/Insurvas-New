@@ -1,10 +1,11 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useState, type FormEvent } from "react";
 import { notify } from "@/lib/notify";
 
 import { OverlayFrame } from "@/components/app/dialer-overlay-frame";
-import { Callout, Pill, st } from "@/components/app/settings/primitives";
+import { Callout, st, pillTone } from "@/components/app/settings/primitives";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { US_STATES } from "@/lib/appointments/constants";
@@ -87,14 +88,14 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
       description="The same screening the server runs, on demand. Fail closed."
       footerNote="DNC compliance is mandatory and cannot be switched off."
       footerActions={<>
-        <span id="preflight-dial-reason" className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Dial from the queue or a lead</span>
+        <span id="preflight-dial-reason" className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Dial from the queue or a lead</span>
         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
         <button type="button" disabled aria-describedby="preflight-dial-reason" className={cn(buttonVariants({ variant: "outline" }), "bg-[var(--surface-alt)] text-[var(--muted)] disabled:opacity-100")}>Dial</button>
       </>}
     >
       <form onSubmit={submit} className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1">
-          <label htmlFor="dial-phone" className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Phone number</label>
+          <label htmlFor="dial-phone" className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Phone number</label>
           <input
             id="dial-phone"
             type="tel"
@@ -111,8 +112,8 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
         <Button type="submit" disabled={readOnly || checking || !phone.trim()}>{readOnly ? "Read-only account" : checking ? "Checking…" : "Check"}</Button>
       </form>
       {fieldError
-        ? <p id="dial-phone-error" role="alert" className="-mt-3 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{fieldError}</p>
-        : <p id="dial-phone-privacy" className="-mt-3 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Your number is sent to the configured DNC vendor over HTTPS. Only a masked number is retained in provider logs.</p>}
+        ? <p id="dial-phone-error" role="alert" className="-mt-3 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{fieldError}</p>
+        : <p id="dial-phone-privacy" className="-mt-3 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Your number is sent to the configured DNC vendor over HTTPS. Only a masked number is retained in provider logs.</p>}
 
       <div className="min-w-0 shrink-0 overflow-x-auto">
         <table className={cn(st.table, "min-w-[560px]")}>
@@ -129,7 +130,7 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
               ? checks.map((row) => (
                   <tr key={row.key} className="m-row">
                     <td className={st.td}>{row.label}</td>
-                    <td className={st.td}><Pill tone={row.tone}>{row.result}</Pill></td>
+                    <td className={st.td}><StatusChip dot={false} tone={pillTone(row.tone)}>{row.result}</StatusChip></td>
                     <td className={st.td}>
                       {row.key === "window" && needsStatePick ? (
                         <select
@@ -137,7 +138,7 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
                           value={state}
                           disabled={readOnly || checking}
                           onChange={(event) => { setState(event.target.value); void check(event.target.value); }}
-                          className="box-border h-8 w-full max-w-[190px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                          className="box-border h-8 w-full max-w-[190px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                         >
                           <option value="">Pick the customer&rsquo;s state</option>
                           {US_STATES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
@@ -151,7 +152,7 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
               : PLACEHOLDER_ROWS.map((label) => (
                   <tr key={label}>
                     <td className={st.td}>{label}</td>
-                    <td className={st.td}><Pill tone="neutral">Not run</Pill></td>
+                    <td className={st.td}><StatusChip dot={false} tone="neutral">Not run</StatusChip></td>
                     <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
                     <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
                   </tr>

@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { verificationProgress } from "@/lib/verification/progress";
 import { isApplicationOutcome } from "./applicationOutcome";
 import { DispositionError, listMappedOutcomes } from "./service";
+import { workItemPipelineId } from "@/lib/pipelines/outcomeStages";
 
 /**
  * Verification status of an inbound transfer, read from its verification session: the open one,
@@ -36,10 +37,11 @@ export async function verificationStatus(tenantId: string, workItemId: string): 
 /**
  * The tenant's outcome for this key when it records an application (sale or submitted
  * application), else null — the one test both the verification gate and the dialer's setter rule
- * use. Read from the outcome's mapped stage and flags, never from the key.
+ * use. Read from the outcome's mapped stage and flags, never from the key. `pipelineId` is the
+ * lead's pipeline: its own stage for the outcome is the one that decides (20261022200000).
  */
-export async function applicationOutcomeFor(tenantId: string, dispositionKey: string) {
-  const outcomes = await listMappedOutcomes(tenantId);
+export async function applicationOutcomeFor(tenantId: string, dispositionKey: string, pipelineId: string | null = null) {
+  const outcomes = await listMappedOutcomes(tenantId, pipelineId);
   const outcome = outcomes.find((row) => row.disposition_key === dispositionKey);
   return outcome && isApplicationOutcome(outcome, outcome.mapped_stage) ? outcome : null;
 }
@@ -53,7 +55,7 @@ export async function applicationOutcomeFor(tenantId: string, dispositionKey: st
  * outcomes pass straight through — they may be recorded at any point in the call.
  */
 export async function assertApplicationOutcomeVerified(tenantId: string, workItemId: string, dispositionKey: string) {
-  const outcome = await applicationOutcomeFor(tenantId, dispositionKey);
+  const outcome = await applicationOutcomeFor(tenantId, dispositionKey, await workItemPipelineId(tenantId, workItemId));
   // Not a mapped active application outcome: complete_disposition refuses or leaves it as it always has.
   if (!outcome) return;
   const status = await verificationStatus(tenantId, workItemId);

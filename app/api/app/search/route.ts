@@ -4,7 +4,9 @@ import { z } from "zod";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { effectiveFeatures } from "@/lib/features/killSwitch";
-import { searchWorkspace } from "@/lib/search/service";
+import { searchWorkspace, suggestWorkspace } from "@/lib/search/service";
+import { planHiddenSettingsSections } from "@/lib/tenantTeam/seats";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const querySchema = z.object({
   q: z.string().trim().max(100),
@@ -24,6 +26,17 @@ export async function GET(request: NextRequest) {
     limit: request.nextUrl.searchParams.get("limit") ?? "7",
   });
   if (!parsed.success) return NextResponse.json({ error: "Search terms are limited to 100 characters." }, { status: 400 });
+  // ?suggest=1 with nothing typed: the everyday actions this person may take (2026-10-09), so the
+  // box is useful the moment it opens. Gated like every other answer; no database read.
+  if (parsed.data.q.trim().length === 0 && request.nextUrl.searchParams.get("suggest") === "1") {
+    try {
+      const entitlement = await getEntitlement(auth.context.tenantId);
+      const granted = await effectiveFeatures(entitlement.features, auth.context.tenantId);
+      return NextResponse.json(suggestWorkspace({ role: auth.context.role, grantedFeatures: granted }), { headers: { "Cache-Control": "no-store" } });
+    } catch {
+      return NextResponse.json({ hits: [], total: 0, truncated: false }, { headers: { "Cache-Control": "no-store" } });
+    }
+  }
   if (parsed.data.q.trim().length < 2) {
     return NextResponse.json({ hits: [], total: 0, truncated: false }, { headers: { "Cache-Control": "no-store" } });
   }
@@ -35,8 +48,12 @@ export async function GET(request: NextRequest) {
       tenantId: auth.context.tenantId,
       role: auth.context.role,
       grantedFeatures: granted,
+      // The same sections the settings page hides for this plan (a single seat has no Team & access).
+      hiddenSettings: planHiddenSettingsSections(entitlement.limits.max_seats),
       query: parsed.data.q,
       limit: parsed.data.limit,
+      // AG-0.5: a narrowed agency session finds its producers' leads and policies only (scope from the session).
+      scope: await scopeFor(auth.context),
     });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {

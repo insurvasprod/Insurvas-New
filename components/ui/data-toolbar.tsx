@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { RotateCw, Search, SlidersHorizontal } from "lucide-react";
+import { RotateCw, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -87,6 +87,38 @@ export function FilterButton({
         <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs tabular-nums text-foreground">{count}</span>
       )}
     </Button>
+  );
+}
+
+/**
+ * Turns every filter and the search off. Shown only while something is filtering, just before
+ * Refresh, and drawn like Refresh so the two read as a pair rather than a loose word beside a button.
+ */
+export function ClearFiltersButton({ onClick, label = "Clear" }: { onClick: () => void; label?: string }) {
+  return (
+    <Button type="button" variant="outline" onClick={onClick} aria-label="Clear all filters and the search">
+      <X aria-hidden="true" />
+      {label}
+    </Button>
+  );
+}
+
+/**
+ * An option that changes what the action beside it does ("also the lines I left unmatched"), as one
+ * 36px row so it lines up with the toolbar's buttons. It sits just before the button it qualifies.
+ */
+export function ToolbarCheckbox({ checked, onChange, label, disabled = false, title }: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: ReactNode;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <label title={title} className={cn("inline-flex h-9 cursor-pointer items-center gap-2 rounded-md px-1 text-sm text-foreground select-none", disabled && "cursor-not-allowed opacity-50")}>
+      <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      {label}
+    </label>
   );
 }
 

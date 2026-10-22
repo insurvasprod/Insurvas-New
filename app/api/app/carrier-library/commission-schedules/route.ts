@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
+import { refreshDiscrepanciesQuietly } from "@/lib/discrepancies/service";
 import { saveCommissionSchedule } from "@/lib/carriers/service";
 import { commissionScheduleSchema } from "@/lib/carriers/schemas";
 import { SchemaPendingError } from "@/lib/carriers/schemaGap";
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
   try {
     const row = await saveCommissionSchedule(auth.context.tenantId, parsed.data);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.commission_schedule_saved", targetType: "commission_schedule", targetId: row.id, metadata: { carrierId: row.carrier_id, productCode: row.product_code, policyYear: row.policy_year, appliesOnward: row.applies_onward === true, effectiveFrom: row.effective_from }, request });
+    // What the contract expects changed, so what the carrier owes did too (LA-4.5 option a). After the response.
+    const tenantId = auth.context.tenantId;
+    after(() => refreshDiscrepanciesQuietly(tenantId));
     return NextResponse.json({ commissionSchedule: row }, { status: 201 });
   } catch (error) {
     if (error instanceof SchemaPendingError) return NextResponse.json({ error: error.message }, { status: 503 });

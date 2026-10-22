@@ -1,7 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { refreshDiscrepanciesQuietly } from "@/lib/discrepancies/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -74,6 +75,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not save policies" }, { status: 400 });
   }
   await audit({ actorType: "tenant", actorId: auth.context.userId, action: source === "csv" ? "tenant.policies_imported" : "tenant.policy_created", targetType: "tenant_policy", targetId: (rows[0] as { policy_number: string }).policy_number, metadata: { count: rows.length, source }, request });
+  // A new policy can be "never paid" by statements already imported (LA-4.5 option a: the findings
+  // follow every change to their facts; the Discrepancies page only reads them). After the response.
+  const tenantId = auth.context.tenantId;
+  after(() => refreshDiscrepanciesQuietly(tenantId));
   return NextResponse.json({ policies: result.data ?? [] }, { status: 201 });
 }
 
@@ -87,5 +92,8 @@ export async function PATCH(request: NextRequest) {
   const result = await db().from("tenant_policies").update(changes).eq("id", id).eq("tenant_id", auth.context.tenantId).select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, renewal_date, source, created_at, updated_at").single<Policy>();
   if (result.error || !result.data) return NextResponse.json({ error: result.error?.code === "23505" ? "That policy number already exists" : "Policy not found" }, { status: result.error?.code === "23505" ? 409 : 404 });
   await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.policy_updated", targetType: "tenant_policy", targetId: id, metadata: { changed: Object.keys(changes) }, request });
+  // Status, carrier, premium or issue date all change what the carrier owes (LA-4.5 option a).
+  const tenantId = auth.context.tenantId;
+  after(() => refreshDiscrepanciesQuietly(tenantId));
   return NextResponse.json({ policy: result.data });
 }

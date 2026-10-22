@@ -41,6 +41,9 @@ export const ISSUED_POLICY_ERRORS: Record<string, string> = {
   ISSUED_POLICY_ALREADY_ISSUED: "This deal already has a policy in force. Mark that one lapsed before recording another.",
   ISSUED_POLICY_NOT_FOUND: "That policy is not in your workspace.",
   ISSUED_POLICY_NOT_IN_FORCE: "Only a policy that is in force can be marked lapsed.",
+  ISSUED_POLICY_APPLICATION_NOT_FOUND: "This application is not in your workspace any more.",
+  ISSUED_POLICY_APPLICATION_NOT_ISSUED: "Only an application closed as issued can carry its policy into the book.",
+  ISSUED_POLICY_APPLICATION_HAS_POLICY: "This application already has a different policy number recorded.",
   ISSUED_POLICY_LAPSE_BEFORE_ISSUE: "A policy cannot lapse before the day it was issued.",
   ISSUED_POLICY_ATTRIBUTION_MISMATCH: "This deal's campaign disagrees with the campaign on its application. Fix the lead's attribution before recording the policy.",
 };

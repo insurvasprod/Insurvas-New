@@ -1,3 +1,15 @@
+> **Superseded (2026-10-15).** The spec is Notion: "Module 6 — Compliance" and tasks LA-6.1–6.8 in the Insurvas Sprint. This file's older plan (a litigation packet zip, call recording) was not taken — Notion chose an evidence report and no recording.
+>
+> **Progress (Notion sprint), 2026-10-15** — all eight built, not yet committed:
+> - 6.1 Compliance record index — `20261015100000` (LIVE), `lib/compliance/recordIndex.ts`
+> - 6.2 Pre-transfer gate & verdict — `20261015110000`, `lib/compliance/transferGate*.ts`, partner screen + submit routes
+> - 6.3 Evidence report — `20261015120000`, `/app/evidence-report`, `lib/compliance/evidence*.ts`
+> - 6.4 Complaints — `20261015130000`, `/app/complaints`, overdue banner in the shell, `/api/cron/complaint-deadlines`
+> - 6.5 Consumer deletion — `20261015140000`, `/app/deletion-requests`, `lib/compliance/dataSubject*.ts` (completeness test)
+> - 6.6 Retention engine & purge — `20261015150000`, `lib/compliance/retention*.ts`, `/api/cron/retention-summary`
+> - 6.7 Dashboard — `20261015160000`, `/app/compliance`, `/api/cron/compliance-monthly`
+> - 6.8 Settings — `20261015170000`, `/app/compliance/settings`
+> - 6.2–6.8 in one paste: `supabase/deploy/2026-10-15-la6-compliance.sql`
 # LA-6: Compliance completion
 
 **Module 6.** Consent and DNC are on **Basic**; the litigation packet is on **Advanced**. See the [roadmap](../roadmap/ROADMAP.md).

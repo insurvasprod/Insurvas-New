@@ -1,27 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  Callout,
-  DashedCard,
-  DraftActions,
-  Field,
-  Pill,
-  PlusIcon,
-  SettingsCard,
-  SettingsGrid,
-  SettingsSectionHeader,
-  SettingsStack,
-  SettingsTableCard,
-  ToggleRow,
-  btn,
-  control,
-  st,
-} from "@/components/app/settings/primitives";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
+import { Callout, DashedCard, DraftActions, Field, PlusIcon, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, SettingsTableCard, ToggleRow, btn, control, st, pillTone } from "@/components/app/settings/primitives";
 import {
   BLOCK_REPEATS,
   REPEAT_LABELS,
@@ -301,7 +287,7 @@ export function CalendarAvailabilitySettings() {
     return (
       <SettingsStack>
         {header}
-        <p role="status" className="text-[14px] text-[var(--muted)]">Loading calendar settings…</p>
+        <p role="status" className="text-sm text-[var(--muted)]">Loading calendar settings…</p>
       </SettingsStack>
     );
   if (error)
@@ -341,7 +327,7 @@ export function CalendarAvailabilitySettings() {
 
       {members.length > 1 && (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Whose calendar">
-          <span className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Member</span>
+          <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Member</span>
           {members.map((member) => {
             const current = member.userId === draft.userId;
             const days = new Set((edits[member.userId] ?? member).hours.map((hour) => hour.weekday)).size;
@@ -354,7 +340,7 @@ export function CalendarAvailabilitySettings() {
                 onClick={() => { setSelected(member.userId); setOpenDay(null); setSaveError(""); }}
               >
                 {member.name}
-                <span className="text-[12px] font-normal text-[var(--muted)]">{days ? `${days}d` : "—"}</span>
+                <span className="text-xs font-normal text-[var(--muted)]">{days ? `${days}d` : "—"}</span>
                 {edits[member.userId] && <span className="sr-only">, unsaved changes</span>}
               </button>
             );
@@ -391,7 +377,7 @@ export function CalendarAvailabilitySettings() {
                 value={zone ?? ""}
                 disabled={busy}
                 onChange={(event) => setDraft({ ...draft, timezone: event.target.value || null })}
-                className="h-6 cursor-pointer appearance-none rounded-full border-0 bg-[var(--surface)] py-0 pr-7 pl-2.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--body)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-default"
+                className="h-6 cursor-pointer appearance-none rounded-full border-0 bg-[var(--surface)] py-0 pr-7 pl-2.5 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--body)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-default"
               >
                 <option value="">Choose a timezone…</option>
                 {zoneOptions.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -400,9 +386,9 @@ export function CalendarAvailabilitySettings() {
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </span>
-            <Pill tone={openDays > 0 ? "success" : "warning"} dot>
+            <StatusChip tone={pillTone(openDays > 0 ? "success" : "warning")} dot>
               {openDays > 0 ? `${openDays} ${openDays === 1 ? "day" : "days"} open` : "No days open"}
-            </Pill>
+            </StatusChip>
           </>
         }
       >
@@ -607,6 +593,7 @@ export function CalendarAvailabilitySettings() {
         </SettingsCard>
       </SettingsGrid>
 
+      <PagedProvider>
       <SettingsTableCard
         title="Blocked time"
         actions={
@@ -637,15 +624,17 @@ export function CalendarAvailabilitySettings() {
               <th scope="col" className={cn(st.th, st.num, "w-[170px]")}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
-          <tbody>
-            {draft.blocks.length === 0 ? (
+          {draft.blocks.length === 0 ? (
+            <tbody>
               <tr>
                 <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>
                   No blocked time. Lunch, leave, training — anything added here cannot be booked across.
                 </td>
               </tr>
-            ) : (
-              draft.blocks.map((block, index) => {
+            </tbody>
+          ) : (
+            <PagedBody>
+              {draft.blocks.map((block, index) => {
                 const lost = slotsLostPerWeek(block, draft.hours, zone, length, buffer);
                 return (
                   <tr key={block.id ?? `new-${index}`}>
@@ -679,11 +668,17 @@ export function CalendarAvailabilitySettings() {
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
+              })}
+            </PagedBody>
+          )}
         </table>
+        {draft.blocks.length > 10 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+            <PagedPager total={draft.blocks.length} noun="blocks" />
+          </div>
+        )}
       </SettingsTableCard>
+      </PagedProvider>
 
       <BlockDialog
         editor={blockEditor}
@@ -753,8 +748,8 @@ function LinkedCalendarRow({
         onChange={onToggle}
       />
       {ready && connected.map((connection) => (
-        <div key={connection.id} className="flex flex-wrap items-center gap-2 text-[12px] leading-[1.5] text-[var(--muted)]">
-          <Pill tone={connection.status === "error" ? "warning" : "success"} dot>{providerLabel(connection.provider)}</Pill>
+        <div key={connection.id} className="flex flex-wrap items-center gap-2 text-xs leading-[1.5] text-[var(--muted)]">
+          <StatusChip tone={pillTone(connection.status === "error" ? "warning" : "success")} dot>{providerLabel(connection.provider)}</StatusChip>
           <span className="min-w-0">
             {connection.accountEmail ?? "Linked account"}
             {connection.status === "error"
@@ -834,7 +829,7 @@ function DayRows({
         <td className={cn(st.td, st.num)}>{slots == null ? "—" : slots}</td>
         <td className={cn(st.td, st.num, "whitespace-nowrap")}>
           <span className="inline-flex items-center gap-1">
-            <Pill tone={open ? "success" : "neutral"}>{open ? "Open" : "Closed"}</Pill>
+            <StatusChip dot={false} tone={pillTone(open ? "success" : "neutral")}>{open ? "Open" : "Closed"}</StatusChip>
             {editable && (
               <button type="button" className={btn("row")} aria-expanded={expanded} aria-label={`Edit ${day}’s hours`} onClick={onToggle}>
                 {expanded ? "Done" : "Edit"}
@@ -847,7 +842,7 @@ function DayRows({
         <tr>
           <td colSpan={5} className={cn(st.td, "bg-[var(--surface-alt)]")}>
             <div className="flex flex-col gap-3 py-1">
-              {spans.length === 0 && <p className="m-0 text-[14px] text-[var(--muted)]">{day} is closed. Add hours to open it.</p>}
+              {spans.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">{day} is closed. Add hours to open it.</p>}
               {spans.map(({ hour, index }) => (
                 <div key={index} className="flex flex-wrap items-end gap-3">
                   <Field label="Opens" htmlFor={`day-${weekday}-${index}-from`} className="w-[150px]">
@@ -882,7 +877,7 @@ function DayRows({
                 </div>
               ))}
               {inverted && (
-                <p role="alert" className="m-0 text-[12px] text-[var(--error-ink)]">A working block has to close after it opens.</p>
+                <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">A working block has to close after it opens.</p>
               )}
               <div className="flex flex-wrap gap-2.5">
                 <button type="button" className={btn("secondary")} disabled={disabled} onClick={onAdd}>
@@ -998,14 +993,14 @@ function BlockForm({
           ))}
         </select>
       </Field>
-      {problem && from && to && <p role="alert" className="m-0 text-[12px] text-[var(--error-ink)]">{problem}</p>}
+      {problem && from && to && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{problem}</p>}
       <div className="flex justify-end gap-2.5">
         <button type="button" className={btn("ghost")} onClick={onClose}>Cancel</button>
         <button type="submit" className={btn("primary")} disabled={Boolean(problem)}>
           {editor.index === null ? "Add block" : "Update block"}
         </button>
       </div>
-      <p className="m-0 text-[12px] text-[var(--muted)]">Blocks are written with the rest of the calendar when you choose Save changes.</p>
+      <p className="m-0 text-xs text-[var(--muted)]">Blocks are written with the rest of the calendar when you choose Save changes.</p>
     </form>
   );
 }

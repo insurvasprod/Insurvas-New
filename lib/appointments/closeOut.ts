@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import type { ProducerScope } from "../agency/visibilityCore";
+import { appointmentVisible } from "./scopeCore";
 
 type Result<T> = { data: T; error: { message: string } | null };
 type Query<T> = PromiseLike<Result<T>> & {
@@ -39,6 +41,10 @@ export type CloseOutAppointment = {
  */
 export async function listCloseOutAppointments(
   tenantId: string,
+  // AG-0.5: the session's scope and id (scopeFor); a list keeps the producers' own appointments and the
+  // viewer's bookings. Omitted / null = the whole agency's strip, as before.
+  scope: ProducerScope = null,
+  viewerId = "",
 ): Promise<CloseOutAppointment[]> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const rows = await db
@@ -51,7 +57,7 @@ export async function listCloseOutAppointments(
   if (rows.error)
     throw new Error(`Could not load appointments awaiting close-out: ${rows.error.message}`);
 
-  const items = rows.data ?? [];
+  const items = (rows.data ?? []).filter((row) => appointmentVisible(scope, { agentUserId: text(row.agent_user_id) || null, bookedBy: text(row.booked_by) || null }, viewerId));
   if (items.length === 0) return [];
 
   const leadIds = [...new Set(items.map((row) => text(row.lead_id)).filter(Boolean))];

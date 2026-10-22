@@ -1,5 +1,6 @@
 import "server-only";
 
+import { audit } from "@/lib/audit/log";
 import { effectiveCarrierFacts } from "@/lib/salesSettings/carriers";
 import { auditAfterSubmit } from "./afterAudit";
 import { confirmationExtension, confirmationPath, magicMatches, MAX_CONFIRMATION_BYTES, normaliseReference, patternExample, referencePatternCheck } from "./afterSubmitRules";
@@ -55,11 +56,22 @@ export async function attachConfirmation(actor: Actor, applicationId: string, su
   return { attached: true, type: ext };
 }
 
-/** A 60-second signed URL, after the tenant check (a cross-tenant request is a 403). */
-export async function confirmationUrl(tenantId: string, applicationId: string, submissionId: string) {
+/** The access-log key a confirmation read is recorded under, beside the SSN and banking reveals. */
+export const CONFIRMATION_FIELD_KEY = "submission.confirmation";
+
+/**
+ * A 60-second signed URL, after the tenant check (a cross-tenant request is a 403). The screenshot
+ * shows the carrier's own copy of the application, so it is read like any other sensitive value:
+ * the access record first, then the URL — a read that could not be recorded does not happen.
+ */
+export async function confirmationUrl(actor: Actor, applicationId: string, submissionId: string) {
+  const tenantId = actor.tenantId;
   const s = guardTenant(await submissionHead(submissionId), tenantId, applicationId);
   if (!s.confirmation_path) throw new ApplicationError("CONFIRMATION_MISSING", "No confirmation is attached to this submission.", 404);
   if (!s.confirmation_path.startsWith(`${tenantId}/`)) throw new ApplicationError("FORBIDDEN", "That confirmation belongs to another agency.", 403);
+  const log = await db().from("tenant_sensitive_access_log").insert({ tenant_id: tenantId, user_id: actor.userId, application_id: applicationId, field_key: CONFIRMATION_FIELD_KEY, action: "reveal", surface: "web" });
+  if (log.error) fail(log.error, "Could not record who opened the confirmation");
+  await audit({ actorType: "tenant", actorId: actor.userId, action: "tenant.application_field_revealed", targetType: "tenant_application", targetId: applicationId, metadata: { fieldKey: CONFIRMATION_FIELD_KEY, submissionId, surface: "web" }, request: actor.request });
   const signed = await db().storage.from(CONFIRMATION_BUCKET).createSignedUrl(s.confirmation_path, 60);
   if (signed.error || !signed.data?.signedUrl) throw new ApplicationError("CONFIRMATION_STORAGE", "Could not open the confirmation.", 500);
   return { url: signed.data.signedUrl as string, expiresInSeconds: 60 };

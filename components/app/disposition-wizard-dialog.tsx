@@ -20,9 +20,9 @@ import { cn } from "@/lib/utils";
  * for deep links. Opened from the Dialer, the lead workspace and the verification panel.
  */
 
-const h3 = "m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
-const help = "mt-1.5 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]";
-const label12 = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const h3 = "m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
+const help = "mt-1.5 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]";
+const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
 /** An outcome's real side effects beyond the stage it lands in. */
 function extras(outcome: NonNullable<WalkView["options"]>[number]): string[] {
@@ -174,7 +174,7 @@ export function DispositionWizardDialog({
         <section aria-label="Answered so far" className="min-w-0 md:w-[300px] md:shrink-0">
           <div className={label12}>{callMode?.earlierWalk ? "Answered on an earlier call" : "Answered so far"}</div>
           {orderedSteps.length === 0 ? (
-            <p className="mt-2 mb-0 border-t border-[var(--border)] py-[11px] text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{callMode && !callMode.walkAvailable ? "This lead's stage has no questions set up, so choose the outcome directly." : "No answers recorded yet."}</p>
+            <p className="mt-2 mb-0 border-t border-[var(--border)] py-[11px] text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{callMode && !callMode.walkAvailable ? "This lead's stage has no questions set up, so choose the outcome directly." : "No answers recorded yet."}</p>
           ) : (
             <ol className="m-0 mt-2 list-none p-0">
               {orderedSteps.map((step) => {
@@ -184,16 +184,16 @@ export function DispositionWizardDialog({
                   <li key={step.id} className={cn("flex gap-3 border-t border-[var(--border)] py-[11px]", editingSequence === step.sequence && "bg-[var(--brand-50)]")}>
                     <Check aria-hidden className="mt-[3px] size-4 shrink-0 text-[var(--success)]" strokeWidth={2.6} />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{question}</span>
-                      <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] break-words text-[var(--ink)]">{answerLabel(step, stepNode)}</span>
+                      <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{question}</span>
+                      <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] break-words text-[var(--ink)]">{answerLabel(step, stepNode)}</span>
                     </span>
-                    {editing && <button type="button" onClick={() => { walk.beginEdit(step.sequence); setEditing(false); }} disabled={readOnly || saving} aria-label={`Edit the answer to ${question}`} className="shrink-0 cursor-pointer self-center border-0 bg-transparent p-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline disabled:cursor-not-allowed disabled:opacity-50">Edit</button>}
+                    {editing && <button type="button" onClick={() => { walk.beginEdit(step.sequence); setEditing(false); }} disabled={readOnly || saving} aria-label={`Edit the answer to ${question}`} className="shrink-0 cursor-pointer self-center border-0 bg-transparent p-1 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline disabled:cursor-not-allowed disabled:opacity-50">Edit</button>}
                   </li>
                 );
               })}
             </ol>
           )}
-          {callMode?.earlierWalk && orderedSteps.length > 0 && <p className="mt-2 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">These questions belong to this lead&rsquo;s earlier call and are not asked again. Choose this call&rsquo;s outcome.</p>}
+          {callMode?.earlierWalk && orderedSteps.length > 0 && <p className="mt-2 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">These questions belong to this lead&rsquo;s earlier call and are not asked again. Choose this call&rsquo;s outcome.</p>}
           {orderedSteps.length > 0 && !callMode?.earlierWalk && (
             <Button type="button" variant="ghost" className="mt-1" onClick={() => setEditing((on) => !on)} disabled={readOnly || saving} aria-pressed={editing}>
               {editing ? "Done choosing" : "Edit an earlier answer"}
@@ -211,8 +211,8 @@ export function DispositionWizardDialog({
               <div className="flex items-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] px-4 py-3.5">
                 <Check aria-hidden className="mt-1 size-4 shrink-0 text-[var(--success-ink)]" />
                 <div className="min-w-0">
-                  <p className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{wizard.dispositions.find((item) => item.disposition_key === wizard.walk.final_disposition_key)?.label ?? view.chosen?.label ?? wizard.walk.final_disposition_key}</p>
-                  <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{wizard.walk.composed_note || "No note was composed."}</p>
+                  <p className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{wizard.dispositions.find((item) => item.disposition_key === wizard.walk.final_disposition_key)?.label ?? view.chosen?.label ?? wizard.walk.final_disposition_key}</p>
+                  <p className="mt-1 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{wizard.walk.composed_note || "No note was composed."}</p>
                 </div>
               </div>
             </>
@@ -230,7 +230,7 @@ export function DispositionWizardDialog({
             <>
               <div>
                 <h3 className={h3}>Callback details</h3>
-                <p className={help}>Booked in {view.customerName}’s timezone ({wizard.customerTimezone}) and checked against their calling window.</p>
+                <p className={help}>Booked in {view.customerName}’s timezone ({view.customerZone ?? "choose it below"}) and checked against their calling window.</p>
               </div>
               <CallbackDetailsFields walk={walk} view={view} readOnly={readOnly} />
             </>

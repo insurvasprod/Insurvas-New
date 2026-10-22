@@ -5,6 +5,12 @@ import { audit } from "@/lib/audit/log";
 import { BOOKING_REFUSALS, appointmentFacts, bookAppointment, bookableContext, confirmAppointment, rebookAppointment, redactBlocksForSetter, rescheduleAppointment } from "@/lib/appointments/booking";
 import { SCHEMA_GAP_MESSAGE, SchemaGapError } from "@/lib/appointments/schemaGap";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
+import { scopeFor } from "@/lib/agency/visibility";
+import { calendarVisible, guardAppointment } from "@/lib/appointments/scope";
+
+/** AG-0.5: a calendar outside the session's scope answers as an agent who cannot be booked. */
+const AGENT_NOT_IN_SCOPE = () => NextResponse.json({ error: "Choose an agent whose calendar you can book.", code: "agent_not_found" }, { status: 404 });
 
 /**
  * LA-2.11 / LA-2.12 · book and reschedule an appointment on the agent's calendar.
@@ -19,7 +25,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * and the overlap in particular *cannot* be decided outside the database without reintroducing the
  * race LA-2.11 exists to prevent.
  */
-const BOOKING_ROLES = ["owner", "producer", "setter"] as const;
+// LA-0.2: an assistant books like a setter (appointments.book); in an agency only into the producers he assists.
+const BOOKING_ROLES = ["owner", "producer", "assistant", "setter"] as const;
 
 const bookSchema = z.object({
   lead_id: z.string().uuid(),
@@ -92,10 +99,12 @@ function refusal(error: unknown) {
 }
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", BOOKING_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", BOOKING_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
-    const context = await bookableContext(auth.context.tenantId);
+    // AG-0.5: in an agency only the calendars of the session and the producers in its scope (and its own
+    // bookings). From the session, never the request; null = the whole agency, as before.
+    const context = await bookableContext(auth.context.tenantId, await scopeFor(auth.context), auth.context.userId);
     // Decided 2026-09-25: a setter sees blocked time as "Unavailable", never its reason. The time
     // itself stays in the payload, because the picker has to know it is not bookable. LA-2.12-2: and
     // another setter's booking is a taken slot, without its lead or notes.
@@ -119,6 +128,12 @@ export async function POST(request: NextRequest) {
       { error: parsed.error.issues[0]?.message ?? "Enter valid appointment details" },
       { status: 400 },
     );
+  // AG-0.5: in an agency the lead must be one the session may see (its producer in scope; 404 otherwise)
+  // and the calendar must be the session's own or a producer's in its scope. Null scope: unchanged.
+  const scope = await scopeFor(auth.context);
+  const hiddenLead = await guardLead(auth.context, parsed.data.lead_id);
+  if (hiddenLead) return hiddenLead;
+  if (!calendarVisible(scope, parsed.data.agent_user_id, auth.context.userId)) return AGENT_NOT_IN_SCOPE();
 
   try {
     const booked = await bookAppointment({
@@ -161,6 +176,8 @@ export async function PATCH(request: NextRequest) {
   if (action === "confirm") {
     const confirm = confirmSchema.safeParse(body);
     if (!confirm.success) return NextResponse.json({ error: "Choose the appointment to confirm" }, { status: 400 });
+    const hidden = await guardAppointment(auth.context, confirm.data.appointment_id, await scopeFor(auth.context));
+    if (hidden) return hidden;
     try {
       const mine = await notTheSettersOwn(auth.context.role, auth.context.tenantId, auth.context.userId, confirm.data.appointment_id);
       if (mine) return mine;
@@ -181,6 +198,10 @@ export async function PATCH(request: NextRequest) {
     const rebook = rebookSchema.safeParse(body);
     if (!rebook.success)
       return NextResponse.json({ error: "Choose the no-show to rebook and a valid time" }, { status: 400 });
+    const scope = await scopeFor(auth.context);
+    const hidden = await guardAppointment(auth.context, rebook.data.appointment_id, scope);
+    if (hidden) return hidden;
+    if (rebook.data.agent_user_id && !calendarVisible(scope, rebook.data.agent_user_id, auth.context.userId)) return AGENT_NOT_IN_SCOPE();
     try {
       const mine = await notTheSettersOwn(auth.context.role, auth.context.tenantId, auth.context.userId, rebook.data.appointment_id);
       if (mine) return mine;
@@ -208,6 +229,8 @@ export async function PATCH(request: NextRequest) {
   const parsed = rescheduleSchema.safeParse(body);
   if (!parsed.success)
     return NextResponse.json({ error: "Choose a valid appointment and time" }, { status: 400 });
+  const hidden = await guardAppointment(auth.context, parsed.data.appointment_id, await scopeFor(auth.context));
+  if (hidden) return hidden;
 
   try {
     const mine = await notTheSettersOwn(auth.context.role, auth.context.tenantId, auth.context.userId, parsed.data.appointment_id);

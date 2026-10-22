@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { formatInTimezone, stateFromLeadValues } from "./timezone";
+import { NO_PRODUCER, type ProducerScope } from "../agency/visibilityCore";
 
 export type CallbackStatus = "scheduled" | "due" | "completed" | "cancelled" | "missed";
 export type CallbackView = {
@@ -47,6 +48,12 @@ export type ListCallbacksOptions = {
   includeHistory?: boolean;
   /** Only callbacks in these states. Omitted = every state, including completed and cancelled. */
   statuses?: CallbackStatus[];
+  /**
+   * AG-0.5: the session's producer scope (scopeFor, from the session). A list keeps the callbacks
+   * assigned to those producers (D1: tenant_callbacks.assigned_to); null or omitted = every callback,
+   * exactly as before.
+   */
+  scope?: ProducerScope;
 };
 
 /**
@@ -86,6 +93,7 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
     if (options.to) query = query.lte("scheduled_at_utc", options.to);
     if (options.callbackId) query = query.eq("id", options.callbackId);
     if (options.statuses) query = query.in("status", options.statuses);
+    if (options.scope) query = query.in("assigned_to", options.scope.length ? [...options.scope] : [NO_PRODUCER]);
     return query;
   };
   // The agency-side time on each callback is the workspace timezone (Settings › Agency profile). It
@@ -111,19 +119,58 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
   const historyRead = (columns: string) => supabase.from("callback_history").select(columns).eq("tenant_id", tenantId).in("callback_id", rows.map((row) => row.id)).order("created_at", { ascending: true });
   type HistoryRow = { id: string; callback_id: string; actor_user_id: string | null; action: string; created_at: string; old_scheduled_at_utc: string | null; new_scheduled_at_utc: string | null; old_status: string | null; new_status: string | null; note: string | null; via?: string | null };
   const HISTORY = "id, callback_id, actor_user_id, action, created_at, old_scheduled_at_utc, new_scheduled_at_utc, old_status, new_status, note";
-  let histories: { data: HistoryRow[] | null; error: { message: string; code?: string } | null } = { data: [], error: null };
-  if (options.includeHistory && rows.length) {
-    const withVia = await historyRead(`${HISTORY}, via`);
-    const read = withVia.error && isMissingColumn(withVia.error) ? await historyRead(HISTORY) : withVia;
-    histories = { data: (read.data ?? []) as unknown as HistoryRow[], error: read.error };
-  }
-  if (histories.error) throw new Error("Could not load callback details.");
+  // The history (and its actors) and the sources (attempts, partners, campaigns, vendors) each need
+  // only the rows above, not each other: the two chains run side by side rather than one after the other.
+  const readHistory = async () => {
+    let histories: { data: HistoryRow[] | null; error: { message: string; code?: string } | null } = { data: [], error: null };
+    if (options.includeHistory && rows.length) {
+      const withVia = await historyRead(`${HISTORY}, via`);
+      const read = withVia.error && isMissingColumn(withVia.error) ? await historyRead(HISTORY) : withVia;
+      histories = { data: (read.data ?? []) as unknown as HistoryRow[], error: read.error };
+    }
+    if (histories.error) return { histories, historyActors: { data: [] as Array<{ id: string; name: string }>, error: null } };
+    const historyActorIds = [...new Set((histories.data ?? []).map((row) => row.actor_user_id).filter((id): id is string => Boolean(id)))];
+    const historyActors = options.includeHistory && historyActorIds.length
+      ? await supabase.from("users").select("id, name").in("id", historyActorIds)
+      : { data: [] as Array<{ id: string; name: string }>, error: null };
+    return { histories, historyActors };
+  };
   const leadMap = new Map(rows.flatMap((row) => (row.lead && row.lead.tenant_id === tenantId ? [[row.lead_id, row.lead] as const] : [])));
   const userMap = new Map(rows.flatMap((row) => (row.assignee ? [[row.assigned_to, row.assignee] as const] : [])));
-  const historyActorIds = [...new Set((histories.data ?? []).map((row) => row.actor_user_id).filter((id): id is string => Boolean(id)))];
-  const historyActors = options.includeHistory && historyActorIds.length
-    ? await supabase.from("users").select("id, name").in("id", historyActorIds)
-    : { data: [], error: null };
+  // Attempts and sources for the row's second line — "attempt 3 · Northline BPO". Three batched
+  // reads keyed by the leads on this page, never one per row.
+  const leads = [...leadMap.values()];
+  const leadIds = leads.map((lead) => lead.id);
+  const partnerIds = [...new Set(leads.map((lead) => lead.partner_id).filter((id): id is string => Boolean(id)))];
+  const campaignIds = [...new Set(leads.map((lead) => lead.campaign_id).filter((id): id is string => Boolean(id)))];
+  const loose = supabase as unknown as { from(table: string): { select(columns: string): { eq(column: string, value: string): { in(column: string, values: string[]): PromiseLike<{ data: unknown[] | null; error: { message: string } | null }> } } } };
+  type CampaignRow = { id: string; name: string; vendor_id: string | null };
+  type Read = { data: unknown[] | null; error: { message: string } | null };
+  const readCampaigns = async (): Promise<{ campaigns: Read; vendors: Read }> => {
+    if (!campaignIds.length) return { campaigns: { data: [], error: null }, vendors: { data: [], error: null } };
+    // The campaign's vendor rides along (tenant_campaigns -> tenant_lead_vendors) and is kept only when it
+    // is this tenant's, as the separate tenant-filtered read kept it. If the embed is refused, the two
+    // reads run as they always did.
+    const embedded = await loose.from("tenant_campaigns").select("id, name, vendor_id, vendor:tenant_lead_vendors(id, name, tenant_id)").eq("tenant_id", tenantId).in("id", campaignIds);
+    if (!embedded.error) {
+      const withVendor = (embedded.data ?? []) as Array<CampaignRow & { vendor: { id: string; name: string; tenant_id: string } | null }>;
+      return {
+        campaigns: { data: withVendor.map(({ id, name, vendor_id }) => ({ id, name, vendor_id })), error: null },
+        vendors: { data: withVendor.flatMap((row) => (row.vendor_id && row.vendor && row.vendor.tenant_id === tenantId ? [{ id: row.vendor.id, name: row.vendor.name }] : [])), error: null },
+      };
+    }
+    const campaigns = await loose.from("tenant_campaigns").select("id, name, vendor_id").eq("tenant_id", tenantId).in("id", campaignIds);
+    const vendorIds = [...new Set(((campaigns.data ?? []) as Array<{ vendor_id: string | null }>).map((row) => row.vendor_id).filter((id): id is string => Boolean(id)))];
+    const vendors = vendorIds.length ? await loose.from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId).in("id", vendorIds) : { data: [], error: null };
+    return { campaigns, vendors };
+  };
+  const [{ histories, historyActors }, attempts, partners, { campaigns, vendors }] = await Promise.all([
+    readHistory(),
+    leadIds.length ? loose.from("tenant_call_attempts").select("lead_id, attempt_number").eq("tenant_id", tenantId).in("lead_id", leadIds) : Promise.resolve({ data: [], error: null }),
+    partnerIds.length ? loose.from("partners").select("id, name").eq("tenant_id", tenantId).in("id", partnerIds) : Promise.resolve({ data: [], error: null }),
+    readCampaigns(),
+  ]);
+  if (histories.error) throw new Error("Could not load callback details.");
   if (historyActors.error) throw new Error("Could not load callback history actors.");
   const historyActorMap = new Map((historyActors.data ?? []).map((user) => [user.id, user]));
   const historyMap = new Map<string, CallbackView["history"]>();
@@ -139,20 +186,6 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
     note: row.note,
     via: row.via ?? null,
   }]);
-  // Attempts and sources for the row's second line — "attempt 3 · Northline BPO". Three batched
-  // reads keyed by the leads on this page, never one per row.
-  const leads = [...leadMap.values()];
-  const leadIds = leads.map((lead) => lead.id);
-  const partnerIds = [...new Set(leads.map((lead) => lead.partner_id).filter((id): id is string => Boolean(id)))];
-  const campaignIds = [...new Set(leads.map((lead) => lead.campaign_id).filter((id): id is string => Boolean(id)))];
-  const loose = supabase as unknown as { from(table: string): { select(columns: string): { eq(column: string, value: string): { in(column: string, values: string[]): PromiseLike<{ data: unknown[] | null; error: { message: string } | null }> } } } };
-  const [attempts, partners, campaigns] = await Promise.all([
-    leadIds.length ? loose.from("tenant_call_attempts").select("lead_id, attempt_number").eq("tenant_id", tenantId).in("lead_id", leadIds) : Promise.resolve({ data: [], error: null }),
-    partnerIds.length ? loose.from("partners").select("id, name").eq("tenant_id", tenantId).in("id", partnerIds) : Promise.resolve({ data: [], error: null }),
-    campaignIds.length ? loose.from("tenant_campaigns").select("id, name, vendor_id").eq("tenant_id", tenantId).in("id", campaignIds) : Promise.resolve({ data: [], error: null }),
-  ]);
-  const vendorIds = [...new Set(((campaigns.data ?? []) as Array<{ vendor_id: string | null }>).map((row) => row.vendor_id).filter((id): id is string => Boolean(id)))];
-  const vendors = vendorIds.length ? await loose.from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId).in("id", vendorIds) : { data: [], error: null };
   // A missing side table (an environment without LA-2) degrades to no attempt or source, not a 500.
   const attemptsByLead = new Map<string, number>();
   for (const row of (attempts.error ? [] : attempts.data ?? []) as Array<{ lead_id: string; attempt_number: number }>) {
@@ -188,7 +221,7 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
   });
 }
 
-export async function listDueCallbacks(tenantId: string) {
+export async function listDueCallbacks(tenantId: string, scope: ProducerScope = null) {
   // Due-today and overdue are only ever true for an open callback (see isDueToday/isOverdue above),
   // and "today" in any customer timezone ends at most ~26h from now (UTC+14). Bounding the read to
   // that stops the dashboard pulling every callback the tenant has ever had — completed and
@@ -196,6 +229,7 @@ export async function listDueCallbacks(tenantId: string) {
   const callbacks = await listCallbacks(tenantId, {
     statuses: ["scheduled", "due", "missed"],
     to: new Date(Date.now() + 36 * 3_600_000).toISOString(),
+    scope,
   });
   return callbacks.filter((callback) => callback.isDueToday || callback.isOverdue);
 }

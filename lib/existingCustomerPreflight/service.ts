@@ -50,9 +50,12 @@ function statusFor(matches: PreflightMatch[]): PreflightStatus {
   return "spoken_before";
 }
 
-export async function runExistingCustomerPreflight(params: { tenantId: string; leadId: string; values: unknown }): Promise<PreflightResult> {
+/**
+ * The match itself, with nothing stored. The LA-6.2 transfer gate calls this before any lead exists;
+ * runExistingCustomerPreflight below calls it and stores the result on the lead.
+ */
+export async function findExistingCustomer(params: { tenantId: string; values: unknown; excludeLeadId?: string | null }): Promise<{ status: PreflightStatus; matches: PreflightMatch[] }> {
   const values = record(params.values);
-  const checkedAt = new Date().toISOString();
   const full = fullName(values);
   const { data, error } = await getSupabaseServiceClient().rpc("find_existing_customer_preflight", {
     p_tenant_id: params.tenantId,
@@ -60,12 +63,17 @@ export async function runExistingCustomerPreflight(params: { tenantId: string; l
     p_dob: dateValue(values),
     p_phone_digits: phoneValue(values),
     p_address_search: address(values) ? normalizeText(address(values)!) : null,
-    p_exclude_lead_id: params.leadId,
+    p_exclude_lead_id: params.excludeLeadId ?? null,
     p_limit: 20,
   });
   if (error) throw new Error(`Could not complete existing-customer pre-flight: ${error.message}`);
   const matches = ((data ?? []) as unknown as Array<Parameters<typeof mapMatch>[0]>).map(mapMatch);
-  const status = statusFor(matches);
+  return { status: statusFor(matches), matches };
+}
+
+export async function runExistingCustomerPreflight(params: { tenantId: string; leadId: string; values: unknown }): Promise<PreflightResult> {
+  const checkedAt = new Date().toISOString();
+  const { status, matches } = await findExistingCustomer({ tenantId: params.tenantId, values: params.values, excludeLeadId: params.leadId });
   const soldBy = soldByPartners(matches);
   const result: PreflightResult = { status, policyMatchingIncluded: false, policyMatchingNote: "Policy matching is not included yet; this check covers prior leads and contacts only.", checkedAt, matches, soldByPartners: soldBy, soldByMultiplePartners: soldBy.length >= 2 };
   const stored = await getSupabaseServiceClient().from("agent_leads").update({ preflight_status: status, preflight_checked_at: checkedAt, preflight_result: result as unknown as Json }).eq("tenant_id", params.tenantId).eq("id", params.leadId);

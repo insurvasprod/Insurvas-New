@@ -7,6 +7,7 @@ import { BLOCK_REPEATS } from "@/lib/appointments/calendarMath";
 import { SchemaGapError } from "@/lib/appointments/schemaGap";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-2.11 · the working hours, blocked time and booking policy every appointment rule reads.
@@ -59,10 +60,13 @@ const saveSchema = z.object({
 }).strict();
 
 export async function GET() {
-  const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
-    const { members, schema, agency } = await getCalendarSettings(auth.context.tenantId);
+    const [{ members: everyone, schema, agency }, scope] = await Promise.all([getCalendarSettings(auth.context.tenantId), scopeFor(auth.context)]);
+    // AG-0.5: inside an agency a narrowed session sees its own week and its visible producers' — never another
+    // producer's hours or blocked time (block reasons are personal). Solo tenants and owners see every member.
+    const members = scope === null ? everyone : everyone.filter((m) => m.userId === auth.context.userId || rowVisible(scope, m.userId));
     return NextResponse.json(
       // `canEditOthers` travels with the payload so the screen decides what to OFFER and the route
       // stays the enforcement. A producer shown another member's editable week would get a 403 from

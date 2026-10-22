@@ -14,11 +14,11 @@ import {
   Send,
   Settings,
   Users,
+  WalletCards,
   X,
 } from "lucide-react";
 
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
@@ -61,10 +61,11 @@ function PartnerNav({ role, onNavigate }: { role: PartnerRole; onNavigate?: () =
   const teamActive = isActivePath(pathname, "/partner/team");
   const settingsActive = isActivePath(pathname, "/partner/settings");
   const statusItems: PartnerNavItem[] = [
-    ...(role === "partner_admin" ? [{ label: "Team review", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }] : []),
+    // LA-7.4: payout statements are the organisation's, not every seat's.
+    ...(role === "partner_admin" ? [{ label: "Statements", path: "/partner/payouts", icon: WalletCards }, { label: "Team review", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }] : []),
     { label: "Settings", path: "/partner/settings", icon: Settings },
   ];
-  const orgActive = teamActive || settingsActive || isActivePath(pathname, "/partner/team-review");
+  const orgActive = teamActive || settingsActive || isActivePath(pathname, "/partner/team-review") || isActivePath(pathname, "/partner/payouts");
   // Shut by default, as drawn; open whenever the page you are on lives inside it, so a deep link
   // never lands in a section that looks closed.
   const [orgOpen, setOrgOpen] = useState(orgActive);
@@ -129,7 +130,7 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
           <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="absolute inset-0 bg-black/50" />
           <div className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto p-4 text-foreground">
             <div className="min-h-0 flex-1">
-              <div className="portal-agent-sidebar-brand"><InsurvasLogo size="sidebar" /><button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"><X className="size-5" aria-hidden="true" /></button></div>
+              <div className="portal-agent-sidebar-brand"><InsurvasLogo size="sidebar" tone="dark" /><button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"><X className="size-5" aria-hidden="true" /></button></div>
               {navigation}
               <PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} />
             </div>
@@ -139,7 +140,7 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
       )}
 
       <aside data-print-hide className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col md:flex ${collapsed ? "is-collapsed" : ""}`} data-collapsed={collapsed}>
-        <div className="portal-agent-sidebar-brand"><div className="insurvas-partner-brand-full"><InsurvasLogo size="sidebar" /></div><InsurvasLogo size="compact" variant="symbol" className="insurvas-partner-brand-compact" /><button type="button" className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}</button></div>
+        <div className="portal-agent-sidebar-brand"><div className="insurvas-partner-brand-full"><InsurvasLogo size="sidebar" tone="dark" /></div><InsurvasLogo size="compact" variant="symbol" tone="dark" className="insurvas-partner-brand-compact" /><button type="button" className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}</button></div>
         <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
           {navigation}
         </div>
@@ -148,9 +149,4 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
       </aside>
     </>
   );
-}
-
-/** The theme toggle only. Sign-out is the labelled last row of the top bar’s account menu. */
-export function PartnerSidebarFooter() {
-  return <ThemeToggle tone="onBrand" />;
 }

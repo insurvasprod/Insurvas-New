@@ -23,9 +23,9 @@ export function InviteLinkPanel({ url, expiresAt }: { url: string; expiresAt: st
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-[var(--color-blue-faint)] p-4">
+    <div className="space-y-3 rounded-lg border border-border bg-[var(--color-brand-faint)] p-4">
       <div className="flex items-start gap-2 text-sm">
-        <Mail className="mt-0.5 size-4 shrink-0 text-[var(--color-blue)]" />
+        <Mail className="mt-0.5 size-4 shrink-0 text-[var(--color-brand)]" />
         <p className="text-muted-foreground">
           If the email was not received, send this secure link to them yourself. It expires{" "}
           <span className="font-medium text-foreground">{new Date(expiresAt).toLocaleString()}</span>.

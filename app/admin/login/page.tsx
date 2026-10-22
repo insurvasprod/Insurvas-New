@@ -3,26 +3,29 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LinkArrow } from "@/components/ui/link-arrow";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { AuthBrand, PortalAuthSplitShell } from "@/components/portal/portal-auth-split-shell";
 
+/**
+ * The staff sign-in (2026-10-13: brought into the same split frame as the agent and partner doors —
+ * the form on one side, the brand panel with the night ribbon on the other — so the three doors read
+ * as one product, in the app's colours like the rest of /admin).
+ *
+ * Still two steps and two requests: the credentials go to /api/admin/auth/login, and only once they
+ * pass does the second step — the authenticator code — open in the same place, as its own form
+ * posting to /api/admin/auth/verify-2fa. A step indicator above the form shows where you are, and
+ * "Use a different account" goes back.
+ */
 type Step = "credentials" | "totp";
 
-// Local overrides of the shared controls to the board's sizes (p-adm-login). components/ui/* is
-// shared by every plane, so the board's 44px field and 48px button live here, not there.
-const FIELD_LABEL = "block text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]";
-const FIELD_INPUT =
-  "h-11 rounded-md border-[var(--border-strong)] bg-card px-3 text-base tracking-[-0.02em] text-foreground shadow-none md:text-base " +
-  // The step-two field is disabled until step one passes; the board draws it as an ordinary field.
-  "disabled:opacity-100";
-const STEP_BUTTON =
-  "h-12 w-full rounded-md border border-transparent " +
-  // The board's inactive button: a grey plate with muted text, not the accent faded out.
-  "disabled:border-[var(--border)] disabled:bg-[var(--surface-alt)] disabled:text-muted-foreground disabled:opacity-100";
+/** First sign-in of a new staff account: the authenticator is enrolled here, by its owner. */
+type Enrolment = { qrDataUrl: string; secret: string };
 
 // Each line is a statement about what the code does, checked against it:
 //   audit      lib/audit/log.ts writes ip + user agent on every admin write; audit_log is append-only
@@ -40,19 +43,37 @@ const SIGN_IN_FACTS = [
   "Sessions last 12 hours.",
 ];
 
+function StepDot({ number, label, state }: { number: number; label: string; state: "done" | "current" | "next" }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+          state === "next" ? "bg-[var(--surface-alt)] text-muted-foreground" : "bg-[var(--primary)] text-[var(--on-primary)]"
+        }`}
+      >
+        {number}
+      </span>
+      <span className={`text-sm font-semibold ${state === "next" ? "text-muted-foreground" : "text-foreground"}`}>{label}</span>
+    </span>
+  );
+}
+
 export default function AdminLoginPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
+  const [enrolment, setEnrolment] = useState<Enrolment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
   const onTotp = step === "totp";
 
-  // Step two is a second card; move the keyboard there when it opens.
+  // Step two opens in place of step one; move the keyboard there when it does.
   useEffect(() => {
     if (onTotp) codeRef.current?.focus();
   }, [onTotp]);
@@ -61,263 +82,256 @@ export default function AdminLoginPage() {
     event.preventDefault();
     setError(null);
     setLoading(true);
-
-    const res = await fetch("/api/admin/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    setLoading(false);
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/admin/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Something went wrong");
-      return;
+      if (!res.ok) {
+        setError(body?.error ?? "Something went wrong");
+        return;
+      }
+      if (body?.requires2fa) {
+        if (body.enrol2fa) {
+          // No authenticator on this account yet: fetch a secret for its owner to scan. It is
+          // stored only once a code from it verifies (verify-2fa).
+          const enrolRes = await fetch("/api/admin/auth/enroll-2fa", { method: "POST" });
+          const enrolBody = await enrolRes.json().catch(() => null);
+          if (!enrolRes.ok || !enrolBody?.qrDataUrl) {
+            setError(enrolBody?.error ?? "Could not start authenticator setup. Try again.");
+            return;
+          }
+          setEnrolment({ qrDataUrl: enrolBody.qrDataUrl, secret: enrolBody.secret });
+        } else {
+          setEnrolment(null);
+        }
+        setStep("totp");
+        return;
+      }
+      router.replace("/admin");
+    } catch {
+      setError("Could not sign in. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-
-    const body = await res.json().catch(() => null);
-    if (body?.requires2fa) {
-      setStep("totp");
-      return;
-    }
-
-    router.replace("/admin");
   }
 
   async function handleTotp(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setLoading(true);
-
-    const res = await fetch("/api/admin/auth/verify-2fa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-
-    setLoading(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Something went wrong");
-      return;
+    try {
+      const res = await fetch("/api/admin/auth/verify-2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(body?.error ?? "Something went wrong");
+        return;
+      }
+      router.replace("/admin");
+    } catch {
+      setError("Could not verify the code. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    router.replace("/admin");
+  function startOver() {
+    setStep("credentials");
+    setCode("");
+    setEnrolment(null);
+    setPassword("");
+    setError(null);
   }
 
   // The authenticator entry is labelled "Insurvas Admin" + the account's email (lib/adminAuth/totp.ts).
   // Shown only once the credentials step has passed, so it never echoes an address nobody confirmed.
   const accountEmail = onTotp ? email.trim().toLowerCase() : "";
 
+  const errorBox = error && (
+    <p
+      id="admin-login-error"
+      role="alert"
+      className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]"
+    >
+      {error}
+    </p>
+  );
+
   return (
-    <div className="m-stagger flex min-h-screen w-full min-w-0 flex-col bg-[var(--canvas)]">
-      {/* ── The staff header. Outside the admin shell, so drawn here to the board. ───────────── */}
-      <header className="flex flex-wrap items-center justify-between gap-3 bg-[var(--nav-bg)] px-4 py-3.5 sm:px-12">
-        <span className="flex items-center gap-2.5">
-          <InsurvasLogo size="sidebar" />
-          <span className="text-sm font-semibold uppercase leading-[1.43] tracking-[0.04em] text-[var(--nav-ink)]">
-            Insurvas · Super Admin
-          </span>
-        </span>
-        <span className="text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
-          Staff only. Customers sign in at{" "}
-          <Link href="/app/login" className="font-semibold text-[var(--nav-ink)]">
-            app.insurvas.com
-          </Link>
-          .
-        </span>
-      </header>
+    <PortalAuthSplitShell
+      mode="sign-in"
+      className="portal-tenant-auth-shell"
+      form={
+        <div className="m-stagger portal-auth-form-inner">
+          <AuthBrand href="/" label="Insurvas home">
+            <InsurvasLogo size="auth" />
+          </AuthBrand>
 
-      <main className="flex flex-1 items-center justify-center p-6 sm:p-12">
-        <div className="flex w-full min-w-0 flex-col items-start gap-8 lg:w-auto lg:flex-row">
-          {/* ── Step one ─────────────────────────────────────────────────────────────────── */}
-          <div className="w-full min-w-0 lg:w-[400px]">
-            <h1 className="text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
-              Platform administration
-            </h1>
-            <p className="mb-6 mt-2.5 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
-              Two steps, two requests. This screen is deliberately plain: a screenshot of it must never be mistaken for
-              the customer product.
-            </p>
+          <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
+            Staff access
+          </div>
+          <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+            Platform administration
+          </h1>
+          <p className="mb-6 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+            Insurvas staff only. Two steps: your credentials, then a code from your authenticator app.
+          </p>
 
-            <section aria-labelledby="step-credentials" className="rounded-lg border border-border bg-card p-7">
-              <div className="flex items-center gap-2.5">
-                <span
-                  aria-hidden="true"
-                  className={`inline-flex size-[22px] items-center justify-center rounded-full text-xs font-semibold ${
-                    onTotp
-                      ? "bg-[var(--surface-alt)] text-muted-foreground"
-                      : "bg-[var(--primary)] text-[var(--on-primary)]"
-                  }`}
-                >
-                  1
-                </span>
-                <h2
-                  id="step-credentials"
-                  className={`text-lg font-semibold leading-[1.28] tracking-[-0.015em] ${
-                    onTotp ? "text-muted-foreground" : "text-foreground"
-                  }`}
-                >
-                  Credentials
-                </h2>
+          <div className="mb-6 flex items-center gap-3" aria-label={`Step ${onTotp ? 2 : 1} of 2`}>
+            <StepDot number={1} label="Credentials" state={onTotp ? "done" : "current"} />
+            <span aria-hidden="true" className="h-px flex-1 bg-border">
+              <span className="block h-full bg-[var(--primary)] transition-[width] duration-500" style={{ width: onTotp ? "100%" : "0%" }} />
+            </span>
+            <StepDot number={2} label="Second factor" state={onTotp ? "current" : "next"} />
+          </div>
+
+          {!onTotp ? (
+            <form key="credentials" className="flex flex-col gap-4" onSubmit={handleCredentials}>
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Staff email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                />
               </div>
-
-              <form className="mt-5 flex flex-col gap-4" onSubmit={handleCredentials}>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className={FIELD_LABEL}>
-                    Staff email
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="username"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={FIELD_INPUT}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password" className={FIELD_LABEL}>
-                    Password
-                  </Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     required
+                    aria-describedby={error ? "admin-login-error" : undefined}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className={FIELD_INPUT}
+                    onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                    className="pr-11"
                   />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+                  </button>
                 </div>
-                {!onTotp && error && (
-                  <p role="alert" className="text-sm text-[var(--error-ink)]">
-                    {error}
-                  </p>
-                )}
-                <Button type="submit" className={STEP_BUTTON} disabled={loading}>
-                  {loading ? "Checking…" : "Continue"}
-                </Button>
-              </form>
-            </section>
-
-            <p className="mt-4 text-sm text-muted-foreground">
-              Tenant or agent?{" "}
-              <Link className="font-semibold text-[var(--accent-ink)]" href="/app/login">
-                Sign in to the Insurvas app
-              </Link>
-            </p>
-          </div>
-
-          {/* ── Step two. A second request, drawn as a second card rather than a field that
-                appears in the first one. ─────────────────────────────────────────────────── */}
-          <div className="w-full min-w-0 lg:w-[400px]">
-            <section aria-labelledby="step-second-factor" className="rounded-lg border border-border bg-card p-7">
-              <div className="flex items-center gap-2.5">
-                <span
-                  aria-hidden="true"
-                  className={`inline-flex size-[22px] items-center justify-center rounded-full text-xs font-semibold ${
-                    onTotp
-                      ? "bg-[var(--primary)] text-[var(--on-primary)]"
-                      : "bg-[var(--surface-alt)] text-muted-foreground"
-                  }`}
-                >
-                  2
-                </span>
-                <h2
-                  id="step-second-factor"
-                  className={`text-lg font-semibold leading-[1.28] tracking-[-0.015em] ${
-                    onTotp ? "text-foreground" : "text-muted-foreground"
-                  }`}
-                >
-                  Second factor
-                </h2>
               </div>
-
+              {errorBox}
+              <Button type="submit" className="mt-2 h-12 w-full" disabled={loading}>
+                {loading ? "Checking…" : "Continue"}
+              </Button>
+            </form>
+          ) : (
+            <form key="totp" className="flex flex-col gap-4" onSubmit={handleTotp}>
               {/* The board says the code "goes to" the email. It does not: it is a TOTP code from an
                   authenticator app (lib/adminAuth/totp.ts), and nothing is ever emailed. */}
-              <p className="mt-3.5 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
-                A separate request, not a field revealed on the same form. The code comes from your authenticator app
-                {accountEmail ? (
-                  <>
-                    , under <strong className="font-semibold text-foreground">Insurvas Admin</strong> for{" "}
+              {enrolment ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+                    Two-factor authentication is required and this account has none yet. Scan this code
+                    with your authenticator app, then enter the six-digit code it shows for{" "}
                     <strong className="font-semibold text-foreground">{accountEmail}</strong>.
-                  </>
-                ) : (
-                  "."
-                )}
-              </p>
-
-              <form className="mt-4 flex flex-col gap-4" onSubmit={handleTotp}>
-                <div className="space-y-1.5">
-                  <Label htmlFor="code" className={FIELD_LABEL}>
-                    Six-digit code
-                  </Label>
-                  <Input
-                    ref={codeRef}
-                    id="code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    required
-                    disabled={!onTotp}
-                    aria-describedby="code-hint"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                    className={FIELD_INPUT}
+                  </p>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- local data: URI */}
+                  <img
+                    src={enrolment.qrDataUrl}
+                    alt="Authenticator setup QR code"
+                    width={180}
+                    height={180}
+                    // Stays white in dark mode on purpose: a QR code needs a light quiet zone.
+                    className="self-center rounded-md border border-border bg-white p-2"
                   />
-                  <p id="code-hint" className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-                    Numeric keypad, one-time-code autofill.
+                  <p className="text-xs text-muted-foreground">
+                    Can&apos;t scan? Enter this key by hand:{" "}
+                    <code className="break-all font-mono text-foreground">{enrolment.secret}</code>
                   </p>
                 </div>
-                {onTotp && error && (
-                  <p role="alert" className="text-sm text-[var(--error-ink)]">
-                    {error}
-                  </p>
-                )}
-                <Button
-                  type="submit"
-                  className={STEP_BUTTON}
-                  disabled={!onTotp || loading || code.length !== 6}
-                  aria-describedby={onTotp ? undefined : "step-two-locked"}
-                >
-                  {loading ? "Verifying…" : "Verify and enter"}
-                </Button>
-                {!onTotp && (
-                  <span id="step-two-locked" className="sr-only">
-                    Available once your email and password are accepted.
-                  </span>
-                )}
-              </form>
-            </section>
+              ) : (
+                <p className="text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+                  Open your authenticator app and enter the code under{" "}
+                  <strong className="font-semibold text-foreground">Insurvas Admin</strong> for{" "}
+                  <strong className="font-semibold text-foreground">{accountEmail}</strong>.
+                </p>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="code">Six-digit code</Label>
+                <Input
+                  ref={codeRef}
+                  id="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                  aria-describedby={error ? "admin-login-error" : undefined}
+                  value={code}
+                  onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); setError(null); }}
+                  className="text-center text-lg font-semibold tracking-[0.5em] tabular-nums"
+                />
+              </div>
+              {errorBox}
+              <Button type="submit" className="mt-2 h-12 w-full" disabled={loading || code.length !== 6}>
+                {loading ? "Verifying…" : "Verify and enter"}
+              </Button>
+              <button type="button" onClick={startOver} className="inline-flex items-center gap-1.5 self-start text-sm font-semibold text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="size-4" aria-hidden="true" /> Use a different account
+              </button>
+            </form>
+          )}
+
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+            <span className="text-sm text-muted-foreground">Tenant or agent?</span>
+            <LinkArrow asChild>
+              <Link href="/app/login">Sign in to the Insurvas app</Link>
+            </LinkArrow>
           </div>
 
-          {/* ── What signing in commits you to ────────────────────────────────────────────── */}
-          <div className="w-full min-w-0 lg:w-[340px]">
-            <section aria-labelledby="sign-in-facts" className="rounded-lg border border-border bg-card p-6">
-              <h2
-                id="sign-in-facts"
-                className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground"
-              >
+          <nav className="portal-login-footer" aria-label="Legal links">
+            <Link href="/legal/privacy">Privacy</Link>
+            <Link href="/legal/tos">Terms</Link>
+            <a href="mailto:support@insurvas.com">Support</a>
+          </nav>
+        </div>
+      }
+      story={
+        <div className="m-stagger mx-auto w-full max-w-[38rem]">
+          <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--nav-muted)]">
+            Insurvas · Super admin
+          </div>
+          <h2 className="mt-3.5 max-w-[520px] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--on-dark)] lg:text-[clamp(2.75rem,4.2vw,3.75rem)]">
+            The platform, from the inside.
+          </h2>
+
+          <div className="mt-8 max-w-[460px] rounded-xl border border-[var(--nav-line)] bg-[color-mix(in_srgb,var(--nav-bg)_62%,transparent)] p-6 backdrop-blur-md">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="size-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />
+              <span className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-[var(--on-dark)]">
                 What happens when you sign in
-              </h2>
-              <ul className="mt-3.5">
-                {SIGN_IN_FACTS.map((line) => (
-                  <li key={line} className="flex gap-2.5 py-[7px]">
-                    <Lock
-                      className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-                      strokeWidth={2.2}
-                      aria-hidden="true"
-                    />
-                    <span className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">{line}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+              </span>
+            </div>
+            <ul className="mt-4 p-0">
+              {SIGN_IN_FACTS.map((line) => (
+                <li key={line} className="flex list-none gap-2.5 py-1.5">
+                  <Lock className="size-[13px] shrink-0 translate-y-1 text-[var(--nav-muted)]" strokeWidth={2.4} aria-hidden="true" />
+                  <span className="text-sm leading-normal tracking-[-0.02em] text-[var(--nav-ink)]">{line}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
-      </main>
-    </div>
+      }
+    />
   );
 }

@@ -44,9 +44,16 @@ async function agencyFacts(tenantId: string) {
 export async function RoleGateNotice({
   featureLabel,
   detail,
+  reason = "role",
 }: {
   featureLabel: string;
   detail: string;
+  /**
+   * "agency" (AG-0.5): the role does reach this screen, but inside an agency it is the agency's business, so a
+   * narrowed session is refused whatever its role. Saying "your role does not include" over a table that says the
+   * role reaches it would contradict itself, so the heading changes and the reach table is left out.
+   */
+  reason?: "role" | "agency";
 }) {
   const context = await resolveTenantContext();
   const role: TenantRole | null = context?.role ?? null;
@@ -57,11 +64,11 @@ export async function RoleGateNotice({
     : [{ agencyName: null, ownerEmail: null }, null];
   // Only say the agency has it when the plan really grants it; otherwise say only who can help.
   const agencyHasIt = Boolean(closed?.required_feature && entitlement?.features.includes(closed.required_feature));
-  const reach = role ? roleReach(menu, role, featureLabel) : null;
+  const reach = role && reason === "role" ? roleReach(menu, role, featureLabel) : null;
   const roleLabel = role ? TENANT_ROLE_LABELS[role].toLowerCase() : null;
   const otherLabel = reach ? TENANT_ROLE_LABELS[reach.otherRole as TenantRole] ?? reach.otherRole : null;
   const askHref = facts.ownerEmail
-    ? `mailto:${facts.ownerEmail}?subject=${encodeURIComponent(`Access to ${featureLabel} in Insurvas`)}&body=${encodeURIComponent(`Hi,\n\nI'm signed in to Insurvas as ${roleLabel ? withArticle(roleLabel) : "a team member"}, and ${featureLabel} is closed to my role. Could you change my role if I should have it?\n`)}`
+    ? `mailto:${facts.ownerEmail}?subject=${encodeURIComponent(`Access to ${featureLabel} in Insurvas`)}&body=${encodeURIComponent(`Hi,\n\nI'm signed in to Insurvas as ${roleLabel ? withArticle(roleLabel) : "a team member"}, and ${featureLabel} is ${reason === "agency" ? "kept for the agency's owner and admins" : "closed to my role"}. Could you change my role if I should have it?\n`)}`
     : null;
 
   return (
@@ -74,17 +81,17 @@ export async function RoleGateNotice({
             <span className="portal-gate-icon is-info">
               <UserLock className="size-6" aria-hidden="true" />
             </span>
-            <h2>Your role does not include {featureLabel}</h2>
+            <h2>{reason === "agency" ? `${featureLabel} is run by your agency` : `Your role does not include ${featureLabel}`}</h2>
             <p>
               {roleLabel && <>You are signed in as {withArticle(roleLabel).split(" ")[0]} <strong>{roleLabel}</strong>. </>}
               {detail}
             </p>
-            <p>
+            {reason === "role" && <p>
               This is not a plan limit.{" "}
               {agencyHasIt && facts.agencyName
                 ? `${facts.agencyName} has ${featureLabel}, and your owner can change your role if this is wrong.`
                 : `Your ${facts.agencyName ? `owner at ${facts.agencyName}` : "account owner"} can change your role if this is wrong.`}
-            </p>
+            </p>}
             <div className="portal-gate-actions">
               <Button asChild>
                 <Link href="/app/dashboard">Back to your dashboard</Link>

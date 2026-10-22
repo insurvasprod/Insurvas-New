@@ -14,8 +14,10 @@ import { refundApprovalThresholdCents } from "@/lib/settings/queries";
 import { priceForCycle, type PlanPrices } from "@/lib/money";
 import {
   approvalRefusalReason,
+  creditCentsForDays,
   creditToFreeDays,
   needsSecondApprover,
+  REFUND_COUNTING_STATUSES,
   requestRefusalReason,
   type CreditNoteType,
   type CreditReason,
@@ -113,7 +115,25 @@ export async function requestCreditNote(input: RequestInput): Promise<CreditNote
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new CreditNoteError("The credit note was not created.");
 
-  if (needsSecondApprover(input.type, input.amountCents, thresholdCents)) {
+  // The database decides, on the CUMULATIVE refunds against the invoice and under a per-invoice
+  // lock (20261015560000) — two $499 refunds on one invoice no longer each slip under $500. Its
+  // answer is the one acted on: executing a note the database parked for approval would move the
+  // money the control exists to hold. The local check below only catches the reverse: a database
+  // that approved what the cumulative rule says needs a second admin is out of date, and nothing
+  // is sent until it is fixed.
+  const priorRefundedCents =
+    input.type === "refund" && input.invoiceId ? await refundedSoFarCents(input.invoiceId, row.credit_note_id) : 0;
+  const parked = row.status === "pending_approval";
+  if (!parked && needsSecondApprover(input.type, input.amountCents, thresholdCents, priorRefundedCents)) {
+    console.error(
+      `[credit-note] ${row.number} was approved by the database but the cumulative refunds on the invoice need a second approver — migration 20261015560000 is not applied. Not executed.`,
+    );
+    throw new CreditNoteError(
+      `${row.number} needs a second approver (refunds on this invoice total more than the threshold), but the database approved it. Nothing was sent — apply the billing migration, then reject this note and raise it again.`,
+    );
+  }
+
+  if (parked) {
     return {
       id: row.credit_note_id,
       number: row.number,
@@ -131,6 +151,18 @@ export async function requestCreditNote(input: RequestInput): Promise<CreditNote
     awaitingApproval: false,
     message: executed.message,
   };
+}
+
+/** Refunds already raised against the invoice that still count — everything but failed and rejected. */
+async function refundedSoFarCents(invoiceId: string, excludeId: string): Promise<number> {
+  const { data, error } = await getSupabaseServiceClient()
+    .from("credit_notes")
+    .select("id, amount_cents")
+    .eq("invoice_id", invoiceId)
+    .eq("type", "refund")
+    .in("status", [...REFUND_COUNTING_STATUSES]);
+  if (error) throw new CreditNoteError(`Could not read the refunds already raised on this invoice: ${error.message}`);
+  return (data ?? []).filter((note) => note.id !== excludeId).reduce((sum, note) => sum + note.amount_cents, 0);
 }
 
 export async function approveCreditNote(
@@ -338,7 +370,7 @@ export async function redeemCreditAsFreeDays(tenantId: string): Promise<{ days: 
   const supabase = getSupabaseServiceClient();
 
   const { data: credit } = await supabase
-    .from("tenant_credits").select("balance_cents").eq("tenant_id", tenantId).maybeSingle<{ balance_cents: number }>();
+    .from("tenant_credits").select("balance_cents, updated_at").eq("tenant_id", tenantId).maybeSingle<{ balance_cents: number; updated_at: string | null }>();
 
   if (!credit || credit.balance_cents <= 0) return { days: 0, message: "This tenant has no credit balance." };
 
@@ -386,11 +418,52 @@ export async function redeemCreditAsFreeDays(tenantId: string): Promise<{ days: 
   const provider = buildProvider("whop", { tenantId });
   if (!(provider instanceof WhopProvider)) throw new CreditNoteError("Free days require the Whop provider.");
 
-  await provider.addFreeDays(subscription.whop_membership_id, days);
-
   // Only the value actually given is deducted, so the remainder stays owed rather than evaporating.
-  const spentCents = Math.round(days * (periodPrice / periodDays));
-  await supabase.rpc("adjust_tenant_credit", { p_tenant_id: tenantId, p_delta_cents: -spentCents });
+  // Whole cents, rounded up, never more than the balance the days were floored from.
+  const spentCents = creditCentsForDays(days, periodPrice, periodDays);
+
+  // Debit FIRST, as a compare-and-swap on the balance we read: a concurrent redemption or credit
+  // in between makes this match nothing, and nothing is given. The provider call and the debit
+  // cannot share a transaction, so the order is chosen so the failure left behind is a refundable
+  // debit (put back below) rather than free days given away with the credit still on the books.
+  const { data: debited, error: debitError } = await supabase
+    .from("tenant_credits")
+    .update({ balance_cents: credit.balance_cents - spentCents, updated_at: new Date().toISOString() })
+    .eq("tenant_id", tenantId)
+    .eq("balance_cents", credit.balance_cents)
+    .select("balance_cents");
+  if (debitError) throw new CreditNoteError(`Could not debit the credit balance: ${debitError.message}`);
+  if (!debited || debited.length !== 1) {
+    throw new CreditNoteError("The credit balance changed while this was being worked out. Nothing was added — try again.");
+  }
+
+  try {
+    // Keyed on the balance state this redemption consumed (its value and when it last changed), so
+    // a retry of THIS redemption is one grant at Whop and any later one is a new grant.
+    await provider.addFreeDays(
+      subscription.whop_membership_id,
+      days,
+      `${subscription.id}_${credit.updated_at ?? "never"}_${credit.balance_cents}_${days}`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/timed out|outcome is unknown/i.test(message)) {
+      // Whop may well have added the days. Putting the credit back could give the same value twice,
+      // so the debit stands and a human checks the membership.
+      console.error(`[credits] tenant ${tenantId}: add_free_days outcome unknown (${message}); ${spentCents} cents stay debited`);
+      throw new CreditNoteError(
+        `The provider did not answer, so it is not known whether ${days} free day(s) were added. ${(spentCents / 100).toFixed(2)} stays debited — check the membership at Whop before restoring it.`,
+      );
+    }
+    const { error: restoreError } = await supabase.rpc("adjust_tenant_credit", { p_tenant_id: tenantId, p_delta_cents: spentCents });
+    if (restoreError) {
+      console.error(`[credits] tenant ${tenantId}: free days failed (${message}) AND ${spentCents} cents could not be put back: ${restoreError.message}`);
+      throw new CreditNoteError(
+        `The provider did not add the free days (${message}), and putting ${(spentCents / 100).toFixed(2)} back on the balance also failed. Restore it by hand.`,
+      );
+    }
+    throw new CreditNoteError(`The provider did not add the free days, so no credit was used: ${message}`);
+  }
 
   return { days, message: `${days} free day(s) added; ${(spentCents / 100).toFixed(2)} of credit used.` };
 }

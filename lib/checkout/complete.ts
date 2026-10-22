@@ -14,10 +14,13 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
-import { TRIAL_DAYS } from "./constants";
+import { trialDaysForPlan } from "./trialDays";
+import { applyAutoOffer } from "@/lib/offers/service";
+import { audit } from "@/lib/audit/log";
 import type { BillingCycle } from "@/lib/money";
 
-export type CompletionSource = "return" | "webhook";
+/** "no_payment": a checkout with CHECKOUT_PAYMENT_MODE=none (lib/checkout/noPayment.ts). */
+export type CompletionSource = "return" | "webhook" | "no_payment";
 
 export type Completion = {
   subscriptionId: string;
@@ -64,7 +67,8 @@ export async function completeCheckout(
     p_plan_id: planId,
     p_billing_cycle: billingCycle,
     p_whop_membership_id: options.membershipId ?? null,
-    p_trial_days: TRIAL_DAYS,
+    // The plan version's own trial (plan_prices.trial_days), not a platform-wide 14 (audit 2026-10-15).
+    p_trial_days: await trialDaysForPlan(planId),
   });
 
   if (error) throw new Error(`Could not create the subscription for ${tenantId}: ${error.message}`);
@@ -85,6 +89,23 @@ export async function completeCheckout(
       .eq("status", "open");
 
     console.log(`[checkout] tenant ${tenantId}: subscription ${row.status} created via ${options.source}`);
+
+    // SA-4.4: platform auto-offers reach self-serve signups too, not only admin-assigned
+    // subscriptions (audit, 2026-10-15). Exactly once: only the caller whose call CREATED the
+    // subscription runs it, and the SQL itself refuses a second coupon (already_has_coupon). A
+    // failure never undoes the checkout — applyAutoOffer logs and returns null.
+    const autoOfferId = await applyAutoOffer(row.subscription_id);
+    if (autoOfferId) {
+      await audit({
+        actorId: null,
+        actorType: "system",
+        action: "offer.applied",
+        targetType: "subscription",
+        targetId: row.subscription_id,
+        metadata: { offerId: autoOfferId, application: "auto", source: `checkout_${options.source}`, tenantId },
+        request: new Request("https://internal.invalid/checkout/complete"),
+      }).catch((error) => console.error(`[checkout] auto-offer ${autoOfferId} applied to ${row.subscription_id} but not audited`, error));
+    }
   }
 
   return {

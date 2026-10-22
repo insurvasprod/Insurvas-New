@@ -5,6 +5,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { recordSubmission } from "@/lib/applications/mutations";
 import { runWelcomePack } from "@/lib/applications/welcomePack";
 import { submissionSchema } from "@/lib/applications/schemas";
+import { guardAttempt } from "@/lib/agency/guards";
+import { refuseIfCannotSubmit } from "@/lib/agency/submitGate";
 
 /**
  * LA-3.15 · the agent pressed submit on the carrier's site. Records the carrier's reference (it may
@@ -17,6 +19,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
+  // AG-1.10 · in an agency, a producer whose onboarding is incomplete cannot submit — told which item is missing.
+  const cannotSubmit = await refuseIfCannotSubmit(auth.context.tenantId, id);
+  if (cannotSubmit) return cannotSubmit;
   const input = await body(request, submissionSchema);
   if (input instanceof NextResponse) return input;
   try {

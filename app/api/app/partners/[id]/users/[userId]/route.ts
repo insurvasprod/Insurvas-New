@@ -18,7 +18,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a valid action" }, { status: 400 });
   const status = parsed.data.action === "deactivate" ? "revoked" : "active";
   try {
-    await setPartnerUserStatus({ tenantId: auth.context.tenantId, partnerId, userId, status, maxPartnerUsers: auth.entitlement.limits.max_partner_users });
+    await setPartnerUserStatus({ tenantId: auth.context.tenantId, partnerId, userId, status, maxPartnerUsers: auth.entitlement.limits.max_partner_users, actorPlane: "agency" });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: status === "revoked" ? "tenant.partner_user_deactivated" : "tenant.partner_user_reactivated", targetType: "partner_user", targetId: userId, metadata: { partnerId, actorPlane: "agent" }, request });
     return NextResponse.json({ ok: true, status });
   } catch (error) {

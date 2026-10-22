@@ -1,8 +1,9 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState } from "react";
 
-import { Callout, Field, Pill, control, st } from "@/components/app/settings/primitives";
+import { Callout, Field, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,7 +41,7 @@ import { cn } from "@/lib/utils";
 
 const STATE_NAMES = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
 const stateName = (code: string) => STATE_NAMES.get(code) ?? code;
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 type StateFilter = "all" | "no_rule" | "has_rule" | "scheduled";
 type HolidayScope = "upcoming" | "all";
@@ -299,7 +300,7 @@ function StateRow({ row, onOpen }: { row: StateBoardRow; onOpen: () => void }) {
       <td className={st.td}>
         <span className={st.strong}>{stateName(row.state)}</span>
         <span className={st.sub}>{row.state}{row.timezone ? ` · ${row.timezone}` : ""}</span>
-        {!row.hasStateRule && <Pill tone="warning" className="mt-1">No state rule</Pill>}
+        {!row.hasStateRule && <StatusChip dot={false} tone="warning" className="mt-1">No state rule</StatusChip>}
       </td>
       <td className={st.td}>{rule ? hoursLabel(rule.startLocal, rule.endLocal) : hoursLabel(FEDERAL_START, FEDERAL_END)}</td>
       <td className={st.td}>{rule ? daysLabel(rule.allowedWeekdays) : "Every day"}</td>
@@ -312,7 +313,7 @@ function StateRow({ row, onOpen }: { row: StateBoardRow; onOpen: () => void }) {
         {next && <span className={st.sub}>Changes {dayLabel(next.effectiveFrom)}</span>}
       </td>
       <td className={cn(st.td, "max-w-[260px]")}>
-        <span className="line-clamp-2 text-[13px]">{rule ? rule.source : "Federal window"}</span>
+        <span className="line-clamp-2 text-sm">{rule ? rule.source : "Federal window"}</span>
       </td>
       <td className={cn(st.td, st.num)}>
         <Button type="button" variant="outline" size="sm" aria-label={`Open the ${stateName(row.state)} rule`} onClick={onOpen}>
@@ -329,10 +330,10 @@ function HolidayRow({ holiday, removable, disabled, onRemove }: { holiday: Calli
       <td className={cn(st.td, "tabular-nums")}>{dayLabel(holiday.date)}</td>
       <td className={st.td}>
         {holiday.name}
-        {!holiday.blocked && <Pill className="ml-2">Not blocking</Pill>}
+        {!holiday.blocked && <StatusChip dot={false} className="ml-2">Not blocking</StatusChip>}
       </td>
       <td className={st.td}>{holiday.state ? stateName(holiday.state) : "Every state"}</td>
-      <td className={cn(st.td, "text-[13px]")}>{holiday.source ?? "—"}</td>
+      <td className={cn(st.td, "text-sm")}>{holiday.source ?? "—"}</td>
       <td className={cn(st.td, st.num)}>
         {removable && (
           <Button type="button" variant="outline" size="sm" disabled={disabled} aria-label={`Remove ${holiday.name}`} onClick={onRemove}>
@@ -418,8 +419,8 @@ function StateRuleDialog({
     <Dialog open onOpenChange={(next) => !next && !busy && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[820px]">
         <DialogHeader>
-          <DialogTitle className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em]">{stateName(row.state)} calling rule</DialogTitle>
-          <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+          <DialogTitle className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em]">{stateName(row.state)} calling rule</DialogTitle>
+          <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
             {row.hasStateRule ? "Publish a new version from a date. The version before it ends that day." : "No state rule yet: the federal window applies here."}
           </DialogDescription>
         </DialogHeader>
@@ -445,8 +446,8 @@ function StateRuleDialog({
                     <tr key={version.id}>
                       <td className={cn(st.td, "tabular-nums")}>
                         {dayLabel(version.effectiveFrom)}
-                        {inForce && <Pill tone="success" className="ml-2">In force</Pill>}
-                        {scheduled && <Pill tone="info" className="ml-2">Scheduled</Pill>}
+                        {inForce && <StatusChip dot={false} tone="good" className="ml-2">In force</StatusChip>}
+                        {scheduled && <StatusChip dot={false} tone="info" className="ml-2">Scheduled</StatusChip>}
                       </td>
                       <td className={cn(st.td, "tabular-nums")}>{version.effectiveTo ? dayLabel(version.effectiveTo) : "—"}</td>
                       <td className={st.td}>
@@ -454,7 +455,7 @@ function StateRuleDialog({
                         {version.sundayStartLocal && <span className={st.sub}>Sunday {hoursLabel(version.sundayStartLocal, version.sundayEndLocal)}</span>}
                       </td>
                       <td className={st.td}>{daysLabel(version.allowedWeekdays)}{version.blockHolidays ? " · no holidays" : ""}</td>
-                      <td className={cn(st.td, "text-[13px]")}>{version.source}</td>
+                      <td className={cn(st.td, "text-sm")}>{version.source}</td>
                       <td className={cn(st.td, st.num)}>
                         {scheduled && !readOnly && (
                           <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onWithdraw(version)}>
@@ -483,10 +484,10 @@ function StateRuleDialog({
         </div>
 
         <fieldset className="m-0 border-0 p-0">
-          <legend className="mb-2 text-[14px] font-semibold text-[var(--ink)]">Days calls are allowed</legend>
+          <legend className="mb-2 text-sm font-semibold text-[var(--ink)]">Days calls are allowed</legend>
           <div className="flex flex-wrap gap-3">
             {WEEKDAYS.map((label, day) => (
-              <label key={label} className="inline-flex items-center gap-1.5 text-[14px] text-[var(--body)]">
+              <label key={label} className="inline-flex items-center gap-1.5 text-sm text-[var(--body)]">
                 <input type="checkbox" checked={draft.allowedWeekdays.includes(day)} disabled={readOnly || busy} onChange={() => toggleDay(day)} />
                 {label}
               </label>
@@ -496,7 +497,7 @@ function StateRuleDialog({
 
         {draft.allowedWeekdays.includes(0) && (
           <div className="grid gap-4 sm:grid-cols-3 sm:items-end">
-            <label className="inline-flex items-center gap-2 pb-2 text-[14px] text-[var(--body)]">
+            <label className="inline-flex items-center gap-2 pb-2 text-sm text-[var(--body)]">
               <input type="checkbox" checked={draft.sundayHours} disabled={readOnly || busy} onChange={(event) => setDraft({ ...draft, sundayHours: event.target.checked })} />
               Different hours on Sunday
             </label>
@@ -513,7 +514,7 @@ function StateRuleDialog({
           </div>
         )}
 
-        <label className="inline-flex items-center gap-2 text-[14px] text-[var(--body)]">
+        <label className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
           <input type="checkbox" checked={draft.blockHolidays} disabled={readOnly || busy} onChange={(event) => setDraft({ ...draft, blockHolidays: event.target.checked })} />
           No calls on this state&rsquo;s holidays or federal holidays
         </label>
@@ -527,7 +528,7 @@ function StateRuleDialog({
           </Field>
         </div>
 
-        {problem && draft.source.trim() !== "" && <p role="alert" className="m-0 text-[13px] text-[var(--error-ink)]">{problem}</p>}
+        {problem && draft.source.trim() !== "" && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{problem}</p>}
 
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Close</Button>
@@ -566,8 +567,8 @@ function HolidayDialog({
     <Dialog open onOpenChange={(next) => !next && !busy && onClose()}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em]">Add a holiday</DialogTitle>
-          <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+          <DialogTitle className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em]">Add a holiday</DialogTitle>
+          <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
             No calls that day in a state whose rule bars holidays.
           </DialogDescription>
         </DialogHeader>

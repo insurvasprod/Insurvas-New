@@ -1,17 +1,8 @@
+import { csvCell } from "@/lib/csv/cell";
 import type { PartnerRow } from "./service";
 
-/**
- * A CSV cell.
- *
- * The leading-quote guard is the same one `lib/contacts/csv.ts` uses and is not cosmetic: a value
- * beginning `=`, `+`, `-` or `@` is executed as a formula when the file is opened in a spreadsheet,
- * and partner names are attacker-influenced text that reaches a finance team's Excel.
- */
-function csvCell(value: unknown) {
-  const text = value === null || value === undefined ? "" : String(value);
-  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
+// csvCell's formula guard is not cosmetic here: partner names are attacker-influenced text that
+// reaches a finance team's Excel.
 
 function money(cents: number | null) {
   return cents === null ? "" : (cents / 100).toFixed(2);

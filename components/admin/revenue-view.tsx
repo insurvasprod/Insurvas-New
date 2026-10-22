@@ -8,15 +8,15 @@ import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile
 import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState } from "@/components/ui/page-states";
 import { PageHeader } from "@/components/ui/page-header";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
-const h2 = "text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
-const sub = "mt-1 text-[14px] text-[var(--muted)]";
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const h2 = "text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
+const sub = "mt-1 text-sm text-[var(--muted)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 const LONG = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const SHORT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 const signed = (cents: number) => `${cents > 0 ? "+" : cents < 0 ? "−" : ""}${formatCentsAsCurrency(Math.abs(cents))}`;
@@ -128,11 +128,11 @@ export async function RevenueView() {
           <div className="mt-5 flex h-[170px] items-end gap-3 sm:gap-5" role="list" aria-label="MRR movement">
             {bars.map((bar) => (
               <div key={bar.label} role="listitem" className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                <span className={cn("text-[14px] font-semibold tabular-nums whitespace-nowrap", bar.measured ? bar.ink : "text-[var(--muted)]")}>{bar.measured ? signed(bar.cents) : "—"}</span>
+                <span className={cn("text-sm font-semibold tabular-nums whitespace-nowrap", bar.measured ? bar.ink : "text-[var(--muted)]")}>{bar.measured ? signed(bar.cents) : "—"}</span>
                 {bar.measured
                   ? <span className={cn("w-full rounded-t-[6px]", bar.tone)} style={{ height: `${Math.max(4, Math.round((Math.abs(bar.cents) / tallest) * 124))}px` }} aria-hidden />
                   : <span className="w-full rounded-t-[6px] border border-dashed border-[var(--border-strong)]" style={{ height: "24px" }} aria-hidden />}
-                <span className="text-center text-[12px] text-[var(--muted)]">{bar.label}{!bar.measured && <span className="block">not measured</span>}</span>
+                <span className="text-center text-xs text-[var(--muted)]">{bar.label}{!bar.measured && <span className="block">not measured</span>}</span>
               </div>
             ))}
           </div>
@@ -147,8 +147,8 @@ export async function RevenueView() {
               return (
                 <li key={step.label} className="border-t border-[var(--border)] py-2.5">
                   <div className="flex justify-between gap-3">
-                    <span className={cn("text-[14px]", step.measured ? "text-[var(--body)]" : "text-[var(--muted)]")}>{step.label}</span>
-                    <span className={cn("text-[14px] tabular-nums", step.measured ? "font-semibold text-[var(--ink)]" : "text-[12px] text-[var(--muted)]")}>
+                    <span className={cn("text-sm", step.measured ? "text-[var(--body)]" : "text-[var(--muted)]")}>{step.label}</span>
+                    <span className={cn("text-sm tabular-nums", step.measured ? "font-semibold text-[var(--ink)]" : "text-xs text-[var(--muted)]")}>
                       {step.measured && step.count !== null ? `${step.count.toLocaleString()}${share !== null ? ` · ${Math.round(share * 100)}%` : ""}` : "not instrumented"}
                     </span>
                   </div>
@@ -157,24 +157,24 @@ export async function RevenueView() {
                       <span className="block h-1.5 rounded-full bg-[var(--info)]" style={{ width: `${Math.min(100, share * 100)}%` }} />
                     </span>
                   )}
-                  {step.note && <span className="mt-1 block text-[12px] text-[var(--muted)]">{step.note}</span>}
+                  {step.note && <span className="mt-1 block text-xs text-[var(--muted)]">{step.note}</span>}
                 </li>
               );
             })}
           </ol>
           {/* Stated in words — and unmeasured steps are skipped rather than counted as zero, which would always name them as the biggest drop. */}
-          <p className="border-t border-[var(--border)] pt-2.5 text-[14px] text-[var(--body)]">{biggestDropOff(funnel)}</p>
+          <p className="border-t border-[var(--border)] pt-2.5 text-sm text-[var(--body)]">{biggestDropOff(funnel)}</p>
         </section>
       </div>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
-        <TableCard className="min-w-0" title={`Plan mix${snapshotLabel ? ` · ${snapshotLabel}` : ""}`}>
+        <PagedTableCard total={planRows.length} noun="plans" className="min-w-0" title={`Plan mix${snapshotLabel ? ` · ${snapshotLabel}` : ""}`}>
           {planRows.length === 0 ? (
             <EmptyState title="No revenue to break down yet" hint="It fills in once a subscription has billed at least once." />
           ) : (
               <table className="w-full min-w-[420px] border-collapse">
                 <thead><tr className="bg-[var(--surface-alt)]"><th scope="col" className={th}>Plan</th><th scope="col" className={cn(th, "text-right")}>Customers</th><th scope="col" className={cn(th, "text-right")}>MRR</th><th scope="col" className={cn(th, "text-right")}>Share</th></tr></thead>
-                <tbody>
+                <PagedBody>
                   {planRows.map(([code, stats]) => (
                     <tr key={code}>
                       <td className={cn(td, "font-semibold text-[var(--ink)]")}>{code}</td>
@@ -183,10 +183,10 @@ export async function RevenueView() {
                       <td className={cn(td, "text-right tabular-nums")}>{mrr > 0 ? `${((stats.mrr_cents / mrr) * 100).toFixed(1)}%` : "—"}</td>
                     </tr>
                   ))}
-                </tbody>
+                </PagedBody>
               </table>
           )}
-        </TableCard>
+        </PagedTableCard>
 
         <section className={card} aria-labelledby="customers-churn">
           <h2 id="customers-churn" className={h2}>Customers &amp; churn</h2>
@@ -201,8 +201,8 @@ export async function RevenueView() {
               ["Net revenue churn", base > 0 ? formatRate(churn.netRevenueChurnRate) : "— (no MRR at the start)"],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4 border-t border-[var(--border)] py-2 first:border-t-0">
-                <dt className="text-[14px] text-[var(--body)]">{label}</dt>
-                <dd className="m-0 text-[14px] font-semibold tabular-nums text-[var(--ink)]">{value}</dd>
+                <dt className="text-sm text-[var(--body)]">{label}</dt>
+                <dd className="m-0 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</dd>
               </div>
             ))}
           </dl>

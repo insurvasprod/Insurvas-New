@@ -13,6 +13,7 @@
  * this screen cannot grow a second vocabulary (lib/dispositions/oneVocabulary.test.mjs).
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Plus } from "lucide-react";
 
@@ -23,19 +24,9 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  Field,
-  Pill,
-  SettingsCard,
-  SettingsSectionHeader,
-  SettingsStack,
-  Timeline,
-  ToggleRow,
-  control,
-  st,
-} from "@/components/app/settings/primitives";
+import { Callout, Field, SettingsCard, SettingsSectionHeader, SettingsStack, Timeline, ToggleRow, control, st, pillTone } from "@/components/app/settings/primitives";
 import type {
   DispositionCloseStatus,
   DispositionFlow,
@@ -235,7 +226,7 @@ function minutesProblem(next: NextActionSetting): string {
 
 function YesNo({ value }: { value: boolean | null | undefined }) {
   if (value == null) return <span className="text-[var(--muted)]">—</span>;
-  return value ? <Pill tone="success">Yes</Pill> : <Pill tone="neutral">No</Pill>;
+  return value ? <StatusChip dot={false} tone="good">Yes</StatusChip> : <StatusChip dot={false} tone="neutral">No</StatusChip>;
 }
 
 function SettingsDialog({ open, onOpenChange, title, description, wide, children }: { open: boolean; onOpenChange: (open: boolean) => void; title: ReactNode; description?: ReactNode; wide?: boolean; children: ReactNode }) {
@@ -243,8 +234,8 @@ function SettingsDialog({ open, onOpenChange, title, description, wide, children
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={cn("max-h-[88vh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] text-[var(--body)]", wide ? "sm:max-w-4xl" : "sm:max-w-xl")}>
         <DialogHeader>
-          <DialogTitle className="text-[18px] text-[var(--ink)]">{title}</DialogTitle>
-          {description && <DialogDescription className="text-[14px] leading-[1.5] text-[var(--muted)]">{description}</DialogDescription>}
+          <DialogTitle className="text-title-sm text-[var(--ink)]">{title}</DialogTitle>
+          {description && <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">{description}</DialogDescription>}
         </DialogHeader>
         {children}
       </DialogContent>
@@ -417,7 +408,7 @@ function AddOutcome({ stages, pipelines, endsCallAvailable, nextActionAvailable,
 
 /* ── wizard graph editor (saves each edit, as it always has) ───────────── */
 
-const small = "box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] text-[var(--ink)] mt-1.5";
+const small = "box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] mt-1.5";
 
 function OutcomeKeySelect({ id, value, outcomes, onChange }: { id: string; value: string; outcomes: DispositionSettingsRow[]; onChange: (value: string) => void }) {
   const known = outcomes.some((item) => item.disposition_key === value);
@@ -487,8 +478,8 @@ function FlowEditor({ config, flowId, onFlowChange, reload }: { config: Config; 
             </Field>
           </div>
           <div className="mt-4 flex flex-col gap-3">
-            <span className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">Answers</span>
-            {node.options.length === 0 && <p className="m-0 text-[14px] text-[var(--muted)]">No answers yet.</p>}
+            <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">Answers</span>
+            {node.options.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">No answers yet.</p>}
             {node.options.map((option) => (
               <div key={option.id} className="grid gap-3 rounded-[8px] bg-[var(--surface-alt)] p-3 sm:grid-cols-4">
                 <Field label="Label" htmlFor={`option-label-${option.id}`}>
@@ -514,7 +505,7 @@ function FlowEditor({ config, flowId, onFlowChange, reload }: { config: Config; 
 
       {flow && (
         <form className="grid gap-3 rounded-[12px] border border-dashed border-[var(--border-strong)] p-4 sm:grid-cols-2" onSubmit={(event) => void createNode(event)}>
-          <span className="text-[14px] font-semibold text-[var(--ink)] sm:col-span-2">Add a question</span>
+          <span className="text-sm font-semibold text-[var(--ink)] sm:col-span-2">Add a question</span>
           <Field label="Question key" htmlFor="new-node-key">
             <input id="new-node-key" className={small} required pattern="[a-z][a-z0-9_]{1,79}" value={newNode.node_key} onChange={(event) => setNewNode({ ...newNode, node_key: event.target.value })} />
           </Field>
@@ -535,7 +526,7 @@ function FlowEditor({ config, flowId, onFlowChange, reload }: { config: Config; 
 
       {flow && (
         <form className="grid gap-3 rounded-[12px] border border-dashed border-[var(--border-strong)] p-4 sm:grid-cols-2" onSubmit={(event) => void createOption(event)}>
-          <span className="text-[14px] font-semibold text-[var(--ink)] sm:col-span-2">Add an answer</span>
+          <span className="text-sm font-semibold text-[var(--ink)] sm:col-span-2">Add an answer</span>
           <Field label="Question" htmlFor="new-option-node" className="sm:col-span-2">
             <select id="new-option-node" className={small} required value={newOption.node_id} onChange={(event) => setNewOption({ ...newOption, node_id: event.target.value })}>
               <option value="">Choose a question…</option>
@@ -730,7 +721,9 @@ export function DispositionSettings() {
       {unmapped > 0 && <Callout tone="error" title={`${unmapped} of ${activeRows.length} active outcomes have no stage. Every outcome must map to a stage before it can be saved.`} />}
       {saveError && <Callout tone="error" title="Some changes were not saved">{saveError}</Callout>}
 
-      <TableCard
+      <PagedTableCard
+        total={visible.length}
+        noun="outcomes"
         toolbar={
           <DataToolbar
             actions={
@@ -779,7 +772,7 @@ export function DispositionSettings() {
                 <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {visible.map((row) => {
                 const closes = closesAs(row);
                 const next = nextActionText(row);
@@ -789,13 +782,13 @@ export function DispositionSettings() {
                     <td className={st.td}>
                       <span className={cn("inline-flex flex-wrap items-center gap-2", !row.is_active && "text-[var(--muted)]")}>
                         {row.label}
-                        {!row.is_active && <Pill tone="neutral">Archived</Pill>}
-                        {pending && <Pill tone="warning" dot>Unsaved</Pill>}
+                        {!row.is_active && <StatusChip dot={false} tone="neutral">Archived</StatusChip>}
+                        {pending && <StatusChip tone="warning" dot>Unsaved</StatusChip>}
                       </span>
                     </td>
                     <td className={st.td}><YesNo value={row.counts_as_work_completed} /></td>
                     <td className={st.td}><YesNo value={row.ends_call} /></td>
-                    <td className={st.td}>{closes ? <Pill tone={closes === "won" ? "success" : "error"}>{closes === "won" ? "Won" : "Lost"}</Pill> : <span className="text-[var(--muted)]">—</span>}</td>
+                    <td className={st.td}>{closes ? <StatusChip dot={false} tone={pillTone(closes === "won" ? "success" : "error")}>{closes === "won" ? "Won" : "Lost"}</StatusChip> : <span className="text-[var(--muted)]">—</span>}</td>
                     <td className={st.td}>
                       {next.main}
                       {next.sub && <span className={st.sub}>{next.sub}</span>}
@@ -806,10 +799,10 @@ export function DispositionSettings() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <SettingsCard
         title={flow ? `The wizard behind “${flow.stage_name}”` : "The outcome wizard"}
@@ -824,9 +817,9 @@ export function DispositionSettings() {
           </div>
         )}
         {!flow ? (
-          <p className="m-0 text-[14px] text-[var(--muted)]">No wizard is configured yet. One is created for each pipeline stage.</p>
+          <p className="m-0 text-sm text-[var(--muted)]">No wizard is configured yet. One is created for each pipeline stage.</p>
         ) : flow.nodes.length === 0 ? (
-          <p className="m-0 text-[14px] text-[var(--muted)]">This stage&apos;s wizard has no questions yet.</p>
+          <p className="m-0 text-sm text-[var(--muted)]">This stage&apos;s wizard has no questions yet.</p>
         ) : (
           <Timeline items={wizardTimeline(flow, outcomesByKey)} />
         )}

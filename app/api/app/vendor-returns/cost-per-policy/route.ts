@@ -2,14 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { ReturnsRequestError, getCampaignCostPerPolicy } from "@/lib/vendorScorecard/returnsService";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * One campaign's cost per issued policy over its whole life, from the scorecard report, so a claim
  * can say what its credit would move it to. `cost` is null when the report cannot answer.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
+  const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
+  if (refused) return refused;
   try {
     const cost = await getCampaignCostPerPolicy(auth.context.tenantId, request.nextUrl.searchParams.get("campaign_id"));
     return NextResponse.json({ cost }, { headers: { "Cache-Control": "no-store" } });

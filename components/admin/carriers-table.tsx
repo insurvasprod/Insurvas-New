@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useMemo, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
@@ -10,7 +11,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { TableCard } from "@/components/ui/table-card";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, Pill, st } from "@/components/app/settings/primitives";
+import { btn, st, pillTone, Switch } from "@/components/app/settings/primitives";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +33,8 @@ import { cn } from "@/lib/utils";
 import { CarrierDialog } from "./carrier-dialog";
 import { CarrierDeactivateDialog } from "./carrier-deactivate-dialog";
 
-const PAGE_SIZE = 25;
-const MENU_ITEM = "text-[14px] tracking-[-0.02em] text-[var(--ink)]";
+const PAGE_SIZE = 10;
+const MENU_ITEM = "text-sm tracking-[-0.02em] text-[var(--ink)]";
 
 type StateFilter = "all" | "active" | "inactive";
 type UsageFilter = "any" | "in_use" | "unused";
@@ -256,7 +257,7 @@ export function CarriersTable({
               <tr className={st.headRow}>
                 <th scope="col" className={cn(st.th, "w-[120px]")}>Code</th>
                 <th scope="col" className={st.th}>Carrier</th>
-                <th scope="col" className={cn(st.th, "w-[130px]")}>State</th>
+                <th scope="col" className={cn(st.th, "w-[160px]")}>State</th>
                 <th scope="col" className={cn(st.th, "w-[90px]")}>Sort</th>
                 <th scope="col" className={cn(st.th, "w-[230px]")}>Usage</th>
                 <th scope="col" className={cn(st.th, "w-[140px]")}>Created</th>
@@ -282,13 +283,23 @@ export function CarriersTable({
                 return (
                   <tr key={carrier.id} className="m-row hover:bg-[var(--brand-50)]">
                     <td className={st.td}>
-                      <code className="font-mono text-[14px]">{carrier.code}</code>
+                      <code className="font-mono text-sm">{carrier.code}</code>
                     </td>
                     <td className={st.td}>{carrier.name}</td>
                     <td className={st.td}>
-                      <Pill tone={carrier.is_active ? "success" : "neutral"} dot>
-                        {carrier.is_active ? "Active" : "Inactive"}
-                      </Pill>
+                      {/* The switch runs the same checks as the row menu: switching off a carrier in
+                          use is refused and opens the in-use dialog, and the switch stays on. */}
+                      <span className="inline-flex items-center gap-2">
+                        <Switch
+                          checked={carrier.is_active}
+                          disabled={pending === carrier.id}
+                          label={`${carrier.name}: ${carrier.is_active ? "active, switch off" : "inactive, switch on"}`}
+                          onChange={(next) => void (next ? reactivate(carrier) : deactivate(carrier))}
+                        />
+                        <StatusChip tone={pillTone(carrier.is_active ? "success" : "neutral")}>
+                          {carrier.is_active ? "Active" : "Inactive"}
+                        </StatusChip>
+                      </span>
                     </td>
                     <td className={cn(st.td, "tabular-nums")}>{carrier.sort_order}</td>
                     <td className={cn(st.td, "tabular-nums")} title={usage.available ? usageTitle(rowUsage) : USAGE_UNKNOWN_TITLE}>
@@ -314,7 +325,7 @@ export function CarriersTable({
                             Edit
                           </DropdownMenuItem>
                           {carrier.is_active ? (
-                            <DropdownMenuItem variant="destructive" className="text-[14px] tracking-[-0.02em]" onSelect={() => deactivate(carrier)}>
+                            <DropdownMenuItem variant="destructive" className="text-sm tracking-[-0.02em]" onSelect={() => deactivate(carrier)}>
                               Deactivate
                             </DropdownMenuItem>
                           ) : (

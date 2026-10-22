@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Reveal, Tilt3D } from "@/components/marketing/motion";
-import styles from "@/components/marketing/landing.module.css";
+import { Reveal, usePrefersReducedMotion } from "@/components/marketing/motion";
+import { PricingExplorer } from "@/components/public/pricing-explorer";
+import { Collapse, PRICING_CSS, SegmentedControl } from "@/components/public/pricing-motion";
+import { PricingPicker } from "@/components/public/pricing-picker";
+import { PricingPlanCard, type CardPrice } from "@/components/public/pricing-plan-card";
 import {
   BILLING_CYCLES,
   BILLING_CYCLE_LABELS,
@@ -15,19 +18,47 @@ import {
   parseDollarsToCents,
   type BillingCycle,
 } from "@/lib/money";
+import { availableNeeds, planIncrements, recommendPlan } from "@/lib/pricing/planFit";
 import { publicPriceForCycle, type PublicPlan } from "@/lib/publicPlans/types";
 
 /**
- * The public pricing page (board p-pub-pricing).
+ * The public pricing page (board p-pub-pricing; redesigned 2026-10-13).
  *
- * Everything priced or compared here comes from the catalog, which the page promises in so many
- * words. It used to keep a hard-coded comparison table for "Starter / Growth / Scale" and three
- * literal add-ons, while the live catalog sells differently named plans — so the table compared
- * plans nobody could buy. Now:
- *  - plans and add-ons are read on the server and passed in (no client fetch, no loading flash);
- *  - the comparison table is built from each plan's real feature grants;
- *  - the yearly badge, the yearly answer and the closing line are computed, not written.
+ * Prices and plan contents are read from the live catalog on the server and passed in. The page
+ * reads, in order: the per-workspace promise and the billing cycle; a "Which plan fits you?" picker
+ * that lights up the cheapest plan covering the jobs ticked; the plans, each listing what it adds to
+ * the one before it, by module; a module-by-module explorer (which replaced the flat compare table);
+ * add-ons; questions; the closing call. The feature descriptions in the explorer are written copy,
+ * kept in components/public/pricing-explorer.tsx — everything priced or granted is catalog data.
+ *
+ * Two audiences (2026-10-22): individual agents and agencies, one at a time behind a toggle at the
+ * top (?for=agency links straight to the agency view). Agencies buy AG-0.12's flat seat bands: the
+ * first band reads "Everything in <the top individual plan>, plus" the agency-only features, each
+ * card names its seat range, and the questions add who uses a seat and how band changes are billed.
+ * The "which plan fits you" picker is an individual-agent question, so it shows only there.
  */
+export type PricingAudience = "individual" | "agency";
+
+const AUDIENCE_COPY: Record<PricingAudience, { title: string; lede: string }> = {
+  individual: {
+    title: "Priced per workspace. Never per lead.",
+    lede: "You already pay your vendors for every lead. Insurvas is priced by plan, so the lead you bought is not charged twice. Add-ons and usage above a plan’s allowance are priced separately.",
+  },
+  agency: {
+    title: "One flat price for your whole agency.",
+    lede: "Pick the band your team fits in. Producers, managers and assistants all work inside it, with payouts, lead routing and the agency dashboard included — never priced per seat or per lead.",
+  },
+};
+
+/** "Up to 50 seats", "51–150 seats", "151+ seats": each band from the one below it. */
+function seatLabels(plans: PublicPlan[]): (string | null)[] {
+  return plans.map((plan, index) => {
+    const below = index > 0 ? plans[index - 1].max_seats : null;
+    if (plan.max_seats == null || plan.max_seats <= 0) return below != null ? `${(below + 1).toLocaleString("en-US")}+ seats` : null;
+    if (below == null) return `Up to ${plan.max_seats.toLocaleString("en-US")} seats`;
+    return `${(below + 1).toLocaleString("en-US")}–${plan.max_seats.toLocaleString("en-US")} seats`;
+  });
+}
 export type PricingAddon = { code: string; name: string; description: string | null; price_cents: number; billing_cycle: BillingCycle };
 
 function savingPercent(plan: PublicPlan, cycle: BillingCycle): number | null {
@@ -55,222 +86,207 @@ function savingLabel(percent: number, cycle: BillingCycle): string {
   return `save up to ${percent}%`;
 }
 
-const ADDON_CYCLE: Record<BillingCycle, string> = { monthly: "/ month", quarterly: "/ quarter", yearly: "/ year" };
-
-function CompareCell({ included }: { included: boolean }) {
-  return (
-    <span className="w-[150px] shrink-0 text-center">
-      {included ? (
-        <Check className="mx-auto size-[13px] stroke-[3] text-[var(--success)]" aria-label="Included" />
-      ) : (
-        <span className="text-sm text-muted-foreground" aria-label="Not included">—</span>
-      )}
-    </span>
-  );
+function cardPrice(plan: PublicPlan, cycle: BillingCycle): CardPrice {
+  const raw = publicPriceForCycle(plan, cycle);
+  const totalCents = raw ? parseDollarsToCents(raw) : null;
+  if (totalCents == null) return null;
+  return { totalCents, monthlyCents: Math.round(totalCents / CYCLE_MONTHS[cycle]), saving: savingPercent(plan, cycle) };
 }
 
-export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[]; addons: PricingAddon[]; loadError: string | null }) {
+const ADDON_CYCLE: Record<BillingCycle, string> = { monthly: "/ month", quarterly: "/ quarter", yearly: "/ year" };
+
+const SECTION = "mx-auto max-w-7xl px-4 sm:px-6 lg:px-16";
+const EYEBROW = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--accent-ink)]";
+const H2 = "mt-3 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg";
+
+export function PricingPage({ plans: catalog, addons, loadError, initialAudience = "individual" }: { plans: PublicPlan[]; addons: PricingAddon[]; loadError: string | null; initialAudience?: PricingAudience }) {
+  const audiences = useMemo(() => (["individual", "agency"] as const).filter((item) => catalog.some((plan) => plan.audience === item)), [catalog]);
+  const [audience, setAudienceState] = useState<PricingAudience>(audiences.includes(initialAudience) ? initialAudience : audiences[0] ?? "individual");
+  const setAudience = (next: PricingAudience) => {
+    setAudienceState(next);
+    setNeeds([]);
+    // Shareable: /pricing?for=agency opens the agency view.
+    const url = new URL(window.location.href);
+    if (next === "agency") url.searchParams.set("for", "agency");
+    else url.searchParams.delete("for");
+    window.history.replaceState(null, "", url);
+  };
+  const plans = useMemo(() => catalog.filter((plan) => plan.audience === audience), [catalog, audience]);
+  // An agency band builds on the top individual plan: its card says so, then lists only what it adds.
+  const baseForAgency = useMemo(() => {
+    const individual = catalog.filter((plan) => plan.audience === "individual");
+    return individual.length ? individual[individual.length - 1] : null;
+  }, [catalog]);
+  const seats = useMemo(() => (audience === "agency" ? seatLabels(plans) : plans.map(() => null)), [audience, plans]);
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [needs, setNeeds] = useState<string[]>([]);
+  const [pickTurn, setPickTurn] = useState(0);
+  const reduced = usePrefersReducedMotion();
 
   const offeredCycles = useMemo(
     () => BILLING_CYCLES.filter((candidate) => plans.some((plan) => publicPriceForCycle(plan, candidate))),
     [plans],
   );
+  const increments = useMemo(
+    () => (audience === "agency" && baseForAgency ? planIncrements([baseForAgency, ...plans]).slice(1) : planIncrements(plans)),
+    [audience, baseForAgency, plans],
+  );
+  const questions = useMemo(() => availableNeeds(plans), [plans]);
+  const fit = useMemo(
+    () => recommendPlan(plans.map((plan) => ({ ...plan, monthlyCents: plan.price_monthly ? parseDollarsToCents(plan.price_monthly) : null })), needs),
+    [plans, needs],
+  );
+  const recommendedCode = fit.status === "match" ? fit.code : null;
+
   const yearlySaving = bestSaving(plans, "yearly");
+  const allTrials = plans.length > 0 && plans.every((plan) => plan.trial_days > 0);
   const defaultPlan = plans.find((plan) => plan.is_default) ?? null;
   // "Move down" only makes sense when there is something cheaper than the plan we lead with.
   const monthlyCents = (plan: PublicPlan) => (plan.price_monthly ? parseDollarsToCents(plan.price_monthly) : null) ?? Number.POSITIVE_INFINITY;
   const defaultIsCheapest = defaultPlan ? plans.every((plan) => monthlyCents(defaultPlan) <= monthlyCents(plan)) : false;
   const defaultIsDearest = defaultPlan ? plans.every((plan) => monthlyCents(defaultPlan) >= monthlyCents(plan)) : false;
-  const closingLine = !defaultPlan
-    ? "Start your trial. Keep your data either way."
+  const leadPlan = defaultPlan ?? plans[0] ?? null;
+  const closingLine = audience === "agency"
+    ? "Start on the band your team fits. Move up the day you grow."
+    : !defaultPlan
+    ? "Start your trial. Export your data either way."
     : plans.length < 2
-      ? `Start on ${defaultPlan.name}. Keep your data either way.`
+      ? `Start on ${defaultPlan.name}. Export your data either way.`
       : defaultIsCheapest
         ? `Start on ${defaultPlan.name}. Move up when you outgrow it.`
         : defaultIsDearest
           ? `Start on ${defaultPlan.name}. Move down if you do not need it all.`
           : `Start on ${defaultPlan.name}. Move up or down as you grow.`;
 
-  // Rows are every feature any public plan grants, in the order the cheapest plan lists them and
-  // then the rest; a plan's column ticks the features it actually grants.
-  const compareRows = useMemo(() => {
-    const seen = new Set<string>();
-    const rows: string[] = [];
-    for (const plan of plans) for (const label of plan.feature_bullets) if (!seen.has(label)) { seen.add(label); rows.push(label); }
-    return rows;
-  }, [plans]);
-
   const faqs = [
-    { q: "What happens when the trial ends?", a: "Nothing is charged until you finish checkout. If you do not, the workspace stays readable and writing is disabled — your book of business is never held hostage." },
-    { q: "Is there a per-lead charge?", a: "No. Seats and monthly imports are the limits, and both are printed on every plan." },
+    // One story everywhere (signup, checkout, landing): a card is entered at checkout, $0 is charged
+    // for the trial, then the plan renews automatically until cancelled.
+    { q: "What happens when the trial ends?", a: "You enter a card at checkout, and nothing is charged during the trial. When it ends, the plan’s price is charged to that card and the subscription renews automatically each billing period until you cancel. Cancel before the trial ends, in Settings › Plan & billing, and you are not charged. Taxes may apply. If a later payment fails, the workspace stays readable and writing is paused until it is settled." },
+    { q: "Is there a per-lead charge?", a: "No. A plan is priced per workspace, not per lead: you already pay your vendors for every lead, and we do not charge you for it again. Add-ons you choose, and metered usage above your plan’s allowance, are billed at the rates shown." },
     { q: "Can I change plan mid-cycle?", a: "Yes. You choose whether it applies now with proration or at renewal, and the confirmation names the effective date before anything moves." },
     { q: "What happens to existing subscribers when you change a plan?", a: "They keep the version they bought. Plans are versioned, so publishing a new version leaves every current subscriber on theirs until they renew." },
+    ...(audience === "agency"
+      ? [
+          { q: "Who uses a seat?", a: "Every accepted, working member of the agency: the owner, producers, managers and assistants. Each person is one seat, whatever they do." },
+          { q: "What happens when my team outgrows its band?", a: "Move up a band at any time: the change applies straight away and you pay the prorated difference for the rest of the period. Moving down takes effect at the end of the period, with no refund." },
+        ]
+      : []),
     yearlySaving
       ? { q: "Do you offer a discount for yearly billing?", a: `Yes — ${savingLabel(yearlySaving, "yearly")} on yearly billing. Switch the toggle above and the prices update.` }
       : { q: "Do you offer a discount for yearly billing?", a: "Not at the moment: every plan is billed at the same monthly rate whichever cycle you choose." },
   ];
 
+  const toggleNeed = (id: string) => {
+    setNeeds((now) => (now.includes(id) ? now.filter((item) => item !== id) : [...now, id]));
+    setPickTurn((turn) => turn + 1);
+  };
+  const showPlan = (code: string) => {
+    document.getElementById(`plan-${code}`)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+    setPickTurn((turn) => turn + 1);
+  };
+
+  const ready = !loadError && plans.length > 0;
+
   return (
-    <main>
-      <section className="relative isolate overflow-hidden px-4 pt-20 text-center sm:px-6 lg:px-16">
-        <div aria-hidden="true" className={`${styles.aurora} left-1/2 -top-[520px] -translate-x-1/2 opacity-50`} />
+    <main className="overflow-x-clip">
+      <style>{PRICING_CSS}</style>
+
+      <section className="relative isolate px-4 pt-16 text-center sm:px-6 sm:pt-20 lg:px-16">
+        <div aria-hidden="true" className="pz-aurora left-1/2 -top-[460px] -z-10 -translate-x-1/2" />
         <Reveal>
-          <h1 className="mx-auto max-w-[780px] text-[40px] font-semibold leading-[1.02] tracking-[-0.035em] text-foreground sm:text-[56px]">
-            Priced per workspace, not per lead.
+          <div className={EYEBROW}>Pricing</div>
+          <h1 key={audience} className="pz-fade mx-auto mt-4 max-w-[780px] text-headline-lg font-semibold leading-[1.02] tracking-[-0.035em] text-foreground sm:text-hero">
+            {AUDIENCE_COPY[audience].title}
           </h1>
-          <p className="mx-auto mt-5 max-w-[620px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            You already pay your vendors by the lead. We are not going to charge you again for the same one.
+          <p key={`${audience}-lede`} className="pz-fade mx-auto mt-5 max-w-[600px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+            {AUDIENCE_COPY[audience].lede}
           </p>
         </Reveal>
 
-        {offeredCycles.length > 1 && (
-          <div className="mt-8">
-            <span role="group" aria-label="Billing cycle" className="inline-flex gap-1 rounded-full bg-[var(--surface-alt)] p-[5px]">
-              {offeredCycles.map((item) => {
+        {audiences.length > 1 && (
+          <div className="mt-10 flex justify-center">
+            <SegmentedControl
+              label="Who it is for"
+              value={audience}
+              onChange={setAudience}
+              options={audiences.map((item) => ({ value: item, label: item === "agency" ? "Agencies" : "Individual agents" }))}
+            />
+          </div>
+        )}
+
+        {ready && offeredCycles.length > 1 && (
+          <div className={`${audiences.length > 1 ? "mt-4" : "mt-10"} flex justify-center`}>
+            <SegmentedControl
+              label="Billing cycle"
+              value={cycle}
+              onChange={setCycle}
+              options={offeredCycles.map((item) => {
                 const saving = bestSaving(plans, item);
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    aria-pressed={cycle === item}
-                    onClick={() => setCycle(item)}
-                    className={`inline-flex h-11 items-center gap-2 rounded-full border px-5 text-sm font-semibold tracking-[-0.01em] ${
-                      cycle === item ? "border-border bg-[var(--surface)] text-foreground" : "border-transparent bg-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {BILLING_CYCLE_LABELS[item]}
-                    {saving ? <span className="rounded-full bg-[var(--brand-50)] px-2 py-0.5 text-xs font-semibold text-[var(--accent-ink)]">{savingLabel(saving, item)}</span> : null}
-                  </button>
-                );
+                return { value: item, label: BILLING_CYCLE_LABELS[item], note: saving ? savingLabel(saving, item) : null };
               })}
-            </span>
+            />
           </div>
         )}
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-16">
+      <section className={`${SECTION} pt-12`}>
         {loadError ? (
           <div className="rounded-xl border border-[var(--error)]/30 bg-card p-10 text-center text-[var(--error-ink)]">{loadError}</div>
         ) : plans.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-10 text-center text-muted-foreground">No public plans are available right now.</div>
         ) : (
-          <div className={`grid gap-6 ${plans.length >= 3 ? "lg:grid-cols-3" : plans.length === 2 ? "md:grid-cols-2 lg:mx-auto lg:max-w-[880px]" : "mx-auto max-w-[440px]"}`}>
-            {plans.map((plan, index) => {
-              const rawPrice = publicPriceForCycle(plan, cycle);
-              const cents = rawPrice ? parseDollarsToCents(rawPrice) : null;
-              const saving = savingPercent(plan, cycle);
-              const equivalent = cents == null ? null : Math.round(cents / CYCLE_MONTHS[cycle]);
-              return (
-                <Reveal key={plan.code} variant="tilt" delay={index * 110} className="h-full">
-                  <Tilt3D max={6} glare className="h-full">
-                    <div
-                      className={`relative flex h-full flex-col rounded-2xl bg-card p-8 ${
-                        plan.is_default ? "border-[1.5px] border-[var(--primary)] shadow-[0_24px_70px_-24px_var(--primary)]" : "border border-border"
-                      }`}
-                    >
-                      {plan.is_default && (
-                        <div className="absolute -top-[13px] left-8 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-semibold text-[var(--on-primary)]" style={{ transform: "translateZ(30px)" }}>
-                          Most agencies start here
-                        </div>
-                      )}
+          <>
+            {audience === "individual" && plans.length > 1 && questions.length > 0 && (
+              <Reveal className="mx-auto mb-10 max-w-[960px]">
+                <PricingPicker needs={questions} selected={needs} onToggle={toggleNeed} result={fit} onShow={showPlan} />
+              </Reveal>
+            )}
 
-                      <div className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">{plan.name}</div>
-                      <p className="mt-2 min-h-[42px] text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
-                        {plan.blurb ?? "Everything you need to run your insurance business."}
-                      </p>
-
-                      {cents == null ? (
-                        <div className="mt-5 rounded-lg bg-muted px-4 py-5 text-sm text-muted-foreground">Not available on the {cycle} cycle</div>
-                      ) : (
-                        <>
-                          <div className="mt-5 flex items-baseline gap-2" style={{ transform: "translateZ(24px)" }}>
-                            <span className="text-[40px] font-semibold leading-[1.1] tracking-[-0.03em] tabular-nums text-foreground">{formatCentsAsCurrency(equivalent!)}</span>
-                            <span className="text-sm leading-normal tracking-[-0.02em] text-muted-foreground">/month</span>
-                          </div>
-                          <div className="mt-1.5 min-h-[18px] text-xs leading-normal tracking-[-0.01em] text-[var(--accent-ink)]">
-                            {cycle === "monthly" ? "Billed monthly" : `${formatCentsAsCurrency(cents)} billed ${cycle}`}
-                            {saving ? ` · save ${saving}%` : ""}
-                          </div>
-                        </>
-                      )}
-
-                      <div className="mt-5 flex-1 border-t border-border pt-5">
-                        {plan.feature_bullets.map((feature) => (
-                          <div key={feature} className="flex gap-2.5 py-[7px]">
-                            <Check className="mt-0.5 size-[13px] shrink-0 stroke-[3] text-[var(--success)]" aria-hidden="true" />
-                            <span className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">{feature}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-6">
-                        {cents != null ? (
-                          <Button asChild variant={plan.is_default ? "default" : "secondary"} className={`h-12 w-full rounded-full ${plan.is_default ? "" : "border-[var(--border-strong)]"}`}>
-                            <Link href={`/signup?plan=${encodeURIComponent(plan.code)}&cycle=${cycle}`}>
-                              {plan.trial_days > 0 ? `Start ${plan.trial_days}-day trial` : "Get started"}
-                            </Link>
-                          </Button>
-                        ) : (
-                          <Button disabled variant="secondary" className="h-12 w-full rounded-full border-[var(--border-strong)]">Cycle unavailable</Button>
-                        )}
-                      </div>
-                    </div>
-                  </Tilt3D>
+            <div className={`grid items-stretch gap-6 ${plans.length >= 3 ? "lg:grid-cols-3" : plans.length === 2 ? "md:grid-cols-2 lg:mx-auto lg:max-w-[880px]" : "mx-auto max-w-[440px]"}`}>
+              {plans.map((plan, index) => (
+                <Reveal key={`${audience}-${plan.code}`} delay={index * 110} className="h-full">
+                  <PricingPlanCard
+                    plan={plan}
+                    increment={increments[index]}
+                    cycle={cycle}
+                    price={cardPrice(plan, cycle)}
+                    recommended={plan.code === recommendedCode}
+                    pickTurn={pickTurn}
+                    seats={seats[index]}
+                  />
                 </Reveal>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
-        <p className="mt-6 text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          Every plan includes a trial, no card, and every price on this page is read from the catalog — nothing here is a literal.
+        <p className="mx-auto mt-8 max-w-[720px] text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+          {allTrials ? "Every plan starts with a free trial: you enter a card at checkout, and nothing is charged until the trial ends. " : ""}
+          Prices and plan contents come from the live catalog; the one-line feature descriptions below are ours, written to explain each one.
         </p>
       </section>
 
-      {plans.length > 1 && compareRows.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pt-[72px] sm:px-6 lg:px-16">
-          <Reveal>
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="overflow-x-auto">
-                <div className="min-w-[640px]">
-                  <div className="flex items-end gap-4 border-b border-border px-6 py-5">
-                    <span className="flex-1 text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">Compare every plan</span>
-                    {plans.map((plan) => (
-                      <span key={plan.code} className={`w-[150px] shrink-0 text-center text-sm font-semibold tracking-[-0.01em] ${plan.is_default ? "text-[var(--accent-ink)]" : "text-foreground"}`}>{plan.name}</span>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-4 border-b border-border bg-[var(--surface-alt)] px-6 py-3">
-                    <span className="flex-1 text-sm font-semibold leading-normal text-foreground">Price per month, billed {cycle}</span>
-                    {plans.map((plan) => {
-                      const raw = publicPriceForCycle(plan, cycle);
-                      const cents = raw ? parseDollarsToCents(raw) : null;
-                      return <span key={plan.code} className="w-[150px] shrink-0 text-center text-sm font-semibold tabular-nums text-foreground">{cents == null ? "—" : formatCentsAsCurrency(Math.round(cents / CYCLE_MONTHS[cycle]))}</span>;
-                    })}
-                  </div>
-                  <div className="flex items-center gap-4 border-b border-border px-6 py-3">
-                    <span className="flex-1 text-sm leading-normal text-[var(--body)]">Free trial</span>
-                    {plans.map((plan) => <span key={plan.code} className="w-[150px] shrink-0 text-center text-sm font-semibold tabular-nums text-foreground">{plan.trial_days ? `${plan.trial_days} days` : "—"}</span>)}
-                  </div>
-                  {compareRows.map((label) => (
-                    <div key={label} className="flex items-center gap-4 border-t border-border px-6 py-3 first:border-t-0">
-                      <span className="flex-1 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">{label}</span>
-                      {plans.map((plan) => <CompareCell key={plan.code} included={plan.feature_bullets.includes(label)} />)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+      {ready && (
+        <section className={`${SECTION} pt-[88px]`}>
+          <Reveal className="mx-auto max-w-[680px] text-center">
+            <div className={EYEBROW}>Modules</div>
+            <h2 className={H2}>What&apos;s included, module by module</h2>
+            <p className="mt-3.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+              Pick a module to see each feature in plain words, and which plans include it.
+            </p>
+          </Reveal>
+          <Reveal className="mt-10">
+            <PricingExplorer plans={plans} />
           </Reveal>
         </section>
       )}
 
       {addons.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pt-[72px] sm:px-6 lg:px-16">
+        <section className={`${SECTION} pt-[88px]`}>
           <Reveal className="max-w-[680px]">
-            <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--accent-ink)]">Add-ons</div>
-            <h2 className="mt-3 text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[40px]">Buy the bit you actually ran out of</h2>
+            <div className={EYEBROW}>Add-ons</div>
+            <h2 className={H2}>Buy the bit you actually ran out of</h2>
             <p className="mt-3.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
               An add-on grants features and credits through exactly the same entitlement path as a plan, so an operator can always see both sources.
             </p>
@@ -278,11 +294,11 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
 
           <div className="mt-8 grid gap-6 md:grid-cols-3">
             {addons.map((addon, index) => (
-              <Reveal key={addon.code} variant="rise" delay={index * 90}>
-                <div className="m-card h-full rounded-2xl border border-border bg-card p-6">
-                  <div className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">{addon.name}</div>
+              <Reveal key={addon.code} delay={index * 90}>
+                <div className="h-full rounded-2xl border border-border bg-card p-6 transition-[transform,box-shadow] duration-200 ease-[var(--e-out)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-hover)]">
+                  <div className="text-title-sm font-semibold tracking-[-0.015em] text-foreground">{addon.name}</div>
                   <div className="mt-2 min-h-10 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">{addon.description ?? "Adds to any plan that offers it."}</div>
-                  <div className="mt-3 text-lg font-semibold leading-[1.28] tracking-[-0.015em] tabular-nums text-foreground">
+                  <div className="mt-3 text-title-sm font-semibold tracking-[-0.015em] tabular-nums text-foreground">
                     {formatCentsAsCurrency(addon.price_cents)} <span className="text-sm font-normal text-muted-foreground">{ADDON_CYCLE[addon.billing_cycle]}</span>
                   </div>
                 </div>
@@ -292,22 +308,30 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
         </section>
       )}
 
-      <section className="mx-auto max-w-7xl px-4 pt-[72px] sm:px-6 lg:px-16">
-        <div className="mx-auto max-w-[680px] text-center">
-          <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--accent-ink)]">Questions</div>
-          <h2 className="mt-3 text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[40px]">Before you enter a card</h2>
-        </div>
+      <section className={`${SECTION} pt-[88px]`}>
+        <Reveal className="mx-auto max-w-[680px] text-center">
+          <div className={EYEBROW}>Questions</div>
+          <h2 className={H2}>Before you enter a card</h2>
+        </Reveal>
 
         <div className="mx-auto mt-8 max-w-[900px]">
           {faqs.map((item, index) => {
             const open = openFaq === index;
             return (
-              <div key={item.q}>
-                <button type="button" aria-expanded={open} onClick={() => setOpenFaq(open ? null : index)} className="flex w-full items-center gap-3.5 border-t border-border py-[22px] text-left">
-                  <ChevronDown aria-hidden="true" className={`size-4 shrink-0 transition-transform duration-150 ${open ? "text-[var(--accent-ink)]" : "-rotate-90 text-muted-foreground"}`} />
-                  <span className="flex-1 text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">{item.q}</span>
+              <div key={item.q} className="border-t border-border">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={`faq-${index}`}
+                  onClick={() => setOpenFaq(open ? null : index)}
+                  className="flex w-full items-center gap-3.5 py-[22px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-color)]"
+                >
+                  <ChevronDown aria-hidden="true" className={`size-4 shrink-0 transition-transform duration-300 ease-[var(--e-out)] ${open ? "text-[var(--accent-ink)]" : "-rotate-90 text-muted-foreground"}`} />
+                  <span className="flex-1 text-title-sm font-semibold tracking-[-0.015em] text-foreground">{item.q}</span>
                 </button>
-                {open && <p className="m-in mb-[22px] ml-[30px] max-w-[820px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">{item.a}</p>}
+                <Collapse open={open} id={`faq-${index}`}>
+                  <p className="mb-[22px] ml-[30px] max-w-[820px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">{item.a}</p>
+                </Collapse>
               </div>
             );
           })}
@@ -315,14 +339,12 @@ export function PricingPage({ plans, addons, loadError }: { plans: PublicPlan[];
         </div>
       </section>
 
-      <section className="relative isolate mt-[72px] overflow-hidden bg-[var(--brand-50)] px-4 py-[72px] text-center sm:px-6 lg:px-16">
+      <section className="relative isolate mt-[88px] overflow-hidden bg-[var(--primary-soft)] px-4 py-[72px] text-center sm:px-6 lg:px-16">
         <Reveal>
-          <h2 className="text-[32px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[40px]">
-            {closingLine}
-          </h2>
+          <h2 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">{closingLine}</h2>
           <div className="mt-7 flex justify-center gap-3.5">
-            <Button asChild className="h-13 rounded-full px-7 text-base">
-              <Link href={defaultPlan ? `/signup?plan=${encodeURIComponent(defaultPlan.code)}&cycle=${cycle}` : "/signup"}>Start your trial</Link>
+            <Button asChild className="h-12 rounded-full px-7 text-base shadow-[var(--shadow-brand)]">
+              <Link href={leadPlan ? `/signup?plan=${encodeURIComponent(leadPlan.code)}&cycle=${cycle}` : "/signup"}>Start your trial</Link>
             </Button>
           </div>
         </Reveal>

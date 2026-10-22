@@ -134,10 +134,17 @@ export type LoginActivityPage = {
 /**
  * Platform-wide feed. Always paginated — this table is the fastest-growing one in the schema.
  * Newest first, with the id as a tie-break so two attempts in the same instant cannot swap pages.
+ *
+ * `includeStaff` decides whether staff (actor_type = 'admin') sign-ins are in it at all. They carry
+ * staff email addresses and IPs, which are security data: only super_admin sees them. Every other
+ * role reading this page (support_agent, billing_admin) gets tenant-user sign-ins only, and the
+ * counts — "of N" included — are taken over the same rows, so nothing about staff leaks through a
+ * total either. Callers pass `staffLoginsVisibleTo(role)`.
  */
 export async function fetchLoginActivityPage(options: {
   page: number;
   filters: ActivityFilters;
+  includeStaff: boolean;
   now?: number;
 }): Promise<LoginActivityPage> {
   const supabase = getSupabaseServiceClient();
@@ -150,6 +157,11 @@ export async function fetchLoginActivityPage(options: {
     .order("ts", { ascending: false })
     .order("id", { ascending: false });
   let inRange = supabase.from("login_events").select("id", { count: "exact", head: true });
+
+  if (!options.includeStaff) {
+    request = request.eq("actor_type", "user");
+    inRange = inRange.eq("actor_type", "user");
+  }
 
   if (since) {
     request = request.gte("ts", since.toISOString());

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { DialerWorkflowError, DialGateError, startDialAttempt } from "@/lib/dialerScripts/service";
 import { recordDialRefused } from "@/lib/leadWorkspace/refusals";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
 
 // LA-2.12 audit. A setter's whole job is "work the outbound queue" and "record dispositions", and
 // permissions.ts has granted them `dialer.use` since the role was added — but every route here
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Lead, script and disclosure details are required" }, { status: 400 });
+  // AG-0.5: in an agency a narrow session starts a call only on a lead assigned to a producer in its
+  // scope — outbound or an inbound return call found through search; anything else is 404 before a
+  // gate is read or a refusal recorded against the lead. Null scope (solo, owner/admin): unchanged.
+  const hidden = await guardLead(auth.context, parsed.data.lead_id);
+  if (hidden) return hidden;
   try {
     const attempt = await startDialAttempt({ tenantId: auth.context.tenantId, agentId: auth.context.userId, leadId: parsed.data.lead_id, scriptId: parsed.data.script_id, scriptVersion: parsed.data.script_version ?? undefined, disclosureState: parsed.data.disclosure_state.toUpperCase(), disclosureProductCode: parsed.data.disclosure_product_code, inbound: parsed.data.inbound === true });
     return NextResponse.json({ attempt }, { status: 201 });

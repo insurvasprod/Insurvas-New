@@ -1,12 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, MoreHorizontal, TriangleAlert, X } from "lucide-react";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Pill, btn, st } from "@/components/app/settings/primitives";
+import { btn, st, pillTone } from "@/components/app/settings/primitives";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
@@ -466,13 +467,13 @@ export function UsersListTable({
                   <td className={st.td}>
                     <span title={user.lifecycle === "suspended" && user.suspension_reason ? `Reason: ${user.suspension_reason}` : undefined} className="inline-flex">
                       {user.lifecycle ? (
-                        <Pill tone={LIFECYCLE_TONES[user.lifecycle]} dot>
+                        <StatusChip tone={pillTone(LIFECYCLE_TONES[user.lifecycle])} dot>
                           {USER_LIFECYCLE_LABELS[user.lifecycle]}
-                        </Pill>
+                        </StatusChip>
                       ) : (
-                        <Pill tone="neutral" dot>
+                        <StatusChip tone="neutral" dot>
                           {userStatusLabel(user.status)}
-                        </Pill>
+                        </StatusChip>
                       )}
                     </span>
                   </td>

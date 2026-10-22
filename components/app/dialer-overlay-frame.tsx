@@ -55,11 +55,11 @@ export function OverlayFrame({
           >
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px]">
               <div className="min-w-0">
-                <DialogPrimitive.Title className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</DialogPrimitive.Title>
-                <DialogPrimitive.Description className="mt-[5px] mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{description}</DialogPrimitive.Description>
+                <DialogPrimitive.Title className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</DialogPrimitive.Title>
+                <DialogPrimitive.Description className="mt-[5px] mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{description}</DialogPrimitive.Description>
               </div>
               <div className="flex shrink-0 items-center gap-3.5">
-                {counter && <span className="text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] whitespace-nowrap text-[var(--accent-ink)]">{counter}</span>}
+                {counter && <span className="text-xs leading-[1.5] font-semibold tracking-[-0.01em] whitespace-nowrap text-[var(--accent-ink)]">{counter}</span>}
                 <DialogPrimitive.Close
                   aria-label="Close"
                   className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--muted)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
@@ -71,7 +71,7 @@ export function OverlayFrame({
             <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto p-[22px]">{children}</div>
             {(footerNote || footerActions) && (
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5">
-                <span className="max-w-[380px] text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{footerNote}</span>
+                <span className="max-w-[380px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{footerNote}</span>
                 {footerActions && <span className="flex flex-wrap items-center gap-2.5">{footerActions}</span>}
               </div>
             )}

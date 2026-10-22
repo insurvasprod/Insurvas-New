@@ -4,12 +4,16 @@ import { audit } from "@/lib/audit/log";
 import { runExistingCustomerPreflight } from "@/lib/existingCustomerPreflight/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { guardLead } from "@/lib/agency/guards";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", ["owner", "producer", "assistant"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   const leadId = (await params).id;
   if (!UUID.test(leadId)) return NextResponse.json({ error: "Choose a valid lead" }, { status: 400 });
   try {

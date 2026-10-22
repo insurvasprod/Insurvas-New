@@ -6,9 +6,10 @@
  * it works — never a password: no field, no key, no column holds one.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useState } from "react";
 
-import { Field, Pill, SettingsCard, control } from "@/components/app/settings/primitives";
+import { Field, SettingsCard, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { PORTAL_MFA_LABEL, PORTAL_MFA_TYPES } from "@/lib/salesSettings/portalSchemas";
@@ -55,9 +56,9 @@ export async function copyUsername(username: string) {
 }
 
 export function VerifiedChip({ lastVerifiedAt, needsCheck }: { lastVerifiedAt: string | null; needsCheck: boolean }) {
-  if (!lastVerifiedAt) return <Pill tone="warning">Not verified yet</Pill>;
-  if (needsCheck) return <Pill tone="warning">Check it still works</Pill>;
-  return <Pill tone="success">Verified {shortDay(lastVerifiedAt)}</Pill>;
+  if (!lastVerifiedAt) return <StatusChip dot={false} tone="warning">Not verified yet</StatusChip>;
+  if (needsCheck) return <StatusChip dot={false} tone="warning">Check it still works</StatusChip>;
+  return <StatusChip dot={false} tone="good">Verified {shortDay(lastVerifiedAt)}</StatusChip>;
 }
 
 export function PortalAccountCard({
@@ -91,7 +92,7 @@ export function PortalAccountCard({
       sub="One account per carrier, held by the agency."
       action={
         <span className="flex shrink-0 flex-wrap items-center gap-2.5">
-          {account ? <VerifiedChip lastVerifiedAt={account.lastVerifiedAt} needsCheck={account.needsCheck} /> : <Pill tone="neutral">Not saved yet</Pill>}
+          {account ? <VerifiedChip lastVerifiedAt={account.lastVerifiedAt} needsCheck={account.needsCheck} /> : <StatusChip dot={false} tone="neutral">Not saved yet</StatusChip>}
           {account && !readOnly && (
             <Button type="button" variant="outline" disabled={verifying} onClick={onVerify} title="Someone signed in today and it still works.">{verifying ? "Marking…" : "Mark verified"}</Button>
           )}
@@ -126,7 +127,7 @@ export function PortalAccountCard({
           <input id="portal-verified" type="date" max={today()} className={control} value={draft.lastVerifiedOn} disabled={readOnly} onChange={(e) => onChange({ lastVerifiedOn: e.target.value })} />
         </Field>
         <div className="min-w-0">
-          <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Open the portal</span>
+          <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Open the portal</span>
           <div className="mt-1.5 flex flex-wrap gap-2.5">
             <WithReason reason={openUrl ? null : "Add the portal URL first."}>
               <Button type="button" disabled={!openUrl} onClick={() => { if (openUrl) void openPortal(openUrl, username); }}>Open portal</Button>
@@ -135,7 +136,7 @@ export function PortalAccountCard({
               <Button type="button" variant="outline" disabled={!username} onClick={() => { if (username) void copyUsername(username); }}>Copy username</Button>
             </WithReason>
           </div>
-          <span className="mt-1.5 block text-[12px] leading-[1.5] text-[var(--muted)]">Opening copies the username, so only the password has to be fetched.</span>
+          <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">Opening copies the username, so only the password has to be fetched.</span>
         </div>
       </div>
     </SettingsCard>

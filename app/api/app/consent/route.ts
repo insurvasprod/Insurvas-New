@@ -6,6 +6,7 @@ import { getConsentLocker, getConsentRecord, type ConsentStatus } from "@/lib/co
 import { audit } from "@/lib/audit/log";
 import { EVIDENCE_LABEL, type EvidenceFilter } from "@/lib/consent/evidence";
 import { evidenceCsv, getConsentEvidence, type EvidenceSource } from "@/lib/consent/evidenceService";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-2.6 · the consent locker, read-only.
@@ -23,8 +24,10 @@ const SOURCES: EvidenceSource[] = ["partner", "vendor", "direct"];
 const EXPORT_CAP = 10_000;
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("consent_locker", ROLES);
+  const auth = await requireFeatureRole("consent_locker", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "The consent locker");
+  if (refused) return refused;
 
   const params = request.nextUrl.searchParams;
   const id = params.get("id");

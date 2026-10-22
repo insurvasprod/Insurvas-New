@@ -59,6 +59,29 @@ type PartnerMarket = {
   state: string;
 };
 
+// The submission's retry key, per draft, in this browser (LA-1 audit: it was regenerated on every
+// mount, so a resumed draft lost its number-entry screening link and its replay protection).
+// Storage can be unavailable (private mode, blocked site data); the form then works as before.
+const SUBMISSION_KEY_PREFIX = "insurvas:partner-submission:";
+const SUBMISSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function recallSubmissionId(draftId: string | null): string | null {
+  if (!draftId || typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(`${SUBMISSION_KEY_PREFIX}${draftId}`);
+    return value && SUBMISSION_UUID.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function rememberSubmissionId(draftId: string | null, submissionId: string) {
+  if (!draftId || typeof window === "undefined") return;
+  try { window.localStorage.setItem(`${SUBMISSION_KEY_PREFIX}${draftId}`, submissionId); } catch { /* storage unavailable */ }
+}
+function forgetSubmissionId(draftId: string | null) {
+  if (!draftId || typeof window === "undefined") return;
+  try { window.localStorage.removeItem(`${SUBMISSION_KEY_PREFIX}${draftId}`); } catch { /* storage unavailable */ }
+}
+
 function PartnerField({
   field,
   value,
@@ -183,9 +206,10 @@ function PartnerField({
         .join("");
       return onChange(formatted);
     }
-    return onChange(
-      ["number", "currency"].includes(field.type) ? Number(raw) : raw,
-    );
+    // A currency field is stored in cents, as every agent screen reads it, and typed in dollars:
+    // before 2026-10-22 the typed number was stored as cents, so "250000" became $2,500.00.
+    if (field.type === "currency") return onChange(Math.round(Number(raw) * 100));
+    return onChange(field.type === "number" ? Number(raw) : raw);
   };
   return (
     <Input id={id}
@@ -196,12 +220,12 @@ function PartnerField({
       readOnly={readOnly}
       step={
         field.type === "currency"
-          ? 1
+          ? 0.01
           : field.type === "number"
             ? "any"
             : undefined
       }
-      value={value === undefined ? "" : String(value)}
+      value={value === undefined ? "" : field.type === "currency" && typeof value === "number" ? String(value / 100) : String(value)}
       placeholder={field.validation?.placeholder ?? undefined}
       onChange={(event) => updateInput(event.target.value)}
       onInput={
@@ -265,13 +289,18 @@ export function PartnerLeadForm({
   };
   type RejectionNotice = { code: string; count: number; script: string };
   const [template, setTemplate] = useState<FormTemplate | null>(null);
-  const submissionId = useRef(crypto.randomUUID());
+  // LA-1.6: the retry key is the submission's, so it survives a remount of the same draft (a tab
+  // switch, a reload). Kept per draft in this browser; a new phone number still starts a new one.
+  const submissionId = useRef<string>(recallSubmissionId(resumeDraftId) ?? crypto.randomUUID());
   // The draft this form writes to. It starts as the resumed draft (or none) and is set by the first
   // save of a new form, so every later save updates that one draft instead of starting another.
   const draftIdRef = useRef<string | null>(resumeDraftId);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const valuesRef = useRef<Record<string, unknown>>({});
   const dirtyRef = useRef(false);
+  // Bumped on every edit. A save only clears `dirty` when nothing was typed while it was in flight;
+  // otherwise those last keystrokes would be marked saved and never sent.
+  const editRevision = useRef(0);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [status, setStatus] = useState("Loading form…");
   const [saving, setSaving] = useState(false);
@@ -286,7 +315,7 @@ export function PartnerLeadForm({
     useState<RejectionNotice | null>(null);
   const [dncAcknowledged, setDncAcknowledged] = useState(false);
   const [duplicateMatches, setDuplicateMatches] = useState<
-    Array<{ leadId: string; matchedOn: string[] }>
+    Array<{ matchedOn: string[] }>
   >([]);
   const [duplicateJustification, setDuplicateJustification] = useState("");
   const [sectionIndex, setSectionIndex] = useState(0);
@@ -336,6 +365,10 @@ export function PartnerLeadForm({
   useEffect(() => {
     if (preview) return;
     let cancelled = false;
+    // A refresh starts when the window regains focus, which a click into the phone field can do; on
+    // a slow server its answer lands after the partner has typed. Answers typed since it started win
+    // (QA pass 2026-10-22: the screened number was wiped and the draft saved "0 answers").
+    const startedAtRevision = editRevision.current;
     void Promise.all([
       fetch(`/api/partner/forms/${encodeURIComponent(productCode)}`, {
         cache: "no-store",
@@ -354,6 +387,7 @@ export function PartnerLeadForm({
       }))
       .then(({ form, draft, formResponse, draftResponse }) => {
         if (cancelled) return;
+        if (formRefresh > 0 && editRevision.current !== startedAtRevision) return;
         if (!formResponse.ok) {
           setStatus(form?.error ?? "This product form is unavailable");
           onFormVersion?.(null);
@@ -361,6 +395,7 @@ export function PartnerLeadForm({
         }
         // The resumed draft is gone (submitted or discarded elsewhere): carry on as a new form.
         if (draftIdRef.current && !draftResponse.ok) {
+          forgetSubmissionId(draftIdRef.current);
           draftIdRef.current = null;
           onDraftChange?.(null);
         }
@@ -418,9 +453,12 @@ export function PartnerLeadForm({
   }, [productCode, formRefresh, onFormVersion, onDraftChange, preview]);
 
   const persistDraft = useCallback(
-    (payload: Record<string, unknown>, visibleStatus = true) => {
+    (visibleStatus = true) => {
     const saveDraftNow = async () => {
       if (!template) return;
+      // What is sent is what is on screen when this save actually runs (saves are queued).
+      const payload = valuesRef.current;
+      const sentRevision = editRevision.current;
       if (preview) {
         if (visibleStatus) setStatus("Preview: drafts are not saved");
         return;
@@ -442,8 +480,9 @@ export function PartnerLeadForm({
         );
         const saved = (await response.json().catch(() => null)) as { id?: string; error?: string; code?: string } | null;
         if (response.ok) {
-          dirtyRef.current = false;
+          if (editRevision.current === sentRevision) dirtyRef.current = false;
           if (saved?.id && saved.id !== draftIdRef.current) draftIdRef.current = saved.id;
+          rememberSubmissionId(draftIdRef.current, submissionId.current);
           onDraftChange?.(draftIdRef.current);
           setDraftSavedAt(Date.now());
           if (visibleStatus) setStatus("Draft saved");
@@ -480,7 +519,7 @@ export function PartnerLeadForm({
   useEffect(() => {
     if (!template || !dirtyRef.current || preview) return;
     const timer = window.setTimeout(() => {
-      void persistDraft(valuesRef.current);
+      void persistDraft();
     }, 750);
     return () => window.clearTimeout(timer);
   }, [values, template, productCode, persistDraft, preview]);
@@ -488,7 +527,7 @@ export function PartnerLeadForm({
   useEffect(() => {
     if (!template || preview) return;
     const flush = () => {
-      if (dirtyRef.current) void persistDraft(valuesRef.current, false);
+      if (dirtyRef.current) void persistDraft(false);
     };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") flush();
@@ -564,7 +603,7 @@ export function PartnerLeadForm({
         !Number.isFinite(value) ||
         (field.type === "currency" && !Number.isInteger(value)))
     )
-      return `${field.label} must be a valid ${field.type === "currency" ? "integer-cent amount" : "number"}`;
+      return `${field.label} must be a valid ${field.type === "currency" ? "dollar amount" : "number"}`;
     if (field.type === "email" && !/^\S+@\S+\.\S+$/.test(value as string))
       return `${field.label} must be a valid email address`;
     if (
@@ -650,6 +689,7 @@ export function PartnerLeadForm({
     }
     valuesRef.current = next;
     dirtyRef.current = true;
+    editRevision.current += 1;
     setValues(next);
     setFieldErrors((current) => {
       if (!current[fieldKey]) return current;
@@ -660,6 +700,7 @@ export function PartnerLeadForm({
     setSubmitError(null);
     if (phoneField?.field_key === fieldKey) {
       submissionId.current = crypto.randomUUID();
+      rememberSubmissionId(draftIdRef.current, submissionId.current);
       lastScreenedPhone.current = null;
       setRejectionNotice(null);
       setConsentGiven(false);
@@ -723,6 +764,8 @@ export function PartnerLeadForm({
           body: JSON.stringify({
             phone: valuesRef.current[phoneField.field_key],
             submission_id: submissionId.current,
+            // LA-6.2: the calling-hours check needs the state the transfer is for.
+            carrier_state: market?.state ?? null,
           }),
         },
       );
@@ -730,7 +773,7 @@ export function PartnerLeadForm({
       if (!response.ok) {
         setScreening(null);
         setRejectionNotice(
-          body?.code === "tcpa_block"
+          (body?.code === "tcpa_block" || body?.code === "compliance_screening")
             ? {
                 code: body.code,
                 count: Number(body.blocked_count ?? 0),
@@ -893,7 +936,7 @@ export function PartnerLeadForm({
   });
   async function saveAndClose() {
     if (preview) return;
-    await persistDraft(valuesRef.current);
+    await persistDraft();
     // persistDraft clears the dirty flag only when the server stored the draft.
     if (!dirtyRef.current) router.push("/partner");
   }
@@ -948,7 +991,7 @@ export function PartnerLeadForm({
       if (!response.ok) {
         const message = body?.error ?? "Could not submit lead";
         if (body?.code === "duplicate_lead") {
-          setDuplicateMatches(body.matches ?? []);
+          setDuplicateMatches(Array.isArray(body.matches) ? body.matches.map((match: { matchedOn?: unknown }) => ({ matchedOn: Array.isArray(match.matchedOn) ? match.matchedOn.map(String) : [] })) : []);
           setSubmitError(
             "This person may already be in the pipeline. Review the match and add a justification if this is a separate lead.",
           );
@@ -958,7 +1001,7 @@ export function PartnerLeadForm({
           setStatus("Duplicate review required");
         } else {
           setRejectionNotice(
-            body?.code === "tcpa_block"
+            (body?.code === "tcpa_block" || body?.code === "compliance_screening")
               ? {
                   code: body.code,
                   count: Number(body.blocked_count ?? 0),
@@ -985,6 +1028,7 @@ export function PartnerLeadForm({
       setFormOpened(false);
       setDraftSavedAt(null);
       // The submitted draft is deleted server-side; the next form starts a new one.
+      forgetSubmissionId(draftIdRef.current);
       draftIdRef.current = null;
       onDraftChange?.(null);
       submissionId.current = crypto.randomUUID();
@@ -1143,10 +1187,17 @@ export function PartnerLeadForm({
         <span className="font-mono">{rejectionNotice.code.toUpperCase()}</span>.
         No lead was created.
       </p>
-      <p>
-        Blocked submissions for this partner:{" "}
-        <strong>{rejectionNotice.count}</strong>
-      </p>
+      {rejectionNotice.code === "compliance_screening" ? (
+        <p>
+          Rejected — compliance screening.{" "}
+          <strong>{rejectionNotice.count}</strong> this month.
+        </p>
+      ) : (
+        <p>
+          Blocked submissions for this partner:{" "}
+          <strong>{rejectionNotice.count}</strong>
+        </p>
+      )}
       {rejectionNotice.script && (
         <p>
           <span className="font-medium">Suggested neutral close:</span> “
@@ -1246,7 +1297,7 @@ export function PartnerLeadForm({
                 </span>
                 <span>
                   {step.label}
-                  {step.left > 0 && <small className="block text-[12px] font-normal text-[var(--warning-ink)]">{step.left} left</small>}
+                  {step.left > 0 && <small className="block text-xs font-normal text-[var(--warning-ink)]">{step.left} left</small>}
                 </span>
                 {step.complete && <span className="sr-only"> (complete)</span>}
               </button>
@@ -1412,7 +1463,7 @@ export function PartnerLeadForm({
                 type="button"
                 variant="outline"
                 disabled={saving}
-                onClick={() => void persistDraft(valuesRef.current)}
+                onClick={() => void persistDraft()}
               >
                 Save draft
               </Button>
@@ -1730,10 +1781,10 @@ function LegacyPartnerPortalWorkspace({
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <a
               href="#submit"
-              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Send
-                className="size-5 text-[var(--color-blue)]"
+                className="size-5 text-[var(--color-brand)]"
                 aria-hidden="true"
               />
               <p className="mt-3 font-semibold">Submit leads</p>
@@ -1743,7 +1794,7 @@ function LegacyPartnerPortalWorkspace({
             </a>
             <a
               href="#pipeline"
-              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <CheckCircle2
                 className="size-5 text-[var(--color-success)]"
@@ -1756,10 +1807,10 @@ function LegacyPartnerPortalWorkspace({
             </a>
             <a
               href="#team"
-              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Users
-                className="size-5 text-[var(--color-blue)]"
+                className="size-5 text-[var(--color-brand)]"
                 aria-hidden="true"
               />
               <p className="mt-3 font-semibold">Manage team</p>
@@ -1900,7 +1951,7 @@ function LegacyPartnerPortalWorkspace({
                         className="flex flex-wrap items-center justify-between gap-3 py-3"
                       >
                         <div className="min-w-0">
-                          <p className="text-[14px] font-medium text-[var(--ink)]">
+                          <p className="text-sm font-medium text-[var(--ink)]">
                             {draft.label ?? "Customer name not entered yet"}
                           </p>
                           <p className="portal-partner-submit-muted">

@@ -13,7 +13,7 @@ export function InvoiceDetailTabs({ tabs }: { tabs: Array<{ id: string; label: s
   const current = tabs.find((tab) => tab.id === active) ?? tabs[0];
   return (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-      <div role="tablist" aria-label="Invoice" className="flex gap-6 overflow-x-auto border-b border-[var(--border)] px-4">
+      <div role="tablist" aria-label="Invoice" className="flex gap-6 overflow-x-auto  border-[var(--border)] px-4">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -24,12 +24,12 @@ export function InvoiceDetailTabs({ tabs }: { tabs: Array<{ id: string; label: s
             aria-controls={`invoice-panel-${tab.id}`}
             onClick={() => setActive(tab.id)}
             className={cn(
-              "-mb-px inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-1 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em]",
+              "-mb-px inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-1 text-sm leading-[1.43] font-semibold tracking-[-0.01em]",
               tab.id === current?.id ? "border-[var(--primary)] text-[var(--ink)]" : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",
             )}
           >
             {tab.label}
-            {typeof tab.count === "number" && tab.count > 0 && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] tabular-nums">{tab.count}</span>}
+            {typeof tab.count === "number" && tab.count > 0 && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums">{tab.count}</span>}
           </button>
         ))}
       </div>

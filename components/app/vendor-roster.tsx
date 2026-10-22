@@ -1,11 +1,14 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertCircle, Clock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { DetailPanel } from "@/components/ui/detail-panel";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,6 +16,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
 import { Field, control } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
+import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
 import {
   VENDOR_STATUS_LABEL,
   vendorCampaignWarning,
@@ -27,8 +31,8 @@ import {
  * The vendor roster on /app/campaigns (Vendors concept board, LA-2 §5), and the New vendor form.
  *
  * The p-app-campaigns layout is kept: this is the "Vendor rollup" table it already had, with the
- * concept board's facts added as a column, chips and detail lines rather than a relayout into
- * cards. Every figure is read, never computed here:
+ * concept board's facts added as columns and a Signals chip column; a row opens its fact lines and the
+ * edit form in a side panel (2026-10-06 redesign). Every figure is read, never computed here:
  *   spend, records, rejected, per usable, unit price   tenant_vendor_rollup   (GET /api/app/vendors)
  *   speed to lead, consent claimed                     the LA-2.5/2.6 views   (GET /api/app/vendors)
  *   cost per issued policy, claimable returns,
@@ -79,7 +83,6 @@ function calendarDate(value: string | null | undefined) {
 }
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const LEAD_TYPE: Record<string, string> = { list: "List", realtime: "Real-time", aged: "Aged" };
-const PAGE_SIZE = 25;
 
 function contactOf(vendor: Vendor): VendorContact {
   const raw = (vendor.contact ?? {}) as Record<string, unknown>;
@@ -94,7 +97,7 @@ function Chip({ tone, children }: { tone: "warning" | "info" | "neutral"; childr
     info: "bg-[var(--info-surface)] text-[var(--info-ink)]",
     neutral: "bg-[var(--surface-alt)] text-[var(--body)]",
   } as const;
-  return <span className={`ml-2 inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 align-middle text-xs font-semibold ${tones[tone]}`}>{children}</span>;
+  return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 align-middle text-xs font-semibold ${tones[tone]}`}>{children}</span>;
 }
 
 /** A full-width line under a vendor row. Danger for money about to lapse and drop facts; info for a trial. */
@@ -139,7 +142,7 @@ function VendorFields({ draft, onChange, idPrefix, allowInactive }: { draft: Dra
   const set = (key: keyof Draft) => (event: { target: { value: string } }) => onChange({ ...draft, [key]: event.target.value });
   const id = (key: string) => `${idPrefix}-${key}`;
   return <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
-    <Field label="Name" htmlFor={id("name")}><input id={id("name")} className={control} value={draft.name} onChange={set("name")} placeholder="Apex Data" /></Field>
+    <Field label="Name" htmlFor={id("name")}><input id={id("name")} className={control} value={draft.name} onChange={set("name")} maxLength={160} placeholder="Apex Data" /></Field>
     <Field label="Category" htmlFor={id("category")}><input id={id("category")} className={control} value={draft.category} onChange={set("category")} maxLength={80} placeholder="Aged & ping-post" /></Field>
     <Field label="Lead type" htmlFor={id("type")}><select id={id("type")} className={control} value={draft.lead_type} onChange={set("lead_type")}><option value="list">List — a spreadsheet</option><option value="realtime">Real-time — posted by API</option><option value="aged">Aged — old and cheap</option></select></Field>
     <Field label="Status" htmlFor={id("status")}><select id={id("status")} className={control} value={draft.status} onChange={set("status")}>
@@ -152,11 +155,18 @@ function VendorFields({ draft, onChange, idPrefix, allowInactive }: { draft: Dra
     <Field label="Contact name" htmlFor={id("contact")}><input id={id("contact")} className={control} value={draft.contact_name} onChange={set("contact_name")} maxLength={120} placeholder="Tom Reilly" /></Field>
     <Field label="Contact email" htmlFor={id("email")}><input id={id("email")} className={control} type="email" value={draft.contact_email} onChange={set("contact_email")} maxLength={200} placeholder="accounts@apexdata.io" /></Field>
     <Field label="Contact phone" htmlFor={id("phone")}><input id={id("phone")} className={control} type="tel" value={draft.contact_phone} onChange={set("contact_phone")} maxLength={40} /></Field>
-    <Field label="Terms" htmlFor={id("terms")} className="col-span-full"><input id={id("terms")} className={control} value={draft.terms} onChange={set("terms")} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
+    <Field label="Terms" htmlFor={id("terms")} className="col-span-full"><input id={id("terms")} className={control} value={draft.terms} onChange={set("terms")} maxLength={2000} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
   </div>;
 }
 
-/** The New vendor panel. Opened by the page header's "New vendor". */
+/**
+ * The full-length detail panel beside a table (2026-10-06 redesign, after the callback calendar): a
+ * row opens it, X or Esc closes it. Since 2026-10-09 it is the shared DetailPanel (split), kept in
+ * view beside the table while the table scrolls.
+ */
+export const SIDE_PANEL_FRAME = "lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-2rem)]";
+
+/** The New vendor form, in a dialog. Opened by the page's "New vendor". */
 export function NewVendorPanel({ onClose, onCreated }: { onClose: () => void; onCreated: () => Promise<unknown> | void }) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
@@ -180,15 +190,17 @@ export function NewVendorPanel({ onClose, onCreated }: { onClose: () => void; on
     } finally { setSaving(false); }
   }
 
-  return <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5" aria-labelledby="new-vendor-heading">
-    <h2 id="new-vendor-heading" className="m-0 text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">New vendor</h2>
-    <VendorFields draft={draft} onChange={setDraft} idPrefix="new-vendor" allowInactive={false} />
-    {error && <p className="m-0 text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-      <Button type="button" disabled={!draft.name.trim() || saving} onClick={() => void createVendor()}>{saving ? "Saving…" : "Add vendor"}</Button>
-    </div>
-  </section>;
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
+      <DialogHeader><DialogTitle>New vendor</DialogTitle></DialogHeader>
+      <VendorFields draft={draft} onChange={setDraft} idPrefix="new-vendor" allowInactive={false} />
+      {error && <p className="m-0 text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <Button type="button" disabled={!draft.name.trim() || saving} onClick={() => void createVendor()}>{saving ? "Saving…" : "Add vendor"}</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>;
 }
 
 /** "3 days left", "closes today". */
@@ -203,10 +215,10 @@ function TrialLine({ facts, onShowCampaigns, onOrderAnother, orderDisabledReason
   const needs = [campaigns <= 1 ? "a second campaign" : null, leads < threshold ? `${(threshold - leads).toLocaleString()} more leads` : null].filter(Boolean).join(" and ");
   const policies = facts.issued_policies;
   const sensitivity = facts.one_more_sale_moves_cents === null ? null
-    : policies === 0 ? ` The first sale would put its cost per policy at ${money(facts.one_more_sale_moves_cents)}.`
-    : ` One more sale would move its cost per policy by ${money(facts.one_more_sale_moves_cents)}.`;
+    : policies === 0 ? `The first sale would put its cost per policy at ${money(facts.one_more_sale_moves_cents)}.`
+    : `One more sale would move its cost per policy by ${money(facts.one_more_sale_moves_cents)}.`;
   return <FactLine tone="info" icon={<AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--info-ink)]" aria-hidden="true" />}>
-    <p className="m-0"><strong className="font-semibold text-[var(--info-ink)]">Trialling.</strong> {plural(campaigns, "campaign")}, {plural(leads, "lead")}{policies !== null ? `, ${plural(policies, "policy", "policies")} so far` : ""}. Not ranked or flagged until it has {needs}.{sensitivity}</p>
+    <p className="m-0"><strong className="font-semibold text-[var(--info-ink)]">Trialling.</strong> {plural(campaigns, "campaign")}, {plural(leads, "lead")}{policies !== null ? `, ${plural(policies, "policy", "policies")} so far` : ""}. Not ranked or flagged until it has {needs}.{sensitivity && <> <InfoTip label="Why it is not ranked yet">A small sample swings too much to rank. {sensitivity}</InfoTip></>}</p>
     <div className="mt-2 flex flex-wrap items-center gap-2">
       <Button type="button" variant="outline" size="sm" onClick={onShowCampaigns}>See its campaigns</Button>
       <Button type="button" variant="outline" size="sm" disabled={orderDisabledReason !== null} title={orderDisabledReason ?? undefined} onClick={onOrderAnother}>Order another</Button>
@@ -236,6 +248,8 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
+  // Header, callouts, tab row, toolbar, column heads and pager around the vendor rows.
+  const pageSize = useFittingRows(400, 45);
 
   async function refresh() {
     setRefreshing(true);
@@ -271,6 +285,7 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
     setOpenId(vendorId); setSaveError(null);
     setDraft(vendor ? draftOf(vendor) : null);
   }
+  const close = useCallback(() => { setOpenId(null); setDraft(null); }, []);
 
   async function saveVendor(vendorId: string) {
     if (!draft || saving) return;
@@ -292,107 +307,148 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
   const best = facts?.best ?? null;
   const query = search.trim().toLowerCase();
   const matching = query ? rollup.filter((vendor) => vendor.vendor_name.toLowerCase().includes(query)) : rollup;
-  const { current, rows: shown } = paginate(matching, page, PAGE_SIZE);
+  const { current, rows: shown } = paginate(matching, page, pageSize);
   const bad = "font-semibold text-[var(--error-ink)]";
+  const selected = openId ? rollup.find((vendor) => vendor.vendor_id === openId) ?? null : null;
+  // While the panel is open the table keeps the columns that identify and rank a vendor.
+  const wide = selected === null;
 
-  return <TableCard
-    title="Vendor rollup"
-    toolbar={<DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
-      <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search vendors" />
-    </DataToolbar>}
-    footer={matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "vendor" : "vendors"} onPage={setPage} pageSize={PAGE_SIZE} /> : undefined}
-  >
-    {matching.length === 0 ? <NoMatches noun="vendors" onClear={() => { setSearch(""); setPage(1); }} /> : <Table className="[&_td]:text-[var(--body)]">
-      <TableHeader><TableRow>
-        <TableHead scope="col">Vendor</TableHead>
-        <TableHead scope="col" className="text-right">Spend</TableHead>
-        <TableHead scope="col" className="text-right">Purchased</TableHead>
-        <TableHead scope="col" className="text-right">Rejected</TableHead>
-        <TableHead scope="col" className="text-right">Per usable</TableHead>
-        <TableHead scope="col" className="text-right">Cost / issued</TableHead>
-        <TableHead scope="col" className="text-right">Median to dial</TableHead>
-        <TableHead scope="col" className="text-right">Under 60s</TableHead>
-        <TableHead scope="col" className="text-right">Consent claimed</TableHead>
-      </TableRow></TableHeader>
-      <TableBody>
-        {shown.map((vendor) => {
-          const fast = speedByVendor.get(vendor.vendor_id);
-          const certificates = consentByVendor.get(vendor.vendor_id);
-          const row = vendorById.get(vendor.vendor_id);
-          const fact = factsByVendor.get(vendor.vendor_id);
-          const status = row?.status ?? vendor.status;
-          const category = row?.category ?? fact?.category ?? null;
-          const open = openId === vendor.vendor_id;
-          const orderDisabledReason = vendorTakesCampaigns(status) ? null : "Inactive vendors take no new campaigns. Set it back to active first.";
-          const costFlagged = fact?.drop?.reasons.some((reason) => reason.key === "cost") ?? false;
-          const lines: ReactNode[] = [];
-          if (fact?.claimable) lines.push(<FactLine key="claim" tone="danger" icon={<Clock className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" aria-hidden="true" />}>
-            <p className="m-0 tabular-nums"><strong className="font-semibold">{money(fact.claimable.cents)} claimable, {daysLeft(fact.claimable.days_left)}.</strong> {plural(fact.claimable.rows, "row")} at the campaign&rsquo;s purchased rate. <a className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/vendor-returns?vendor=${vendor.vendor_id}`}>Claim it now</a></p>
-          </FactLine>);
-          if (fact?.drop) {
-            const text = fact.drop.reasons.map((reason) => reason.text).join("; ");
-            const renews = calendarDate(fact.drop.renews_on);
-            lines.push(<FactLine key="drop" tone="danger" icon={<AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" aria-hidden="true" />}>
-              <p className="m-0 tabular-nums">{text.charAt(0).toUpperCase() + text.slice(1)}. {renews ? <>Renewal is on <strong className="font-semibold">{renews}</strong>.</> : "No renewal date recorded."} <span className="text-muted-foreground">Facts to weigh — nothing is paused automatically.</span></p>
-            </FactLine>);
-          }
-          if (fact?.trialling) lines.push(<TrialLine key="trial" facts={fact} onShowCampaigns={() => onShowCampaigns(vendor.vendor_id)} onOrderAnother={() => onNewCampaign(vendor.vendor_id, vendor.lead_type)} orderDisabledReason={orderDisabledReason} />);
-          const contact = row ? contactOf(row) : {};
-          // Said beside the edit, from the draft: choosing "Under review" is when the reader needs it.
-          const warning = open && draft ? vendorCampaignWarning(draft.status, row?.name ?? vendor.vendor_name) : null;
-          return <Fragment key={vendor.vendor_id}>
-            <TableRow className={`portal-campaigns-row${open ? " is-open" : ""}`} onClick={() => toggle(vendor.vendor_id)}>
-              <TableCell>
-                <button type="button" className="portal-campaigns-name" aria-expanded={open} onClick={(event) => { event.stopPropagation(); toggle(vendor.vendor_id); }}>{vendor.vendor_name}</button>
-                {status === "under_review" && <Chip tone="warning">{VENDOR_STATUS_LABEL.under_review}</Chip>}
-                {status === "inactive" && <Chip tone="neutral">{VENDOR_STATUS_LABEL.inactive}</Chip>}
-                {fact?.trialling && status !== "inactive" && <Chip tone="info">Trialling</Chip>}
-                <small className="portal-campaigns-sub">{category ? `${category} · ` : ""}{vendor.lead_type} · {vendor.active_campaign_count} of {vendor.campaign_count} active</small>
+  return <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+    <TableCard
+      className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-210px)] min-w-0 flex-1`}
+      toolbar={<DataToolbar actions={<>{query && <ClearFiltersButton onClick={() => { setSearch(""); setPage(1); }} />}<RefreshButton onClick={() => void refresh()} refreshing={refreshing} /></>}>
+        <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search vendors" />
+      </DataToolbar>}
+      footer={<>
+        {matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "vendor" : "vendors"} onPage={setPage} pageSize={pageSize} /> : <span />}
+        {(factsError || (facts?.pending.length ?? 0) > 0) && <span role="status" title={factsError ?? undefined}>{factsError ? "Refresh to load cost per policy and returns." : facts?.pending.map((item) => item.detail).join(" ")}</span>}
+      </>}
+    >
+      {matching.length === 0 ? <NoMatches noun="vendors" onClear={() => { setSearch(""); setPage(1); }} /> : <Table className="[&_td]:text-[var(--body)]">
+        <TableHeader><TableRow>
+          <TableHead scope="col">Vendor</TableHead>
+          {wide && <TableHead scope="col">Type</TableHead>}
+          {wide && <TableHead scope="col" className="text-right">Campaigns</TableHead>}
+          <TableHead scope="col" className="text-right">Spend</TableHead>
+          {wide && <TableHead scope="col" className="text-right">Purchased</TableHead>}
+          {wide && <TableHead scope="col" className="text-right">Rejected</TableHead>}
+          <TableHead scope="col" className="text-right">Per usable</TableHead>
+          <TableHead scope="col" className="text-right">Cost / issued</TableHead>
+          {wide && <TableHead scope="col" className="text-right">Median to dial</TableHead>}
+          {wide && <TableHead scope="col" className="text-right">Under 60s</TableHead>}
+          {wide && <TableHead scope="col" className="text-right">Consent claimed</TableHead>}
+          <TableHead scope="col">Signals</TableHead>
+        </TableRow></TableHeader>
+        <TableBody>
+          {shown.map((vendor) => {
+            const fast = speedByVendor.get(vendor.vendor_id);
+            const certificates = consentByVendor.get(vendor.vendor_id);
+            const row = vendorById.get(vendor.vendor_id);
+            const fact = factsByVendor.get(vendor.vendor_id);
+            const status = row?.status ?? vendor.status;
+            const category = row?.category ?? fact?.category ?? null;
+            const open = openId === vendor.vendor_id;
+            const costFlagged = fact?.drop?.reasons.some((reason) => reason.key === "cost") ?? false;
+            const type = `${category ? `${category} · ` : ""}${LEAD_TYPE[vendor.lead_type] ?? vendor.lead_type}`;
+            return <TableRow key={vendor.vendor_id} className={`portal-campaigns-row${open ? " is-open" : ""}`} onClick={() => toggle(vendor.vendor_id)}>
+              <TableCell className="max-w-[240px]">
+                <button type="button" className="portal-campaigns-name block max-w-full truncate" title={vendor.vendor_name} aria-expanded={open} onClick={(event) => { event.stopPropagation(); toggle(vendor.vendor_id); }}>{vendor.vendor_name}</button>
               </TableCell>
+              {wide && <TableCell className="max-w-[200px] truncate" title={type}>{type}</TableCell>}
+              {wide && <TableCell className="text-right tabular-nums">{vendor.active_campaign_count} of {vendor.campaign_count} active</TableCell>}
               <TableCell className="text-right tabular-nums">{money(vendor.total_spend_cents)}</TableCell>
-              <TableCell className="text-right tabular-nums">{vendor.records_purchased.toLocaleString()}</TableCell>
-              <TableCell className={cn("text-right tabular-nums", (vendor.records_rejected ?? 0) > 0 && bad)}>{count(vendor.records_rejected)}</TableCell>
+              {wide && <TableCell className="text-right tabular-nums">{vendor.records_purchased.toLocaleString()}</TableCell>}
+              {wide && <TableCell className={cn("text-right tabular-nums", (vendor.records_rejected ?? 0) > 0 && bad)}>{count(vendor.records_rejected)}</TableCell>}
               <TableCell className="text-right tabular-nums"><strong>{money2(vendor.cost_per_usable_record_cents)}</strong></TableCell>
               <TableCell className={cn("text-right tabular-nums", costFlagged && bad)} title={fact?.trialling ? "Not ranked: still trialling" : best && best.vendor_id === vendor.vendor_id ? "Lowest cost per issued policy of the ranked vendors" : undefined}>
                 {fact ? <strong className={best && best.vendor_id === vendor.vendor_id ? "text-[var(--success-ink)]" : undefined}>{money2(fact.cost_per_policy_cents)}</strong> : "—"}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{fast?.posted_leads ? duration(fast.median_seconds) : "—"}</TableCell>
-              <TableCell className="text-right tabular-nums">{fast?.posted_leads ? percent(fast.dialled_within_60s_pct) : "—"}</TableCell>
-              <TableCell className={cn("text-right tabular-nums", certificates && Number(certificates.claimed_coverage_pct ?? 0) < 50 && bad)}>{certificates ? percent(certificates.claimed_coverage_pct) : "—"}</TableCell>
-            </TableRow>
-            {lines.length > 0 && <TableRow className="portal-campaigns-detail-row"><TableCell colSpan={9}><div className="flex flex-col gap-2 px-4 pb-3">{lines}</div></TableCell></TableRow>}
-            {open && <TableRow className="portal-campaigns-detail-row"><TableCell colSpan={9}>
-              <div className="portal-campaigns-detail">
-                <dl>
-                  <div><dt>Contact</dt><dd>{contact.name || contact.email || contact.phone
-                    ? <>{[contact.name, contact.phone].filter(Boolean).join(" · ")}{contact.email ? <>{contact.name || contact.phone ? " · " : ""}<a className="text-[var(--accent-ink)] hover:underline" href={`mailto:${contact.email}`}>{contact.email}</a></> : null}</>
-                    : "—"}</dd></div>
-                  <div><dt>Unit price</dt><dd>{money2(vendor.cost_per_record_cents)} per record</dd></div>
-                  <div><dt>Return window</dt><dd>{vendor.return_window_days > 0 ? plural(vendor.return_window_days, "day") : "No returns agreed"}{fact?.claimable ? ` · soonest claimable ${daysLeft(fact.claimable.days_left)}` : ""}</dd></div>
-                  <div><dt>Undialable</dt><dd>{percent(fact?.undialable_percent)}</dd></div>
-                  <div><dt>Renews on</dt><dd>{calendarDate(row?.renews_on ?? fact?.renews_on) ?? "—"}</dd></div>
-                  <div><dt>Lead type</dt><dd>{LEAD_TYPE[vendor.lead_type] ?? vendor.lead_type}</dd></div>
-                </dl>
-                <CampaignSpeedToLead vendorId={vendor.vendor_id} />
-                {row?.terms &&<p className="m-0 text-sm text-[var(--body)]"><span className="font-semibold text-foreground">Terms:</span> {row.terms}</p>}
-                {draft && <>
-                  <VendorFields draft={draft} onChange={setDraft} idPrefix={`vendor-${vendor.vendor_id}`} allowInactive />
-                  {warning && <p className="m-0 text-sm text-[var(--warning-ink)]">{warning}</p>}
-                  {saveError && <p className="m-0 text-sm text-[var(--error-ink)]" role="alert">{saveError}</p>}
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button type="button" variant="outline" disabled={orderDisabledReason !== null} title={orderDisabledReason ?? undefined} onClick={() => onNewCampaign(vendor.vendor_id, vendor.lead_type)}>New campaign for this vendor</Button>
-                    <Button type="button" disabled={!draft.name.trim() || saving} onClick={() => void saveVendor(vendor.vendor_id)}>{saving ? "Saving…" : "Save vendor"}</Button>
-                  </div>
-                  {orderDisabledReason && <p className="m-0 text-right text-xs text-muted-foreground">{orderDisabledReason}</p>}
-                </>}
-              </div>
-            </TableCell></TableRow>}
-          </Fragment>;
-        })}
-      </TableBody>
-    </Table>}
-    {(factsError || (facts?.pending.length ?? 0) > 0) && <p className="m-0 border-t border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground" role="status">
-      {factsError ? `Cost per policy, claimable returns and trial status did not load: ${factsError}` : facts?.pending.map((item) => item.detail).join(" ")}
-    </p>}
-  </TableCard>;
+              {wide && <TableCell className="text-right tabular-nums">{fast?.posted_leads ? duration(fast.median_seconds) : "—"}</TableCell>}
+              {wide && <TableCell className="text-right tabular-nums">{fast?.posted_leads ? percent(fast.dialled_within_60s_pct) : "—"}</TableCell>}
+              {wide && <TableCell className={cn("text-right tabular-nums", certificates && Number(certificates.claimed_coverage_pct ?? 0) < 50 && bad)}>{certificates ? percent(certificates.claimed_coverage_pct) : "—"}</TableCell>}
+              <TableCell className="whitespace-nowrap">
+                {/* The fact lines' short form; the sentences and their actions are in the panel. */}
+                <span className="flex items-center gap-1.5">
+                  {status === "under_review" && <Chip tone="warning">{VENDOR_STATUS_LABEL.under_review}</Chip>}
+                  {status === "inactive" && <Chip tone="neutral">{VENDOR_STATUS_LABEL.inactive}</Chip>}
+                  {fact?.trialling && status !== "inactive" && <Chip tone="info">Trialling</Chip>}
+                  {fact?.claimable && <a className="inline-flex items-center gap-1 rounded-full bg-[var(--error-surface)] px-2 py-0.5 text-xs font-semibold text-[var(--error-ink)] hover:underline" href={`/app/vendor-returns?vendor=${vendor.vendor_id}`} onClick={(event) => event.stopPropagation()} title={`${plural(fact.claimable.rows, "row")} at the campaign's purchased rate — claim it now`}><Clock className="size-3" aria-hidden="true" />{money(fact.claimable.cents)} claimable, {daysLeft(fact.claimable.days_left)}</a>}
+                  {fact?.drop && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--error-surface)] px-2 py-0.5 text-xs font-semibold text-[var(--error-ink)]"><AlertCircle className="size-3" aria-hidden="true" />Facts to weigh</span>}
+                </span>
+              </TableCell>
+            </TableRow>;
+          })}
+        </TableBody>
+      </Table>}
+    </TableCard>
+
+    {selected && <VendorPanel
+      vendor={selected}
+      row={vendorById.get(selected.vendor_id)}
+      fact={factsByVendor.get(selected.vendor_id)}
+      draft={draft}
+      onDraft={setDraft}
+      saving={saving}
+      saveError={saveError}
+      onSave={() => void saveVendor(selected.vendor_id)}
+      onClose={close}
+      onNewCampaign={onNewCampaign}
+      onShowCampaigns={onShowCampaigns}
+    />}
+  </div>;
+}
+
+/** One vendor's facts and edit form, in the side panel. */
+function VendorPanel({ vendor, row, fact, draft, onDraft, saving, saveError, onSave, onClose, onNewCampaign, onShowCampaigns }: {
+  vendor: Rollup;
+  row: Vendor | undefined;
+  fact: VendorCardFacts | undefined;
+  draft: Draft | null;
+  onDraft: (next: Draft) => void;
+  saving: boolean;
+  saveError: string | null;
+  onSave: () => void;
+  onClose: () => void;
+  onNewCampaign: (vendorId: string, leadType: string) => void;
+  onShowCampaigns: (vendorId: string) => void;
+}) {
+  const status = row?.status ?? vendor.status;
+  const category = row?.category ?? fact?.category ?? null;
+  const orderDisabledReason = vendorTakesCampaigns(status) ? null : "Set this vendor to active to order more.";
+  const contact = row ? contactOf(row) : {};
+  // Said beside the edit, from the draft: choosing "Under review" is when the reader needs it.
+  const warning = draft ? vendorCampaignWarning(draft.status, row?.name ?? vendor.vendor_name) : null;
+  const dropText = fact?.drop ? fact.drop.reasons.map((reason) => reason.text).join("; ") : "";
+  const renews = fact?.drop ? calendarDate(fact.drop.renews_on) : null;
+  return <DetailPanel mode="split" className={SIDE_PANEL_FRAME} title={vendor.vendor_name} subtitle={`${category ? `${category} · ` : ""}${vendor.lead_type} · ${vendor.active_campaign_count} of ${vendor.campaign_count} active`} onClose={onClose}>
+    {fact?.claimable && <FactLine tone="danger" icon={<Clock className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" aria-hidden="true" />}>
+      <p className="m-0 tabular-nums"><strong className="font-semibold">{money(fact.claimable.cents)} claimable, {daysLeft(fact.claimable.days_left)}.</strong> {plural(fact.claimable.rows, "row")} at the campaign&rsquo;s purchased rate. <a className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/vendor-returns?vendor=${vendor.vendor_id}`}>Claim it now</a></p>
+    </FactLine>}
+    {fact?.drop && <FactLine tone="danger" icon={<AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" aria-hidden="true" />}>
+      <p className="m-0 tabular-nums">{dropText.charAt(0).toUpperCase() + dropText.slice(1)}. {renews ? <>Renewal is on <strong className="font-semibold">{renews}</strong>.</> : "No renewal date recorded."} <span className="text-muted-foreground">Facts to weigh — nothing is paused automatically.</span></p>
+    </FactLine>}
+    {fact?.trialling && <TrialLine facts={fact} onShowCampaigns={() => onShowCampaigns(vendor.vendor_id)} onOrderAnother={() => onNewCampaign(vendor.vendor_id, vendor.lead_type)} orderDisabledReason={orderDisabledReason} />}
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      <div className="col-span-2"><dt className="text-xs text-muted-foreground">Contact</dt><dd className="mt-0.5 break-words text-foreground">{contact.name || contact.email || contact.phone
+        ? <>{[contact.name, contact.phone].filter(Boolean).join(" · ")}{contact.email ? <>{contact.name || contact.phone ? " · " : ""}<a className="text-[var(--accent-ink)] hover:underline" href={`mailto:${contact.email}`}>{contact.email}</a></> : null}</>
+        : "—"}</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Unit price</dt><dd className="mt-0.5 tabular-nums text-foreground">{money2(vendor.cost_per_record_cents)} per record</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Return window</dt><dd className="mt-0.5 text-foreground">{vendor.return_window_days > 0 ? plural(vendor.return_window_days, "day") : "No returns agreed"}{fact?.claimable ? ` · soonest claimable ${daysLeft(fact.claimable.days_left)}` : ""}</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Undialable</dt><dd className="mt-0.5 tabular-nums text-foreground">{percent(fact?.undialable_percent)}</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Renews on</dt><dd className="mt-0.5 text-foreground">{calendarDate(row?.renews_on ?? fact?.renews_on) ?? "—"}</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Lead type</dt><dd className="mt-0.5 text-foreground">{LEAD_TYPE[vendor.lead_type] ?? vendor.lead_type}</dd></div>
+    </dl>
+    <CampaignSpeedToLead vendorId={vendor.vendor_id} />
+    {row?.terms && <p className="m-0 text-sm text-[var(--body)]"><span className="font-semibold text-foreground">Terms:</span> {row.terms}</p>}
+    {draft && <>
+      <VendorFields draft={draft} onChange={onDraft} idPrefix={`vendor-${vendor.vendor_id}`} allowInactive />
+      {warning && <p className="m-0 text-sm text-[var(--warning-ink)]">{warning}</p>}
+      {saveError && <p className="m-0 text-sm text-[var(--error-ink)]" role="alert">{saveError}</p>}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button type="button" variant="outline" disabled={orderDisabledReason !== null} title={orderDisabledReason ?? undefined} onClick={() => onNewCampaign(vendor.vendor_id, vendor.lead_type)}>New campaign for this vendor</Button>
+        <Button type="button" disabled={!draft.name.trim() || saving} onClick={onSave}>{saving ? "Saving…" : "Save vendor"}</Button>
+      </div>
+      {orderDisabledReason && <p className="m-0 text-right text-xs text-muted-foreground">{orderDisabledReason}</p>}
+    </>}
+  </DetailPanel>;
 }

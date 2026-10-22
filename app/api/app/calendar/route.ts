@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { appointmentsInRange, redactCalendarForSetter } from "@/lib/appointments/calendar";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-2.11's day and week calendar.
@@ -11,13 +12,14 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * two people in the same hour. What they may not do is change it, which is `/api/app/availability`
  * and excludes them.
  */
-const CALENDAR_ROLES = ["owner", "producer", "setter"] as const;
+// LA-0.2: an assistant keeps the calendar (calendar.manage); in an agency his scope is the producers he assists.
+const CALENDAR_ROLES = ["owner", "producer", "assistant", "setter"] as const;
 
 /** A month of days at a time is plenty for a day-or-week view, and bounds the read. */
 const MAX_DAYS = 31;
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES);
+  const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
 
   const params = request.nextUrl.searchParams;
@@ -32,7 +34,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: `Choose a range of ${MAX_DAYS} days or fewer` }, { status: 400 });
 
   try {
-    const appointments = await appointmentsInRange(auth.context.tenantId, new Date(fromAt).toISOString(), new Date(toAt).toISOString());
+    // AG-0.5: in an agency a narrow session sees the calendars of the producers in its scope and its own
+    // bookings, never another producer's diary; from the session, never the request. Null = everything.
+    const appointments = await appointmentsInRange(auth.context.tenantId, new Date(fromAt).toISOString(), new Date(toAt).toISOString(), await scopeFor(auth.context), auth.context.userId);
     return NextResponse.json(
       // LA-2.12-2: a setter sees another setter's booking as a taken slot, never its lead or notes.
       { appointments: auth.context.role === "setter" ? redactCalendarForSetter(appointments, auth.context.userId) : appointments },

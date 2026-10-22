@@ -32,9 +32,19 @@ export const CARD_TITLE: Record<LegalDocType, string> = {
   tos: "Terms of service",
   privacy: "Privacy policy",
   dpa: "Data processing agreement",
+  refund: "Refund policy",
+  cookies: "Cookie notice",
+  subprocessors: "Subprocessors",
 };
 
-export const SWITCH_LABEL: Record<LegalDocType, string> = { tos: "Terms", privacy: "Privacy", dpa: "DPA" };
+export const SWITCH_LABEL: Record<LegalDocType, string> = {
+  tos: "Terms",
+  privacy: "Privacy",
+  dpa: "DPA",
+  refund: "Refunds",
+  cookies: "Cookies",
+  subprocessors: "Subprocessors",
+};
 
 export const DRAFT_KEY = "draft";
 

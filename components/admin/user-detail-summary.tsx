@@ -1,9 +1,12 @@
+import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Callout, Pill } from "@/components/app/settings/primitives";
+import { Callout } from "@/components/app/settings/primitives";
+import { pillTone } from "@/lib/ui/pillTone";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import type { UserDetail } from "@/lib/adminUsers/detail";
 import { userStatusTone, utcDate, utcDateTime } from "@/lib/adminUsers/detailFormat";
 import { TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
@@ -13,7 +16,8 @@ import { userStatusLabel } from "@/lib/users/constants";
 /** More than this many distinct IPs in 24h suggests a shared account (same threshold as the list). */
 const SHARED_ACCOUNT_IP_THRESHOLD = 3;
 
-type Fact = { label: string; value: string; iso?: string | null };
+/** Names, addresses and dates rather than counts: set at 18px and truncated, as on the tenant record. */
+const FACT = "block truncate text-lg leading-[1.33]";
 
 /**
  * The top of the admin user record (board p-adm-user-detail): back link, header with the state
@@ -25,24 +29,15 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
   const roleLabel = (role: string | null) =>
     role ? (TENANT_ROLE_LABELS[role as TenantRole] ?? role) : null;
 
-  const facts: Fact[] = [
-    { label: "User id", value: user.id },
-    { label: "Email", value: user.email ?? "—" },
-    { label: "Created", value: utcDate(user.createdAt), iso: user.createdAt },
-    { label: "Last login", value: user.lastLoginAt ? utcDateTime(user.lastLoginAt) : "Never", iso: user.lastLoginAt },
-    ...(user.suspendedAt
-      ? [{ label: "Suspended", value: utcDateTime(user.suspendedAt), iso: user.suspendedAt }]
-      : []),
-    { label: "Phone", value: user.phone || "—" },
-    { label: "Plan", value: user.planCode ?? "No plan yet" },
-  ];
+  const agencies = user.memberships.map((membership) => membership.tenantName ?? "Unnamed agency");
+  const when = (iso: string | null, text: string) => (iso ? <DashboardUtcTime iso={iso} text={text} /> : text);
 
   return (
     <>
       <div>
         <Link
           href="/admin/users"
-          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           <ArrowLeft className="size-[13px] stroke-[2.4]" aria-hidden="true" />
           Back to users
@@ -51,23 +46,23 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
           title={user.name || user.email || "User"}
           actions={
             <span role="group" aria-label="Account state" className="flex flex-wrap items-center gap-2">
-              <Pill tone={userStatusTone(user.status)} dot>
+              <StatusChip tone={pillTone(userStatusTone(user.status))} dot>
                 {userStatusLabel(user.status)}
-              </Pill>
-              {user.memberships.length === 0 && <Pill tone="neutral">No agency</Pill>}
+              </StatusChip>
+              {user.memberships.length === 0 && <StatusChip dot={false} tone="neutral">No agency</StatusChip>}
               {user.memberships.map((membership) => (
                 <span key={membership.tenantId} className="contents">
-                  {roleLabel(membership.role) && <Pill tone="neutral">{roleLabel(membership.role)}</Pill>}
+                  {roleLabel(membership.role) && <StatusChip dot={false} tone="neutral">{roleLabel(membership.role)}</StatusChip>}
                   <Link
                     href={`/admin/tenants/${membership.tenantId}`}
                     className="rounded-full no-underline hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                     title="Open this agency's record"
                   >
-                    <Pill tone="neutral">{membership.tenantName ?? "Unnamed agency"}</Pill>
+                    <StatusChip dot={false} tone="neutral">{membership.tenantName ?? "Unnamed agency"}</StatusChip>
                   </Link>
                 </span>
               ))}
-              {!isOnboarded(user) && <Pill tone="warning">Invite pending</Pill>}
+              {!isOnboarded(user) && <StatusChip dot={false} tone="warning">Invite pending</StatusChip>}
             </span>
           }
         />
@@ -80,23 +75,36 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
         />
       )}
 
-      <section aria-label="Key facts" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
-        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
-          {facts.map((fact) => (
-            <div key={fact.label} className="min-w-0">
-              <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
-                {fact.label}
-              </dt>
-              <dd
-                className="m-0 mt-1 truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums"
-                title={fact.iso ? undefined : fact.value}
-              >
-                {fact.iso ? <DashboardUtcTime iso={fact.iso} text={fact.value} /> : fact.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      {/* The same strip as the tenant record, so the person and the agency read alike. */}
+      <StatStrip label="Key facts">
+        <StatTile valueSize="text"
+          label="Email"
+          value={<span className={FACT} title={user.email ?? undefined}>{user.email ?? "—"}</span>}
+          footnote={user.phone ? <span className="block truncate">{user.phone}</span> : "no phone"}
+        />
+        <StatTile valueSize="text"
+          label="Last login"
+          value={<span className={FACT}>{when(user.lastLoginAt, user.lastLoginAt ? utcDateTime(user.lastLoginAt) : "Never")}</span>}
+          valueTone={sharedAccountSuspected ? "warning" : undefined}
+          footnote={`${user.distinctIps24h.toLocaleString("en-US")} ${user.distinctIps24h === 1 ? "address" : "addresses"} in 24 hours`}
+        />
+        <StatTile valueSize="text"
+          label={agencies.length === 1 ? "Agency" : "Agencies"}
+          value={<span className={FACT} title={agencies.join(", ") || undefined}>{agencies[0] ?? "None"}</span>}
+          footnote={agencies.length > 1 ? `and ${agencies.length - 1} more` : (roleLabel(user.memberships[0]?.role ?? null) ?? "not in an agency")}
+        />
+        <StatTile valueSize="text" label="Plan" value={<span className={FACT}>{user.planCode ?? "No plan yet"}</span>} footnote={isOnboarded(user) ? "account set up" : "invite pending"} />
+        <StatTile valueSize="text"
+          label="Joined"
+          value={<span className={FACT}>{when(user.createdAt, utcDate(user.createdAt))}</span>}
+          footnote={user.suspendedAt ? <>Suspended {when(user.suspendedAt, utcDateTime(user.suspendedAt))}</> : "not suspended"}
+        />
+        <StatTile valueSize="text"
+          label="User id"
+          value={<span className="block truncate font-mono text-sm leading-[1.5]" title={user.id}>{user.id}</span>}
+          reserveFootnote
+        />
+      </StatStrip>
     </>
   );
 }

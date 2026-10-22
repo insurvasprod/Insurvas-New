@@ -34,6 +34,8 @@ import { SaveStatus } from "@/components/app/applications/workspace/save-status"
 import { StepCard } from "@/components/app/applications/workspace/step-card";
 import { SharedWithPrimary } from "@/components/app/applications/household/shared-detail";
 import { useReveal } from "@/components/app/applications/workspace/use-reveal";
+import { IncomeCapture } from "@/components/app/retention/income-capture";
+import { incomeTypeFromDraft } from "@/lib/retention/income";
 
 const METHOD_SHORT: Record<PaymentMethod, string> = { ach: "ACH", direct_express: "Direct Express", debit_card: "Debit card", credit_card: "Credit card", direct_bill: "Direct bill" };
 const BRAND_LABEL: Record<CardBrand, string> = { visa: "Visa", mastercard: "Mastercard", discover: "Discover", amex: "American Express" };
@@ -110,12 +112,15 @@ function NumberField({ id, label, fieldKey, stored, value, onChange, onLeave, er
   hint?: ReactNode;
   readOnly: boolean;
 }) {
-  const { value: revealed, busy, reveal, hide } = useReveal(fieldKey, stored?.masked);
+  const { value: revealed, busy, reveal, hide, dialog } = useReveal(fieldKey, stored?.masked, label.toLowerCase());
   const has = Boolean(stored?.hasValue);
   const revealButton = has && (revealed !== null ? (
     <Button type="button" variant="ghost" onClick={hide} aria-label={`Hide ${label.toLowerCase()}`}><EyeOff aria-hidden="true" />Hide</Button>
   ) : (
-    <Button type="button" variant="ghost" onClick={() => { void reveal(); }} disabled={busy} title={busy ? "Revealing…" : undefined} aria-label={`Reveal the stored ${label.toLowerCase()}`}><Eye aria-hidden="true" />Reveal</Button>
+    <>
+      {dialog}
+      <Button type="button" variant="ghost" onClick={() => { void reveal(); }} disabled={busy} title={busy ? "Revealing…" : undefined} aria-label={`Reveal the stored ${label.toLowerCase()}`}><Eye aria-hidden="true" />Reveal</Button>
+    </>
   ));
   const shownHint = hint ?? (revealed !== null ? "Masked again in a minute." : has ? `${readOnly ? "" : `Leave blank to keep ${stored!.masked}. `}One field per reveal. Each one writes an audit row.` : undefined);
 
@@ -505,8 +510,9 @@ function PaymentStepFor() {
           <p id="pay.draft_day" tabIndex={-1} className="text-sm text-[var(--muted)] outline-none">Direct bill isn&apos;t drafted, so there&apos;s no draft day to choose. The carrier bills the client.</p>
         </StepCard>
       ) : (
+        <div className="flex w-full shrink-0 flex-col gap-4 2xl:w-[320px]">
         <DraftDatePanel
-          className="w-full shrink-0 2xl:w-[320px]"
+          className="w-full"
           idPrefix="pay.dd"
           draftDayId="pay.draft_day"
           dob={dobText}
@@ -518,6 +524,19 @@ function PaymentStepFor() {
           onCommit={commitDraft}
           status={draftShared ? <SharedWithPrimary keys={["draft_day"]} what="draft day" /> : !closed && draftTouched ? <SaveStatus touched={draftTouched} /> : undefined}
         />
+        {/* LA-5.10 · the amount beside the income type, while the agent is already asking about it. Optional. */}
+        {!sample && (
+          <StepCard title="Monthly income" chips={<StatusChip tone="neutral">Optional</StatusChip>}>
+            <IncomeCapture
+              compact
+              readUrl={`/api/app/applications/attempts/${attempt.id}/income?surface=draft_date_setup`}
+              save={(income) => fetch(`/api/app/applications/attempts/${attempt.id}/income`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surface: "draft_date_setup", income }) })}
+              defaultType={incomeTypeFromDraft(draftInitial.incomeType)}
+              readOnly={closed}
+            />
+          </StepCard>
+        )}
+        </div>
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { audit } from "@/lib/audit/log";
-import { customerTimezone } from "@/lib/callbacks/timezone";
+import { resolveCustomerTimezone } from "@/lib/callbacks/timezone";
 import { resolveSalesSettings } from "@/lib/salesSettings/schema";
 import { auditAfterSubmit } from "./afterAudit";
 import { isOpenStatus } from "./afterSubmitRules";
@@ -191,7 +191,10 @@ export async function bookRequirementCallback(actor: Actor, applicationId: strin
   let zone = input.timezone?.trim() || null;
   if (!zone) {
     const lead = await db().from("agent_leads").select("values").eq("tenant_id", actor.tenantId).eq("id", a.lead_id).maybeSingle();
-    zone = customerTimezone((lead.data?.values ?? {}) as Record<string, unknown>);
+    // Never a guessed zone (LA-1 audit): an unknown or split state needs the agent's choice.
+    const resolved = resolveCustomerTimezone((lead.data?.values ?? {}) as Record<string, unknown>);
+    if (!resolved.ok) throw new ApplicationError(resolved.code.toUpperCase(), resolved.message, 400);
+    zone = resolved.zone;
   }
   const note = input.note?.trim() || `Chase: ${r.description ?? r.kind}`.slice(0, 1000);
   const { data, error } = await db().rpc("la3_requirement_callback", {

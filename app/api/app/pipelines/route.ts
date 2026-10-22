@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
+import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { createPipeline, listPipelinesWithSchema, pipelineCounts } from "@/lib/pipelines/service";
 import { SchemaPendingError } from "@/lib/pipelines/schemaGap";
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
   try {
     const pipeline = await createPipeline(auth.context.tenantId, { name: body?.name, partner_type: body?.partner_type, is_default: body?.is_default });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.pipeline_created", targetType: "pipeline", targetId: pipeline.id, metadata: { name: pipeline.name, partnerType: pipeline.partner_type }, request });
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "pipelines", changes: [{ key: `pipeline:${pipeline.id}`, label: `Pipeline “${pipeline.name}”`, from: null, to: "created" }] }); 
     return NextResponse.json({ pipeline }, { status: 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create pipeline" }, { status: error instanceof SchemaPendingError ? 503 : 400 }); }
 }

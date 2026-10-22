@@ -4,6 +4,8 @@ import { z } from "zod";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { acceptBufferHandoff, BufferHandoffError, getBufferHandoffContext, listPendingBufferHandoffs, offerBufferHandoff } from "@/lib/bufferHandoff/service";
+import { rowVisible, scopeFor } from "@/lib/agency/visibility";
+import { guardWorkItem } from "@/lib/transferInbox/scope";
 
 const uuid = z.string().uuid();
 const bodySchema = z.discriminatedUnion("action", [
@@ -21,12 +23,13 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     if (auth.context.role === "assistant") {
       if (!hasTenantPermission(auth.context.role, "inbound.buffer")) return NextResponse.json({ error: "Your role cannot offer handoffs." }, { status: 403 });
-      return NextResponse.json(await getBufferHandoffContext(auth.context.tenantId, auth.context.userId));
+      // AG-0.5: in an agency the buffer is offered only the producers he assists.
+      return NextResponse.json(await getBufferHandoffContext(auth.context.tenantId, auth.context.userId, await scopeFor(auth.context)));
     }
     const handoffs = await listPendingBufferHandoffs(auth.context.tenantId, auth.context.userId);
     const workItemId = new URL(request.url).searchParams.get("work_item_id");
@@ -41,6 +44,12 @@ export async function POST(request: Request) {
     const auth = await requireFeatureRole("inbound_transfers", ["assistant"], { write: true });
     if (auth instanceof NextResponse) return auth;
     if (!hasTenantPermission(auth.context.role, "inbound.buffer")) return NextResponse.json({ error: "Your role cannot offer handoffs.", code: "buffer_role_required" }, { status: 403 });
+    // AG-0.5: the transfer must be one the buffer may see (his own claim), and in an agency the caller
+    // goes only to a producer in his scope. Null scope: unchanged.
+    const scope = await scopeFor(auth.context);
+    const hidden = await guardWorkItem(auth.context, body.data.work_item_id, scope);
+    if (hidden) return hidden;
+    if (!rowVisible(scope, body.data.target_user_id)) return NextResponse.json({ error: "Choose an active licensed agent.", code: "licensed_agent_required" }, { status: 403 });
     try {
       return NextResponse.json({ handoff: await offerBufferHandoff({ tenantId: auth.context.tenantId, workItemId: body.data.work_item_id, bufferUserId: auth.context.userId, targetUserId: body.data.target_user_id, request }) });
     } catch (error) { return errorResponse(error); }

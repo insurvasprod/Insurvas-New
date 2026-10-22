@@ -10,6 +10,20 @@ import { checkCallbackInCallingWindow } from "@/lib/dispositions/callbackWindow"
 import { zonedLocalToUtc } from "@/lib/dispositions/callbackTime";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
+import { rowVisible, scopeFor, type ProducerScope } from "@/lib/agency/visibility";
+
+/**
+ * AG-0.5 · one callback by id: in an agency a narrow session may act on a callback assigned to itself or
+ * to a producer in its scope (D1: tenant_callbacks.assigned_to); anything else answers exactly as a
+ * callback that does not exist. Null scope (solo, owner/admin): no read, unchanged.
+ */
+async function callbackHidden(tenantId: string, viewerId: string, scope: ProducerScope, callbackId: string): Promise<NextResponse | null> {
+  if (scope === null) return null;
+  const row = await getSupabaseServiceClient().from("tenant_callbacks").select("assigned_to").eq("tenant_id", tenantId).eq("id", callbackId).maybeSingle<{ assigned_to: string | null }>();
+  if (row.error) return NextResponse.json({ error: "The callback could not be checked. Try again." }, { status: 503 });
+  if (!row.data) return null;
+  return row.data.assigned_to === viewerId || rowVisible(scope, row.data.assigned_to) ? null : NextResponse.json({ error: "That callback was not found." }, { status: 404 });
+}
 
 const uuid = z.string().uuid();
 const querySchema = z.object({
@@ -51,10 +65,10 @@ function errorResponse(error: unknown) {
  * The calling window for each state on the page, so "Book a callback" can say "Inside the Arizona
  * calling window" while the agent picks a time. Advisory: the reschedule below asks the database.
  */
-async function windowsFor(tenantId: string, states: string[]): Promise<Record<string, CallbackWindowFacts>> {
+async function windowsFor(settingsRead: Promise<Awaited<ReturnType<typeof getCallingWindows>>>, states: string[]): Promise<Record<string, CallbackWindowFacts>> {
   if (!states.length) return {};
   try {
-    const settings = await getCallingWindows(tenantId);
+    const settings = await settingsRead;
     return Object.fromEntries(states.map((state) => [state, callbackWindowFacts(state, settings.federal, settings.stateRules, settings.tenant)]));
   } catch {
     return {};
@@ -62,11 +76,18 @@ async function windowsFor(tenantId: string, states: string[]): Promise<Record<st
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("callback_calendar", ["owner", "producer", "assistant"]);
+  const auth = await requireFeatureRole("callback_calendar", ["owner", "producer", "assistant"], { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());
   const parsed = querySchema.safeParse(params);
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid callback date range." }, { status: 400 });
+  // AG-0.5: in an agency a producer, manager or assistant reads only the callbacks assigned to the
+  // producers in its scope; from the session, never the request. Null = every callback, as before.
+  const scope = await scopeFor(auth.context);
+  if (parsed.data.callback_id) {
+    const hidden = await callbackHidden(auth.context.tenantId, auth.context.userId, scope, parsed.data.callback_id);
+    if (hidden) return hidden;
+  }
   if (parsed.data.suggest_local) {
     // "Outside the Oregon calling window" while the agent picks — and the next time that is not.
     if (!parsed.data.callback_id) return NextResponse.json({ error: "Choose a callback." }, { status: 400 });
@@ -77,20 +98,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ nearest });
   }
   try {
+    // A single-callback read (History) needs none of the page's context.
+    const pageRead = !parsed.data.callback_id;
+    // None of the page's context depends on the callbacks except which states' windows to describe, so it
+    // is read beside the list rather than after it. The calling-window settings are read up front too and
+    // used only if a callback has a state. Each carries a handler so a failure the list's own error
+    // overtakes is not left unhandled; awaited below, each settles exactly as it did when read after.
+    const settingsRead = getCallingWindows(auth.context.tenantId);
+    const zoneRead = getWorkspaceTimezone(auth.context.tenantId).catch(() => null);
+    const refusalsRead = pageRead ? recentCallbackRefusals(auth.context.tenantId, scope, auth.context.userId).catch(() => []) : Promise.resolve([]);
+    const ownZoneRead = agentTimezones(auth.context.tenantId, auth.context.userId);
+    for (const read of [settingsRead, ownZoneRead]) read.catch(() => undefined);
     const callbacks = await listCallbacks(auth.context.tenantId, {
       from: parsed.data.from,
       to: parsed.data.to,
       callbackId: parsed.data.callback_id,
       includeHistory: parsed.data.include_history,
+      // The session's own callbacks too (an assistant's scope is the producers he assists, not himself).
+      scope: scope === null ? null : [...new Set([...scope, auth.context.userId])],
     });
     const states = [...new Set(callbacks.map((callback) => callback.state).filter((state): state is string => Boolean(state)))];
-    // A single-callback read (History) needs none of the page's context.
-    const pageRead = !parsed.data.callback_id;
     const [windows, agencyTimezone, refusals, ownZone] = await Promise.all([
-      windowsFor(auth.context.tenantId, states),
-      getWorkspaceTimezone(auth.context.tenantId).catch(() => null),
-      pageRead ? recentCallbackRefusals(auth.context.tenantId).catch(() => []) : Promise.resolve([]),
-      agentTimezones(auth.context.tenantId, auth.context.userId),
+      windowsFor(settingsRead, states),
+      zoneRead,
+      refusalsRead,
+      ownZoneRead,
     ]);
     // LA-1.22: the customer's time "with the agent's shown alongside" — the agent's OWN zone, the one
     // saved with their working hours, not the agency's (an agent licensed in 14 states is routinely
@@ -108,6 +140,9 @@ export async function PATCH(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid callback action." }, { status: 400 });
+  // AG-0.5: another producer's callback is "not found" before anything is checked or written.
+  const hidden = await callbackHidden(auth.context.tenantId, auth.context.userId, await scopeFor(auth.context), parsed.data.callback_id);
+  if (hidden) return hidden;
   let refusalContext: { leadId: string; timezone: string; local: string } | null = null;
   try {
     const params = { tenantId: auth.context.tenantId, userId: auth.context.userId, callbackId: parsed.data.callback_id, request };

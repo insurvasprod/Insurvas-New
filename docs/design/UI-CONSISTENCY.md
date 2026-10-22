@@ -14,7 +14,7 @@ pointing here. Three questions they used to answer differently are settled:
 |---|---|---|
 | Eyebrow above the title | **None.** `PageHeader` ignores the prop. Auth and onboarding cards (`AuthCard`) may show a step label ("Step 1 of 3"). | FOUNDATION's "eyebrow is the menu section" rule |
 | Figures | **`StatStrip` + `StatTile` only**, at most one strip, under the header (§4) | the 3–5 metric-card grid in FOUNDATION and the page prompts |
-| Colour identity | **Two, by plane.** Orange (`app/globals.css`) for the agent and partner apps and the public site. Blue for the admin console only (user decision 1), applied as token overrides in `app/admin/admin-plane.css`, so components never name a colour. | FOUNDATION §1's split, whose blue marketing/legal pages and old hex values are out of date |
+| Colour identity | **The 2026 brand: green, by plane** ([BRAND.md](BRAND.md)). Bright green `#07d6a0` for action and deep olive `#0d4037` for ink, the rail and the top bar, in `app/globals.css`, for the agent and partner apps and the public site. The admin console uses the same colours, rail, top bar and page spacing, with a blue accent: `app/admin/admin-plane.css` re-points the accent tokens only (owner decisions 2026-10-13). Components never name a colour. The bright green is never text on a light ground; use `--accent-ink`. `lib/design/brandContrast.test.mjs` enforces it. | FOUNDATION §1's split, and the orange identity of 2026-09 |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
 rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx]`, eyebrows,
@@ -103,6 +103,18 @@ Helper text belongs in a field's `hint`, a tooltip, or nowhere.
 - No card around a card. No decorative side panels. Two-column layouts only when the second column is
   real content (e.g. a detail pane for the selected row), never notes.
 - Compact: prefer fewer, denser blocks.
+- **A record's details or a create form beside a list is `DetailPanel`** (`components/ui/detail-panel.tsx`,
+  2026-10-09): `mode="split"` sits beside the table (30%, the Callbacks booking panel is the model),
+  `mode="overlay"` slides over it from the right. It owns the header, the "Close" button, Escape,
+  focus return and the slide-in — never hand-build an `<aside>` for this. A short confirmation or a
+  small form is a `Dialog` instead.
+- **A page with several lists shows one at a time** with `ViewTabs` (`components/ui/view-tabs.tsx`),
+  page actions on the right of the same row; size the pager with `useFittingPageSize`
+  (`components/ui/use-fitting-page-size.ts`).
+- **Say it in a few words; explain behind an `InfoTip`** (`components/ui/info-tip.tsx`) beside the term.
+  Compliance and legal wording is never moved into a tip: it stays on the screen, in full.
+- **An empty list offers the action that fills it** (`EmptyState`'s `action`), linking only to a page
+  or flow that exists. A filtered list with nothing in it is `NoMatches` with its clear action.
 
 ## 9. CSS
 - New screens use Tailwind and the shared components; do not add page-specific `.portal-*` rules to

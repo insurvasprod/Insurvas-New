@@ -1,5 +1,9 @@
 # INSURVAS Brex-inspired UI/UX mockups
 
+> **Colour superseded (2026-10-05).** These boards are drawn in the old orange. Their layout and
+> content still apply. For colour, type and the logo, follow [docs/design/BRAND.md](../../design/BRAND.md):
+> the green and deep olive brand, Montserrat, and the new isotype.
+
 This collection contains one desktop UI/UX mockup for every Licensed Agent and Partner portal page requested by the product owner.
 
 ## Design sources

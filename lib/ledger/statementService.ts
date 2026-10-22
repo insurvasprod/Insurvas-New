@@ -8,6 +8,7 @@ import { dayMonthYear } from "@/lib/format/dates";
 import { readXlsxAsCsv } from "@/lib/agentTemplates/xlsx";
 import { refreshDiscrepanciesQuietly } from "@/lib/discrepancies/service";
 import {
+  REMATCH_LEFT_UNMATCHED_PENDING_MESSAGE,
   STATEMENT_FILES_PENDING_MESSAGE,
   STATEMENT_SCHEMA_PENDING_MESSAGE,
   STATEMENT_FILE_KINDS,
@@ -28,7 +29,7 @@ import {
   type UnmatchedStatementLine,
 } from "./statementConstants";
 import { STATEMENT_BUCKET, STATEMENT_CONTENT_TYPE, statementBytesMatch, statementStoragePath } from "./statementFile";
-import { parseAmountCents, parseStatementCsv, parseStatementDate, parseStatementKind, sanitizeStatementMapping, readStatementHeaders, type ParsedStatement, type ParsedStatementLine } from "./statementParse";
+import { parseStatementCsv, sanitizeStatementMapping, readStatementHeaders, readStatementLine, type ParsedStatement, type ParsedStatementLine } from "./statementParse";
 import { proposeExactMatches, proposeFallbackMatches, type MatchCarrier, type MatchProposal } from "./statementMatch";
 
 /**
@@ -373,6 +374,48 @@ export async function getStatementLedger(input: { tenantId: string; canView: (pr
   return { ...base, entries: visible };
 }
 
+/**
+ * LA-4.9 · the accepted statement lines for ONE policy, for its own page. One query filtered by the
+ * tenant and the policy — not the whole tenant's ledger filtered afterwards. The caller has already
+ * checked the viewer may see this policy (the same `canView` question), so no other policy is read.
+ * Before migration 20260924260000: `available: false`.
+ */
+export async function getPolicyStatementLines(tenantId: string, policy: { id: string; policy_number: string; insured_name: string; created_by: string | null }): Promise<{ available: boolean; entries: StatementLedgerEntry[] }> {
+  const read = await readAll<EntryRow>(() =>
+    db().from("tenant_commission_statement_entries")
+      .select("line_id, statement_id, carrier_id, period_start, period_end, original_filename, line_number, amount_cents, kind, posted_on, policy_id, method, accepted_by, accepted_at")
+      .eq("tenant_id", tenantId).eq("policy_id", policy.id).order("posted_on", { ascending: false }).order("line_id"),
+  );
+  if (read.error) {
+    if (isPending(read.error)) return { available: false, entries: [] };
+    throw new Error(`Could not load the policy's statement lines: ${read.error.message}`);
+  }
+  if (!read.rows.length) return { available: true, entries: [] };
+  const [carriers, names] = await Promise.all([carriersById(read.rows.map((row) => row.carrier_id)), namesOf(read.rows.map((row) => row.accepted_by))]);
+  return {
+    available: true,
+    entries: read.rows.map((row) => ({
+      id: row.line_id,
+      statementId: row.statement_id,
+      carrierName: carriers.get(row.carrier_id)?.name ?? "Unknown carrier",
+      periodStart: row.period_start,
+      periodEnd: row.period_end,
+      fileName: row.original_filename,
+      lineNumber: row.line_number,
+      postedOn: row.posted_on,
+      kind: row.kind,
+      amountCents: Number(row.amount_cents),
+      policyId: policy.id,
+      policyNumber: policy.policy_number,
+      insuredName: policy.insured_name,
+      producerUserId: policy.created_by,
+      method: row.method,
+      acceptedByName: row.accepted_by ? names.get(row.accepted_by) ?? null : null,
+      acceptedAt: row.accepted_at,
+    })),
+  };
+}
+
 // ── import ─────────────────────────────────────────────────────────────────────
 
 export type StatementImportInput = {
@@ -382,6 +425,12 @@ export type StatementImportInput = {
   fileName: string;
   csvText: string;
   mapping: StatementMapping;
+  /**
+   * The SHA-256 of the original file, which the browser computes before the preview, so the preview's
+   * duplicate check compares the same hash the import stores. An Excel file's CSV text hashes
+   * differently from its bytes. The import never trusts this; it hashes the bytes it receives.
+   */
+  fileSha256?: string;
 };
 
 type Prepared = { carrier: MatchCarrier; parsed: ParsedStatement; mapping: StatementMapping; proposals: Map<number, LineProposal>; policies: Map<string, PolicyRow>; sha256: string };
@@ -466,7 +515,7 @@ function duplicateMessage(duplicate: { uploadedAt: string; uploadedByName: strin
 
 /** Everything the preview step shows. Writes nothing. */
 export async function previewStatement(tenantId: string, input: StatementImportInput): Promise<StatementPreview> {
-  const prepared = await prepare(tenantId, input);
+  const prepared = await prepare(tenantId, input, input.fileSha256);
   const duplicate = await findDuplicate(tenantId, input, prepared.sha256);
   const { lines } = prepared.parsed;
   const proposed = lines.filter((line) => prepared.proposals.get(line.lineNumber)?.policyId);
@@ -541,14 +590,19 @@ async function csvOf(kind: StatementFileKind, bytes: Uint8Array): Promise<{ csv:
   return { csv: "", sheetName: null };
 }
 
-/** Stores the original under its content address. Null when the bucket does not exist yet (pre-migration). */
+/**
+ * Stores the original under its content address. Null only when the bucket does not exist yet
+ * (pre-migration). Any other failure stops the import before a statement row is written: a statement
+ * whose original was not kept could never be downloaded or re-processed.
+ */
 async function storeOriginal(tenantId: string, kind: StatementFileKind, sha256: string, bytes: Uint8Array): Promise<string | null> {
   const path = statementStoragePath(tenantId, sha256, kind);
   // Content-addressed: the same bytes are the same object, so writing them again changes nothing.
   const up = await db().storage.from(STATEMENT_BUCKET).upload(path, bytes, { contentType: STATEMENT_CONTENT_TYPE[kind], upsert: true });
   if (!up.error) return path;
-  if (/bucket not found|not found/i.test(up.error.message)) return null;
-  throw new Error(`Could not store the statement file: ${up.error.message}`);
+  if (/bucket not found/i.test(up.error.message)) return null;
+  console.error("[statements] could not store the original file", up.error);
+  throw new StatementError("The file could not be stored, so nothing was imported. Try again in a minute.", 502, "file_not_stored");
 }
 
 /** Removes a stored original no statement points at — after a failed import, never one in use. */
@@ -564,8 +618,8 @@ async function releaseOriginal(tenantId: string, path: string | null) {
  * with exact and name proposals, and a PDF waits for its lines (LA-4.2). One transaction writes
  * the statement, its lines and proposals, and — when re-processing — voids the one it replaces.
  *
- * Before migration 20261002100000 a CSV or workbook still imports through the LA-0 function, without
- * the original kept; a PDF or a re-process is refused with the sentence that says why.
+ * Without migration 20261002100000 nothing imports: the caller gets the sentence that says a database
+ * update is needed. (The LA-0 import function that used to stand in was dropped by 20261007120000.)
  */
 export async function importStatementFile(tenantId: string, actorUserId: string, input: StatementFileInput): Promise<StatementImportResult> {
   if (!statementBytesMatch(input.kind, input.bytes.subarray(0, 1024))) {
@@ -628,34 +682,14 @@ export async function importStatementFile(tenantId: string, actorUserId: string,
     p_reprocessed_from: input.reprocessFrom ?? null,
   });
 
-  let result = v2;
-  let fileStored = Boolean(storagePath);
-  if (v2.error && isPending(v2.error)) {
-    // The LA-4 migration is not applied: a CSV or workbook imports as it always has, a PDF or a
-    // re-process waits for the migration. A name proposal is dropped, because the LA-0 function
-    // records every proposal as an exact one.
-    if (input.kind === "pdf" || input.reprocessFrom) {
-      await releaseOriginal(tenantId, storagePath);
-      throw new StatementSchemaPendingError(STATEMENT_FILES_PENDING_MESSAGE);
-    }
-    fileStored = false;
-    result = await db().rpc("import_commission_statement", {
-      p_tenant_id: tenantId,
-      p_actor_user_id: actorUserId,
-      p_carrier_id: prepared.carrier.id,
-      p_period_start: input.periodStart,
-      p_period_end: input.periodEnd,
-      p_original_filename: fileName,
-      p_file_sha256: sha256,
-      p_headers: prepared.parsed.headers,
-      p_mapping: prepared.mapping,
-      p_lines: payload.map((line) => ({ ...line, proposed_policy_id: line.proposed_method === "exact" ? line.proposed_policy_id : null })),
-    });
-    if (!result.error) await releaseOriginal(tenantId, storagePath);
-  }
+  // v2 is the only import (LA-0's import_commission_statement was dropped by 20261007120000, once
+  // 20261002100000 had been live since 2026-10-02). A database without it says so, imports nothing,
+  // and leaves no stored original behind.
+  const result = v2;
+  const fileStored = Boolean(storagePath);
   if (result.error) {
     await releaseOriginal(tenantId, storagePath);
-    if (isPending(result.error)) throw new StatementSchemaPendingError();
+    if (isPending(result.error)) throw new StatementSchemaPendingError(STATEMENT_FILES_PENDING_MESSAGE);
     if (result.error.code === "23505") {
       const again = await findDuplicate(tenantId, base, sha256);
       throw new StatementError(again ? duplicateMessage(again) : "This file was already imported for this carrier and period.", 409, "duplicate_statement");
@@ -749,24 +783,12 @@ export async function addManualStatementLines(tenantId: string, actorUserId: str
   const carrier = (await carriersById([row.carrier_id])).get(row.carrier_id);
   if (!carrier) throw new StatementError("This statement's carrier is no longer in the carrier library.", 409, "unknown_carrier");
 
-  const lines: ParsedStatementLine[] = entered.map((input, index) => {
-    const errors: string[] = [];
-    const policyNumber = input.policyNumber.trim().slice(0, 120) || null;
-    const insuredName = (input.insuredName ?? "").trim().slice(0, 200) || null;
-    const amountText = input.amount.trim();
-    let amountCents = parseAmountCents(amountText);
-    if (!amountText) errors.push("No amount on this line.");
-    else if (amountCents === null) errors.push(`“${amountText}” is not an amount.`);
-    let kind: StatementLineKind | null = input.kind ? parseStatementKind(input.kind) : null;
-    let kindFrom: ParsedStatementLine["kindFrom"] = kind ? "column" : null;
-    if (!kind && amountCents !== null) { kind = amountCents < 0 ? "chargeback" : "commission"; kindFrom = "sign"; }
-    if (kind === "chargeback" && amountCents !== null) amountCents = -Math.abs(amountCents);
-    const dateText = (input.lineDate ?? "").trim();
-    const lineDate = dateText ? parseStatementDate(dateText) : null;
-    if (dateText && !lineDate) errors.push(`“${dateText}” is not a date.`);
-    const raw = { "Policy number": input.policyNumber, Insured: input.insuredName ?? "", Amount: input.amount, Kind: input.kind ?? "", Date: input.lineDate ?? "" };
-    return { lineNumber: index + 1, raw, policyNumber, insuredName, amountCents, kind, kindFrom, lineDate, premiumCents: null, rateBp: null, error: errors.length ? errors.join(" ") : null };
-  });
+  // The same reader as a file's rows: a typed line cannot be read differently from an imported one.
+  const lines: ParsedStatementLine[] = entered.map((input, index) => readStatementLine(
+    { policyNumber: input.policyNumber, insuredName: input.insuredName, amount: input.amount, kind: input.kind, lineDate: input.lineDate },
+    index + 1,
+    { "Policy number": input.policyNumber, Insured: input.insuredName ?? "", Amount: input.amount, Kind: input.kind ?? "", Date: input.lineDate ?? "" },
+  ));
 
   const proposals = await proposeAll(tenantId, lines, await readPolicies(tenantId), carrier, { start: row.period_start, end: row.period_end });
   const payload = lines.map((line) => {
@@ -792,12 +814,14 @@ export async function addManualStatementLines(tenantId: string, actorUserId: str
 
 // ── the unmatched queue, and re-matching it (LA-4.3) ───────────────────────────
 
-type UnmatchedRow = { id: string; statement_id: string; line_number: number; policy_number: string | null; insured_name: string | null; amount_cents: number | string | null; kind: StatementLineKind | null };
+type UnmatchedRow = { id: string; statement_id: string; line_number: number; policy_number: string | null; insured_name: string | null; amount_cents: number | string | null; kind: StatementLineKind | null; review_status: StatementLineReview };
 
 /** Every line still without a match, across statements that are not voided. */
-export async function listUnmatchedLines(tenantId: string): Promise<{ available: boolean; lines: UnmatchedStatementLine[] }> {
+export async function listUnmatchedLines(tenantId: string, options: { includeLeftUnmatched?: boolean } = {}): Promise<{ available: boolean; lines: UnmatchedStatementLine[] }> {
+  // The queue is the lines still waiting for a match; the ones a person set aside join it only when asked.
+  const statuses: StatementLineReview[] = options.includeLeftUnmatched ? ["unmatched", "left_unmatched"] : ["unmatched"];
   const [lines, statements] = await Promise.all([
-    readAll<UnmatchedRow>(() => db().from("tenant_commission_statement_lines").select("id, statement_id, line_number, policy_number, insured_name, amount_cents, kind").eq("tenant_id", tenantId).eq("review_status", "unmatched").order("statement_id").order("line_number")),
+    readAll<UnmatchedRow>(() => db().from("tenant_commission_statement_lines").select("id, statement_id, line_number, policy_number, insured_name, amount_cents, kind, review_status").eq("tenant_id", tenantId).in("review_status", statuses).order("statement_id").order("line_number")),
     readAll<{ id: string; carrier_id: string; period_start: string; period_end: string; status: StatementStatus }>(() => db().from("tenant_commission_statements").select("id, carrier_id, period_start, period_end, status").eq("tenant_id", tenantId).neq("status", "voided").order("id")),
   ]);
   const error = lines.error ?? statements.error;
@@ -816,6 +840,7 @@ export async function listUnmatchedLines(tenantId: string): Promise<{ available:
       periodStart: statement.period_start, periodEnd: statement.period_end, lineNumber: line.line_number,
       policyNumber: line.policy_number, insuredName: line.insured_name,
       amountCents: line.amount_cents === null ? null : Number(line.amount_cents), kind: line.kind,
+      leftUnmatched: line.review_status === "left_unmatched",
     });
   }
   return { available: true, lines: out };
@@ -838,14 +863,19 @@ async function rejectedPairs(tenantId: string, lineIds: string[]): Promise<Set<s
   return out;
 }
 
-export type RematchResult ={ proposed: number; statements: number; lines: Array<{ line_id: string; statement_id: string; line_number: number; policy_id: string; method: string }> };
+/** `was` is the line's state before (unmatched / left_unmatched); absent before migration 20261006100000. */
+export type RematchResult = { proposed: number; statements: number; lines: Array<{ line_id: string; statement_id: string; line_number: number; policy_id: string; method: string; was?: StatementLineReview }> };
 
 /**
  * Re-proposes matches for unmatched lines against the book as it is now — one statement's, or every
- * statement's. Lines a person left unmatched on purpose are not touched. Still only proposals.
+ * statement's. Lines a person left unmatched on purpose are included only when they ask
+ * (`includeLeftUnmatched`, LA-4.3 option c). A pairing a person rejected is never proposed again,
+ * and leaving a line unmatched rejected its proposal, so a set-aside line can only return with a
+ * different policy. Still only proposals.
  */
-export async function rematchStatementLines(tenantId: string, actorUserId: string, statementId?: string): Promise<RematchResult> {
-  const queue = await listUnmatchedLines(tenantId);
+export async function rematchStatementLines(tenantId: string, actorUserId: string, options: { statementId?: string; includeLeftUnmatched?: boolean } = {}): Promise<RematchResult> {
+  const { statementId, includeLeftUnmatched = false } = options;
+  const queue = await listUnmatchedLines(tenantId, { includeLeftUnmatched });
   if (!queue.available) throw new StatementSchemaPendingError();
   const scoped = statementId ? queue.lines.filter((line) => line.statementId === statementId) : queue.lines;
   if (!scoped.length) return { proposed: 0, statements: 0, lines: [] };
@@ -873,9 +903,13 @@ export async function rematchStatementLines(tenantId: string, actorUserId: strin
   }
   if (!proposals.length) return { proposed: 0, statements: 0, lines: [] };
 
-  const result = await db().rpc("rematch_commission_statement_lines", { p_tenant_id: tenantId, p_actor_user_id: actorUserId, p_proposals: proposals });
+  // Three arguments unless the person asked for set-aside lines: that call works before and after
+  // migration 20261006100000, so plain re-matching never waits for it.
+  const result = await db().rpc("rematch_commission_statement_lines", includeLeftUnmatched
+    ? { p_tenant_id: tenantId, p_actor_user_id: actorUserId, p_proposals: proposals, p_include_left_unmatched: true }
+    : { p_tenant_id: tenantId, p_actor_user_id: actorUserId, p_proposals: proposals });
   if (result.error) {
-    if (isPending(result.error)) throw new StatementSchemaPendingError(STATEMENT_FILES_PENDING_MESSAGE);
+    if (isPending(result.error)) throw new StatementSchemaPendingError(includeLeftUnmatched ? REMATCH_LEFT_UNMATCHED_PENDING_MESSAGE : STATEMENT_FILES_PENDING_MESSAGE);
     if (result.error.code === "22023") throw new StatementError(result.error.message, 400, "invalid_rematch");
     throw new Error(`Could not re-match the lines: ${result.error.message}`);
   }

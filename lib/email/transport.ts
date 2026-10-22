@@ -18,6 +18,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 
 import { getSupabaseServiceClient } from "../supabase/service.ts";
+import { EMAIL_LOGO_CID, EMAIL_LOGO_PNG_BASE64 } from "./logo.ts";
 
 export type EmailDelivery =
   | { delivered: true; providerId: string }
@@ -226,7 +227,13 @@ export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
       text: input.text,
       html: input.html,
       replyTo: input.replyTo,
-      ...(input.attachments?.length ? { attachments: input.attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType })) } : {}),
+      attachments: [
+        ...(input.attachments ?? []).map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType })),
+        // The shell's logo travels inside the message (layout.ts), so it shows without loading anything remote.
+        ...(input.html.includes(`cid:${EMAIL_LOGO_CID}`)
+          ? [{ filename: "insurvas.png", content: Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64"), contentType: "image/png", cid: EMAIL_LOGO_CID, contentDisposition: "inline" as const }]
+          : []),
+      ],
     });
 
     await record(input, { status: "sent", providerMessageId: info.messageId });

@@ -1,12 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { Field, Pill, btn, control } from "@/components/app/settings/primitives";
+import { Field, btn, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import {
   SWITCH_STATES,
   SWITCH_STATE_HELP,
@@ -38,9 +39,9 @@ const STATE_RANK: Record<SwitchState, number> = { off: 0, beta: 1, on: 2 };
 const REASON_MAX = 500;
 
 function StatusPill({ state }: { state: SwitchState }) {
-  if (state === "off") return <Pill tone="warning" dot>Switched off</Pill>;
-  if (state === "beta") return <Pill tone="warning" dot>Named tenants only</Pill>;
-  return <Pill tone="success" dot>Available</Pill>;
+  if (state === "off") return <StatusChip tone="warning" dot>Switched off</StatusChip>;
+  if (state === "beta") return <StatusChip tone="warning" dot>Named tenants only</StatusChip>;
+  return <StatusChip tone="good" dot>Available</StatusChip>;
 }
 
 /**
@@ -193,7 +194,9 @@ export function FeatureSwitchesPanel({
     .sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.index - b.index);
 
   return (
-    <TableCard
+    <PagedTableCard
+      total={rows.length}
+      noun="features"
       toolbar={
         canToggle ? undefined : (
           <p role="note" className="m-0 text-xs text-muted-foreground">
@@ -202,13 +205,12 @@ export function FeatureSwitchesPanel({
         )
       }
     >
-      <ul className="m-0 list-none p-0">
-        {rows.length === 0 && (
-          <li className="px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-            There are no features in the catalog yet, so there is nothing to switch off.
-          </li>
-        )}
-
+      {rows.length === 0 && (
+        <p className="m-0 px-4 py-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+          There are no features in the catalog yet, so there is nothing to switch off.
+        </p>
+      )}
+      <PagedBody as="ul" className="m-0 list-none p-0">
         {rows.map(({ f, state }) => {
           const isOpen = open === f.featureKey;
           const notOn = state !== "on";
@@ -221,18 +223,18 @@ export function FeatureSwitchesPanel({
                 <span className="min-w-0 md:w-[210px] md:shrink-0">
                   <span
                     title={f.label}
-                    className="block break-words text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]"
+                    className="block break-words text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]"
                   >
                     {f.featureKey}
                   </span>
                   {f.isArchived && (
-                    <Pill tone="neutral" className="mt-1">
+                    <StatusChip dot={false} tone="neutral" className="mt-1">
                       Archived
-                    </Pill>
+                    </StatusChip>
                   )}
                 </span>
 
-                <span className="min-w-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] md:w-[150px] md:shrink-0">
+                <span className="min-w-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] md:w-[150px] md:shrink-0">
                   {f.moduleLabel}
                   {f.overrideCount > 0 && (
                     <span className="block">
@@ -241,7 +243,7 @@ export function FeatureSwitchesPanel({
                   )}
                 </span>
 
-                <span className="min-w-0 flex-1 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+                <span className="min-w-0 flex-1 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
                   <SwitchDetail featureSwitch={live[f.featureKey]} reason={reasons[f.featureKey]} />
                 </span>
 
@@ -286,7 +288,7 @@ export function FeatureSwitchesPanel({
                         </button>
                       ))}
                     </div>
-                    <p className="mt-1.5 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                    <p className="mt-1.5 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                       {SWITCH_STATE_HELP[draft.state]}
                     </p>
                   </div>
@@ -337,7 +339,7 @@ export function FeatureSwitchesPanel({
                   </Field>
 
                   {error && (
-                    <p role="alert" className="m-0 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--error-ink)]">
+                    <p role="alert" className="m-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--error-ink)]">
                       {error}
                     </p>
                   )}
@@ -355,7 +357,7 @@ export function FeatureSwitchesPanel({
             </li>
           );
         })}
-      </ul>
-    </TableCard>
+      </PagedBody>
+    </PagedTableCard>
   );
 }

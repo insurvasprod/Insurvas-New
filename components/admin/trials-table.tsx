@@ -1,12 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useEffect, useId, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { Pill, st, type PillTone } from "@/components/app/settings/primitives";
+import { st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import {
@@ -21,7 +22,7 @@ import type { TrialBoardRow, TrialEngagement } from "@/lib/trials/board";
 import { ENDING_SOON_DAYS, SIGNAL_KEYS, SIGNAL_LABELS, SIGNAL_MEANINGS } from "@/lib/trials/boardModel";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 type EndsFilter = "any" | "soon" | "week";
 type SignalFilter = "any" | "no_leads" | "no_team" | "no_carrier" | "neither";
@@ -357,7 +358,7 @@ export function TrialsTable({
                     onChange={(e) => setDays(e.target.value)}
                     aria-describedby={`${id}-days-hint`}
                   />
-                  <p id={`${id}-days-hint`} className="text-[12px] leading-[1.5] text-[var(--muted)]">
+                  <p id={`${id}-days-hint`} className="text-xs leading-[1.5] text-[var(--muted)]">
                     Between 1 and 90 whole days.
                   </p>
                 </div>
@@ -370,7 +371,7 @@ export function TrialsTable({
                   onChange={(e) => setReason(e.target.value)}
                   placeholder={pending?.kind === "extend" ? "Onboarding call slipped a week" : "Customer asked to stop"}
                 />
-                <p className="text-[12px] leading-[1.5] text-[var(--muted)]">At least 5 characters. Recorded in the audit log.</p>
+                <p className="text-xs leading-[1.5] text-[var(--muted)]">At least 5 characters. Recorded in the audit log.</p>
               </div>
             </div>
           )}
@@ -425,10 +426,10 @@ function SignalPills({ row }: { row: TrialBoardRow }) {
             : `${SIGNAL_MEANINGS[key]}: not yet`;
         return (
           <span key={key} title={title}>
-            <Pill tone={done ? "success" : "neutral"}>
+            <StatusChip dot={false} tone={pillTone(done ? "success" : "neutral")}>
               {SIGNAL_LABELS[key]}
               <span className="sr-only">{!row.signals ? " unknown" : done ? " done" : " not yet"}</span>
-            </Pill>
+            </StatusChip>
           </span>
         );
       })}
@@ -466,7 +467,7 @@ function TrialDetail({
       label: "Owner sign-in",
       value: (
         <span title={row.lastLoginFull ? `Last signed in ${row.lastLoginFull}` : "The owner has never signed in"}>
-          <Pill tone={ENGAGEMENT_TONE[row.engagement.level]}>{row.engagement.label}</Pill>
+          <StatusChip dot={false} tone={pillTone(ENGAGEMENT_TONE[row.engagement.level])}>{row.engagement.label}</StatusChip>
         </span>
       ),
     },
@@ -474,9 +475,9 @@ function TrialDetail({
     {
       label: "Card on file",
       value: row.hasPaymentMethod ? (
-        <Pill tone="success">Card on file</Pill>
+        <StatusChip dot={false} tone="good">Card on file</StatusChip>
       ) : (
-        <Pill tone="warning">No card on file</Pill>
+        <StatusChip dot={false} tone="warning">No card on file</StatusChip>
       ),
     },
     { label: "Started", value: <TrialDate iso={row.startedAt} text={row.startedFull} full={row.startedFull} /> },
@@ -489,13 +490,13 @@ function TrialDetail({
       <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
         {facts.map((fact) => (
           <div key={fact.label} className="min-w-0">
-            <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{fact.label}</dt>
-            <dd className="m-0 mt-1 truncate text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] tabular-nums">{fact.value}</dd>
+            <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{fact.label}</dt>
+            <dd className="m-0 mt-1 truncate text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] tabular-nums">{fact.value}</dd>
           </div>
         ))}
       </dl>
 
-      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
         {SIGNAL_KEYS.map((key) => (
           <li key={key}>
             <span className="font-semibold text-[var(--ink)]">{SIGNAL_LABELS[key]}</span> — {SIGNAL_MEANINGS[key].toLowerCase()}:{" "}
@@ -525,17 +526,17 @@ function TrialDetail({
             </Button>
           </>
         ) : (
-          <span className="text-[12px] leading-[1.5] text-[var(--muted)]">Only super admins and billing admins can change a trial.</span>
+          <span className="text-xs leading-[1.5] text-[var(--muted)]">Only super admins and billing admins can change a trial.</span>
         )}
         <Link
           href={`/admin/tenants/${row.tenantId}`}
-          className="ml-auto rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+          className="ml-auto rounded-sm text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           Open tenant record
         </Link>
       </div>
       {canManage && !row.hasPaymentMethod && (
-        <p id={`convert-reason-${row.subscriptionId}`} className="m-0 text-[12px] leading-[1.5] text-[var(--muted)]">
+        <p id={`convert-reason-${row.subscriptionId}`} className="m-0 text-xs leading-[1.5] text-[var(--muted)]">
           Convert now is off: there is no card on file to charge.
         </p>
       )}

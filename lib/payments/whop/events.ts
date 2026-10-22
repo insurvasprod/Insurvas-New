@@ -130,3 +130,21 @@ export function extractTenantIdFromMetadata(envelope: WhopEnvelope): string | nu
   walk(envelope.data, 0);
   return found;
 }
+
+/**
+ * How long a stored-but-unfinished delivery counts as in progress. Whop gives a handler 5 seconds;
+ * a minute covers a slow handler without parking a crashed one for long — its retries arrive later.
+ */
+export const IN_FLIGHT_WINDOW_MS = 60_000;
+
+/** Pure, so the in-flight rule is tested without a database. */
+export function isInFlight(
+  existing: { processed_at: string | null; process_error: string | null; attempts: number | null; received_at: string | null },
+  now: number = Date.now(),
+): boolean {
+  if (existing.processed_at !== null) return false;
+  // A recorded failure means the first delivery finished (badly): this one is the retry.
+  if (existing.process_error !== null || (existing.attempts ?? 0) > 0) return false;
+  const received = existing.received_at ? Date.parse(existing.received_at) : Number.NaN;
+  return Number.isFinite(received) && now - received >= 0 && now - received < IN_FLIGHT_WINDOW_MS;
+}

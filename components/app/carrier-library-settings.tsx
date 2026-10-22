@@ -1,39 +1,26 @@
 "use client";
 
 /**
- * Settings › Carrier library.
+ * Settings › Carrier library: the carriers you're contracted with — level, writing number, the
+ * contract's history and whether the carrier requires E&O in force.
  *
- * The table lists every product contract (a contracted carrier plus a product with a schedule or an
- * advance rule at the carrier's current level). The two cards under it show the selected row: the
- * schedule in force today, collapsed the way a carrier quotes it, and its advance rule — which is
- * the section's draft (the save bar writes a new rule effective today, Discard puts it back).
- *
- * Every editor that was on this page before lives in the Edit / "Add a contract" dialog: carrier
- * choice (Configured / Not configured), contract level + writing number + effective date, contract
- * history, product choice, policy-year rate entry (the only way schedule rows are made) and the
- * advance rule with its own effective date.
+ * Commission rates and advance rules moved to Book of Business › Rate card (2026-10-08 overlap
+ * merge), beside the policies they price; they were set in two places before. The product column
+ * still shows which products have a rate at the current level.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Plus } from "lucide-react";
 
-import {
-  Callout,
-  control,
-  Field,
-  Pill,
-  SettingsCard,
-  SettingsGrid,
-  SettingsSectionHeader,
-  SettingsStack,
-  st,
-} from "@/components/app/settings/primitives";
+import { Callout, control, Field, SettingsSectionHeader, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -42,14 +29,11 @@ import type { AdvanceRuleRow, CommissionScheduleRow, TenantCarrierRow } from "@/
 import type { ProductRow } from "@/lib/products/constants";
 import {
   activeContract,
-  bandLabel,
   buildContractRows,
-  currentAdvanceRule,
   formatBps,
   formatDay,
   formatPercentFromBps,
   parseBps,
-  scheduleBands,
   todayIso,
   type ContractRow,
 } from "@/lib/carriers/contracts";
@@ -61,28 +45,12 @@ type Snapshot = {
   commissionSchedules: CommissionScheduleRow[];
   advanceRules: AdvanceRuleRow[];
   /** Migration 20260924220100: which carriers require E&O in force. */
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean }>;
+  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }>;
   requirementsAvailable?: boolean;
+  /** Migration 20261013100000: LA-0.4's switch can be saved. Until then every carrier reads as on. */
+  switchAvailable?: boolean;
 };
-type RuleValues = { advanceMonths: string; advancePct: string; clawbackMonths: string; clawbackType: "full" | "prorated" };
 type DialogState = { mode: "add" | "edit"; carrierId: string; productCode: string };
-
-const EMPTY_RULE: RuleValues = { advanceMonths: "", advancePct: "", clawbackMonths: "", clawbackType: "prorated" };
-const selectControl = control;
-
-function ruleValues(rule: AdvanceRuleRow | null): RuleValues {
-  if (!rule) return EMPTY_RULE;
-  return { advanceMonths: String(rule.advance_months), advancePct: formatBps(rule.advance_pct_bp), clawbackMonths: String(rule.clawback_months), clawbackType: rule.clawback_type };
-}
-
-const sameRule = (a: RuleValues, b: RuleValues) =>
-  a.advanceMonths.trim() === b.advanceMonths.trim() && (parseBps(a.advancePct) ?? a.advancePct.trim()) === (parseBps(b.advancePct) ?? b.advancePct.trim()) && a.clawbackMonths.trim() === b.clawbackMonths.trim() && a.clawbackType === b.clawbackType;
-
-function percentOfYearOne(value: string) {
-  const bp = parseBps(value);
-  if (bp === null) return null;
-  return `${Number((bp / 100).toFixed(2))}% of year one`;
-}
 
 async function post(path: string, body: Record<string, unknown>): Promise<{ ok: true } | { ok: false; error: string }> {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -94,12 +62,9 @@ export function CarrierLibrarySettings() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [ruleDraft, setRuleDraft] = useState<{ key: string; values: RuleValues } | null>(null);
-  const [ruleSaving, setRuleSaving] = useState(false);
-  const [ruleError, setRuleError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [query, setQuery] = useState("");
+  const [switching, setSwitching] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,39 +88,22 @@ export function CarrierLibrarySettings() {
   const rows = useMemo(() => (snapshot ? buildContractRows(snapshot) : []), [snapshot]);
   const needle = query.trim().toLowerCase();
   const shownRows = needle ? rows.filter((row) => row.carrierName.toLowerCase().includes(needle) || (row.productName ?? "").toLowerCase().includes(needle)) : rows;
-  const selected = rows.find((row) => row.key === selectedKey) ?? rows[0] ?? null;
-  const asOf = todayIso();
-
-  const currentRule = selected?.productCode && snapshot ? currentAdvanceRule(snapshot.advanceRules, selected.carrierId, selected.productCode, asOf) : null;
-  const ruleOriginal = ruleValues(currentRule);
-  const ruleCurrent = selected && ruleDraft?.key === selected.key ? ruleDraft.values : ruleOriginal;
-  const ruleDirty = Boolean(selected?.productCode) && !sameRule(ruleCurrent, ruleOriginal);
-  const setRule = (patch: Partial<RuleValues>) => {
-    if (!selected) return;
-    setRuleError(null);
-    setRuleDraft({ key: selected.key, values: { ...ruleCurrent, ...patch } });
-  };
-
-  async function saveRuleDraft() {
-    if (!selected?.productCode) return;
-    const advanceMonths = Number(ruleCurrent.advanceMonths);
-    const advancePct = parseBps(ruleCurrent.advancePct);
-    const clawbackMonths = Number(ruleCurrent.clawbackMonths);
-    if (!ruleCurrent.advanceMonths.trim() || !Number.isInteger(advanceMonths) || advanceMonths < 0 || advanceMonths > 120) { setRuleError("Advance months is a whole number from 0 to 120."); return; }
-    if (advancePct === null) { setRuleError("Advance percent is in basis points: 7,500 is 75%."); return; }
-    if (!ruleCurrent.clawbackMonths.trim() || !Number.isInteger(clawbackMonths) || clawbackMonths < 0 || clawbackMonths > 240) { setRuleError("Clawback months is a whole number from 0 to 240."); return; }
-    setRuleSaving(true);
-    const result = await post("/api/app/carrier-library/advance-rules", { carrier_id: selected.carrierId, product_code: selected.productCode, advance_months: advanceMonths, advance_pct_bp: advancePct, clawback_months: clawbackMonths, clawback_type: ruleCurrent.clawbackType, effective_from: asOf });
-    setRuleSaving(false);
-    if (!result.ok) { setRuleError(result.error); notify.block(result.error); return; }
-    notify.done("Advance rule saved");
-    setRuleDraft(null);
+  const isContracted = (carrierId: string) => snapshot?.carrierRequirements?.find((row) => row.carrier_id === carrierId)?.contracted !== false;
+  /**
+   * LA-0.4 "Contracted? [x]": off takes the carrier out of quoting, lead assignment and every "who do
+   * we write with" list. Its contract history, rates and the money on policies already written stay.
+   */
+  async function setContracted(carrierId: string, carrierName: string, next: boolean) {
+    setSwitching(carrierId);
+    const response = await fetch("/api/app/carrier-library/tenant-carriers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carrier_id: carrierId, contracted: next }) });
+    const result = await response.json().catch(() => null);
+    setSwitching(null);
+    if (!response.ok) {
+      notify.block(result?.error ?? "Could not save the switch");
+      return;
+    }
+    notify.done(next ? `${carrierName} is switched back on` : `${carrierName} is switched off: no new quotes, applications or leads for it`);
     await load();
-  }
-
-  function discardRule() {
-    setRuleDraft(null);
-    setRuleError(null);
   }
 
   function openAdd() {
@@ -164,7 +112,6 @@ export function CarrierLibrarySettings() {
   }
 
   function openEdit(row: ContractRow) {
-    setSelectedKey(row.key);
     setDialog({ mode: "edit", carrierId: row.carrierId, productCode: row.productCode ?? snapshot?.products[0]?.code ?? "" });
   }
 
@@ -191,22 +138,19 @@ export function CarrierLibrarySettings() {
     );
   }
 
-  const bands = selected?.productCode ? scheduleBands(snapshot.commissionSchedules, { carrierId: selected.carrierId, productCode: selected.productCode, contractLevelBp: selected.levelBp, asOf }) : [];
-  const laterRates = selected?.productCode
-    ? snapshot.commissionSchedules.filter((row) => row.carrier_id === selected.carrierId && row.product_code === selected.productCode && row.contract_level_bp === selected.levelBp && row.effective_from > asOf).length
-    : 0;
-  const pctHint = percentOfYearOne(ruleCurrent.advancePct);
-
   return (
     <SettingsStack>
       <SettingsSectionHeader />
 
-      <TableCard
+      <PagedTableCard
+        total={shownRows.length}
+        noun="contracts"
         toolbar={
           <DataToolbar
             actions={
               <>
-                <Button type="button" onClick={openAdd}>
+                <Button type="button" variant="outline" asChild><Link href="/app/rate-card">Rates and advance rules</Link></Button>
+                <Button data-guide="carrier-library-add" type="button" onClick={openAdd}>
                   <Plus aria-hidden="true" />
                   Add a contract
                 </Button>
@@ -219,7 +163,7 @@ export function CarrierLibrarySettings() {
         }
       >
         {rows.length === 0 ? (
-          <EmptyState title="No carrier contracts yet" hint="Add a contract to record its level, writing number and commission schedule." />
+          <EmptyState title="No carrier contracts yet" hint="Add a contract to record its level and writing number. Rates and advance rules are set on the Rate card." />
         ) : shownRows.length === 0 ? (
           <NoMatches noun="contracts" onClear={() => setQuery("")} />
         ) : (
@@ -230,28 +174,32 @@ export function CarrierLibrarySettings() {
                 <th scope="col" className={cn(st.th, "w-[200px]")}>Product</th>
                 <th scope="col" className={cn(st.th, st.num, "w-[150px]")}>Contract level</th>
                 <th scope="col" className={cn(st.th, st.num, "w-[140px]")}>Effective from</th>
+                <th scope="col" className={cn(st.th, "w-[120px]")}>Contracted?</th>
                 <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {shownRows.map((row) => {
-                const isSelected = row.key === selected?.key;
                 return (
-                  <tr key={row.key} className={cn(isSelected && "bg-[var(--surface-alt)]")}>
+                  <tr key={row.key}>
                     <td className={st.td}>
-                      <button
-                        type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => setSelectedKey(row.key)}
-                        className="cursor-pointer rounded-[4px] text-left text-inherit hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-                        title="Show this contract's schedule and advance rule"
-                      >
-                        {row.carrierName}
-                      </button>
+                      <span className={isContracted(row.carrierId) ? undefined : "text-[var(--muted)]"}>{row.carrierName}</span>
+                      {!isContracted(row.carrierId) && <span className="block text-xs text-[var(--muted)]">Switched off</span>}
                     </td>
                     <td className={st.td}>{row.productName ?? <span className="text-[var(--muted)]">No products yet</span>}</td>
                     <td className={cn(st.td, st.num)}>{formatBps(row.levelBp)}</td>
                     <td className={cn(st.td, st.num)}>{formatDay(row.effectiveFrom)}</td>
+                    <td className={st.td}>
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-[var(--primary)] align-middle"
+                        checked={isContracted(row.carrierId)}
+                        disabled={snapshot.switchAvailable === false || switching === row.carrierId}
+                        title={snapshot.switchAvailable === false ? "This switch needs a database update that has not been applied yet." : undefined}
+                        aria-label={`Contracted with ${row.carrierName}`}
+                        onChange={(event) => void setContracted(row.carrierId, row.carrierName, event.target.checked)}
+                      />
+                    </td>
                     <td className={cn(st.td, st.num)}>
                       <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)} aria-label={`Edit ${row.carrierName}${row.productName ? `, ${row.productName}` : ""}`}>
                         Edit
@@ -260,68 +208,10 @@ export function CarrierLibrarySettings() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
-
-      {selected && (
-        <SettingsGrid>
-          <SettingsCard title="Commission schedule" sub={`${selected.carrierName} · ${selected.productName ?? "no product yet"}`} bodyClassName="mt-3.5">
-            {!selected.productCode ? (
-              <p className="text-[14px] leading-[1.5] text-[var(--muted)]">No product has a rate at this contract level yet. Use Edit to add the first policy-year rate.</p>
-            ) : bands.length === 0 ? (
-              <p className="text-[14px] leading-[1.5] text-[var(--muted)]">No rate is in force today at {formatBps(selected.levelBp)}. Use Edit to add policy-year rates.</p>
-            ) : (
-              <table className={st.table}>
-                <thead>
-                  <tr className={st.headRow}>
-                    <th scope="col" className={st.th}>Policy year</th>
-                    <th scope="col" className={cn(st.th, st.num, "w-[120px]")}>Percent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bands.map((band) => (
-                    <tr key={band.from}>
-                      <td className={st.td}>{bandLabel(band)}</td>
-                      <td className={cn(st.td, st.num)}>{formatPercentFromBps(band.rateBp)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {laterRates > 0 && <p className="mt-2 text-[12px] leading-[1.5] text-[var(--muted)]">{laterRates === 1 ? "1 rate takes" : `${laterRates} rates take`} effect later; Edit shows every dated row.</p>}
-          </SettingsCard>
-
-          <SettingsCard title="Advance rule" sub={`${selected.carrierName} · ${selected.productName ?? "no product yet"}`} bodyClassName="mt-3.5">
-            {!selected.productCode ? (
-              <p className="text-[14px] leading-[1.5] text-[var(--muted)]">Advance rules are per product. Add a product to this contract with Edit first.</p>
-            ) : (
-              <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Advance months" htmlFor="rule-advance-months">
-                    <input id="rule-advance-months" type="text" inputMode="numeric" className={control} value={ruleCurrent.advanceMonths} onChange={(e) => setRule({ advanceMonths: e.target.value })} />
-                  </Field>
-                  <Field label="Advance percent" htmlFor="rule-advance-pct" hint={pctHint ?? "In basis points: 7,500 is 75%"}>
-                    <input id="rule-advance-pct" type="text" inputMode="numeric" className={control} value={ruleCurrent.advancePct} onChange={(e) => setRule({ advancePct: e.target.value })} />
-                  </Field>
-                  <Field label="Clawback months" htmlFor="rule-clawback-months">
-                    <input id="rule-clawback-months" type="text" inputMode="numeric" className={control} value={ruleCurrent.clawbackMonths} onChange={(e) => setRule({ clawbackMonths: e.target.value })} />
-                  </Field>
-                  <Field label="Clawback type" htmlFor="rule-clawback-type" hint="Full takes the whole advance back if the policy lapses in the period.">
-                    <select id="rule-clawback-type" className={selectControl} value={ruleCurrent.clawbackType} onChange={(e) => setRule({ clawbackType: e.target.value as RuleValues["clawbackType"] })}>
-                      <option value="prorated">Prorated</option>
-                      <option value="full">Full</option>
-                    </select>
-                  </Field>
-                </div>
-                {ruleError && <Callout tone="error" title={ruleError} className="mt-3.5" />}
-                {!currentRule && !ruleDirty && <p className="mt-3 text-[12px] leading-[1.5] text-[var(--muted)]">No advance rule is recorded for this product yet.</p>}
-              </>
-            )}
-          </SettingsCard>
-        </SettingsGrid>
-      )}
+      </PagedTableCard>
 
       {dialog && (
         <ContractDialog
@@ -333,16 +223,11 @@ export function CarrierLibrarySettings() {
           onSaved={load}
         />
       )}
-
-      <SettingsSaveBar visible={ruleDirty} note="The new advance rule takes effect today">
-        <Button type="button" variant="outline" onClick={discardRule} disabled={ruleSaving}>Discard</Button>
-        <Button type="button" onClick={() => void saveRuleDraft()} disabled={ruleSaving}>{ruleSaving ? "Saving…" : "Save changes"}</Button>
-      </SettingsSaveBar>
     </SettingsStack>
   );
 }
 
-/* ── the editor dialog: every control the page had before ─────────────────────────────────── */
+/* ── the editor dialog: the contract, its history and the E&O requirement ─────────────────── */
 
 function ContractDialog({
   snapshot,
@@ -357,37 +242,21 @@ function ContractDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const { carrierId, productCode } = state;
+  const { carrierId } = state;
   const carrier = snapshot.carriers.find((row) => row.id === carrierId) ?? null;
   const contracts = snapshot.tenantCarriers.filter((row) => row.carrier_id === carrierId);
   const active = activeContract(snapshot.tenantCarriers, carrierId);
 
-  const [saving, setSaving] = useState<"contract" | "schedule" | "rule" | null>(null);
+  const [saving, setSaving] = useState<"contract" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [contractLevel, setContractLevel] = useState(active ? String(active.contract_level_bp) : "");
   const [writingNumber, setWritingNumber] = useState(active?.writing_number ?? "");
   const [contractEffective, setContractEffective] = useState(todayIso());
-  const [policyYear, setPolicyYear] = useState("1");
-  const [rate, setRate] = useState("");
-  const [appliesOnward, setAppliesOnward] = useState(false);
-  const [scheduleEffective, setScheduleEffective] = useState(todayIso());
-  const [advanceMonths, setAdvanceMonths] = useState("");
-  const [advanceRate, setAdvanceRate] = useState("");
-  const [clawbackMonths, setClawbackMonths] = useState("");
-  // Prorated first, as the advance-rule card lists it (the board).
-  const [clawbackType, setClawbackType] = useState<"full" | "prorated">("prorated");
   const requirement = snapshot.carrierRequirements?.find((row) => row.carrier_id === carrierId) ?? null;
   const [requiresEo, setRequiresEo] = useState(requirement?.requires_eo ?? false);
   const [requirementError, setRequirementError] = useState<string | null>(null);
-  const [ruleEffective, setRuleEffective] = useState(todayIso());
 
-  const schedules = snapshot.commissionSchedules
-    .filter((row) => row.carrier_id === carrierId && row.product_code === productCode)
-    .sort((a, b) => b.effective_from.localeCompare(a.effective_from) || a.policy_year - b.policy_year);
-  const rules = snapshot.advanceRules.filter((row) => row.carrier_id === carrierId && row.product_code === productCode);
-  const productName = (code: string) => snapshot.products.find((product) => product.code === code)?.name ?? code;
-
-  async function run(key: "contract" | "schedule" | "rule", path: string, body: Record<string, unknown>, success: string) {
+  async function run(key: "contract", path: string, body: Record<string, unknown>, success: string) {
     setSaving(key);
     setError(null);
     const result = await post(path, body);
@@ -399,17 +268,11 @@ function ContractDialog({
 
   function saveContract(event: FormEvent) {
     event.preventDefault();
-    return run("contract", "/api/app/carrier-library/tenant-carriers", { carrier_id: carrierId, contract_level_bp: parseBps(contractLevel) ?? contractLevel, writing_number: writingNumber, effective_from: contractEffective }, "Carrier contract saved");
+    const level = parseBps(contractLevel);
+    // The raw text used to go to the server, which answered "expected number, received NaN".
+    if (level === null) { const message = "Enter the contract level in basis points, up to 100,000 (11,000 = 110%)."; setError(message); notify.block(message); return; }
+    return run("contract", "/api/app/carrier-library/tenant-carriers", { carrier_id: carrierId, contract_level_bp: level, writing_number: writingNumber, effective_from: contractEffective }, "Carrier contract saved");
   }
-  function saveSchedule(event: FormEvent) {
-    event.preventDefault();
-    return run("schedule", "/api/app/carrier-library/commission-schedules", { carrier_id: carrierId, product_code: productCode, contract_level_bp: active?.contract_level_bp, policy_year: policyYear, rate_bp: parseBps(rate) ?? rate, effective_from: scheduleEffective, applies_onward: appliesOnward }, "Commission schedule saved");
-  }
-  function saveRule(event: FormEvent) {
-    event.preventDefault();
-    return run("rule", "/api/app/carrier-library/advance-rules", { carrier_id: carrierId, product_code: productCode, advance_months: advanceMonths, advance_pct_bp: parseBps(advanceRate) ?? advanceRate, clawback_months: clawbackMonths, clawback_type: clawbackType, effective_from: ruleEffective }, "Advance rule saved");
-  }
-
   /** Saved on change: it is one fact about the carrier's contract, not part of a dated row. */
   async function saveRequiresEo(next: boolean) {
     setRequiresEo(next);
@@ -425,9 +288,8 @@ function ContractDialog({
     await onSaved();
   }
 
-  const blocked = !active;
-  const subhead = "text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
-  const listRow = "flex flex-wrap items-center gap-2 border-t border-[var(--border)] py-2 text-[14px] leading-[1.5] text-[var(--body)] tabular-nums";
+  const subhead = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
+  const listRow = "flex flex-wrap items-center gap-2 border-t border-[var(--border)] py-2 text-sm leading-[1.5] text-[var(--body)] tabular-nums";
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -435,7 +297,7 @@ function ContractDialog({
         <DialogHeader>
           <DialogTitle className="text-[var(--ink)]">{state.mode === "add" ? "Add a contract" : `Edit ${carrier?.name ?? "contract"}`}</DialogTitle>
           <DialogDescription className="text-[var(--muted)]">
-            Each save is a new effective-dated row.
+            Each save is a new effective-dated row. Rates and advance rules are on the <Link href="/app/rate-card" className="font-medium text-[var(--accent-ink)] hover:underline">Rate card</Link>.
           </DialogDescription>
         </DialogHeader>
 
@@ -459,8 +321,8 @@ function ContractDialog({
                       chosen ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border)] hover:bg-[var(--surface-alt)]"
                     )}
                   >
-                    <span className="block text-[14px] font-semibold text-[var(--ink)]">{row.name}</span>
-                    <span className="mt-1 block text-[12px] text-[var(--muted)]">{configured ? "Contract configured" : "Not configured"}</span>
+                    <span className="block text-sm font-semibold text-[var(--ink)]">{row.name}</span>
+                    <span className="mt-1 block text-xs text-[var(--muted)]">{configured ? "Contract configured" : "Not configured"}</span>
                   </button>
                 );
               })}
@@ -489,7 +351,7 @@ function ContractDialog({
 
         {carrier && (
           <div className="border-t border-[var(--border)] pt-4">
-            <label htmlFor="carrier-requires-eo" className="flex items-start gap-2 text-[14px] leading-[1.5] text-[var(--body)]">
+            <label htmlFor="carrier-requires-eo" className="flex items-start gap-2 text-sm leading-[1.5] text-[var(--body)]">
               <input
                 id="carrier-requires-eo"
                 type="checkbox"
@@ -500,114 +362,35 @@ function ContractDialog({
               />
               <span>
                 {carrier.name} requires E&amp;O cover in force
-                <span className="block text-[12px] text-[var(--muted)]">
+                <span className="block text-xs text-[var(--muted)]">
                   {snapshot.requirementsAvailable === false
                     ? "This setting needs a database update that has not been applied yet."
                     : "Saved as soon as it changes."}
                 </span>
               </span>
             </label>
-            {requirementError && <p role="alert" className="mt-2 text-[14px] text-[var(--error-ink)]">{requirementError}</p>}
+            {requirementError && <p role="alert" className="mt-2 text-sm text-[var(--error-ink)]">{requirementError}</p>}
           </div>
         )}
 
         {contracts.length > 0 && (
           <div>
             <p className={subhead}>Contract history for {carrier?.name ?? "carrier"}</p>
-            <div className="mt-1">
+            <PagedProvider>
+            <PagedBody as="div" className="mt-1">
               {contracts.map((row) => (
                 <div key={row.id} className={listRow}>
-                  <Pill tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Current" : "History"}</Pill>
+                  <StatusChip dot={false} tone={pillTone(row.is_active ? "success" : "neutral")}>{row.is_active ? "Current" : "History"}</StatusChip>
                   <span>{formatBps(row.contract_level_bp)} ({formatPercentFromBps(row.contract_level_bp)}) · {row.writing_number}</span>
                   <span className="text-[var(--muted)]">effective {formatDay(row.effective_from)}</span>
                 </div>
               ))}
-            </div>
+            </PagedBody>
+            {contracts.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground"><PagedPager total={contracts.length} noun="contracts" /></div>}
+            </PagedProvider>
           </div>
         )}
 
-        <div className="border-t border-[var(--border)] pt-4">
-          <Field label="Product" htmlFor="contract-product" hint="The commission rate and advance rule below are recorded for this product.">
-            <select id="contract-product" className={selectControl} value={productCode} onChange={(e) => onChange({ ...state, productCode: e.target.value })} required>
-              {snapshot.products.map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
-            </select>
-          </Field>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <form onSubmit={saveSchedule} className="min-w-0 space-y-4">
-            <p className={subhead}>Commission rate{active ? ` at ${formatBps(active.contract_level_bp)}` : ""}</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Policy year" htmlFor="schedule-year" required>
-                <input id="schedule-year" type="number" min={1} max={100} className={control} value={policyYear} onChange={(e) => setPolicyYear(e.target.value)} required />
-              </Field>
-              <Field label="Rate (basis points)" htmlFor="schedule-rate" required hint="11,000 = 110.00%">
-                <input id="schedule-rate" inputMode="numeric" className={control} value={rate} onChange={(e) => setRate(e.target.value)} required />
-              </Field>
-              <Field label="Effective from" htmlFor="schedule-effective" required className="sm:col-span-2">
-                <input id="schedule-effective" type="date" className={control} value={scheduleEffective} onChange={(e) => setScheduleEffective(e.target.value)} required />
-              </Field>
-            </div>
-            <label htmlFor="schedule-onward" className="flex items-start gap-2 text-[14px] leading-[1.5] text-[var(--body)]">
-              <input id="schedule-onward" type="checkbox" className="mt-1 size-4 accent-[var(--primary)]" checked={appliesOnward} onChange={(e) => setAppliesOnward(e.target.checked)} />
-              <span>Also every later year without its own rate (shown as “Year {policyYear || "N"}+”)</span>
-            </label>
-            <Button type="submit" disabled={saving === "schedule" || blocked}>
-              {blocked ? "Save a contract first" : saving === "schedule" ? "Saving…" : "Save commission rate"}
-            </Button>
-            {schedules.length > 0 && (
-              <div>
-                {schedules.map((row) => (
-                  <div key={row.id} className={listRow}>
-                    <span className="font-semibold text-[var(--ink)]">{productName(row.product_code)}</span>
-                    <span>year {row.policy_year}{row.applies_onward ? "+" : ""}</span>
-                    <span>{formatPercentFromBps(row.rate_bp)}</span>
-                    <span className="text-[var(--muted)]">at {formatBps(row.contract_level_bp)} · from {formatDay(row.effective_from)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </form>
-
-          <form onSubmit={saveRule} className="min-w-0 space-y-4">
-            <p className={subhead}>Advance rule</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Advance months" htmlFor="advance-months" required>
-                <input id="advance-months" type="number" min={0} max={120} className={control} value={advanceMonths} onChange={(e) => setAdvanceMonths(e.target.value)} required />
-              </Field>
-              <Field label="Advance percent (basis points)" htmlFor="advance-rate" required hint={percentOfYearOne(advanceRate) ?? undefined}>
-                <input id="advance-rate" inputMode="numeric" className={control} value={advanceRate} onChange={(e) => setAdvanceRate(e.target.value)} required />
-              </Field>
-              <Field label="Clawback months" htmlFor="clawback-months" required>
-                <input id="clawback-months" type="number" min={0} max={240} className={control} value={clawbackMonths} onChange={(e) => setClawbackMonths(e.target.value)} required />
-              </Field>
-              <Field label="Clawback type" htmlFor="clawback-type">
-                <select id="clawback-type" className={selectControl} value={clawbackType} onChange={(e) => setClawbackType(e.target.value as "full" | "prorated")}>
-                  <option value="prorated">Prorated</option>
-                  <option value="full">Full</option>
-                </select>
-              </Field>
-              <Field label="Effective from" htmlFor="rule-effective" required className="sm:col-span-2">
-                <input id="rule-effective" type="date" className={control} value={ruleEffective} onChange={(e) => setRuleEffective(e.target.value)} required />
-              </Field>
-            </div>
-            <Button type="submit" disabled={saving === "rule" || blocked}>
-              {blocked ? "Save a contract first" : saving === "rule" ? "Saving…" : "Save advance rule"}
-            </Button>
-            {rules.length > 0 && (
-              <div>
-                {rules.map((row) => (
-                  <div key={row.id} className={listRow}>
-                    <span className="font-semibold text-[var(--ink)]">{productName(row.product_code)}</span>
-                    <span>{row.advance_months} months at {formatPercentFromBps(row.advance_pct_bp)}</span>
-                    <span>{row.clawback_type} clawback, {row.clawback_months} months</span>
-                    <span className="text-[var(--muted)]">from {formatDay(row.effective_from)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </form>
-        </div>
       </DialogContent>
     </Dialog>
   );

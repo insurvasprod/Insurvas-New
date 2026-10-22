@@ -10,31 +10,34 @@
  *
  * Settings › States & licences renders appointment-vault-settings.tsx instead; both share the
  * dialogs and the checkbox grid in appointment-vault-parts.tsx.
+ *
+ * 2026-10-06 redesign: appointments, licences, and CE with E&O cover are three tabs under the
+ * strip; every readiness item stays listed above them, one line each.
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
   Field,
   KeyValues,
-  Pill,
   SettingsMeter,
-  btn,
   control,
   st,
-  type PillTone,
 } from "@/components/app/settings/primitives";
+import { ViewTabs } from "@/components/app/view-tabs";
 import {
   AppointmentGrid,
   CeDialog,
@@ -53,7 +56,7 @@ import {
 } from "@/components/app/appointment-vault-parts";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { US_REGIONS, US_STATES, regionOf } from "@/lib/appointments/constants";
-import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
+import { appointmentIsActiveAt, eoCoverState } from "@/lib/appointments/eligibility";
 import { SCHEMA_PENDING_MESSAGE } from "@/lib/appointments/pendingSchema";
 import {
   READINESS_WINDOW_DAYS,
@@ -89,45 +92,39 @@ type Vault = {
   eoPolicies: EoPolicyRow[];
   ceRecords: CeRecordRow[];
   extendedFields?: boolean;
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean }> | null;
+  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }> | null;
   /** False until 20260924310000: no pending status, no expiry. */
   appointmentDetails?: boolean;
   /** Null until 20260924310100. */
   carrierTrainings?: CarrierTrainingRow[] | null;
+  /** Sixteen #4: the platform's E&O grace, the same number canWrite uses. */
+  eoGraceDays?: number;
 };
 
 type Dialog = null | "license" | "eo" | "ce" | "training" | { carrierId: string; state: string };
 
-const H2 = "m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
-const MUTED = "text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]";
+type Tab = "appointments" | "licences" | "cover";
 
-/** The board's padded card, with the page's own h2 (SettingsCard draws an h3 for sections). */
-function Card({ title, sub, action, children, labelledBy }: { title: string; sub?: ReactNode; action?: ReactNode; children: ReactNode; labelledBy: string }) {
-  return (
-    <section aria-labelledby={labelledBy} className="min-w-0 rounded-lg border border-border bg-card p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 id={labelledBy} className={H2}>{title}</h2>
-          {sub && <p className={cn("mt-1", MUTED)}>{sub}</p>}
-        </div>
-        {action}
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
+/** The tab's one card reaches the bottom of the window. */
+const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(2)]:flex-1";
+const MUTED = "text-sm leading-normal tracking-[-0.02em] text-[var(--muted)]";
+const TONE: Record<"success" | "warning" | "error" | "neutral", StatusTone> = { success: "good", warning: "warning", error: "danger", neutral: "neutral" };
 
-const CELL_PILL: Record<CellStatus["kind"], { tone: PillTone; label: (status: CellStatus) => string } | null> = {
+const CELL_PILL: Record<CellStatus["kind"], { tone: StatusTone; label: (status: CellStatus) => string } | null> = {
   none: null,
-  appointed: { tone: "success", label: () => "Appointed" },
+  appointed: { tone: "good", label: () => "Appointed" },
   expiring: { tone: "warning", label: () => `Expires <${READINESS_WINDOW_DAYS}d` },
   pending: { tone: "neutral", label: () => "Pending" },
   starts: { tone: "neutral", label: (status) => (status.kind === "starts" ? `From ${dayMonth(status.on, false)}` : "") },
-  expired: { tone: "error", label: () => "Expired" },
+  expired: { tone: "danger", label: () => "Expired" },
   ended: { tone: "neutral", label: () => "Ended" },
 };
 
-export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean; isOwner: boolean }) {
+/**
+ * `readOnlyReason`: why editing is off for an owner whose account is read-only (LA-4.10). The edit
+ * controls are already hidden (`canEdit`); this one line says why, instead of them just vanishing.
+ */
+export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = null }: { canEdit: boolean; isOwner: boolean; readOnlyReason?: string | null }) {
   const [vault, setVault] = useState<Vault | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -140,7 +137,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
   const [carrierQuery, setCarrierQuery] = useState("");
   const [regionFilter, setRegionFilter] = useState("");
   const [licenceQuery, setLicenceQuery] = useState("");
+  const [carrierPage, setCarrierPage] = useState(1);
+  const [licencePage, setLicencePage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState<Tab>("appointments");
 
   const applyVault = useCallback((next: Vault) => {
     setVault(next);
@@ -181,8 +181,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
   const latestByKey = useMemo(() => latestAppointmentByCell(vault?.appointments ?? []), [vault]);
   const configuredCarriers = useMemo(() => {
     if (!vault) return [];
+    // LA-0.4: a carrier the agency switched off is not offered here.
+    const off = new Set((vault.carrierRequirements ?? []).filter((row) => row.contracted === false).map((row) => row.carrier_id));
     const ids = new Set(vault.tenantCarriers.map((row) => row.carrier_id));
-    return vault.carriers.filter((row) => ids.has(row.id));
+    return vault.carriers.filter((row) => ids.has(row.id) && !off.has(row.id));
   }, [vault]);
   const gridStates = useMemo(
     () =>
@@ -283,9 +285,15 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
     !licenceNeedle || [state, stateName(state), ...more].some((value) => value?.toLowerCase().includes(licenceNeedle));
   const shownLicences = licenceRows.filter((row) => matchesState(row.state, row.license_number));
   const shownUnlicensed = unlicensedAppointedStates.filter((state) => matchesState(state));
+  const carrierRows = paginate(shownCarriers, carrierPage, 10);
+  // Licences first, then the appointed states with none, paged as one list (a state is a string).
+  const licenceTotal = shownLicences.length + shownUnlicensed.length;
+  const licencePageRows = paginate<LicenseRow | string>([...shownLicences, ...shownUnlicensed], licencePage, 10);
 
   const eoPolicy = currentEoPolicy(vault.eoPolicies, today);
   const eoDays = eoPolicy ? daysUntilExpiry(eoPolicy.expires_at, today) : null;
+  // Sixteen #4: in the grace after E&O expiry, new business can still be written — say so, in red, every visit.
+  const eoCover = eoCoverState(vault.eoPolicies, today, { graceDays: vault.eoGraceDays });
   const ceRecord = currentCeRecord(vault.ceRecords, today);
   const outstanding = trainings ? outstandingTrainings(trainings) : null;
   const overdueTrainings = outstanding ? outstanding.filter((row) => row.due_on < today).length : 0;
@@ -312,9 +320,18 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
+      {readOnlyReason && <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{readOnlyReason}</p>}
+
+      {/* Not dismissible, by decision: it stays until a renewal is entered (a backdated effective date closes the gap). */}
+      {eoCover.state === "grace" && eoCover.expiredOn && eoCover.graceEndsOn && (
+        <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
+          <strong className="font-semibold">E&amp;O cover expired {shortDate(eoCover.expiredOn)}.</strong>{" "}
+          New business can still be written until {shortDate(eoCover.graceEndsOn)}, then new applications stop. Your book, servicing and reports stay open. Enter the renewal under CE &amp; E&amp;O cover, with its real effective date, even if that is in the past.
+        </div>
+      )}
 
       {!canEdit && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3 text-sm text-[var(--info-ink)]">
+        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-2.5 text-sm text-[var(--info-ink)]">
           View only. An owner with full access edits appointments and licences.
         </div>
       )}
@@ -327,14 +344,14 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
         <StatTile label="CE credits" value={ceRecord ? `${ceRecord.credits_completed}/${ceRecord.credits_required}` : "—"} footnote={ceRecord ? `due ${shortDate(ceRecord.deadline)}` : "no cycle recorded"} />
       </StatStrip>
 
-      {/* Every readiness item, one line each: a fifth blocker is never dropped to keep the page tidy. */}
+      {/* Every readiness item, one line each, in one block: a fifth blocker is never dropped to keep the page tidy. */}
       {items.length > 0 && (
-        <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Readiness items">
+        <ul className="m-0 list-none divide-y divide-border overflow-hidden rounded-lg border border-border p-0" aria-label="Readiness items">
           {items.map((item) => (
             <li
               key={item.key}
               className={cn(
-                "rounded-lg border border-border border-l-[3px] px-4 py-3 text-sm",
+                "border-l-[3px] px-4 py-2 text-sm",
                 item.tone === "error"
                   ? "border-l-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]"
                   : "border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]",
@@ -346,9 +363,20 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
         </ul>
       )}
 
-      {editing && canEdit ? (
+      <ViewTabs
+        label="Appointment vault views"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "appointments", label: "Carrier appointments", count: activeAppointments.length },
+          { key: "licences", label: "State licences", count: licenceRows.length },
+          { key: "cover", label: "CE & E&O cover" },
+        ]}
+      />
+
+      {tab === "appointments" && (editing && canEdit ? (
         configuredCarriers.length === 0 ? (
-          <TableCard toolbar={<DataToolbar actions={<Button type="button" variant="outline" onClick={closeEditor}>Done editing</Button>} />}>
+          <TableCard className={FILL} toolbar={<DataToolbar actions={<Button type="button" variant="outline" onClick={closeEditor}>Done editing</Button>} />}>
             {noCarrier}
           </TableCard>
         ) : (
@@ -376,39 +404,40 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
         )
       ) : (
         <TableCard
-          title="Carrier appointments by state"
+          className={FILL}
           toolbar={
             <DataToolbar
               actions={<>
                 {canEdit && tableCarriers.length > 0 && <Button type="button" variant="outline" onClick={() => setEditing(true)}>Edit appointments</Button>}
+                {(carrierQuery || regionFilter) && <ClearFiltersButton onClick={() => { setCarrierQuery(""); setRegionFilter(""); setCarrierPage(1); }} />}
                 {refreshButton}
               </>}
             >
-              <ToolbarSearch value={carrierQuery} onChange={setCarrierQuery} placeholder="Search carriers" />
-              <select aria-label="Filter states by region" className={toolbarControl} value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}>
+              <ToolbarSearch value={carrierQuery} onChange={(value) => { setCarrierQuery(value); setCarrierPage(1); }} placeholder="Search carriers" />
+              <select aria-label="Filter states by region" className={toolbarControl} value={regionFilter} onChange={(event) => { setRegionFilter(event.target.value); setCarrierPage(1); }}>
                 <option value="">All regions</option>
                 {US_REGIONS.map((region) => <option key={region.name} value={region.name}>{region.name}</option>)}
               </select>
             </DataToolbar>
           }
-          footer={tableCarriers.length > 0 && footprint.length > 0 ? <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
+          footer={tableCarriers.length > 0 && footprint.length > 0 ? shownCarriers.length > 10 && columns.length > 0 ? <Pager page={carrierRows.current} pageSize={10} total={shownCarriers.length} noun="carriers" onPage={setCarrierPage} suffix={`${columns.length} of ${footprint.length} states · grouped by region`} /> : <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
         >
           {tableCarriers.length === 0 ? (
             noCarrier
           ) : footprint.length === 0 ? (
             <EmptyState title="No appointment or licence recorded yet" hint={canEdit ? "Choose Edit appointments to mark the states where each carrier has appointed you." : "Appointments appear here once an owner records them."} />
           ) : shownCarriers.length === 0 || columns.length === 0 ? (
-            <NoMatches noun="appointments" onClear={() => { setCarrierQuery(""); setRegionFilter(""); }} />
+            <NoMatches noun="appointments" onClear={() => { setCarrierQuery(""); setRegionFilter(""); setCarrierPage(1); }} />
           ) : (
-            <table className={cn(st.table, "table-fixed")} style={{ minWidth: 170 + 110 * columns.length }}>
+            <table className={st.table} style={{ minWidth: 190 + 120 * columns.length }}>
               <thead>
                 <tr className={st.headRow}>
-                  <th scope="col" className={cn(st.th, "w-[170px]")}>Carrier</th>
+                  <th scope="col" className={cn(st.th, "min-w-[190px] pl-4")}>Carrier</th>
                   {columns.map((code, index) => {
                     const region = regionOf(code);
                     const startsRegion = index > 0 && regionOf(columns[index - 1]) !== region;
                     return (
-                      <th key={code} scope="col" className={cn(st.th, "w-[110px]", startsRegion && "border-l border-[var(--border)]")} title={`${stateName(code)}${region ? ` · ${region}` : ""}`}>
+                      <th key={code} scope="col" className={cn(st.th, "min-w-[120px]", startsRegion && "border-l border-[var(--border)]")} title={`${stateName(code)}${region ? ` · ${region}` : ""}`}>
                         {code}
                       </th>
                     );
@@ -416,9 +445,9 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
                 </tr>
               </thead>
               <tbody className="m-seq">
-                {shownCarriers.map((carrier) => (
+                {carrierRows.rows.map((carrier) => (
                   <tr key={carrier.id}>
-                    <th scope="row" className={cn(st.td, "truncate text-left font-normal")} title={carrier.name}>
+                    <th scope="row" className={cn(st.td, "max-w-[220px] truncate pl-4 text-left font-normal")} title={carrier.name}>
                       {carrier.name}
                     </th>
                     {columns.map((code, index) => {
@@ -426,7 +455,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
                       const pill = CELL_PILL[status.kind];
                       const label = pill ? pill.label(status) : "No appointment";
                       const startsRegion = index > 0 && regionOf(columns[index - 1]) !== regionOf(code);
-                      const content = pill ? <Pill tone={pill.tone} dot>{label}</Pill> : <span aria-hidden className="text-[var(--muted)]">&mdash;</span>;
+                      const content = pill ? <StatusChip tone={pill.tone}>{label}</StatusChip> : <span aria-hidden className="text-[var(--muted)]">&mdash;</span>;
                       return (
                         <td key={code} className={cn(st.td, startsRegion && "border-l border-[var(--border)]")}>
                           {canEdit ? (
@@ -453,93 +482,88 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
             </table>
           )}
         </TableCard>
+      ))}
+
+      {tab === "licences" && (
+        <TableCard
+          className={FILL}
+          toolbar={
+            <DataToolbar
+              actions={<>
+                {canEdit && (
+                  <Button type="button" variant="outline" onClick={() => setDialog("license")}>
+                    <Plus aria-hidden="true" />
+                    Add a licence
+                  </Button>
+                )}
+                {licenceQuery && <ClearFiltersButton onClick={() => { setLicenceQuery(""); setLicencePage(1); }} />}
+                {refreshButton}
+              </>}
+            >
+              <ToolbarSearch value={licenceQuery} onChange={(value) => { setLicenceQuery(value); setLicencePage(1); }} placeholder="Search states, licences" />
+            </DataToolbar>
+          }
+          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > 10 ? <Pager page={licencePageRows.current} pageSize={10} total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
+        >
+          {licenceRows.length + unlicensedAppointedStates.length === 0 ? (
+            <EmptyState title="No licences recorded yet" hint="Until one is, no lead can be assigned to an owner or producer." />
+          ) : shownLicences.length + shownUnlicensed.length === 0 ? (
+            <NoMatches noun="licences" onClear={() => { setLicenceQuery(""); setLicencePage(1); }} />
+          ) : (
+            <table className={cn(st.table, "min-w-[760px]")}>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={cn(st.th, "pl-4")}>State</th>
+                  <th scope="col" className={st.th}>Licence</th>
+                  <th scope="col" className={st.th}>Lines</th>
+                  <th scope="col" className={st.th}>Expires</th>
+                  <th scope="col" className={cn(st.th, "pr-4")}>Status</th>
+                </tr>
+              </thead>
+              <tbody className="m-seq">
+                {licencePageRows.rows.filter((row): row is LicenseRow => typeof row !== "string").map((row) => {
+                  const status = licenceStatus(row.expires_at, today);
+                  return (
+                    <tr key={row.id}>
+                      <td className={cn(st.td, "whitespace-nowrap pl-4")}>{stateName(row.state)}</td>
+                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{row.license_number}</td>
+                      <td className={cn(st.td, "max-w-[320px] truncate")} title={row.lines_of_authority?.join(", ") || undefined}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
+                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{shortDate(row.expires_at)}</td>
+                      <td className={cn(st.td, "pr-4")}><StatusChip tone={TONE[status.tone]}>{status.label}</StatusChip></td>
+                    </tr>
+                  );
+                })}
+                {licencePageRows.rows.filter((row): row is string => typeof row === "string").map((state) => (
+                  <tr key={`unlicensed-${state}`}>
+                    <td className={cn(st.td, "whitespace-nowrap pl-4")}>{stateName(state)}</td>
+                    {/* The fact itself, on the row: an active carrier appointment here and no licence. */}
+                    <td className={cn(st.td, "text-[var(--error-ink)]")} colSpan={3}>Appointed here with no licence, so no lead in this state can be assigned.</td>
+                    <td className={cn(st.td, "pr-4")}>
+                      <StatusChip tone="danger">Not licensed</StatusChip>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </TableCard>
       )}
 
-      <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex min-w-0 flex-1 flex-col gap-6">
+      {tab === "cover" && (
+        <div className="grid items-start gap-6 lg:grid-cols-2">
           <TableCard
-            title="State licences"
-            toolbar={
-              <DataToolbar
-                actions={<>
-                  {canEdit && (
-                    <Button type="button" variant="outline" onClick={() => setDialog("license")}>
-                      <Plus aria-hidden="true" />
-                      Add a licence
-                    </Button>
-                  )}
-                  {refreshButton}
-                </>}
-              >
-                <ToolbarSearch value={licenceQuery} onChange={setLicenceQuery} placeholder="Search states, licences" />
-              </DataToolbar>
-            }
-          >
-            {licenceRows.length + unlicensedAppointedStates.length > 0 && shownLicences.length + shownUnlicensed.length === 0 ? (
-              <NoMatches noun="licences" onClear={() => setLicenceQuery("")} />
-            ) : (
-              <table className={st.table}>
-                <thead>
-                  <tr className={st.headRow}>
-                    <th scope="col" className={cn(st.th, "w-[90px]")}>State</th>
-                    <th scope="col" className={cn(st.th, "w-[150px]")}>Licence</th>
-                    <th scope="col" className={cn(st.th, "w-[170px]")}>Lines</th>
-                    <th scope="col" className={cn(st.th, "w-[130px]")}>Expires</th>
-                    {/* The board's 130px; left to take the remainder so 90+150+170+130+130 = 670px never
-                        forces a 2px scroll in the 668px the column has at 1440 wide. */}
-                    <th scope="col" className={st.th}><span className="sr-only">Status</span></th>
-                  </tr>
-                </thead>
-                <tbody className="m-seq">
-                  {shownLicences.map((row) => {
-                    const status = licenceStatus(row.expires_at, today);
-                    return (
-                      <tr key={row.id}>
-                        <td className={st.td}>{stateName(row.state)}</td>
-                        <td className={st.td}>{row.license_number}</td>
-                        <td className={st.td}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
-                        <td className={cn(st.td, "tabular-nums")}>{shortDate(row.expires_at)}</td>
-                        <td className={st.td}><Pill tone={status.tone} dot>{status.label}</Pill></td>
-                      </tr>
-                    );
-                  })}
-                  {shownUnlicensed.map((state) => (
-                    <tr key={`unlicensed-${state}`}>
-                      <td className={st.td}>{stateName(state)}</td>
-                      <td className={st.td}>&mdash;</td>
-                      <td className={st.td}>&mdash;</td>
-                      <td className={st.td}>&mdash;</td>
-                      <td className={st.td} title="The agency holds an active carrier appointment here but no licence, so no lead in this state can be assigned.">
-                        <Pill tone="error" dot>Not licensed</Pill>
-                      </td>
-                    </tr>
-                  ))}
-                  {licenceRows.length + unlicensedAppointedStates.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>No licences recorded yet. Until one is, no lead can be assigned to an owner or producer.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
-          </TableCard>
-        </div>
-
-        <div className="flex w-full min-w-0 flex-col gap-6 lg:w-[420px] lg:shrink-0">
-          <Card
-            labelledBy="ce-heading"
             title="Continuing education"
-            sub={ceRecord ? `${stateName(ceRecord.state)}, ${ceRecord.deadline >= today ? "current cycle" : "last recorded cycle"}` : undefined}
+            description={ceRecord ? `${stateName(ceRecord.state)}, ${ceRecord.deadline >= today ? "current cycle" : "last recorded cycle"}` : undefined}
             action={
               canEdit ? (
-                <span className="flex shrink-0 gap-2">
+                <>
                   <Button type="button" variant="outline" onClick={() => setDialog("training")}>Trainings</Button>
                   <Button type="button" variant="outline" onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><Plus aria-hidden="true" />Add a cycle</>}</Button>
-                </span>
+                </>
               ) : undefined
             }
           >
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 border-t border-border px-4 py-4">
               {!ceRecord && <p className={MUTED}>No continuing-education cycle recorded.</p>}
               <KeyValues
                 items={[
@@ -570,34 +594,35 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
                 />
               )}
             </div>
-          </Card>
+          </TableCard>
 
-          <Card
-            labelledBy="eo-heading"
+          <TableCard
             title="Errors & omissions cover"
             action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("eo")}>{eoPolicy ? "Edit" : <><Plus aria-hidden="true" />Add a policy</>}</Button> : undefined}
           >
-            {eoPolicy ? (
-              <KeyValues
-                items={[
-                  { label: "Carrier", value: eoPolicy.carrier },
-                  { label: "Policy", value: eoPolicy.policy_number },
-                  { label: "Per claim", value: money(eoPolicy.per_claim_cents) },
-                  { label: "Aggregate", value: money(eoPolicy.aggregate_cents) },
-                  { label: "Expires", value: longDate(eoPolicy.expires_at) },
-                  {
-                    label: "Days left",
-                    value: eoDays !== null && eoDays < 0 ? "Expired" : String(eoDays),
-                    tone: eoDays !== null && eoDays < 0 ? "error" : eoDays !== null && eoDays <= READINESS_WINDOW_DAYS ? "warning" : undefined,
-                  },
-                ]}
-              />
-            ) : (
-              <p className={MUTED}>No E&amp;O policy on file.</p>
-            )}
-          </Card>
+            <div className="border-t border-border px-4 py-4">
+              {eoPolicy ? (
+                <KeyValues
+                  items={[
+                    { label: "Carrier", value: eoPolicy.carrier },
+                    { label: "Policy", value: eoPolicy.policy_number },
+                    { label: "Per claim", value: money(eoPolicy.per_claim_cents) },
+                    { label: "Aggregate", value: money(eoPolicy.aggregate_cents) },
+                    { label: "Expires", value: longDate(eoPolicy.expires_at) },
+                    {
+                      label: "Days left",
+                      value: eoDays !== null && eoDays < 0 ? "Expired" : String(eoDays),
+                      tone: eoDays !== null && eoDays < 0 ? "error" : eoDays !== null && eoDays <= READINESS_WINDOW_DAYS ? "warning" : undefined,
+                    },
+                  ]}
+                />
+              ) : (
+                <p className={MUTED}>No E&amp;O policy on file.</p>
+              )}
+            </div>
+          </TableCard>
         </div>
-      </div>
+      )}
 
       {canEdit && (
         <>
@@ -815,28 +840,24 @@ function TrainingDialog({
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {ordered.map((row) => {
             const days = daysUntilExpiry(row.due_on, today);
-            const tone: PillTone = row.completed_on ? "success" : days < 0 ? "error" : days <= READINESS_WINDOW_DAYS ? "warning" : "neutral";
+            const tone: StatusTone = row.completed_on ? "good" : days < 0 ? "danger" : days <= READINESS_WINDOW_DAYS ? "warning" : "neutral";
             const label = row.completed_on ? `Done ${shortDate(row.completed_on)}` : days < 0 ? "Overdue" : `Due ${shortDate(row.due_on)}`;
             const busy = saving === `training-${row.id}`;
             return (
-              <li key={row.id} className="rounded-[8px] border border-[var(--border)] px-3 py-2.5">
+              <li key={row.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{row.title}</span>
-                    <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-                      {nameOf(row.carrier_id)} &middot; due {shortDate(row.due_on)}
-                    </span>
-                  </span>
-                  <Pill tone={tone} dot>{label}</Pill>
-                  <button type="button" className={btn("row")} onClick={() => void act(row.id, () => onComplete(row.id, row.completed_on ? null : today))} disabled={busy}>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--ink)]" title={row.title}>{row.title}</span>
+                  <span className="shrink-0 text-xs text-[var(--muted)]">{nameOf(row.carrier_id)} &middot; due {shortDate(row.due_on)}</span>
+                  <StatusChip tone={tone}>{label}</StatusChip>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void act(row.id, () => onComplete(row.id, row.completed_on ? null : today))} disabled={busy}>
                     {row.completed_on ? "Mark outstanding" : "Mark complete"}
-                  </button>
-                  <button type="button" className={btn("danger-row")} onClick={() => void act(row.id, () => onRemove(row.id))} disabled={busy}>
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)]" onClick={() => void act(row.id, () => onRemove(row.id))} disabled={busy}>
                     Remove
-                  </button>
+                  </Button>
                 </div>
                 {rowError?.id === row.id && (
-                  <p role="alert" className="mt-1.5 text-[12px] leading-[1.5] text-[var(--error-ink)]">{rowError.message}</p>
+                  <p role="alert" className="mt-1.5 text-xs leading-normal text-[var(--error-ink)]">{rowError.message}</p>
                 )}
               </li>
             );

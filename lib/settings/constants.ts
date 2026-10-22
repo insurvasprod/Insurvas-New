@@ -71,6 +71,28 @@ export const SETTING_DEFS = [
     unit: "cents",
   },
   {
+    key: "billing.cancelled_retention_days",
+    type: "number",
+    group: "Billing",
+    label: "Cancelled-account retention",
+    help: "How long a cancelled agency can still read and export its book, statements and commission history. Read by the entitlement engine (cancelled_retention_days) and shown to the agency when it cancels.",
+    default: 90,
+    min: 1,
+    max: 3650,
+    unit: "days",
+  },
+  {
+    key: "billing.default_trial_days",
+    type: "number",
+    group: "Billing",
+    label: "Default trial length",
+    help: "Days of free trial for a plan version whose price row does not set its own. A plan's own trial length always wins; existing trials keep the length they started with.",
+    default: 14,
+    min: 0,
+    max: 90,
+    unit: "days",
+  },
+  {
     key: "usage.warn_percent",
     type: "number",
     group: "Usage",
@@ -201,6 +223,19 @@ export const SETTING_DEFS = [
     min: 1,
     max: 600,
     unit: "requests",
+  },
+  {
+    // Sixteen Open Questions #4. Read by lib/appointments (canWrite) and by the SQL eo_grace_days()
+    // (migration 20261015580000), which applies the same default and the same 0..14 bounds.
+    key: "compliance.eo_grace_days",
+    type: "number",
+    group: "Compliance",
+    label: "E&O grace period",
+    help: "Days after an agency's E&O policy expires during which new business can still be written, with a red banner on its appointments page. The platform cap: a tenant can shorten it, never extend it.",
+    default: 7,
+    min: 0,
+    max: 14,
+    unit: "days",
   },
   {
     key: "platform.default_currency",

@@ -1,9 +1,11 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { scopeFor } from "@/lib/agency/visibility";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { QuotesList } from "@/components/app/applications/quotes-list";
 import { SetupPending } from "@/components/app/applications/setup-pending";
-import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
+// LA-8.2: times show in the viewer's own display timezone, else the agency's.
+import { getViewerTimezone } from "@/lib/users/viewerTimezone";
 import { ApplicationError } from "@/lib/applications/db";
 import { FIXTURE_QUOTE_LIST } from "@/lib/applications/listFixtures";
 import { listQuoteRows } from "@/lib/applications/lists";
@@ -31,11 +33,11 @@ async function orPending<T>(read: Promise<T>): Promise<T | null> {
 
 export default async function QuotingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("quoting");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Quoting" description="Compare carrier premiums side by side and keep every quote you give." />;
-  if (guard.role !== "owner" && guard.role !== "producer") return <RoleGateNotice featureLabel="Quoting" detail="Owners and producers quote clients." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Quoting" description="Compare carrier premiums side by side." />;
+  if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Quoting" detail="Owners and producers quote clients." />;
   const query = await searchParams;
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") return <QuotesList rows={sampleRows()} sample />;
-  const [rows, timeZone] = await Promise.all([orPending(listQuoteRows(guard.context.tenantId)), getWorkspaceTimezone(guard.context.tenantId).catch(() => null)]);
+  const [rows, timeZone] = await Promise.all([orPending(scopeFor(guard.context).then((scope) => listQuoteRows(guard.context.tenantId, scope))), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
   if (!rows) return <SetupPending title="Quotes" />;
   return <QuotesList rows={rows} timeZone={timeZone ?? undefined} />;
 }

@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { BLOCK_REPEATS, type BlockRepeat } from "./calendarMath";
 import { isSchemaGap, SchemaGapError } from "./schemaGap";
+import { appointmentVisible, calendarVisible } from "./scopeCore";
+import type { ProducerScope } from "../agency/visibilityCore";
 
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
 type Query<T> = PromiseLike<Result<T>> & {
@@ -271,7 +273,12 @@ export type BookableContext = {
  * occurrence), the same-day switch, double-booking and linked-calendar busy time. Each newer column
  * degrades to the older read when its migration is not applied.
  */
-export async function bookableContext(tenantId: string): Promise<BookableContext> {
+/**
+ * AG-0.5: `scope` and `viewerId` (scopeFor, from the session). In an agency a narrow session is shown
+ * only the calendars of itself and the producers in its scope — their hours, blocks, policies, linked
+ * busy time and upcoming appointments (plus the ones it booked). Omitted / null = the whole agency.
+ */
+export async function bookableContext(tenantId: string, scope: ProducerScope = null, viewerId = ""): Promise<BookableContext> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const nowIso = new Date().toISOString();
 
@@ -291,7 +298,8 @@ export async function bookableContext(tenantId: string): Promise<BookableContext
     db.from("tenant_users").select("user_id, role, accepted_at").eq("tenant_id", tenantId).in("role", ["owner", "producer"]),
   ]);
   if (holders.error) throw new Error(`Could not load who can be booked: ${holders.error.message}`);
-  const bookable = new Set((holders.data ?? []).filter((row) => row.accepted_at).map((row) => text(row.user_id)));
+  const bookable = new Set((holders.data ?? []).filter((row) => row.accepted_at && calendarVisible(scope, text(row.user_id), viewerId)).map((row) => text(row.user_id)));
+  const mine = (row: Record<string, unknown>) => calendarVisible(scope, text(row.user_id), viewerId);
   const availability = { ...allAvailability, data: (allAvailability.data ?? []).filter((row) => bookable.has(text(row.user_id))) };
 
   const blocks = isSchemaGap(firstBlocks.error)
@@ -351,14 +359,14 @@ export async function bookableContext(tenantId: string): Promise<BookableContext
       endTime: text(row.end_time),
       timezone: text(row.timezone),
     })),
-    blocks: (blocks.data ?? []).map((row) => ({
+    blocks: (blocks.data ?? []).filter(mine).map((row) => ({
       userId: text(row.user_id),
       startsAt: text(row.starts_at),
       endsAt: text(row.ends_at),
       reason: text(row.reason) || null,
       repeats: (BLOCK_REPEATS as readonly string[]).includes(text(row.repeats)) ? (text(row.repeats) as BlockRepeat) : "none",
     })),
-    policy: policies.map((row) => ({
+    policy: policies.filter((row) => calendarVisible(scope, row.userId, viewerId)).map((row) => ({
       userId: row.userId,
       appointmentMinutes: row.appointmentMinutes,
       bufferMinutes: row.bufferMinutes,
@@ -366,7 +374,7 @@ export async function bookableContext(tenantId: string): Promise<BookableContext
       allowSameDay: row.allowSameDay,
       allowDoubleBooking: row.allowDoubleBooking,
     })),
-    upcoming: (upcoming.data ?? []).map((row) => ({
+    upcoming: (upcoming.data ?? []).filter((row) => appointmentVisible(scope, { agentUserId: text(row.agent_user_id) || null, bookedBy: text(row.booked_by) || null }, viewerId)).map((row) => ({
       appointmentId: text(row.id),
       agentUserId: text(row.agent_user_id),
       leadId: text(row.lead_id),
@@ -378,6 +386,7 @@ export async function bookableContext(tenantId: string): Promise<BookableContext
     })),
     // An agent with no policy row runs the column default, which honours linked calendars.
     busy: (busyRows.error ? [] : busyRows.data ?? [])
+      .filter(mine)
       .filter((row) => honours.has(text(row.user_id)) || !knownPolicy.has(text(row.user_id)))
       .map((row) => ({ userId: text(row.user_id), startsAt: text(row.starts_at), endsAt: text(row.ends_at) })),
   };

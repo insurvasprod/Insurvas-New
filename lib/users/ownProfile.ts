@@ -25,6 +25,13 @@ export type OwnProfile = {
   licenceNumbers: Record<string, string>;
   /** False until migration 20260924200000 is applied: the numbers are then shown as unavailable and not saved. */
   licenceNumbersReady: boolean;
+  /** When the profile picture last changed (it versions the picture's address); null when there is none. */
+  avatarVersion: string | null;
+  /**
+   * LA-8.2 · how times show for this person only. Null: the agency's timezone (LA-8.3). It never
+   * changes calling windows, which follow the customer's state.
+   */
+  displayTimezone: string | null;
 };
 
 const blankToNull = (value: string | null | undefined) => {
@@ -49,7 +56,19 @@ export const ownProfileInputSchema = z.object({
   npn: z.string().nullable().optional().transform((value) => blankToNull(value)?.replace(/\s+/g, "") ?? null)
     .refine((value) => value === null || /^[0-9]{1,10}$/.test(value), "An NPN is up to ten digits"),
   licenceNumbers: z.record(z.string(), z.string()).optional(),
+  // Absent means "leave it": only a request that names the field changes it.
+  displayTimezone: z.string().nullable().optional().transform((value) => (value === undefined ? undefined : blankToNull(value)))
+    .refine((value) => value === null || value === undefined || isIanaZone(value), "Choose a valid timezone"),
 }).strict();
+
+function isIanaZone(value: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export type OwnProfileInput = z.infer<typeof ownProfileInputSchema>;
 

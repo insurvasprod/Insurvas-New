@@ -1,4 +1,5 @@
 import type { ContactInput, ContactRow, FieldSchemaRow } from "./types";
+import { csvCell as sharedCsvCell, csvUnguard } from "../csv/cell.ts";
 
 export function parseCsv(text: string): string[][] {
   if (text.length > 5_000_000) throw new Error("CSV file is larger than 5 MB");
@@ -22,16 +23,17 @@ export function parseContactCsv(text: string, schema: FieldSchemaRow[]): Contact
   if (index("first_name") < 0 || index("last_name") < 0) throw new Error("CSV must include first_name and last_name columns");
   const allowed = new Set(schema.filter((field) => field.entity === "contact").map((field) => field.field_key));
   return rows.slice(1).map((values) => {
-    const get = (name: string) => { const at = index(name); return at < 0 ? "" : values[at]?.trim() ?? ""; };
+    // csvUnguard: an edited export comes back with the apostrophe the export put before =, +, -, @.
+    const get = (name: string) => { const at = index(name); return at < 0 ? "" : csvUnguard(values[at]?.trim() ?? ""); };
     const custom_fields: Record<string, unknown> = {};
-    headers.forEach((header, at) => { if (header.startsWith("custom_") && allowed.has(header.slice(7)) && values[at] !== "") custom_fields[header.slice(7)] = values[at]; });
+    headers.forEach((header, at) => { if (header.startsWith("custom_") && allowed.has(header.slice(7)) && values[at] !== "") custom_fields[header.slice(7)] = csvUnguard(values[at]); });
     const phones = get("phones").split("|").map((value) => value.trim()).filter(Boolean).map((value) => ({ phone: value, type: "other" as const, is_primary: value === get("primary_phone") }));
     const emails = get("emails").split("|").map((value) => value.trim()).filter(Boolean).map((value) => ({ email: value, is_primary: value === get("email") }));
     return { first_name: get("first_name"), last_name: get("last_name"), dob: get("dob") || null, primary_phone: get("primary_phone") || null, email: get("email") || null, state: get("state") || null, address_line1: get("address_line1") || null, city: get("city") || null, postal_code: get("postal_code") || null, custom_fields, phones, emails };
   });
 }
 
-function csvCell(value: unknown) { const text = Array.isArray(value) ? value.join("|") : value === null || value === undefined ? "" : String(value); const safe = /^[=+\-@]/.test(text) ? `'${text}` : text; return `"${safe.replaceAll('"', '""')}"`; }
+function csvCell(value: unknown) { return sharedCsvCell(Array.isArray(value) ? value.join("|") : value); }
 
 /** The export's custom columns, in the order the field schema sorts them. */
 export function csvContactFields(schema: FieldSchemaRow[]) {
@@ -39,14 +41,14 @@ export function csvContactFields(schema: FieldSchemaRow[]) {
 }
 
 export function csvHeaderLine(fields: FieldSchemaRow[]) {
-  const headers = ["first_name", "last_name", "dob", "primary_phone", "email", "phones", "emails", "state", "address_line1", "city", "postal_code", ...fields.map((field) => `custom_${field.field_key}`)];
+  const headers = ["first_name", "last_name", "dob", "primary_phone", "email", "phones", "emails", "state", "address_line1", "city", "postal_code", ...fields.map((field) => `custom_${field.field_key}`), "provisional"];
   return `${headers.map(csvCell).join(",")}\r\n`;
 }
 
 /** One contact's line, CRLF-terminated. The export streams these a batch at a time. */
 export function csvContactLine(fields: FieldSchemaRow[], contact: ContactRow) {
   const primaryEmail = contact.emails.find((item) => item.is_primary)?.email ?? contact.emails[0]?.email ?? "";
-  return `${[contact.first_name, contact.last_name, contact.dob, contact.primary_phone, primaryEmail, contact.phones.map((item) => item.phone), contact.emails.map((item) => item.email), contact.state, contact.address_line1, contact.city, contact.postal_code, ...fields.map((field) => contact.custom_fields[field.field_key])].map(csvCell).join(",")}\r\n`;
+  return `${[contact.first_name, contact.last_name, contact.dob, contact.primary_phone, primaryEmail, contact.phones.map((item) => item.phone), contact.emails.map((item) => item.email), contact.state, contact.address_line1, contact.city, contact.postal_code, ...fields.map((field) => contact.custom_fields[field.field_key]), contact.provisional ? "yes" : ""].map(csvCell).join(",")}\r\n`;
 }
 
 export function csvForContacts(schema: FieldSchemaRow[], contacts: ContactRow[]) {

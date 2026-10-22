@@ -15,7 +15,7 @@ export type LoginEventRow = {
   failure_reason: string | null;
 };
 
-export const ACTIVITY_PAGE_SIZE = 25;
+export const ACTIVITY_PAGE_SIZE = 10;
 
 /** Why an attempt failed. A small closed set so the UI can label them. */
 export const LOGIN_FAILURE_REASONS = {

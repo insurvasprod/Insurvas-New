@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { AppointmentCalendar } from "@/components/app/appointment-calendar";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -19,14 +19,15 @@ export default async function CalendarPage({
       <FeatureGateNotice
         guard={guard}
         featureLabel="Calendar"
-        description="The appointments booked onto your calendar, by day or by week, with each customer's own local time."
+        description="Booked appointments by day or week, in each customer's own time."
       />
     );
   // A setter books into this diary, so a setter can see it. Changing it is the availability editor,
   // which they cannot reach — "book appointments into Ray's slots" and "cannot change availability
   // or configuration" are two lines of the same role table.
-  if (!["owner", "producer", "setter"].includes(guard.role))
-    return <RoleGateNotice featureLabel="Calendar" detail="Only owners, producers and setters can see the appointment calendar." />;
+  // LA-0.2: an assistant keeps the calendar for the producers he works for (calendar.manage + appointments.book).
+  if (!actAsPage(guard, ["owner", "producer", "assistant", "setter"]))
+    return <RoleGateNotice featureLabel="Calendar" detail="Only owners, producers, assistants and setters can see the appointment calendar." />;
 
   const { appointment } = await searchParams;
 

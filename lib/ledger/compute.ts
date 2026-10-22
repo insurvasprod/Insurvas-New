@@ -37,7 +37,11 @@ export type LedgerPolicy = {
   effectiveDate: string;
   annualPremiumCents: number;
   status: "active" | "pending" | "lapsed" | "cancelled" | string;
-  /** When a lapsed or cancelled policy was marked so (tenant_policies.updated_at). */
+  /**
+   * When a lapsed or cancelled policy was marked so: tenant_policies.status_changed_at (LA-4.7),
+   * which only a change of status moves. Before that migration it fell back to updated_at, which
+   * any edit moved. Null for a policy in force.
+   */
   statusChangedAt: string | null;
   /** Who recorded the policy — the only attribution tenant_policies carries. */
   createdBy: string | null;

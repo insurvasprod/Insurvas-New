@@ -4,6 +4,7 @@ import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/require
 import { prefetchTopBarIdentity, readTopBarIdentity } from "@/lib/tenantAuth/topBarIdentity";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { buildAgentMenu } from "@/lib/menu/definition";
+import { scopeFor, visibleProducerUserIds } from "@/lib/agency/visibility";
 import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
@@ -14,10 +15,14 @@ import { AnnouncementStrip } from "@/components/app/announcement-strip";
 import { SubscriptionStateBanner } from "@/components/app/subscription-state-banner";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
 import { planDisplayName } from "@/lib/plans/display";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { AppTopBar } from "@/components/app/app-top-bar";
 import { NotifySoundPrimer } from "@/components/app/notify-sound-primer";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
+import { OverdueComplaintBanner } from "@/components/app/overdue-complaint-banner";
+import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
+import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
+import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
+import { Suspense } from "react";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -47,7 +52,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
     return result.value;
   };
 
-  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled] =
+  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , , overdueComplaints, setupStamps] =
     await Promise.all([
       resolveSignupContext(),
       resolveTenantContext(),
@@ -58,6 +63,13 @@ export default async function AgentShellLayout({ children }: { children: React.R
       settle(loadFeatureSwitches()),
       // Display-only; started here so `readTopBarIdentity` below finds it already fetched.
       settle(prefetchTopBarIdentity(session.sub, session.tenantId)),
+      // The producer scope for the menu, started with the rest (it is a per-request cache keyed by these
+      // same two ids, so `scopeFor(context)` below picks it up instead of making its own trip).
+      settle(visibleProducerUserIds(session.tenantId, session.sub)),
+      // LA-6.4: a regulator complaint past its deadline (one counted read; 0 on any failure).
+      overdueRegulatorComplaintCount(session.tenantId),
+      // The walkthrough's two finished stamps, for the "Get set up" item (never throws; a failure reads as finished).
+      readSetupStamps(session.tenantId, session.sub),
     ]);
 
   // Self-serve users must finish the gated signup states before the normal entitlement shell.
@@ -84,7 +96,20 @@ export default async function AgentShellLayout({ children }: { children: React.R
   // function pure and shared with the admin plan preview, which deliberately shows plan grants
   // rather than the current outage state.
   const available = applyKillSwitches(entitlement.features, unwrap(switchesSettled), context.tenantId);
-  const menu = buildAgentMenu(available, context.role);
+  // AG-0.2: the member role, so an agency title sees its own items (an admin's and a manager's menus).
+  // AG-0.5: a narrowed session inside an agency is not offered the agency's own screens (their APIs refuse it).
+  const agencyNarrow = (await scopeFor(context)) !== null;
+  // Custom team access: every role the member holds opens its items, minus the pages the owner hid for them.
+  const menu = buildAgentMenu(available, context.memberRole ?? context.role, {
+    agencyNarrow,
+    extraRoles: (context.roles ?? []).slice(1),
+    hiddenPages: context.hiddenPages,
+  });
+  // 2026-10-21 walkthrough: "Get set up" sits under Home until this person's setup is finished.
+  if (setupStillOpen(setupStamps, context, available)) {
+    const home = menu.find((section) => section.id === "home");
+    if (home) home.items = [...home.items, SETUP_MENU_ITEM];
+  }
   const planName = entitlement.plan_code ? planDisplayName(entitlement.plan_code, entitlement.plan_name) : null;
   const identity = await readTopBarIdentity(context);
   const moduleAccess = {
@@ -95,10 +120,6 @@ export default async function AgentShellLayout({ children }: { children: React.R
       available.includes("true_cpa"),
   };
 
-  // No sign-out here: it is the labelled last row of the top bar's account menu, and a second copy
-  // at the foot of the rail was the "lone way out" the top-bar board rules against. The theme
-  // toggle stays until it has a home of its own.
-  const footer = <ThemeToggle tone="onBrand" />;
   const plan = {
     name: planName,
     seats: entitlement.limits.max_seats,
@@ -110,7 +131,6 @@ export default async function AgentShellLayout({ children }: { children: React.R
     <div className="portal-agent flex min-h-screen flex-col md:flex-row">
       <AgentSidebar
         menu={menu}
-        footer={footer}
         moduleAccess={moduleAccess}
         plan={plan}
       />
@@ -131,11 +151,16 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* No context strip under the bar (removed 2026-09-28): the workspace, plan and role are in
             the account menu and the plan card, and the read-only and maintenance states it echoed
             are the banners just below, which say what to do about them. */}
-        <AppTopBar user={identity} />
+        <AppTopBar user={identity} userId={context.userId} />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
+        {/* Louder than everything below it, and not dismissible (LA-6.4). */}
+        {/* AG-0.5: complaints are the agency's, and their screen is refused to a narrowed session inside one. */}
+        <OverdueComplaintBanner count={agencyNarrow ? 0 : overdueComplaints} />
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
-        <SubscriptionStateBanner status={entitlement.status} />
+        <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
+        {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
+        <Suspense fallback={null}><SetupGuideBar /></Suspense>
         <PortalPageTransition>{children}</PortalPageTransition>
       </div>
       </main>

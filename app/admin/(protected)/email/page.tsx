@@ -7,6 +7,7 @@ import { canAccessConfigurationSection } from "@/lib/configuration/sections";
 import { emailConfigProblems, emailDeliveryMode } from "@/lib/email/transport";
 import { PageHeader } from "@/components/ui/page-header";
 import { ConfigurationPlaceholder } from "@/components/admin/configuration-placeholder";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 
 /** What sendEmail() will do in THIS environment, in the order it checks (lib/email/transport.ts). */
 function deliveryStatus(): string {
@@ -33,10 +34,19 @@ export default async function EmailPage() {
   // SA-4.11 is On Hold: the SMTP transport and the delivery log exist, but there is no settings
   // table and no template editor, so this screen reports what is true rather than showing a form
   // that saves values nothing reads.
+  const smtp = emailDeliveryMode() === "smtp";
+  // Names only, as in deliveryStatus(): the delivery-mode switch is its own tile.
+  const missing = emailConfigProblems().filter((name) => !name.startsWith("EMAIL_DELIVERY_MODE"));
+  const sending = smtp && missing.length === 0;
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {/* "Mail Setup" to match the sidebar. Route stays /admin/email. */}
       <PageHeader title="Mail Setup" />
+      <StatStrip label="Mail at a glance">
+        <StatTile label="Delivery mode" valueSize="text" value={smtp ? "SMTP" : "Off"} footnote={smtp ? "set for this environment" : "EMAIL_DELIVERY_MODE not smtp"} />
+        <StatTile label="Settings missing" value={missing.length.toLocaleString("en-US")} valueTone={missing.length > 0 ? "warning" : undefined} footnote={missing.length > 0 ? missing.join(", ") : "all set"} />
+        <StatTile label="Email sent" valueSize="text" value={sending ? "Yes" : "No"} valueTone={sending ? "good" : "warning"} footnote={sending ? "every attempt logged" : "logged as skipped"} />
+      </StatStrip>
       <ConfigurationPlaceholder
         title="Mail setup is not editable here"
         lede={deliveryStatus()}

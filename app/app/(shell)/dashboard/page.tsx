@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { after as afterResponse } from "next/server";
 
 import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "@/lib/entitlements/get";
@@ -6,30 +7,60 @@ import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { visibleDashboardTiles } from "@/lib/dashboard/tiles";
 import { setupChecklistForState } from "@/lib/dashboard/checklist";
-import { hasImportedStatement } from "@/lib/dashboard/summaries";
+import { loadSetupGuideState, loadSetupProfile, loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
+import { resolveRoleHome, splitHomeSections, type HomeSectionKey, type ResolvedHome } from "@/lib/dashboard/roleHome";
+import { greeting, longDate } from "@/lib/dashboard/todayMath";
 import { SetupChecklist } from "@/components/app/setup-checklist";
-import { Card, CardContent } from "@/components/ui/card";
+import { SetupCelebration } from "@/components/app/setup/setup-celebration";
+import { Card } from "@/components/ui/card";
 import { listDueCallbacks } from "@/lib/callbacks/service";
+import { scopeFor, type ProducerScope } from "@/lib/agency/visibility";
+import { scopeWithSelf } from "@/lib/dashboard/scope";
 import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
 import { PendingSummaryCard } from "@/components/app/applications/pending-summary-card";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Fragment, Suspense } from "react";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
-import { getDashboardToday } from "@/lib/dashboard/today";
-import { DashboardOverview, DashboardTodaySkeleton } from "@/components/app/dashboard-today";
+import { getDashboardToday, readFirstName, type DashboardToday } from "@/lib/dashboard/today";
+import { DashboardStreamed, DashboardTodaySkeleton, NextCallback } from "@/components/app/dashboard-today";
 import { DashboardMetrics } from "@/components/app/dashboard-metrics";
-import type { TenantRole } from "@/lib/tenantAuth/roles";
+import { DashboardMoneyList, DashboardMoneyLoading, DashboardMoneyStrip, DashboardUpgrade } from "@/components/app/dashboard-money";
+import { getDashboardMoney, type DashboardMoney } from "@/lib/dashboard/money";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
+import { LiveStamp } from "@/components/ui/live-stamp";
 import type { ReactNode } from "react";
 
+import { Button } from "@/components/ui/button";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
-import { SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 
 /**
  * The dashboard is a frame for registered module tiles. It does not know how to render a carrier,
  * appointment, retention or money module; those modules register data in `lib/dashboard/tiles`.
+ *
+ * What it shows, and in what order, is the reader's role home (`lib/dashboard/roleHome`,
+ * 2026-10-09): a setter lands on the queue and their bookings, a producer on transfers and
+ * callbacks, an assistant on the inbound queue, a bookkeeper on statements and money, an owner on
+ * the team. Every section is gated by the menu entry of the page it opens, so nobody sees a tile
+ * for a screen they cannot open.
+ *
+ * AG-0.5 · producer isolation. The session's producer scope (`scopeFor(context)`, from the session,
+ * never the request) is read once here and handed to every server-side read: null — an
+ * individual-plan tenant, or the owner/admin, bookkeeper or retention — changes nothing. For a
+ * producer, manager, assistant or setter in an agency, no section counts another producer's rows:
+ *   today      getDashboardToday({ scope }): own dials/appointments/premium as before; queue = own
+ *              assigned work; callbacks and transfers = scope + self; lapse omitted (lib/dashboard/today)
+ *   money      getDashboardMoney({ scope }): exposure through role rule AND scope; lapse/persistency a
+ *              producer's own book; agency-wide statement/discrepancy figures never read (lib/dashboard/money)
+ *   callbacks  listDueCallbacks(tenant, scope + self) — D1: tenant_callbacks.assigned_to
+ *   shortcuts  DashboardMetrics scope: the shared figures narrowed, nothing agency-wide (lib/dashboard/summaries)
+ *   pending, closeOut  client cards whose routes scope themselves (/api/app/pending/summary,
+ *              /api/app/appointments/close-out both call scopeFor)
+ *   setup      the owner's home only (a tenant-level checklist, never shown to a narrow session)
  */
 /** "4:30 PM CT" — a time with the zone it is in, as the board's callback rows read. */
 function shortTime(utc: string, timezone: string) {
@@ -47,79 +78,103 @@ function overdueLabel(utc: string, now: number) {
 }
 
 /** "Callbacks due today": its own streamed block, so the page does not wait on this read. */
-async function CallbacksCard({ tenantId }: { tenantId: string }) {
+async function CallbacksCard({ tenantId, href, assigned }: { tenantId: string; href: string; assigned: ProducerScope }) {
   const [callbacks, workspaceZone] = await Promise.all([
-    listDueCallbacks(tenantId),
+    // AG-0.5: `assigned` is the session's scope plus the reader (null = every callback, as before).
+    listDueCallbacks(tenantId, assigned),
     getWorkspaceTimezone(tenantId).catch(() => null),
   ]);
   const agencyZone = workspaceZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   // eslint-disable-next-line react-hooks/purity -- a server render: "48 min overdue" is as of this request.
   const now = Date.now();
   return (
-    <Card className="portal-dashboard-callbacks m-card h-full">
-      <CardContent className="flex h-full flex-col p-5">
-        <div className="flex items-baseline justify-between gap-3 pb-3">
-          <h2 className="text-sm font-semibold leading-normal tracking-[-0.01em]">Callbacks due today</h2>
-          <LinkArrow href="/app/callbacks" className="shrink-0 text-xs">Open calendar</LinkArrow>
+    <TableCard title="Callbacks due today" action={<LinkArrow href={href} className="shrink-0 text-xs">Open calendar</LinkArrow>} className="portal-dashboard-callbacks m-card h-full">
+      {callbacks.length > 0 ? (
+        <div className="portal-dashboard-callback-list mx-4 mb-4">
+          {/* Four, deliberately. This is the nudge; the calendar is the list. */}
+          {callbacks.slice(0, 4).map((callback, index) => (
+            <Link
+              key={callback.id}
+              href={href}
+              aria-label={`Open the callback for ${callback.customerName}`}
+              className={`m-row flex items-center gap-3 px-3 py-2 text-inherit no-underline ${index ? "border-t border-border" : ""}`}
+            >
+              <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" aria-hidden="true">
+                {callback.customerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{callback.customerName}</span>
+                {/* Their clock first, then yours. An agent who reads only the first half
+                    still calls at a time that is civil where the customer is. */}
+                <span className="block truncate text-xs tabular-nums text-muted-foreground">
+                  {shortTime(callback.scheduledAtUtc, callback.customerTimezone)} · {shortTimeNoZone(callback.scheduledAtUtc, agencyZone)} yours
+                </span>
+              </span>
+              <StatusChip tone={callback.isOverdue ? "danger" : "neutral"} dot>
+                {callback.isOverdue ? overdueLabel(callback.scheduledAtUtc, now) : "Scheduled"}
+              </StatusChip>
+            </Link>
+          ))}
         </div>
-
-        {callbacks.length > 0 ? (
-          <div className="portal-dashboard-callback-list">
-            {/* Four, deliberately. This is the nudge; the calendar is the list. */}
-            {callbacks.slice(0, 4).map((callback, index) => (
-              <Link
-                key={callback.id}
-                href="/app/callbacks"
-                aria-label={`Open the callback for ${callback.customerName}`}
-                className={`m-row flex items-center gap-3 px-3 py-2 text-inherit no-underline ${index ? "border-t border-border" : ""}`}
-              >
-                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" aria-hidden="true">
-                  {callback.customerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{callback.customerName}</span>
-                  {/* Their clock first, then yours. An agent who reads only the first half
-                      still calls at a time that is civil where the customer is. */}
-                  <span className="block truncate text-xs tabular-nums text-muted-foreground">
-                    {shortTime(callback.scheduledAtUtc, callback.customerTimezone)} · {shortTimeNoZone(callback.scheduledAtUtc, agencyZone)} yours
-                  </span>
-                </span>
-                <StatusChip tone={callback.isOverdue ? "danger" : "neutral"} dot>
-                  {callback.isOverdue ? overdueLabel(callback.scheduledAtUtc, now) : "Scheduled"}
-                </StatusChip>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center rounded-md border border-dashed border-border p-5 text-center">
-            <p className="text-sm font-semibold">No callbacks are due today</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      ) : (
+        <EmptyState title="No callbacks due today" hint="Callbacks you schedule show here." action={<Button asChild variant="outline"><Link href={href}>Open calendar</Link></Button>} />
+      )}
+    </TableCard>
   );
 }
 
 function CallbacksCardSkeleton() {
   return (
-    <Card className="portal-dashboard-callbacks m-card h-full">
-      <CardContent className="p-5">
-        <SectionLoading rows={4} columns={2} label="Loading callbacks" />
-      </CardContent>
-    </Card>
+    <TableCard title="Callbacks due today" className="portal-dashboard-callbacks m-card h-full">
+      <SectionLoading rows={4} columns={2} label="Loading callbacks" />
+    </TableCard>
   );
 }
 
+/** The live next-callback chip in the header: waits on the same "today" read as the sections. */
+async function NextCallbackSlot({ today, href, serverNow }: { today: Promise<DashboardToday | null>; href: string; serverNow: number }) {
+  const data = await today;
+  if (!data?.nextCallback) return null;
+  return <NextCallback callback={data.nextCallback} serverNow={serverNow} href={href} />;
+}
+
 /**
- * The overview (band, KPI strip, needs, analysis panels), streamed after the page: twenty-odd head
- * counts and one bounded read are cheap, but not free, and the page's first paint does not wait.
+ * The sections that read the "today" data, streamed after the page: twenty-odd head counts and one
+ * bounded read are cheap, but not free, and the page's first paint does not wait. If the read
+ * fails, the data sections are simply absent and the rest of the run still renders.
  */
-async function TodaySection({ tenantId, userId, role, available, aside }: { tenantId: string; userId: string; role: TenantRole; available: string[]; aside?: ReactNode }) {
-  // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
-  const serverNow = Date.now();
-  const today = await getDashboardToday({ tenantId, userId, role, available, now: serverNow }).catch(() => null);
-  if (!today) return <>{aside}</>;
-  return <DashboardOverview data={today} serverNow={serverNow} canDial={available.includes("outbound_dialing") && ["owner", "producer", "setter"].includes(role)} aside={aside} />;
+async function TodaySection({ today, home, sections, slots }: { today: Promise<DashboardToday | null>; home: ResolvedHome; sections: HomeSectionKey[]; slots: Partial<Record<HomeSectionKey, ReactNode>> }) {
+  const data = await today;
+  if (!data) return <>{sections.map((key) => <Fragment key={key}>{slots[key] ?? null}</Fragment>)}</>;
+  return <DashboardStreamed data={data} sections={sections} figures={home.figures} needs={home.needs} slots={slots} />;
+}
+
+/**
+ * A run of sections that render on their own. Callbacks directly followed by the setup checklist
+ * share a row: the checklist hides itself once setup is complete or the owner hides it in this
+ * browser, which only the client knows — so the two columns follow the card being there (`has-`),
+ * not the server's guess. (The owner's checklist now leads the page, LA-0.3, so no role pairs them
+ * today; the pairing stays for a layout that puts them together.)
+ */
+function Run({ keys, slots, setupOpen }: { keys: HomeSectionKey[]; slots: Partial<Record<HomeSectionKey, ReactNode>>; setupOpen: boolean }) {
+  const out: ReactNode[] = [];
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index];
+    if (key === "callbacks" && keys[index + 1] === "setup") {
+      if (slots.callbacks || setupOpen) {
+        out.push(
+          <div key="callbacks-setup" className={`grid gap-4 ${slots.callbacks && setupOpen ? "xl:has-[>[data-setup-checklist]]:grid-cols-2" : ""}`}>
+            {slots.callbacks}
+            {slots.setup}
+          </div>,
+        );
+      }
+      index += 1;
+      continue;
+    }
+    out.push(<Fragment key={key}>{slots[key] ?? null}</Fragment>);
+  }
+  return <>{out}</>;
 }
 
 export default async function AgentDashboardPage() {
@@ -129,94 +184,149 @@ export default async function AgentDashboardPage() {
   // The kill-switch table is fetched here rather than inside `effectiveFeatures` because its query
   // depends on neither the entitlement nor the tenant — only applying the switches does. Awaiting
   // it afterwards cost a second serial round trip, ~170ms of ~340ms of data time on this page,
-  // for a criterion ("loads in under 1 second") with no room to spare.
-  const [entitlement, onboardingState, switches, statementImported] = await Promise.all([
+  // for a criterion ("loads in under 1 second") with no room to spare. The greeting's two reads
+  // (the agency's zone, the reader's first name) ride in the same round trip.
+  // AG-0.5: the producer scope rides in the same round trip (cached per request; free for a solo tenant).
+  const [entitlement, onboardingState, switches, setupProgress, setupProfile, setupGuide, workspaceZone, firstName, scope] = await Promise.all([
     getEntitlement(context.tenantId),
     getDashboardOnboardingState(context.tenantId),
     loadFeatureSwitches(),
-    hasImportedStatement(context.tenantId),
+    loadSetupProgress(context.tenantId),
+    loadSetupProfile(context.tenantId),
+    // The reader's own skips and "Hide" (tenant_setup_guide; empty marks on any failure).
+    loadSetupGuideState(context.tenantId, context.userId),
+    getWorkspaceTimezone(context.tenantId).catch(() => null),
+    readFirstName(context.userId),
+    scopeFor(context),
   ]);
   const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
   const tiles = visibleDashboardTiles(available, context.role);
-  const checklist = setupChecklistForState(onboardingState, { statementImported });
+  // Only the steps this plan can do (and the business profile asked for), so every plan can finish.
+  const checklist = setupChecklistForState(onboardingState, setupProgress, { features: available, profile: setupProfile, seats: entitlement.limits.max_seats, marks: setupGuide });
+  // LA-0.3: the first render that finds every step done stamps it, so the checklist never returns.
+  // After the response, so the stamp never holds up the page.
+  if (checklist.complete && !setupProgress.finished) afterResponse(() => recordSetupFinished(context.tenantId));
   // `available`, not `entitlement.features`. Kill switches are consulted BEFORE the entitlement at
   // every enforcement point (SA-4.10), and `applyKillSwitches` on the line above is what applies
-  // them. This read used `hasFeature(entitlement, …)`, which is the raw plan — so switching
-  // `callback_calendar` off platform-wide hid the callbacks TILE and left this card rendering and
-  // still querying due callbacks. The tile and the card are gated identically in every other
-  // respect, which is exactly why the divergence was invisible.
-  const callbacksAvailable =
-    available.includes("callback_calendar") && ["owner", "producer", "assistant"].includes(context.role);
-  // Same shape as the callbacks gate above, and for the same reason: kill switches are consulted
-  // before the entitlement. The close-out route admits owner and producer, so the strip does too —
-  // recording whether somebody showed is the licensed agent's to do, never the setter being measured
-  // by it.
-  const closeOutAvailable =
-    available.includes("outbound_dialing") && ["owner", "producer"].includes(context.role);
-  const applicationsAvailable = available.includes("applications") && ["owner", "producer"].includes(context.role);
+  // them. The callbacks card once read `hasFeature(entitlement, …)`, which is the raw plan — so
+  // switching `callback_calendar` off platform-wide hid the callbacks TILE and left the card
+  // rendering and still querying due callbacks. Every section below is now decided from
+  // `available` by the role home, the same way the tiles are.
+  // Sixteen #15: the raw plan (code, grants, staff switch-offs) picks the dashboard profile and
+  // decides the one upgrade tile; every link stays gated by `available`.
+  const home = resolveRoleHome(available, context.role, { code: entitlement.plan_code, features: entitlement.features, disabled: entitlement.disabled_features });
+  // A profile with too few tiles skips the dashboard for the plan's primary working screen.
+  if (home.landing) redirect(home.landing);
+  const { before, streamed, after } = splitHomeSections(home.sections);
+  const shown = new Set(home.sections);
+  // Money and retention (LA-4.18) and the upgrade tile's count: one streamed read, started now so it
+  // runs beside the "today" read rather than after it.
+  const money: Promise<DashboardMoney> | null = home.money.length > 0 || home.upgrade
+    ? getDashboardMoney({ context, wanted: home.money, upgrade: Boolean(home.upgrade), scope }).catch(() => ({ figures: [], exposurePolicies: null }))
+    : null;
 
-  // A producer has no team to rank, so the callbacks card sits beside the heatmap instead of the
-  // standings; an owner gets it in the bottom row with the setup checklist. Streamed: the page shell
-  // no longer waits on the due-callbacks read (one more database round trip) before its first paint.
-  const callbacksCard = callbacksAvailable ? (
-    <Suspense fallback={<CallbacksCardSkeleton />}>
-      <CallbacksCard tenantId={context.tenantId} />
-    </Suspense>
-  ) : null;
-  const isOwner = context.role === "owner";
+  // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
+  const serverNow = Date.now();
+  const zone = workspaceZone ?? "America/New_York";
+  // One "today" read, shared by the streamed sections and the header's next-callback chip. It only
+  // runs the reads this home shows (`home.reads`), and a failure is null — sections hidden, page up.
+  const today: Promise<DashboardToday | null> | null = streamed.length > 0 || home.nextCallbackHref
+    ? getDashboardToday({ tenantId: context.tenantId, userId: context.userId, role: context.role, available: [...available], now: serverNow, reads: home.reads, scope }).catch(() => null)
+    : null;
+
+  const callbacksHref = home.nextCallbackHref;
+  const slots: Partial<Record<HomeSectionKey, ReactNode>> = {
+    // Decision 12 puts this here and nowhere else: "anything with no activity goes to pending and
+    // appears in a short strip at the top of his dashboard the next morning: three appointments,
+    // three buttons each. Ten seconds." It was on Activity & scorecard, which is a screen you go
+    // to rather than one you land on — and an appointment nobody closes out drops out of the
+    // setter's show rate after three days, so the cost of not seeing it is somebody's pay.
+    // `hideWhenEmpty` because most mornings there is nothing, and a card that says so every day
+    // is one people stop reading. It stays on Activity as well, where the empty state is a fact
+    // worth stating. Owner and producer only (the close-out route's roles): recording whether
+    // somebody showed is the licensed agent's to do, never the setter being measured by it.
+    closeOut: shown.has("closeOut") ? <AppointmentCloseOutStrip hideWhenEmpty /> : null,
+    // LA-3.15 / 3.18 / 3.26 · awaiting a policy number, waiting on the client, counteroffers about
+    // to expire. It fetches its own counts and hides itself when there is nothing, or no access.
+    pending: shown.has("pending") ? <PendingSummaryCard /> : null,
+    // Streamed: the page shell does not wait on the due-callbacks read before its first paint.
+    callbacks: shown.has("callbacks") && callbacksHref ? (
+      <Suspense fallback={<CallbacksCardSkeleton />}>
+        <CallbacksCard tenantId={context.tenantId} href={callbacksHref} assigned={scopeWithSelf(scope, context.userId)} />
+      </Suspense>
+    ) : null,
+    // Money and retention: the strip on a money profile, a list beside the day's strip otherwise.
+    money: money && shown.has("money") ? (
+      <Suspense fallback={<DashboardMoneyLoading as={home.moneyAs} />}>
+        {home.moneyAs === "strip" ? <DashboardMoneyStrip money={money} /> : <DashboardMoneyList money={money} />}
+      </Suspense>
+    ) : null,
+    // The one upgrade tile, in its fixed place under the strip; it shows only when the count is above zero.
+    upgrade: money && home.upgrade ? (
+      <Suspense fallback={null}>
+        <DashboardUpgrade money={money} featureHref={home.upgrade.featureHref} rowsHref={home.upgrade.rowsHref} />
+      </Suspense>
+    ) : null,
+    // The registry's tiles as one "Your modules" list: every way in, with a live figure where the
+    // reader may read it at that scope (components/app/dashboard-metrics.tsx).
+    shortcuts: tiles.length > 0 ? (
+      <DashboardMetrics tiles={tiles} tenantId={context.tenantId} role={context.role} userId={context.userId} scope={scope} />
+    ) : (
+      /* Two different empty states, because they have two different causes and two different
+         answers. The entitlement genuinely granting nothing is the owner's problem to solve. A
+         plan full of features with no tile for this role is ours, and telling that reader to go
+         and ask their owner sends them after a fix the owner cannot make. */
+      <Card>
+        {available.length === 0
+          ? <EmptyState title="No workspace feature is active yet" hint="Ask your account owner to activate one." />
+          : <EmptyState title="No dashboard shortcuts for your role yet" hint="Use the sidebar to reach your screens." />}
+      </Card>
+    ),
+    setup: shown.has("setup") ? <SetupChecklist checklist={checklist} hidden={setupGuide.hiddenAt !== null} /> : null,
+  };
+
+  // The "Your day" header: a greeting in the agency's clock, the date, the live next callback, and
+  // the role's one to three actions — secondary first, the primary (the role's first thing) last.
+  const [primary, ...secondary] = home.actions;
+  const name = firstName ? `, ${firstName}` : "";
 
   // m-stagger: the blocks arrive 32ms apart, capped at the eighth, then the rest land together.
+  // DashboardStage: the glass layer's ambient ground; LiveStamp: how fresh this render's figures are.
   return (
+    <DashboardStage>
     <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-      <PageHeader size="hero" title="Dashboard" />
+      {/* The finish moment, when the last step was done somewhere other than the guide bar: this render stamps it. */}
+      {shown.has("setup") && checklist.total > 0 && checklist.complete && !setupProgress.finished ? <SetupCelebration steps={checklist.total} done={checklist.completed} audience="owner" /> : null}
+      <PageHeader
+        size="hero"
+        title={`${greeting(serverNow, zone)}${name}`}
+        description={longDate(serverNow, zone)}
+        actions={
+          <>
+            <LiveStamp updatedAt={serverNow} />
+            {today && callbacksHref && (
+              <Suspense fallback={null}>
+                <NextCallbackSlot today={today} href={callbacksHref} serverNow={serverNow} />
+              </Suspense>
+            )}
+            {secondary.map((action) => (
+              <Button key={action.href} asChild variant="outline"><Link href={action.href}>{action.label}</Link></Button>
+            ))}
+            {primary && <Button asChild><Link href={primary.href}>{primary.label}</Link></Button>}
+          </>
+        }
+      />
 
-      {/* Decision 12 puts this here and nowhere else: "anything with no activity goes to pending and
-          appears in a short strip at the top of his dashboard the next morning: three appointments,
-          three buttons each. Ten seconds." It was on Activity & scorecard, which is a screen you go
-          to rather than one you land on — and an appointment nobody closes out drops out of the
-          setter's show rate after three days, so the cost of not seeing it is somebody's pay.
-          `hideWhenEmpty` because most mornings there is nothing, and a card that says so every day
-          is one people stop reading. It stays on Activity as well, where the empty state is a fact
-          worth stating. */}
-      {closeOutAvailable && <AppointmentCloseOutStrip hideWhenEmpty />}
+      <Run keys={before} slots={slots} setupOpen={shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null} />
 
-      {/* LA-3.15 / 3.18 / 3.26 · awaiting a policy number, waiting on the client, counteroffers about
-          to expire. It fetches its own counts and hides itself when there is nothing, or no access. */}
-      {applicationsAvailable && <PendingSummaryCard />}
-
-      {/* The lead: the band, the KPI strip, what needs you, then the analysis panels. The owner asked
-          for a metrics dashboard — more numbers, compact, something worth watching — over the
-          board's checklist-first layout. */}
-      <Suspense fallback={<DashboardTodaySkeleton />}>
-        <TodaySection tenantId={context.tenantId} userId={context.userId} role={context.role} available={[...available]} aside={isOwner ? undefined : callbacksCard} />
-      </Suspense>
-
-      {/* The registry's tiles as a metrics grid: every way in the old "Your workspace" grid gave,
-          now led by its live number. */}
-      {tiles.length > 0 ? (
-        <DashboardMetrics tiles={tiles} tenantId={context.tenantId} />
-      ) : (
-        /* Two different empty states, because they have two different causes and two different
-           answers. The entitlement genuinely granting nothing is the owner's problem to solve. A
-           plan full of features with no tile for this role is ours, and telling that reader to go
-           and ask their owner sends them after a fix the owner cannot make. */
-        <Card>
-          <CardContent className="py-6 text-center text-sm text-muted-foreground">
-            {available.length === 0
-              ? "No workspace feature is active yet — ask your account owner to activate one."
-              : "No dashboard shortcuts for your role yet — use the sidebar to reach your screens."}
-          </CardContent>
-        </Card>
+      {today && streamed.length > 0 && (
+        <Suspense fallback={<DashboardTodaySkeleton strip={streamed.includes("figures")} panels={streamed.includes("activity")} />}>
+          <TodaySection today={today} home={home} sections={streamed} slots={slots} />
+        </Suspense>
       )}
 
-      {/* The owner's bottom row: callbacks due beside the setup checklist (which hides itself once
-          setup is complete, leaving the callbacks card the full width). */}
-      {isOwner && (callbacksCard || !checklist.complete) && (
-        <div className={`grid gap-4 ${callbacksCard && !checklist.complete ? "xl:grid-cols-2" : ""}`}>
-          {callbacksCard}
-          <SetupChecklist checklist={checklist} />
-        </div>
-      )}
+      <Run keys={after} slots={slots} setupOpen={shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null} />
     </div>
+    </DashboardStage>
   );
 }

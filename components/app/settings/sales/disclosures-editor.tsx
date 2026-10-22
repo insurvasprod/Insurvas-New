@@ -83,10 +83,10 @@ function RuleEditor({ draft, setDraft, readOnly, library, clauseErrors }: {
 
   return (
     <div className="flex flex-col gap-3">
-      {rules.length === 0 && <p className="m-0 text-[14px] text-[var(--muted)]">No rule yet — this document is never required on its own.</p>}
+      {rules.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">No rule yet — this document is never required on its own.</p>}
       {rules.map((rule, r) => (
         <Fragment key={r}>
-          {r > 0 && <p className="m-0 text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">or</p>}
+          {r > 0 && <p className="m-0 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">or</p>}
           <div className="border-l-2 border-[var(--border-strong)] py-1 pl-3">
             <div className="flex flex-col gap-2">
               {rule.clauses.map((cl, c) => {
@@ -97,7 +97,7 @@ function RuleEditor({ draft, setDraft, readOnly, library, clauseErrors }: {
                 return (
                   <div key={c}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="w-9 shrink-0 text-[12px] font-semibold uppercase text-[var(--muted)]">{c === 0 ? "If" : "and"}</span>
+                      <span className="w-9 shrink-0 text-xs font-semibold uppercase text-[var(--muted)]">{c === 0 ? "If" : "and"}</span>
                       <select id={`${id}-field`} aria-label={`Rule ${r + 1}, condition ${c + 1}: field`} className={cn(control, "mt-0 w-auto min-w-[220px] flex-1")} value={cl.field} disabled={readOnly} onChange={(e) => setClause(r, c, { field: e.target.value })}>
                         {!knownField && <option value={cl.field}>{cl.field}</option>}
                         {library.interviewFields.length > 0 && (
@@ -127,7 +127,7 @@ function RuleEditor({ draft, setDraft, readOnly, library, clauseErrors }: {
                         <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove condition ${c + 1} from rule ${r + 1}`} onClick={() => removeClause(r, c)}><Trash2 aria-hidden="true" /></Button>
                       )}
                     </div>
-                    {err && <p role="alert" className="m-0 mt-1 pl-11 text-[12px] leading-[1.5] text-[var(--error-ink)]">{err}</p>}
+                    {err && <p role="alert" className="m-0 mt-1 pl-11 text-xs leading-[1.5] text-[var(--error-ink)]">{err}</p>}
                   </div>
                 );
               })}
@@ -211,35 +211,35 @@ export function DisclosureEditor({ item, draft, setDraft, library, readOnly, cla
                     type="file"
                     accept="application/pdf"
                     disabled={busy}
-                    className={cn(control, "mt-0 w-auto flex-1 py-1.5 file:mr-3 file:rounded-[6px] file:border-0 file:bg-[var(--surface-alt)] file:px-2.5 file:py-0.5 file:text-[14px] file:font-semibold file:text-[var(--ink)]")}
+                    className={cn(control, "mt-0 w-auto flex-1 py-1.5 file:mr-3 file:rounded-[6px] file:border-0 file:bg-[var(--surface-alt)] file:px-2.5 file:py-0.5 file:text-sm file:font-semibold file:text-[var(--ink)]")}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) { onAttach(f); setFileKey((k) => k + 1); } }}
                   />
                 )}
-                {!item?.hasAttachment && !canAttach && <span className="text-[14px] text-[var(--muted)]">None</span>}
+                {!item?.hasAttachment && !canAttach && <span className="text-sm text-[var(--muted)]">None</span>}
               </div>
             </Field>
           </div>
           <fieldset className="m-0 min-w-0 border-0 p-0">
-            <legend className="p-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Carriers</legend>
+            <legend className="p-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Carriers</legend>
             {library.carriers.length === 0 && extraCarriers.length === 0 ? (
-              <span className="mt-1.5 block text-[14px] text-[var(--muted)]">Every carrier. Add carriers to your agency in Carriers &amp; products to limit it to some.</span>
+              <span className="mt-1.5 block text-sm text-[var(--muted)]">Every carrier. Add carriers to your agency in Carriers &amp; products to limit it to some.</span>
             ) : (
               <>
                 <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">
                   {library.carriers.map((c) => (
-                    <label key={c.id} className="inline-flex items-center gap-2 text-[14px] text-[var(--body)]">
+                    <label key={c.id} className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
                       <input type="checkbox" className={checkbox} disabled={readOnly} checked={draft.carrierIds.includes(c.id)} onChange={(e) => set({ carrierIds: e.target.checked ? [...draft.carrierIds, c.id] : draft.carrierIds.filter((x) => x !== c.id) })} />
                       {c.name}
                     </label>
                   ))}
                   {extraCarriers.map((id) => (
-                    <label key={id} className="inline-flex items-center gap-2 text-[14px] text-[var(--muted)]" title="A carrier your agency no longer has">
+                    <label key={id} className="inline-flex items-center gap-2 text-sm text-[var(--muted)]" title="A carrier your agency no longer has">
                       <input type="checkbox" className={checkbox} disabled={readOnly} checked onChange={() => set({ carrierIds: draft.carrierIds.filter((x) => x !== id) })} />
                       Former carrier
                     </label>
                   ))}
                 </div>
-                <span className="mt-1.5 block text-[12px] leading-[1.5] text-[var(--muted)]">None ticked means every carrier.</span>
+                <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">None ticked means every carrier.</span>
               </>
             )}
           </fieldset>

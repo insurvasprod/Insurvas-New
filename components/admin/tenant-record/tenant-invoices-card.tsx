@@ -1,11 +1,14 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
+import { useState } from "react";
 
 import { CustomInvoiceDialog } from "@/components/admin/custom-invoice-dialog";
-import { Pill, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { buttonVariants } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import { INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/lib/invoices/constants";
 import { formatCentsAsCurrency } from "@/lib/money";
 import type { TenantInvoiceRow } from "@/lib/subscriptions/tenantBilling";
@@ -36,9 +39,12 @@ export function TenantInvoicesCard({
   invoices: TenantInvoiceRow[];
 }) {
   const now = new Date();
+  const [page, setPage] = useState(1);
+  const { current, rows: pageRows } = paginate(invoices, page);
   return (
     <TableCard
       title="Invoices"
+      footer={<Pager page={current} total={invoices.length} noun="invoices" onPage={setPage} />}
       action={
         <CustomInvoiceDialog
           tenants={[tenant]}
@@ -70,7 +76,7 @@ export function TenantInvoicesCard({
               </td>
             </tr>
           ) : (
-            invoices.map((row) => {
+            pageRows.map((row) => {
               const state = stateOf(row);
               return (
                 <tr key={row.id} className="m-row">
@@ -78,7 +84,7 @@ export function TenantInvoicesCard({
                   <td className={st.td}>{periodRange(row.periodStart, row.periodEnd, now)}</td>
                   <td className={`${st.td} tabular-nums`}>{formatCentsAsCurrency(row.totalCents)}</td>
                   <td className={st.td}>
-                    <Pill tone={state.tone}>{state.label}</Pill>
+                    <StatusChip dot={false} tone={pillTone(state.tone)}>{state.label}</StatusChip>
                   </td>
                   <td className={st.td}>{shortDate(row.paidAt, now)}</td>
                   <td className={st.td}>

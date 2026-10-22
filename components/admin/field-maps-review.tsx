@@ -26,6 +26,7 @@ import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, control, Field } from "@/components/app/settings/primitives";
@@ -194,6 +195,24 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
       />
       {sample && <SampleDataNotice />}
       {notice && <Callout tone="warning" title={notice} />}
+      {!notice && (
+        <StatStrip label="Field maps">
+          <StatTile label="Carrier forms" value={rows.length.toLocaleString("en-US")} footnote="carrier and product pairs" />
+          <StatTile label="Published" value={rows.filter((g) => g.live).length.toLocaleString("en-US")} footnote="filling applications" />
+          <StatTile
+            label="Drafts"
+            value={rows.filter((g) => g.draft).length.toLocaleString("en-US")}
+            footnote={`${rows.filter((g) => g.draft?.status === "in_review").length.toLocaleString("en-US")} in review`}
+          />
+          <StatTile
+            label="Needs review"
+            labelTitle="A published map whose fill missed a field"
+            value={rows.filter((g) => g.live?.status === "needs_review").length.toLocaleString("en-US")}
+            valueTone={rows.some((g) => g.live?.status === "needs_review") ? "warning" : undefined}
+            footnote="a fill missed a field"
+          />
+        </StatStrip>
+      )}
 
       <TableCard
         toolbar={<DataToolbar actions={<RefreshButton onClick={sample ? sampleRefresh.refresh : reload} refreshing={sample ? sampleRefresh.refreshing : loading} />} />}
@@ -216,7 +235,7 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
                 {pageRows.map((g) => {
                   const target = g.draft ?? g.live;
                   return (
-                    <tr key={g.key} className={cn("m-row", target && target.id === selectedId && "bg-[var(--soft-orange-surface)]")}>
+                    <tr key={g.key} className={cn("m-row", target && target.id === selectedId && "bg-[var(--primary-soft)]")}>
                       <td className="font-semibold text-[var(--ink)]">{g.carrierName}</td>
                       <td>{g.productLabel}</td>
                       <td>
@@ -302,8 +321,8 @@ function ReviewDialog({ map, busy, dirty, onClose, onChange, onSave, onPublish, 
       <DialogContent showCloseButton={false} className="max-h-[88vh] gap-0 overflow-y-auto p-0 sm:max-w-[920px]">
         <DialogHeader className="flex-row items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px] text-left">
           <div className="min-w-0">
-            <DialogTitle className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em]">{map.carrierName} · {map.productLabel} application</DialogTitle>
-            <DialogDescription className="mt-1 text-[14px]">{sub}</DialogDescription>
+            <DialogTitle className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em]">{map.carrierName} · {map.productLabel} application</DialogTitle>
+            <DialogDescription className="mt-1 text-sm">{sub}</DialogDescription>
           </div>
           <span className="flex shrink-0 items-center gap-3.5">
             {unverified.length > 0 && <StatusChip tone="warning">{unverified.length} unverified</StatusChip>}
@@ -313,7 +332,7 @@ function ReviewDialog({ map, busy, dirty, onClose, onChange, onSave, onPublish, 
 
         <div className="flex flex-col gap-[18px] p-[22px]">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <span className="text-[14px] text-[var(--body)]">
+            <span className="text-sm text-[var(--body)]">
               {map.entries.length === 0 ? "No fields in this map yet." : shown === risky && !showAll ? `${map.entries.length} fields in the ${editable ? "draft" : "map"}. These ${risky.length} are the ones a wrong selector would cost most.` : `All ${map.entries.length} fields in the ${editable ? "draft" : "map"}.`}
             </span>
             <span className="flex flex-wrap gap-2">
@@ -412,7 +431,7 @@ function ReviewDialog({ map, busy, dirty, onClose, onChange, onSave, onPublish, 
         </div>
 
         <DialogFooter className="flex-row flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5 sm:justify-between">
-          <span className="text-[12px] text-muted-foreground">{editable ? (dirty ? "Unsaved changes to this draft" : "Draft saved — not published") : map.status === "retired" ? "Retired — no longer used for fills" : "Published — edits go into a new version"}</span>
+          <span className="text-xs text-muted-foreground">{editable ? (dirty ? "Unsaved changes to this draft" : "Draft saved — not published") : map.status === "retired" ? "Retired — no longer used for fills" : "Published — edits go into a new version"}</span>
           <span className="flex flex-wrap gap-2.5">
             {!editable && map.status !== "retired" && <Button type="button" variant={map.status === "needs_review" ? "default" : "outline"} disabled={busy} onClick={onNewVersion}>Start version {map.version + 1}</Button>}
             {editable && (
@@ -457,7 +476,7 @@ function NewMapDialog({ carriers, onClose, onCreate }: { carriers: FieldMapCarri
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle className="text-[18px] font-semibold leading-[1.28] tracking-[-0.015em]">Propose a map</DialogTitle>
+          <DialogTitle className="text-title-sm font-semibold leading-[1.28] tracking-[-0.015em]">Propose a map</DialogTitle>
           <DialogDescription>It starts as a draft and fills nothing. Add its fields, verify them, then publish.</DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); void submit(); }}>

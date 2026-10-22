@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { InfoTip } from "@/components/ui/info-tip";
+import { CountUp } from "@/components/ui/count-up";
 
 /**
  * The pieces a figure is made of.
@@ -71,7 +73,7 @@ export function DeltaChip({
 
 /* ── Meter ──────────────────────────────────────────────────────────────────────────────────── */
 
-// `primary` is the one orange bar allowed: progress the reader is actively working through
+// `primary` is the one brand-green bar allowed: progress the reader is actively working through
 // (a setup checklist), never a measurement they merely observe.
 export type MeterTone = "neutral" | "good" | "info" | "warning" | "danger" | "primary";
 
@@ -213,7 +215,10 @@ export function StatTile({
   label: string;
   /** "text" for a strip of words (a name, a status) rather than numbers: 16px and truncated. */
   valueSize?: "figure" | "text";
-  /** Hover explanation for a label that needs one. The footnote is still the accessible answer. */
+  /**
+   * The explanation for a label that needs one. Since 2026-10-09 it is an InfoTip beside the label
+   * (opens on click, tap and keyboard), not a hover-only title: a phone has no hover.
+   */
   labelTitle?: string;
   value: ReactNode;
   /**
@@ -248,14 +253,19 @@ export function StatTile({
     >
       {/* The system's `label` style (12px/600, 0.02em, uppercase), not the board's 10.5px: 12px is
           the smallest text the system allows, and a label is read before the figure it names. */}
-      <div title={labelTitle} className="text-xs font-semibold leading-[1.33] uppercase tracking-[0.02em] text-muted-foreground">{label}</div>
+      <div className="flex items-center gap-1 text-xs font-semibold leading-[1.33] uppercase tracking-[0.02em] text-muted-foreground">
+        {label}
+        {labelTitle && <InfoTip label={`About ${label.toLowerCase()}`} className="size-4 normal-case tracking-normal">{labelTitle}</InfoTip>}
+      </div>
 
       {/* 24px, the dashboard strip's size (2026-09-28: "make it compact"). The figures introduce the
           table below them; they should not compete with it. */}
       <div className="mt-1 flex items-end justify-between gap-3">
-        <span className={cn(valueSize === "text" ? "min-w-0 truncate text-base font-semibold leading-[1.5]" : "text-2xl font-semibold leading-[1.2] tracking-[-0.025em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
-          {value}
-          {unit && <span className="text-[15px] text-muted-foreground">{unit}</span>}
+        {/* m-figure: the glass layer's halo behind the number in dark mode (app/globals.css). A plain
+            number or numeric string counts to its value (CountUp); anything richer renders as given. */}
+        <span className={cn(valueSize === "text" ? "min-w-0 truncate text-base font-semibold leading-[1.5]" : "m-figure text-2xl font-semibold leading-[1.2] tracking-[-0.025em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
+          {valueSize !== "text" && (typeof value === "number" || (typeof value === "string" && /\d/.test(value))) ? <CountUp text={String(value)} /> : value}
+          {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
         </span>
         {trend && <Sparkline points={trend.points} tone={trend.tone} />}
       </div>
@@ -294,10 +304,12 @@ export function StatStrip({ children, label, className }: { children: ReactNode;
   return (
     <section
       aria-label={label}
-      className={cn("m-stat-strip overflow-hidden rounded-lg border border-border shadow-[var(--shadow-rest)]", className)}
+      // m-glass: one frosted surface for the whole strip; the tiles inside are clear (globals.css).
+      className={cn("m-stat-strip m-glass overflow-hidden rounded-lg border border-border", className)}
     >
-      {/* One-pixel gaps over the border colour draw the dividers at any column count. */}
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:auto-cols-fr lg:grid-flow-col lg:grid-cols-none">{children}</div>
+      {/* Each tile draws a hairline on its left and top; the strip clips the outer ones, so the
+          dividers come out right at any column count while the glass shows through every cell. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:auto-cols-fr lg:grid-flow-col lg:grid-cols-none">{children}</div>
     </section>
   );
 }

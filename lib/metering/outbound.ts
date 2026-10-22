@@ -98,8 +98,9 @@ async function liveLimit(tenantId: string, key: OutboundLimitKey, entitlement: A
   }
 }
 
-export async function outboundLimitSnapshot(tenantId: string): Promise<OutboundLimitSnapshot[]> {
-  const entitlement = await getEntitlement(tenantId);
+/** `preloaded`: this request's entitlement for the same tenant (requireFeature's), so it is not read twice. */
+export async function outboundLimitSnapshot(tenantId: string, preloaded?: Awaited<ReturnType<typeof getEntitlement>>): Promise<OutboundLimitSnapshot[]> {
+  const entitlement = preloaded ?? await getEntitlement(tenantId);
   const keys: OutboundLimitKey[] = ["max_setter_seats", "max_active_campaigns", "monthly_leads_imported", "dnc_scrub_lookups", "consent_cert_claims"];
   return Promise.all(keys.map(async (key) => {
     const { usage, limit, hardCap } = await liveLimit(tenantId, key, entitlement);

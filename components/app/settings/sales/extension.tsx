@@ -12,11 +12,12 @@
  * every request.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useState } from "react";
 import { notify } from "@/lib/notify";
 
 import { useExtensionVersion } from "@/components/app/applications/submit/use-extension";
-import { Pill, SettingsCard, SettingsStack, st } from "@/components/app/settings/primitives";
+import { SettingsCard, SettingsStack, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
@@ -153,8 +154,8 @@ export function SalesExtension() {
 
       <SettingsCard title="Install" sub="Per device and per person. Nothing is installed for an agent on their behalf.">
         <div className="flex flex-wrap items-center gap-[14px]">
-          {detected ? <Pill tone="success" dot>Installed on this device</Pill> : <Pill tone="warning" dot>Not installed on this device</Pill>}
-          <span className="text-[14px] leading-[1.5] text-[var(--body)]">{installedVersion ? `Version ${installedVersion}${installedVersion !== latest ? ` · latest is ${latest}` : ""}` : `Latest is ${latest}`}</span>
+          {detected ? <StatusChip tone="good" dot>Installed on this device</StatusChip> : <StatusChip tone="warning" dot>Not installed on this device</StatusChip>}
+          <span className="text-sm leading-[1.5] text-[var(--body)]">{installedVersion ? `Version ${installedVersion}${installedVersion !== latest ? ` · latest is ${latest}` : ""}` : `Latest is ${latest}`}</span>
           <span className="ml-auto flex flex-wrap gap-2.5">
             <Button type="button" variant="outline" onClick={refresh}>Check again</Button>
             {!detected && <Button type="button" onClick={getExtension}>Install for Chrome</Button>}
@@ -198,7 +199,7 @@ export function SalesExtension() {
                 const revocable = onSite.filter((g) => g.status === "active" && (g.mine || canRevokeAll));
                 return (
                   <tr key={s.id} className="m-row">
-                    <td className={st.td}><code className="font-mono text-[12px] text-[var(--ink)]">{host(s.origin)}</code></td>
+                    <td className={st.td}><code className="font-mono text-xs text-[var(--ink)]">{host(s.origin)}</code></td>
                     <td className={st.td}>{s.name}</td>
                     <td className={st.td}>{last ? who(last) : "—"}</td>
                     <td className={st.td}>{last ? day(last.issuedAt) : <span className="text-[var(--muted)]">Never granted</span>}</td>
@@ -228,10 +229,10 @@ export function SalesExtension() {
               <li key={h.key} className="flex gap-3 border-t border-[var(--border)] px-4 py-2.5 first:border-t-0">
                 <span aria-hidden className={cn("mt-2 size-[7px] shrink-0 rounded-full", h.revoked ? "bg-[var(--error)]" : "bg-[var(--success)]")} />
                 <span className="min-w-0">
-                  <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+                  <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
                     {h.revoked ? "Revoked" : `${who(h.g)} granted`} <strong>{host(h.g.origin)}</strong>
                   </span>
-                  <span className="block text-[12px] leading-[1.5] text-[var(--muted)]">
+                  <span className="block text-xs leading-[1.5] text-[var(--muted)]">
                     {when(h.at)} · {h.g.clientName}{h.g.reference ? ` (${h.g.reference})` : ""}{h.revoked ? "" : ` · ${plural(h.g.fieldsRead, "field")} read`}
                     {!h.revoked && h.g.status === "active" ? " · active now" : ""}
                   </span>
@@ -251,10 +252,10 @@ export function SalesExtension() {
           ].map((f) => (
             <div key={f.label} className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] py-[11px] first:border-t-0 first:pt-0">
               <dt className="min-w-0">
-                <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{f.label}</span>
-                <span className="block text-[12px] leading-[1.5] text-[var(--muted)]">{f.help}</span>
+                <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{f.label}</span>
+                <span className="block text-xs leading-[1.5] text-[var(--muted)]">{f.help}</span>
               </dt>
-              <dd className="m-0 text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">{f.value}</dd>
+              <dd className="m-0 text-sm leading-[1.5] font-semibold text-[var(--ink)]">{f.value}</dd>
             </div>
           ))}
         </dl>

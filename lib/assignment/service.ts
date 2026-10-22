@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { appointmentCountsForRouting } from "@/lib/appointments/eligibility";
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 
 import {
   LEAD_LIST_ASSIGN_LIMIT,
@@ -100,23 +101,21 @@ export async function getAssignmentWorkspace(tenantId: string): Promise<Assignme
     rulesQuery(),
     capacityQuery(),
     settingsQuery(),
-    client.from("tenant_users").select("user_id, role, accepted_at").eq("tenant_id", tenantId),
+    // The member's name, email and status ride along (tenant_users_user_id_fkey), so no second read.
+    client.from("tenant_users").select("user_id, role, accepted_at, users!tenant_users_user_id_fkey(id, name, email, status)").eq("tenant_id", tenantId),
     client.from("tenant_campaigns").select("id, name").eq("tenant_id", tenantId).order("name", { ascending: true }),
     client.rpc("assignment_insights", { p_tenant_id: tenantId, p_since: since.toISOString() }),
   ]);
   const failure = [rules, capacities, settings, memberships].find((item) => item.error);
   if (failure?.error) throw new Error(`Could not load assignment workspace: ${failure.error.message}`);
 
-  const accepted = rows<{ user_id: string; role: string; accepted_at: string | null }>(memberships.data)
+  type MemberUser = { id: string; name: string; email: string; status: string };
+  const accepted = rows<{ user_id: string; role: string; accepted_at: string | null; users: MemberUser | MemberUser[] | null }>(memberships.data)
     .filter((membership) => membership.accepted_at && ["owner", "producer", "setter"].includes(membership.role));
 
-  // Only the members of this tenant. This read used to fetch every row of `users` in the database
-  // and discard all but a handful.
-  const memberIds = accepted.map((membership) => membership.user_id);
-  const users = memberIds.length
-    ? await client.from("users").select("id, name, email, status").in("id", memberIds)
-    : { data: [], error: null };
-  if (users.error) throw new Error(`Could not load assignment workspace: ${users.error.message}`);
+  // Only the members of this tenant, embedded on their memberships. This read once fetched every row
+  // of `users` in the database and discarded all but a handful; then a second trip by id.
+  const users = { data: accepted.flatMap((membership) => (Array.isArray(membership.users) ? membership.users : membership.users ? [membership.users] : [])) };
 
   const insightRow = insights.error ? null : (insights.data as Record<string, unknown> | null);
   const eligibleFromSql = insightRow && typeof insightRow.eligible_states === "object" ? insightRow.eligible_states as Record<string, string[]> : null;
@@ -154,7 +153,7 @@ export async function getAssignmentWorkspace(tenantId: string): Promise<Assignme
   return {
     rules: rows<AssignmentRule>(rules.data).map((rule) => ({
       ...rule,
-      strategy: rule.strategy === "least_loaded" ? "least_loaded" : "round_robin",
+      strategy: rule.strategy === "least_loaded" || rule.strategy === "best_placement" ? rule.strategy : "round_robin",
       conditions: Array.isArray(rule.conditions) ? rule.conditions : [],
     })),
     members,
@@ -206,18 +205,20 @@ async function appointmentsForRouting(client: Db, tenantId: string): Promise<Res
 async function eligibleStatesFallback(tenantId: string, userIds: string[]): Promise<Record<string, string[]> | null> {
   if (!userIds.length) return {};
   const client = db();
-  const [licenses, appointments, carriers, own] = await Promise.all([
+  const [licenses, appointments, carriers, own, switchedOff] = await Promise.all([
     client.from("licenses").select("state, expires_at").eq("tenant_id", tenantId),
     appointmentsForRouting(client, tenantId),
     client.from("tenant_carriers").select("carrier_id, is_active").eq("tenant_id", tenantId),
     client.from("tenant_user_licensed_states").select("user_id, state").eq("tenant_id", tenantId),
+    switchedOffCarrierIds(tenantId),
   ]);
   if (licenses.error || appointments.error || carriers.error) return null;
   const today = new Date().toISOString().slice(0, 10);
   const up = (value: unknown) => String(value ?? "").trim().toUpperCase();
   const licensed = new Set(rows<{ state: string; expires_at: string | null }>(licenses.data)
     .filter((l) => up(l.state) && (!l.expires_at || l.expires_at.slice(0, 10) >= today)).map((l) => up(l.state)));
-  const activeCarriers = new Set(rows<{ carrier_id: string; is_active: boolean }>(carriers.data).filter((c) => c.is_active).map((c) => c.carrier_id));
+  // LA-0.4: a carrier the agency switched off does not count, as in the SQL gate.
+  const activeCarriers = new Set(rows<{ carrier_id: string; is_active: boolean }>(carriers.data).filter((c) => c.is_active && !switchedOff.has(c.carrier_id)).map((c) => c.carrier_id));
   const appointed = new Set(rows<{ state: string; status: string; effective_from: string | null; terminated_at: string | null; expires_at?: string | null; carrier_id: string }>(appointments.data)
     .filter((a) => activeCarriers.has(a.carrier_id) && appointmentCountsForRouting(a, today))
     .map((a) => up(a.state)));

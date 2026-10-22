@@ -4,6 +4,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { DNC_BLOCK_MESSAGE } from "@/lib/compliance/constants";
 import { runDialPreflightChecks } from "@/lib/compliance/dialPreflight";
 import { normalizeDialPhone } from "@/lib/compliance/scrub";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * This is the mandatory compliance boundary immediately before a telephony provider is called.
@@ -41,7 +42,9 @@ export async function POST(request: NextRequest) {
 
   let report: Awaited<ReturnType<typeof runDialPreflightChecks>>;
   try {
-    report = await runDialPreflightChecks({ tenantId: auth.context.tenantId, userId: auth.context.userId, normalizedPhone, state });
+    // AG-0.5: in an agency the lead a number belongs to is reported only when it is the session's or a
+    // producer's in its scope; the compliance checks on the number itself are unchanged. Null = as before.
+    report = await runDialPreflightChecks({ tenantId: auth.context.tenantId, userId: auth.context.userId, normalizedPhone, state, scope: await scopeFor(auth.context) });
   } catch {
     return NextResponse.json({ error: "DNC vendors could not verify this number. Dialing remains blocked until a vendor responds.", code: "dnc_unverified", blocked: true }, { status: 503 });
   }

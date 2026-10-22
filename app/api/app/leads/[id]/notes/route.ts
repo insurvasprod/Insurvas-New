@@ -3,12 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { createLeadNote, deleteLeadNote, listLeadNotes, listTeammates, updateLeadNote } from "@/lib/leadNotes/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
 
 const roles = ["owner", "producer", "assistant"] as const;
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", roles);
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   try {
     const leadId = (await params).id;
     const [notes, teammates] = await Promise.all([listLeadNotes(auth.context.tenantId, leadId), listTeammates(auth.context.tenantId)]);
@@ -22,6 +26,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   const body = await request.json().catch(() => null) as { body?: unknown; visibility?: unknown; mentions?: unknown; idempotency_key?: unknown } | null;
   try {
     const result = await createLeadNote({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, leadId: (await params).id, body: body?.body, visibility: body?.visibility, mentions: body?.mentions, idempotencyKey: body?.idempotency_key });
@@ -33,6 +40,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   const body = await request.json().catch(() => null) as { note_id?: unknown; body?: unknown; visibility?: unknown; mentions?: unknown } | null;
   if (typeof body?.note_id !== "string") return NextResponse.json({ error: "Choose a note to edit" }, { status: 400 });
   try {
@@ -46,6 +56,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   const body = await request.json().catch(() => null) as { note_id?: unknown } | null;
   if (typeof body?.note_id !== "string") return NextResponse.json({ error: "Choose a note to delete" }, { status: 400 });
   try {

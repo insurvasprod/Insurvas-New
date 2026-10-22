@@ -4,7 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { customerName, formatInTimezone, stateFromLeadValues, STATE_TIMEZONES } from "@/lib/callbacks/timezone";
 import { productLineLabel } from "@/lib/format/productLine";
 import { describeEmptyQueue, EMPTY_QUEUE_NORMAL, explainEmptyQueue, pickRefusalMessage, returnWindowLine, suppressionRefusal, windowOpeningCandidates, type EmptyQueueFacts, type ReturnWindow, type StateWindowRow } from "./display";
-import { getDncDialingStatus, performDncDialPreflight } from "@/lib/compliance/service";
+import { campaignDialRefusal, storedLitigatorRefusal } from "./dialGate";
 import { normalizeDialPhone } from "@/lib/compliance/scrub";
 import { getCallingWindows, staleRulesReason } from "@/lib/callingWindow/service";
 import { callbackWindowFacts, type CallbackWindowFacts } from "@/lib/callbacks/windowFacts";
@@ -16,6 +16,9 @@ import { decideDialLicence, leadStateBeforeServe, type LicenceDecision } from ".
 import { checkCallbackInCallingWindow } from "@/lib/dispositions/callbackWindow";
 import { dialerVocabulary, type DialerVocabulary, type DispositionVocabularyRow } from "./outcomes";
 import { isPlaceholderDisclosure } from "./disclosureStatus";
+import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
+import { isAgencyTenant } from "../agency/audience";
+import { assignedTo, keptAssignedReason, refusedLeadHandBack } from "./refusedLead";
 
 type Row = Record<string, unknown>;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -41,16 +44,17 @@ type Db = { from(table: string): Query; rpc(name: string, args: Record<string, u
 export type DialerEligibility = {
   allowed: boolean;
   // "list_suppressed" (20260925700200): a stored scrub hit — litigator, federal or state DNC, invalid.
-  reason: "ready" | "no_state" | "invalid_phone" | "not_licensed" | "internal_suppressed" | "list_suppressed" | "outside_window" | "dnc_unavailable" | "policy_unavailable";
+  // "campaign_not_servable": the lead's campaign is paused or not scrubbed (campaigns_servable's rule).
+  // "litigator_listed": the import's stored screening answer named a TCPA litigator.
+  reason: "ready" | "no_state" | "invalid_phone" | "not_licensed" | "internal_suppressed" | "list_suppressed" | "campaign_not_servable" | "litigator_listed" | "outside_window" | "policy_unavailable";
   message: string;
   checkedAt: string;
   timezone: string | null;
   customerLocalTime: string | null;
   /**
-   * Whether a DNC VENDOR is configured and answering — not whether this number was looked up. The
-   * number is looked up only at the click (markDialClicked), and that result is logged in
-   * tenant_dial_dnc_checks. "clear" here used to be rendered as "DNC status: clear", which claimed a
-   * lookup that had not happened.
+   * The stored-list answer for this number (owner decision 3: our own tables only, never a vendor).
+   * "unavailable" means our own lists could not be read. The click re-reads the same lists and logs
+   * the answer in tenant_dial_dnc_checks.
    */
   dncCheck: "pending" | "clear" | "suppressed" | "unavailable";
   /** The agency's own suppression list, checked for this number on every read — its own result. */
@@ -220,7 +224,37 @@ function licenceFor(context: LicenceContext, state: string | null): LicenceDecis
  * prepared. The final click still performs a fresh provider DNC lookup; this function must never
  * turn a cached/diagnostic result into permission to dial.
  */
-async function getDialerEligibility(db: Db, tenantId: string, values: Row, campaignId: string | null, agentId?: string): Promise<DialerEligibility> {
+/** 503 for "we could not tell", 422 for "we checked and the answer is no". */
+function dialGateStatus(reason: DialerEligibility["reason"]) {
+  return reason === "policy_unavailable" ? 503 : 422;
+}
+
+/** The lead's campaign, for the campaigns_servable rule at the dial. */
+async function readGateCampaign(db: Db, tenantId: string, campaignId: string | null) {
+  if (!campaignId) return { campaign: null, readFailed: false };
+  const row = await db.from("tenant_campaigns").select("status, scrub_status").eq("tenant_id", tenantId).eq("id", campaignId).maybeSingle<Row>();
+  if (row.error) return { campaign: null, readFailed: true };
+  return { campaign: row.data ? { status: text(row.data.status) || null, scrubStatus: text(row.data.scrub_status) || null } : null, readFailed: false };
+}
+
+/**
+ * The import's stored litigator evidence: the lead's own screening answer, and a litigator row in
+ * any of the tenant's scrub ledgers. `ledgerListed` is null when the ledger could not be read (a
+ * table not there yet counts as no rows, as it did before the ledger existed).
+ */
+async function readStoredLitigator(db: Db, tenantId: string, leadId: string | null, normalizedPhone: string) {
+  const raw = normalizedPhone.replace(/\D/g, "");
+  const digits = raw.length === 11 && raw.startsWith("1") ? raw.slice(1) : raw;
+  const [lead, ledger] = await Promise.all([
+    leadId ? db.from("agent_leads").select("screening_outcome").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<Row>() : null,
+    db.from("tenant_campaign_scrub_rejections").select("phone_digits").eq("tenant_id", tenantId).eq("phone_digits", digits).eq("outcome", "tcpa_litigator").limit(1),
+  ]);
+  const leadScreeningOutcome = lead && !lead.error ? text(lead.data?.screening_outcome) || null : null;
+  const ledgerListed = ledger.error ? (isPendingSchema(ledger.error) ? false : null) : Array.isArray(ledger.data) && ledger.data.length > 0;
+  return { leadScreeningOutcome, ledgerListed };
+}
+
+async function getDialerEligibility(db: Db, tenantId: string, values: Row, campaignId: string | null, agentId?: string, leadId?: string | null): Promise<DialerEligibility> {
   const checkedAt = new Date().toISOString();
   const { state, timezone, customerLocalTime } = localTime(checkedAt, values);
   const phone = leadPhone(values);
@@ -260,9 +294,9 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
     return blocked("invalid_phone", "Dialing is blocked because this lead does not have a valid phone number.");
   }
 
-  // The three reads are independent and side-effect free, so they are fetched together; the
-  // decisions below still run in the original order, so the first blocking reason is unchanged.
-  const [licence, window, suppressed, dncResult, exemption] = await Promise.all([
+  // The reads are independent, so they are fetched together; the decisions below still run in order.
+  // Every one reads our own tables (owner decision 3): no vendor is asked at the dial.
+  const [licence, window, suppressed, gateCampaign, storedLitigator, exemption] = await Promise.all([
     // "Refused by the dialer": the agent must be licensed in the lead's state (Settings › States &
     // licences, and their own states on Team & access). Only known for a named agent.
     agentId
@@ -278,8 +312,8 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
       p_at: checkedAt,
     }),
     suppressedRead,
-    // Settled here so a DNC failure is evaluated in its own turn below, never short-circuiting the earlier checks.
-    getDncDialingStatus().then((status) => ({ ok: true as const, status }), () => ({ ok: false as const })),
+    readGateCampaign(db, tenantId, campaignId),
+    readStoredLitigator(db, tenantId, leadId ?? null, normalizedPhone),
     exemptionRead,
   ]);
   dncExemption = exemption;
@@ -300,19 +334,24 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
     return blocked("outside_window", `Dialing is blocked by the server calling-window policy. Customer local time: ${customerLocalTime ?? "unknown"}.`);
   }
 
-  if (suppressed.internal === "unavailable") return blocked("policy_unavailable", "Dialing is blocked because the tenant suppression policy could not be verified.");
+  // The campaign half of campaigns_servable: paused, unscrubbed, mid-scrub or failed refuses the dial,
+  // a return call included — skipping the queue never skips the scrub.
+  const campaignRefusal = campaignDialRefusal({ campaignId, campaign: gateCampaign.campaign, readFailed: gateCampaign.readFailed });
+  if (campaignRefusal) return blocked(campaignRefusal.reason, campaignRefusal.message);
+
+  if (suppressed.internal === "unavailable") return blocked("policy_unavailable", "Dialing is blocked because the tenant suppression policy could not be verified.", "unavailable");
   // A stored scrub hit refuses the dial with the list named — the litigator list first.
   const scrubHits = (suppressionHits ?? []).filter((hit) => hit.listType !== "internal");
   if (scrubHits.length) return blocked("list_suppressed", suppressionRefusal(scrubHits.map((hit) => hit.listType)), "suppressed");
   if (suppressed.internal === "suppressed") return blocked("internal_suppressed", "Dialing is blocked because this number is on the tenant do-not-call list.", "suppressed");
-
-  if (!dncResult.ok) return blocked("dnc_unavailable", "Dialing is blocked because DNC availability could not be verified.", "unavailable");
-  if (dncResult.status.blocked) return blocked("dnc_unavailable", dncResult.status.reason ?? "Dialing is blocked until an enabled DNC vendor is available.", "unavailable");
+  // The import's stored litigator answers (the suppression list's litigator rows were read above).
+  const litigatorRefusal = storedLitigatorRefusal(storedLitigator);
+  if (litigatorRefusal) return blocked(litigatorRefusal.reason, litigatorRefusal.message, litigatorRefusal.reason === "litigator_listed" ? "suppressed" : "unavailable");
 
   return {
     allowed: true,
     reason: "ready",
-    message: "The calling window and tenant suppression checks passed. A fresh DNC lookup is required immediately before dialing.",
+    message: "The calling window, campaign scrub and stored suppression checks passed. They are read again immediately before dialing.",
     checkedAt,
     timezone,
     customerLocalTime,
@@ -484,7 +523,13 @@ async function readCallbackWindow(tenantId: string, state: string): Promise<Call
   }
 }
 
-export async function getDialerPanel(input: { tenantId: string; agentId?: string; leadId: string; campaignId?: string | null; productCode?: string | null; includeCost?: boolean }) {
+/**
+ * AG-0.5: `scope` (scopeFor, from the session) — the route has already refused a lead outside it
+ * (guardLead). Here it narrows the one list on the panel that is other agents' rows: the call history,
+ * whose attempts belong to the agent who dialled them (D1: tenant_call_attempts.agent_id). Omitted /
+ * null = every attempt on the lead, as before.
+ */
+export async function getDialerPanel(input: { tenantId: string; agentId?: string; leadId: string; campaignId?: string | null; productCode?: string | null; includeCost?: boolean; scope?: ProducerScope }) {
   const db = getSupabaseServiceClient() as unknown as Db;
   let queueQuery = db.from("lead_queue").select("id, status, claimed_by").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).eq("status", "claimed").order("claimed_at", { ascending: false }).limit(1);
   if (input.agentId) queueQuery = queueQuery.eq("claimed_by", input.agentId);
@@ -494,7 +539,7 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
     readPanelLead(db, input.tenantId, input.leadId),
     db.from("tenant_rebuttals").select("id, objection_key, label, body, sort_order").eq("tenant_id", input.tenantId).eq("is_active", true).order("sort_order"),
     db.from("tenant_consent_artefacts").select("provider, certificate_id, certificate_url, captured_at, consent_timestamp, capture_status").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("captured_at", { ascending: false }).limit(1).maybeSingle<Row>(),
-    db.from("tenant_call_attempts").select("id, attempt_number, attempted_at, slot, disposition, dial_clicked_at, disclosure_confirmed_at").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("attempt_number", { ascending: false }).limit(20),
+    db.from("tenant_call_attempts").select("id, attempt_number, attempted_at, slot, disposition, dial_clicked_at, disclosure_confirmed_at, agent_id").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("attempt_number", { ascending: false }).limit(20),
     queueQuery.maybeSingle<Row>(),
     // LA-2.13 criterion 1: "every served lead carries the reason it was chosen, in plain language".
     //
@@ -536,7 +581,7 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
       : null,
     db.from("tenant_scripts").select("id, campaign_id, product_code, version, sections").eq("tenant_id", input.tenantId).is("campaign_id", null).eq("product_code", productCode).eq("is_active", true).order("version", { ascending: false }).limit(1).maybeSingle<Row>(),
     db.from("state_disclosures").select("id, state, product_code, required_text, effective_from").eq("state", state).eq("product_code", productCode).lte("effective_from", new Date().toISOString().slice(0, 10)).order("effective_from", { ascending: false }).limit(1).maybeSingle<Row>(),
-    getDialerEligibility(db, input.tenantId, values, campaignId, input.agentId),
+    getDialerEligibility(db, input.tenantId, values, campaignId, input.agentId, input.leadId),
     // The board's Campaign / Vendor / Source row. Most leads carry no campaign today; they read "—".
     campaignId ? readPanelCampaign(db, input.tenantId, campaignId) : null,
     // "Open until 8:00 PM CT": the explainer beside tenant_can_dial_now (migration 20260924323200).
@@ -659,7 +704,7 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
     // relation is tolerated, because the panel is compliance-gated and must still open.
     selectionReason: selectionReason(selectionResult),
     consent,
-    attemptHistory: (Array.isArray(attemptsResult.data) ? attemptsResult.data as Row[] : []).map((row) => ({
+    attemptHistory: (Array.isArray(attemptsResult.data) ? attemptsResult.data as Row[] : []).filter((row) => !input.scope || text(row.agent_id) === input.agentId || rowVisible(input.scope, text(row.agent_id) || null)).map((row) => ({
       id: text(row.id), attemptNumber: Number(row.attempt_number ?? 0), attemptedAt: text(row.attempted_at), slot: text(row.slot), disposition: text(row.disposition) || null, dialClicked: Boolean(row.dial_clicked_at), disclosureConfirmed: Boolean(row.disclosure_confirmed_at),
     })),
   };
@@ -698,16 +743,18 @@ export async function startDialAttempt(input: { tenantId: string; agentId: strin
   // All four are reads (current_slot_for_state is a pure STABLE function), so they are fetched
   // together; the throws below keep their original order, eligibility first.
   const [eligibility, queue, latest, slot] = await Promise.all([
-    getDialerEligibility(db, input.tenantId, (lead.data.values ?? {}) as Row, text(lead.data.campaign_id) || null, input.agentId),
+    getDialerEligibility(db, input.tenantId, (lead.data.values ?? {}) as Row, text(lead.data.campaign_id) || null, input.agentId, input.leadId),
     db.from("lead_queue").select("id, status, claimed_by").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).eq("status", "claimed").eq("claimed_by", input.agentId).order("claimed_at", { ascending: false }).limit(1).maybeSingle<Row>(),
     db.from("tenant_call_attempts").select("attempt_number").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("attempt_number", { ascending: false }).limit(1).maybeSingle<Row>(),
     resolveAttemptSlot(db, (lead.data.values ?? {}) as Row),
   ]);
-  if (!eligibility.allowed) throw new DialGateError(eligibility.reason, eligibility.reason === "dnc_unavailable" || eligibility.reason === "policy_unavailable" ? 503 : 422, eligibility.message);
+  if (!eligibility.allowed) throw new DialGateError(eligibility.reason, dialGateStatus(eligibility.reason), eligibility.message);
   if (queue.error) throw new DialerWorkflowError(503, `Could not verify lead assignment: ${queue.error.message}`);
   // An inbound return call has no claim to check. Decision 1: the customer rang Ray, so nothing was
   // served and nothing was claimed — requiring a claim here is what made the disposition
-  // unreachable from the search screen. Every outbound attempt still requires one.
+  // unreachable from the search screen. Every outbound attempt still requires one. The flag waives
+  // the CLAIM only: every compliance gate above (window, licence, campaign scrub/paused, stored
+  // lists, litigator) has already run for it exactly as for an outbound dial.
   if (!queue.data && !input.inbound) throw new DialerWorkflowError(409, "Claim this lead before preparing a dial attempt.");
   if (latest.error) throw new Error(`Could not load call history: ${latest.error.message}`);
   const attemptNumber = Number(latest.data?.attempt_number ?? 0) + 1;
@@ -757,21 +804,15 @@ export async function markDialClicked(input: { tenantId: string; agentId: string
   if (!lead || text(lead.tenant_id) !== input.tenantId) throw new Error("Lead not found for this tenant");
   const values = (lead.values ?? {}) as Row;
   const refuse = (error: DialGateError) => refuseAtClick(input, text(lead.id), !text(attempt.data?.work_item_id), error);
-  const eligibility = await getDialerEligibility(db, input.tenantId, values, text(lead.campaign_id) || null, input.agentId);
-  if (!eligibility.allowed) await refuse(new DialGateError(eligibility.reason, eligibility.reason === "dnc_unavailable" || eligibility.reason === "policy_unavailable" ? 503 : 422, eligibility.message));
-  const phone = leadPhone(values);
-  let dncResult: "clear" | "listed" | "unavailable";
-  try {
-    // The exemption's audited use (LA-2.3-3) names this dial: its lead, attempt and agent.
-    const dnc = await performDncDialPreflight(phone, input.tenantId, undefined, { leadId: text(lead.id), attemptId: input.attemptId, agentId: input.agentId });
-    dncResult = dnc.allowed ? "clear" : "listed";
-  } catch {
-    dncResult = "unavailable";
-  }
-  // Written whatever the answer, so the panel can say what the last real lookup found.
+  // Every gate re-read at the click, from our own tables only (owner decision 3, LA-2.3: no vendor).
+  const eligibility = await getDialerEligibility(db, input.tenantId, values, text(lead.campaign_id) || null, input.agentId, text(lead.id));
+  // The lists' own answer, whichever gate refused first; never "clear" for lists not read.
+  const listed = eligibility.dncCheck === "suppressed" || eligibility.suppression === "suppressed" || (eligibility.suppressionHits ?? []).length > 0;
+  const unread = eligibility.dncCheck === "unavailable" || eligibility.suppression === "unavailable" || eligibility.suppression === "not_checked";
+  const dncResult: "clear" | "listed" | "unavailable" = listed ? "listed" : unread ? "unavailable" : "clear";
+  // Written whatever the answer, so the panel can say what the last real check found.
   await logDncCheck(db, { tenantId: input.tenantId, leadId: text(lead.id), attemptId: input.attemptId, agentId: input.agentId, result: dncResult });
-  if (dncResult === "listed") await refuse(new DialGateError("internal_suppressed", 422, "Dialing is blocked because this number is on a DNC list."));
-  if (dncResult === "unavailable") await refuse(new DialGateError("dnc_unavailable", 503, "Dialing is blocked because the number could not be verified by the DNC vendors."));
+  if (!eligibility.allowed) await refuse(new DialGateError(eligibility.reason, dialGateStatus(eligibility.reason), eligibility.message));
   const result = await db.from("tenant_call_attempts").update({ dial_clicked_at: new Date().toISOString() }).eq("id", input.attemptId).eq("tenant_id", input.tenantId).eq("agent_id", input.agentId).select("id, dial_clicked_at").single<Row>();
   if (result.error || !result.data) throw new Error(result.error?.message ?? "Call attempt not found");
   return result.data;
@@ -970,12 +1011,28 @@ function workableStates(context: LicenceContext): string[] | null {
  * fails leaves its fact out rather than failing the press.
  */
 export async function diagnoseEmptyQueue(tenantId: string, agentId?: string): Promise<{ code: string; message: string }> {
+  return diagnoseQueue(tenantId, agentId, false);
+}
+
+/**
+ * AG-0.5 / AG-0.10 · the same diagnosis for an agency's producer, manager or setter, who is served only
+ * the leads assigned to him: "is anything waiting" is asked of his own assigned work, not of the
+ * agency's pool, and the retry-timer counts (agency-wide lead counts) are left out.
+ */
+export async function diagnoseAssignedQueue(tenantId: string, agentId: string): Promise<{ code: string; message: string }> {
+  return diagnoseQueue(tenantId, agentId, true);
+}
+
+async function diagnoseQueue(tenantId: string, agentId: string | undefined, assignedOnly: boolean): Promise<{ code: string; message: string }> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
+  const scoped = assignedOnly && Boolean(agentId);
   const [campaigns, waiting, licence, agentZone] = await Promise.all([
     db.from("tenant_campaigns").select("name, status, scrub_status").eq("tenant_id", tenantId),
-    db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "unclaimed").limit(1),
+    scoped
+      ? db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "claimed").eq("owner_user_id", agentId as string).is("disposition", null).limit(1)
+      : db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "unclaimed").limit(1),
     agentId ? loadLicenceContext(db, tenantId, agentId).catch(() => null) : Promise.resolve(null),
     readAgentTimezone(db, tenantId, agentId),
   ]);
@@ -1011,11 +1068,14 @@ export async function diagnoseEmptyQueue(tenantId: string, agentId?: string): Pr
   }
 
   // Timers: retry / nurture leads whose next dial is still ahead (agent_leads_retry_due_idx), and
-  // retry leads that are due but wait for an untried slot. Scoped to the workable states.
-  const scoped = (query: Query) => (states ? query.in("values->>state", states) : query);
+  // retry leads that are due but wait for an untried slot. Scoped to the workable states. Not for a
+  // session served only its assigned leads: these count the whole agency's leads (AG-0.5), and a fact
+  // left out is honest.
+  if (scoped) return explainEmptyQueue(facts);
+  const inStates = (query: Query) => (states ? query.in("values->>state", states) : query);
   const [ahead, dueRetry] = await Promise.all([
-    scoped(db.from("agent_leads").select("next_dial_after", { count: "exact" }).eq("tenant_id", tenantId).in("lead_state", ["retry", "nurture"]).gt("next_dial_after", nowIso)).order("next_dial_after", { ascending: true }).limit(1),
-    scoped(db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("lead_state", "retry").lte("next_dial_after", nowIso)),
+    inStates(db.from("agent_leads").select("next_dial_after", { count: "exact" }).eq("tenant_id", tenantId).in("lead_state", ["retry", "nurture"]).gt("next_dial_after", nowIso)).order("next_dial_after", { ascending: true }).limit(1),
+    inStates(db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("lead_state", "retry").lte("next_dial_after", nowIso)),
   ]);
   const aheadRows = (ahead.data as Row[] | null) ?? [];
   const aheadCount = (ahead as unknown as { count?: number | null }).count ?? aheadRows.length;
@@ -1030,12 +1090,14 @@ const MAX_REFUSED_PER_SERVE = 4;
 /**
  * Puts a lead the dialer refused back exactly as the queue would find it: unclaimed, and in the
  * lead_state it was served from — `fresh` if it has never been dialled, whatever tier served it.
+ * AG-0.10: in an agency a lead assigned to this agent stays assigned to him instead, and `why` (the
+ * refusal's sentence) goes into its assignment history (refusedLead.ts).
  *
  * first_dial_at: since 20260925711500 it is stamped at the first Dial click, not at serve, so a
  * refused lead has none. Until that migration is applied, serve_next_lead still stamps it on claim;
  * a stamp equal to this serve's claim time is that, and is cleared.
  */
-async function returnRefusedLead(db: Db, tenantId: string, agentId: string, served: Row) {
+async function returnRefusedLead(db: Db, tenantId: string, agentId: string, served: Row, why?: string) {
   const workItemId = text(served.work_item_id);
   const leadId = text(served.lead_id);
   const [queue, lead] = await Promise.all([
@@ -1046,14 +1108,39 @@ async function returnRefusedLead(db: Db, tenantId: string, agentId: string, serv
   const firstDialAt = text(lead.data?.first_dial_at);
   const stampedByThisServe = Boolean(claimedAt && firstDialAt && new Date(claimedAt).getTime() === new Date(firstDialAt).getTime());
   const neverDialled = Number(lead.data?.attempts_made ?? 0) === 0;
+  // AG-0.10: in an agency a lead the owner assigned to this producer stays his (refusedLead.ts). Asked only in an
+  // agency, so a solo tenant makes exactly the reads and the hand-back it always did.
+  const agency = await isAgencyTenant(tenantId).catch(() => false);
+  const latest = agency
+    ? await db.from("lead_assignment_events").select("event_type, to_user_id, contact_key").eq("tenant_id", tenantId).eq("work_item_id", workItemId).order("created_at", { ascending: false }).limit(1).maybeSingle<Row>()
+    : null;
+  const handBack = refusedLeadHandBack({ agency, assignedToAgent: assignedTo(latest?.data, agentId) });
+  const now = new Date().toISOString();
   const released = await db
     .from("lead_queue")
-    .update({ status: "unclaimed", claimed_by: null, owner_user_id: null, locked_until: null, updated_at: new Date().toISOString() })
+    .update(handBack === "keep_assigned"
+      // Back to how an assigned lead sits between calls: claimed and owned by him, unlocked (serve_next_lead's own path).
+      ? { locked_until: null, updated_at: now }
+      : { status: "unclaimed", claimed_by: null, owner_user_id: null, locked_until: null, updated_at: now })
     .eq("tenant_id", tenantId)
     .eq("id", workItemId)
     .eq("claimed_by", agentId)
-    .eq("status", "claimed");
+    .eq("status", "claimed")
+    .select("id");
   if (released.error) console.error(`[dialer] could not return a refused lead to the queue: ${released.error.message}`);
+  if (handBack === "keep_assigned" && !released.error && ((released.data as Row[] | null) ?? []).length > 0) {
+    const noted = await db.from("lead_assignment_events").insert({
+      tenant_id: tenantId,
+      work_item_id: workItemId,
+      lead_id: leadId,
+      contact_key: text(latest?.data?.contact_key),
+      from_user_id: agentId,
+      to_user_id: agentId,
+      event_type: "reassigned",
+      reason: keptAssignedReason(why),
+    });
+    if (noted.error) console.error(`[dialer] could not record why a refused lead stayed assigned: ${noted.error.message}`);
+  }
   const restoredState = neverDialled ? "fresh" : leadStateBeforeServe(Number(served.tier ?? 0));
   const leadPatch: Row = {};
   if (restoredState) leadPatch.lead_state = restoredState;
@@ -1095,6 +1182,11 @@ async function readOpenLeadLoad(db: Db, tenantId: string, agentId: string): Prom
  * here: one the agent may not sell to is handed straight back to the queue and the next is tried,
  * up to MAX_REFUSED_PER_SERVE. The refused leads are released only after the loop, so the loop
  * cannot be handed the same lead twice.
+ *
+ * AG-0.10: one path for every session. In an agency a narrowed session (producer, manager, assistant, setter)
+ * is closed out of the unassigned pool by agent_can_take_pool_lead (20261019100000), so serve_next_lead's
+ * weighted campaign draw, cohorts and scoring run over the leads assigned to him alone — the same quality
+ * of serving a solo agent gets, and never a pool lead (20261019300000 keeps that from scanning the pool).
  */
 export async function serveNextLead(input: { tenantId: string; agentId: string }): Promise<ServeResult> {
   const db = getSupabaseServiceClient() as unknown as Db;
@@ -1136,7 +1228,7 @@ export async function serveNextLead(input: { tenantId: string; agentId: string }
       if (attempt === MAX_REFUSED_PER_SERVE) break;
     }
   } finally {
-    for (const item of refused) await returnRefusedLead(db, input.tenantId, input.agentId, item.row);
+    for (const item of refused) await returnRefusedLead(db, input.tenantId, input.agentId, item.row, item.message);
   }
   let atCapacity: ServeResult["atCapacity"] = null;
   if (!chosen) {
@@ -1145,6 +1237,9 @@ export async function serveNextLead(input: { tenantId: string; agentId: string }
   }
   return { served: chosen ? servedView(chosen) : null, refused: refused.map(({ state, message }) => ({ state, message })), atCapacity };
 }
+
+/** How far down the queue list the agency producer's queue preview looks for the leads assigned to him. */
+const ASSIGNED_SERVE_WINDOW = 100;
 
 export type PickResult =
   | { served: ReturnType<typeof servedView>; refusal: null }
@@ -1162,8 +1257,22 @@ export type PickResult =
  *
  * Throws SchemaPendingError before migration 20260924323100.
  */
-export async function serveLeadById(input: { tenantId: string; agentId: string; workItemId: string }): Promise<PickResult> {
+/**
+ * AG-0.5 / AG-0.10: may a scoped session pick this work item? Only one assigned to a producer in its scope
+ * (in practice its own: serve_lead_by_id refuses anyone else's as taken). The unassigned pool and another
+ * producer's lead answer exactly as a lead that is not in the queue.
+ */
+async function pickOutsideScope(db: Db, input: { tenantId: string; agentId: string; workItemId: string; scope: ProducerScope }): Promise<boolean> {
+  const owner = await db.from("lead_queue").select("owner_user_id").eq("tenant_id", input.tenantId).eq("id", input.workItemId).maybeSingle<Row>();
+  if (owner.error) throw new DialerWorkflowError(503, `The lead queue could not be read: ${owner.error.message}`);
+  const ownerId = text(owner.data?.owner_user_id) || null;
+  return !owner.data || (ownerId !== input.agentId && !rowVisible(input.scope, ownerId));
+}
+
+export async function serveLeadById(input: { tenantId: string; agentId: string; workItemId: string; scope?: ProducerScope }): Promise<PickResult> {
   const db = getSupabaseServiceClient() as unknown as Db;
+  // AG-0.5: a scoped session (an agency's producer, manager or setter) picks only its own assigned work.
+  if (input.scope && (await pickOutsideScope(db, { ...input, scope: input.scope }))) return { served: null, refusal: { code: "not_found", message: pickRefusalMessage("not_found") } };
   const result = await db.rpc("serve_lead_by_id", { p_tenant_id: input.tenantId, p_agent_user_id: input.agentId, p_work_item_id: input.workItemId });
   if (result.error) {
     if (isPendingSchema(result.error)) throw new SchemaPendingError();
@@ -1189,7 +1298,7 @@ export async function serveLeadById(input: { tenantId: string; agentId: string; 
   const state = stateFromLeadValues(((lead.data?.values ?? {}) as Row));
   const decision = licenceFor(licence, state);
   if (!decision.allowed) {
-    await returnRefusedLead(db, input.tenantId, input.agentId, row);
+    await returnRefusedLead(db, input.tenantId, input.agentId, row, decision.message);
     return { served: null, refusal: { code: "not_licensed", message: decision.message } };
   }
   return { served: servedView(row), refusal: null };
@@ -1201,14 +1310,14 @@ export async function serveLeadById(input: { tenantId: string; agentId: string; 
  * open-lead ceiling and ownership all apply, and a refusal is the pick's own sentence rather than a
  * different lead served in its place. The newest work item that is still in the queue is the one.
  */
-export async function serveLeadByLeadId(input: { tenantId: string; agentId: string; leadId: string }): Promise<PickResult> {
+export async function serveLeadByLeadId(input: { tenantId: string; agentId: string; leadId: string; scope?: ProducerScope }): Promise<PickResult> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const item = await db.from("lead_queue").select("id, status").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("queued_at", { ascending: false }).limit(5);
   if (item.error) throw new DialerWorkflowError(503, `The lead queue could not be read: ${item.error.message}`);
   const rows = (Array.isArray(item.data) ? item.data : []) as Row[];
   const open = rows.find((row) => text(row.status) === "unclaimed" || text(row.status) === "claimed");
   if (!open) return { served: null, refusal: { code: "not_found", message: "This lead is not in the dialer queue, so it cannot be called from here. Open it from Leads instead." } };
-  return serveLeadById({ tenantId: input.tenantId, agentId: input.agentId, workItemId: text(open.id) });
+  return serveLeadById({ tenantId: input.tenantId, agentId: input.agentId, workItemId: text(open.id), scope: input.scope });
 }
 
 export type QueuePreviewRow = {
@@ -1231,21 +1340,32 @@ export type QueuePreview = { available: true; count: number; capped: boolean; ca
  * 20260924323100). Everything in it is servable to this agent right now; nothing is claimed by
  * reading it. Before the migration the list is unavailable and says so; Serve next still works.
  */
-export async function getQueuePreview(input: { tenantId: string; agentId: string; tiers: number[] | null; limit?: number }): Promise<QueuePreview> {
+/**
+ * AG-0.5 / AG-0.10: with a `scope` (an agency's producer, manager, assistant or setter) the list is the
+ * agent's OWN assigned leads only: the unassigned pool is the owner's to route, and the count is of his
+ * rows, never the agency's. The preview reads its window of the list (up to 100 rows, the function's
+ * own ceiling) and keeps the rows assigned to this agent; when that window was full, `capped` says the
+ * list may go on. Omitted / null = the full list and count, as before.
+ */
+export async function getQueuePreview(input: { tenantId: string; agentId: string; tiers: number[] | null; limit?: number; scope?: ProducerScope }): Promise<QueuePreview> {
   const db = getSupabaseServiceClient() as unknown as Db;
-  const result = await db.rpc("dialer_queue_preview", { p_tenant_id: input.tenantId, p_agent_user_id: input.agentId, p_tiers: input.tiers, p_limit: input.limit ?? 25, p_cap: 1000 });
+  const limit = input.limit ?? 25;
+  const result = await db.rpc("dialer_queue_preview", { p_tenant_id: input.tenantId, p_agent_user_id: input.agentId, p_tiers: input.tiers, p_limit: input.scope ? ASSIGNED_SERVE_WINDOW : limit, p_cap: 1000 });
   if (result.error) {
     if (isPendingSchema(result.error)) return { available: false, message: "The queue list needs a database update that has not been applied yet. Serve next lead still works." };
     throw new DialerWorkflowError(503, `The lead queue could not be read: ${result.error.message}`);
   }
   const body = (result.data && typeof result.data === "object" ? result.data : {}) as Row;
   const now = new Date().toISOString();
-  const rows = (Array.isArray(body.rows) ? body.rows : []) as Row[];
+  const allRows = (Array.isArray(body.rows) ? body.rows : []) as Row[];
+  const own = input.scope ? allRows.filter((row) => row.assigned_to_you === true) : allRows;
+  const rows = input.scope ? own.slice(0, limit) : allRows;
+  const windowFull = allRows.length >= ASSIGNED_SERVE_WINDOW && (Number(body.count ?? 0) || 0) > ASSIGNED_SERVE_WINDOW;
   return {
     available: true,
-    count: Number(body.count ?? 0) || 0,
-    capped: body.capped === true,
-    cap: Number(body.cap ?? 1000) || 1000,
+    count: input.scope ? own.length : Number(body.count ?? 0) || 0,
+    capped: input.scope ? windowFull : body.capped === true,
+    cap: input.scope ? ASSIGNED_SERVE_WINDOW : Number(body.cap ?? 1000) || 1000,
     rows: rows.map((row) => {
       const state = text(row.state) || null;
       const timezone = state ? STATE_TIMEZONES[state] ?? null : null;

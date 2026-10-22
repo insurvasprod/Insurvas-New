@@ -1,11 +1,15 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { owedToYou } from "@/lib/discrepancies/service";
+import { statementMoney } from "@/lib/ledger/statementConstants";
+import type { ProducerScope } from "@/lib/agency/visibilityCore";
 
 import { activitySentence, appointmentsSentence, callbacksSentence, carriersSentence, dialerSentence, inboundSentence, leadsSentence, policiesSentence, poolSentence, waitLabel } from "./summaryText";
+import { scopeWithSelf, waitingTransferOr } from "./scope";
 import { NOT_A_CONTACT } from "./todayMath";
 
 /**
@@ -17,7 +21,16 @@ import { NOT_A_CONTACT } from "./todayMath";
  * A figure is the number, a two- or three-word caption under it, and the full sentence
  * (summaryText) as the cell's hover text. Null for a tile with no figure, or when the read fails:
  * the cell then says "—" rather than showing a number it could not get.
+ *
+ * AG-0.5 · producer isolation. `viewer.scope` is the session's producer scope (scopeFor, from the
+ * session); null or no viewer = no filter, exactly as before. With a scope, only the three `shared`
+ * tiles (the ones a narrow role is ever shown a figure for, lib/dashboard/tiles) are read, each over
+ * what that session may see: callbacks assigned to its scope or to itself, the inbound transfers still
+ * waiting or held in its scope, and the floor's members in its scope plus itself (as the Agent Floor
+ * shows them). Every other figure is agency-wide by nature (the agency's leads, policies, statements,
+ * pool, carriers, dials) and is null under a scope: the cell keeps its way in, without a number.
  */
+export type TileViewer = { userId: string; scope: ProducerScope };
 export type TileMetric = {
   value: number;
   caption: string;
@@ -36,6 +49,8 @@ type Loose = {
 type Filterable = Head & PromiseLike<{ data: unknown[] | null; error: { message: string } | null; count: number | null }> & {
   eq(column: string, value: unknown): Filterable;
   is(column: string, value: null): Filterable;
+  in(column: string, values: readonly string[]): Filterable;
+  or(filters: string): Filterable;
   not(column: string, op: string, value: unknown): Filterable;
   lt(column: string, value: string): Filterable;
   gte(column: string, value: string): Filterable;
@@ -47,15 +62,17 @@ const db = () => getSupabaseServiceClient() as unknown as Loose;
 const n = (value: number) => value.toLocaleString("en-US");
 const plural = (value: number, word: string) => `${n(value)} ${word}${value === 1 ? "" : "s"}`;
 
-async function inbound(tenantId: string): Promise<TileMetric> {
+async function inbound(tenantId: string, held: ProducerScope = null): Promise<TileMetric> {
   // Inbound transfers are the queue rows a partner sent (partner_id set) that nobody has claimed.
-  const waiting = () => db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null);
+  // AG-0.5: scoped, only those still waiting (anyone may claim them) or held in the scope.
+  const visible = (query: Filterable) => (held === null ? query : query.or(waitingTransferOr(held)));
+  const waiting = () => visible(db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null));
   const sla = await getQueueSlaSettings(tenantId);
   const cutoff = new Date(Date.now() - sla.escalate_after_seconds * 1000).toISOString();
   const [all, past, oldest] = await Promise.all([
     waiting(),
     waiting().lt("queued_at", cutoff),
-    db().from("lead_queue").select("queued_at").eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null).order("queued_at", { ascending: true }).limit(1),
+    visible(db().from("lead_queue").select("queued_at").eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null)).order("queued_at", { ascending: true }).limit(1),
   ]);
   if (all.error || past.error || oldest.error) throw new Error("inbound summary unavailable");
   const first = ((oldest.data ?? []) as Array<{ queued_at: string }>)[0];
@@ -69,9 +86,12 @@ async function inbound(tenantId: string): Promise<TileMetric> {
   };
 }
 
-async function floor(tenantId: string): Promise<TileMetric> {
+async function floor(tenantId: string, members: ProducerScope = null): Promise<TileMetric> {
   // Who is on the floor right now: a presence row that heartbeat in the last minute and is not "off".
-  const rows = await db().from("agent_presence").select("status, last_seen_at").eq("tenant_id", tenantId).gte("last_seen_at", new Date(Date.now() - 60_000).toISOString());
+  // AG-0.5: scoped, only the members the Agent Floor shows this session (its scope and itself).
+  let query = db().from("agent_presence").select("status, last_seen_at").eq("tenant_id", tenantId).gte("last_seen_at", new Date(Date.now() - 60_000).toISOString());
+  if (members !== null) query = query.in("user_id", members);
+  const rows = await query;
   if (rows.error) throw new Error("floor summary unavailable");
   const live = ((rows.data ?? []) as Array<{ status: string }>).filter((row) => row.status !== "off");
   const ready = live.filter((row) => row.status === "ready").length;
@@ -129,19 +149,32 @@ async function ledger(tenantId: string): Promise<TileMetric> {
 
 /**
  * LA-4.6 · "Owed to you": the open and disputed discrepancies, summed from their stored rows — one
- * read, no ledger recompute. Before any statement is imported there is nothing to compare, so the
- * cell says what to do next rather than claiming $0.
+ * read, no ledger recompute. The figure is the Discrepancies page's own (statementMoney, to the
+ * cent), so the two never disagree.
+ *
+ * It never claims $0 without something behind it:
+ *   · no statement stands yet          → "—", import one;
+ *   · statements, none reviewed yet,
+ *     and nothing found                → "—", review them (an unreviewed statement's lines are still
+ *                                        proposals, so "everything agrees" would be unchecked);
+ *   · reviewed, nothing found          → $0.00, every reviewed statement agrees.
  */
 async function owed(tenantId: string): Promise<TileMetric> {
   const [statements, totals] = await Promise.all([
-    db().from("tenant_commission_statements").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).not("status", "eq", "voided"),
+    db().from("tenant_commission_statements").select("status").eq("tenant_id", tenantId).not("status", "eq", "voided").limit(5000),
     owedToYou(tenantId),
   ]);
   if (statements.error) throw new Error("owed summary unavailable");
-  if (!totals.available || (statements.count ?? 0) === 0) {
+  const standing = (statements.data ?? []) as Array<{ status: string }>;
+  if (!totals.available || standing.length === 0) {
     return { value: 0, display: "—", caption: "import a statement", detail: "Import a carrier statement to see what the carrier paid against what your contract says it owes." };
   }
-  const dollars = `$${Math.round(totals.totalCents / 100).toLocaleString("en-US")}`;
+  const reviewed = standing.filter((row) => row.status === "reviewed").length;
+  if (!totals.count && reviewed === 0) {
+    const waiting = standing.length;
+    return { value: 0, display: "—", caption: "review your statement", detail: `Review the lines on your ${waiting === 1 ? "statement" : `${n(waiting)} statements`} to see what the carrier paid against what your contract says it owes.` };
+  }
+  const dollars = statementMoney(totals.totalCents);
   const parts = [
     totals.byKind.never_paid.count ? `${n(totals.byKind.never_paid.count)} never paid` : null,
     totals.byKind.short_paid.count + totals.byKind.mis_rated.count ? `${n(totals.byKind.short_paid.count + totals.byKind.mis_rated.count)} paid short` : null,
@@ -151,21 +184,27 @@ async function owed(tenantId: string): Promise<TileMetric> {
     value: totals.totalCents,
     display: dollars,
     caption: totals.count ? plural(totals.count, "item") : "nothing found",
-    detail: totals.count ? `You appear to be owed ${dollars}: ${parts.join(", ")}.` : "Every accepted statement line agrees with your contract.",
+    detail: totals.count ? `You appear to be owed ${dollars}: ${parts.join(", ")}.` : `Every statement you reviewed agrees with your contract${reviewed < standing.length ? `; ${n(standing.length - reviewed)} still to review` : ""}.`,
     tone: totals.count ? "warning" : "good",
   };
 }
 
-async function callbacks(tenantId: string): Promise<TileMetric> {
-  const due = await listDueCallbacks(tenantId);
+async function callbacks(tenantId: string, assigned: ProducerScope = null): Promise<TileMetric> {
+  // AG-0.5: scoped, the callbacks assigned to the scope or the reader (D1: assigned_to).
+  const due = await listDueCallbacks(tenantId, assigned);
   const overdue = due.filter((item) => item.isOverdue).length;
   return { value: due.length, caption: overdue ? `${n(overdue)} overdue` : "due today", detail: callbacksSentence(due.length - overdue, overdue), tone: overdue ? "danger" : undefined };
 }
 
 async function carriers(tenantId: string): Promise<TileMetric> {
-  const active = await db().from("tenant_carriers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("is_active", true);
+  const [active, switchedOff] = await Promise.all([
+    db().from("tenant_carriers").select("carrier_id").eq("tenant_id", tenantId).eq("is_active", true),
+    switchedOffCarrierIds(tenantId),
+  ]);
   if (active.error) throw new Error("carriers summary unavailable");
-  return { value: active.count ?? 0, caption: "active carriers", detail: carriersSentence(active.count ?? 0) };
+  // LA-0.4: a carrier the agency switched off is not active.
+  const count = ((active.data ?? []) as Array<{ carrier_id: string }>).filter((row) => !switchedOff.has(row.carrier_id)).length;
+  return { value: count, caption: "active carriers", detail: carriersSentence(count) };
 }
 
 async function appointments(tenantId: string): Promise<TileMetric> {
@@ -222,10 +261,23 @@ export async function hasImportedStatement(tenantId: string): Promise<boolean> {
   }
 }
 
-export async function tileMetric(key: string, tenantId: string): Promise<TileMetric | null> {
-  const read = READERS[key];
-  if (!read) return null;
+/** AG-0.5: the figures that can be read under a producer scope, each over what the session may see. */
+const SCOPED_READERS: Record<string, (tenantId: string, visible: readonly string[]) => Promise<TileMetric>> = {
+  "work.callbacks": callbacks,
+  "work.inbound": inbound,
+  "work.floor": floor,
+};
+
+export async function tileMetric(key: string, tenantId: string, viewer?: TileViewer): Promise<TileMetric | null> {
+  const scope = viewer?.scope ?? null;
   try {
+    if (viewer && scope !== null) {
+      // A narrow session in an agency: the three shared figures, narrowed; nothing agency-wide.
+      const scoped = SCOPED_READERS[key];
+      return scoped ? await scoped(tenantId, scopeWithSelf(scope, viewer.userId) ?? []) : null;
+    }
+    const read = READERS[key];
+    if (!read) return null;
     return await read(tenantId);
   } catch {
     return null;

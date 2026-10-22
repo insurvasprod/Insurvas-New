@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { PARTNER_PIPELINE_TYPES, type DispositionCatalogEntry, type PartnerPipelineType, type Pipeline, type PipelineCounts, type PipelineStage, type PipelineStageType, type UnmappedOutcomes } from "@/lib/pipelines/types";
 import { isMissingFunction, isMissingSchema, SchemaPendingError } from "@/lib/pipelines/schemaGap";
+import { pickProductStage } from "@/lib/agentTemplates/templateChoice";
 export { PARTNER_PIPELINE_TYPES } from "@/lib/pipelines/types";
 export type { PartnerPipelineType, Pipeline, PipelineStage, PipelineStageType } from "@/lib/pipelines/types";
 
@@ -328,6 +329,52 @@ export async function resolveRuntimeStage(tenantId: string, stageKey: string, pa
 }
 
 /**
+ * SA-4.7: build or update the tenant's pipeline for a product from its template's stages
+ * (apply_template_pipeline, 20261015610000). Merges: existing stages — custom ones, renamed ones,
+ * archived ones, and every disposition → stage mapping — are left exactly as they are; only stages
+ * the pipeline lacks are appended. Null when that migration is not live yet: applying the template
+ * still succeeds, as it did before, without the board.
+ */
+export async function syncTemplatePipeline(
+  tenantId: string,
+  productCode: string,
+  pipelineName: string,
+  stages: ReadonlyArray<{ stage_key: string; label: string; stage_type: string; color: string; sort_order: number }>,
+): Promise<{ pipelineId: string; added: number } | null> {
+  const { data, error } = await getSupabaseServiceClient().rpc("apply_template_pipeline" as never, {
+    p_tenant_id: tenantId,
+    p_product_code: productCode,
+    p_pipeline_name: pipelineName,
+    p_stages: stages.map(({ stage_key, label, stage_type, color, sort_order }) => ({ stage_key, label, stage_type, color, sort_order })),
+  } as never) as unknown as { data: Array<{ pipeline_id: string; added: number }> | null; error: { code?: string; message: string } | null };
+  if (isMissingFunction(error)) {
+    console.warn("[pipelines] apply_template_pipeline is not live (20261015610000); the template's stages were not added to a pipeline");
+    return null;
+  }
+  if (error) throw new Error(`Could not build the product pipeline: ${error.message}`);
+  const row = data?.[0];
+  return row ? { pipelineId: row.pipeline_id, added: row.added } : null;
+}
+
+/**
+ * Where a lead created from a product's template enters, when that product has a pipeline
+ * (syncTemplatePipeline): the stage named like the template stage it asked for, else the first open
+ * stage. Null when the product has no pipeline (or 20261015610000 is not live) — the caller then uses
+ * the legacy name lookup, exactly as before.
+ */
+export async function resolveProductEntryStage(tenantId: string, productCode: string, stageLabel: string | null): Promise<{ pipelineId: string; stage: PipelineStage } | null> {
+  const supabase = getSupabaseServiceClient();
+  const pipeline = await (supabase.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("product_code" as never, productCode as never).maybeSingle() as unknown as PromiseLike<{ data: { id: string } | null; error: { code?: string; message: string } | null }>);
+  if (isMissingSchema(pipeline.error)) return null;
+  if (pipeline.error) throw new Error(`Could not load the product pipeline: ${pipeline.error.message}`);
+  if (!pipeline.data) return null;
+  const { data: stages, error } = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, position, stage_type, color, is_archived, created_at, updated_at").eq("pipeline_id", pipeline.data.id).eq("is_archived", false);
+  if (error) throw new Error(`Could not load the product pipeline's stages: ${error.message}`);
+  const stage = pickProductStage((stages ?? []) as PipelineStage[], stageLabel);
+  return stage ? { pipelineId: pipeline.data.id, stage } : null;
+}
+
+/**
  * Where a partner's submission enters (LA-1.9-4): the first open, unarchived stage of the default
  * pipeline for the partner's type — "New Transfer" for a publisher, "Form Lead" for marketing,
  * "Referred" for an affiliate in the seeded pipelines, or whatever stage the agency has put first.
@@ -370,18 +417,41 @@ const DEFAULT_PUBLISHER_DISPOSITION_STAGES = [
   ["Application Withdrawn", "no_payment_method"],
 ] as const;
 
-/** Repair-safe defaults for tenants created before the pipeline mapping migration was deployed. */
+/**
+ * Pipeline row for the defaults seeder: whether this pipeline's defaults were already seeded
+ * (tenant_pipelines.default_mappings_seeded_at, 20261015595000). Before that migration the column is
+ * absent and the seeder behaves as it always did.
+ */
+async function readSeedPipeline(tenantId: string, pipelineId: string): Promise<{ data: { id: string; partner_type: string | null; seeded: boolean } | null; error: { message: string } | null }> {
+  const supabase = getSupabaseServiceClient();
+  const withMarker = await (supabase.from("tenant_pipelines").select("id, partner_type, default_mappings_seeded_at" as never).eq("id", pipelineId).eq("tenant_id", tenantId).maybeSingle() as unknown as PromiseLike<{ data: { id: string; partner_type: string | null; default_mappings_seeded_at: string | null } | null; error: { code?: string; message: string } | null }>);
+  if (!withMarker.error) return { data: withMarker.data ? { id: withMarker.data.id, partner_type: withMarker.data.partner_type, seeded: Boolean(withMarker.data.default_mappings_seeded_at) } : null, error: null };
+  if (withMarker.error.code !== "42703" && withMarker.error.code !== "PGRST204" && !/default_mappings_seeded_at/.test(withMarker.error.message)) return { data: null, error: withMarker.error };
+  const legacy = await supabase.from("tenant_pipelines").select("id, partner_type").eq("id", pipelineId).eq("tenant_id", tenantId).maybeSingle();
+  return { data: legacy.data ? { id: legacy.data.id, partner_type: legacy.data.partner_type, seeded: false } : null, error: legacy.error };
+}
+
+/**
+ * Repair-safe defaults for tenants created before the pipeline mapping migration was deployed.
+ * Seeded ONCE per pipeline (LA-1 audit): a default mapping the agency deleted is never re-inserted
+ * by the next outcome. The marker is set after the first seeding pass, whatever it added.
+ */
 export async function ensureDefaultPublisherDispositionMappings(tenantId: string, pipelineId: string) {
   const supabase = getSupabaseServiceClient();
   // This runs on every disposition, so all three reads go out together (1 round trip). Stage and
   // mapping rows are only used after the tenant-scoped pipeline check below passes.
   const [pipeline, stages, mappings] = await Promise.all([
-    supabase.from("tenant_pipelines").select("id, partner_type").eq("id", pipelineId).eq("tenant_id", tenantId).maybeSingle(),
+    readSeedPipeline(tenantId, pipelineId),
     supabase.from("tenant_pipeline_stages").select("id, name").eq("pipeline_id", pipelineId).eq("is_archived", false),
     supabase.from("stage_dispositions").select("stage_id, disposition_key").eq("tenant_id", tenantId),
   ]);
   if (pipeline.error) throw new Error(`Could not load lead pipeline: ${pipeline.error.message}`);
   if (!pipeline.data || pipeline.data.partner_type !== "publisher") return;
+  if (pipeline.data.seeded) return;
+  const markSeeded = async () => {
+    const marked = await (supabase.from("tenant_pipelines").update({ default_mappings_seeded_at: new Date().toISOString() } as never).eq("id", pipelineId).eq("tenant_id", tenantId).is("default_mappings_seeded_at" as never, null as never) as unknown as PromiseLike<{ error: { code?: string; message: string } | null }>);
+    if (marked.error && marked.error.code !== "42703" && marked.error.code !== "PGRST204") console.error(`[pipelines] could not mark defaults seeded: ${marked.error.message}`);
+  };
   if (stages.error || mappings.error) throw new Error(`Could not load pipeline defaults: ${stages.error?.message ?? mappings.error?.message}`);
   const stageByName = new Map((stages.data ?? []).map((stage) => [stage.name, stage.id]));
   const mappedKeys = new Set((mappings.data ?? []).map((mapping) => mapping.disposition_key));
@@ -394,17 +464,18 @@ export async function ensureDefaultPublisherDispositionMappings(tenantId: string
     mappedKeys.add(dispositionKey);
     mappedStages.add(stageId);
   }
-  if (rows.length === 0) return;
+  if (rows.length === 0) { await markSeeded(); return; }
   // One bulk insert. The table has two unique keys, (tenant_id, disposition_key) and
   // (tenant_id, stage_id), and PostgREST's ignore-duplicates only targets one conflict key, so a
   // concurrent seeder's 23505 falls back to the row-at-a-time path, which skips duplicates per row.
   const bulk = await supabase.from("stage_dispositions").insert(rows);
-  if (!bulk.error) return;
+  if (!bulk.error) { await markSeeded(); return; }
   if (bulk.error.code !== "23505") throw new Error(`Could not seed pipeline defaults: ${bulk.error.message}`);
   for (const row of rows) {
     const inserted = await supabase.from("stage_dispositions").insert(row);
     if (inserted.error && inserted.error.code !== "23505") throw new Error(`Could not seed pipeline defaults: ${inserted.error.message}`);
   }
+  await markSeeded();
 }
 
 export async function partnerTypeForLead(tenantId: string, partnerId: string | null | undefined): Promise<PartnerPipelineType> {

@@ -13,13 +13,19 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
-import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { StatusChip } from "@/components/ui/status-chip";
+import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
 
 import { cn } from "@/lib/utils";
+import { SectionLastChanged } from "@/components/app/settings/last-changed";
 
 /* ── section header ─────────────────────────────────────────────────────── */
 
-type SectionMeta = { title: string; description: string };
+/**
+ * `id` and `history` (LA-8.8): the section's registry id, and whether this viewer may read the
+ * settings history — then the header says who last changed something here, linking into the log.
+ */
+type SectionMeta = { title: string; description: string; id?: string; history?: boolean };
 const SectionContext = createContext<SectionMeta | null>(null);
 
 export function SettingsSectionProvider({ value, children }: { value: SectionMeta; children: ReactNode }) {
@@ -39,8 +45,9 @@ export function SettingsSectionHeader({ actions }: { actions?: ReactNode }) {
     // long the purpose line runs, so the text takes what is left rather than pushing them under it.
     <div className="flex flex-wrap items-end justify-between gap-6 lg:flex-nowrap">
       <div className="min-w-0 flex-1">
-        <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{meta.title}</h2>
-        <p className="mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{meta.description}</p>
+        <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{meta.title}</h2>
+        <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{meta.description}</p>
+        {meta.history && meta.id && <SectionLastChanged sectionKey={meta.id} />}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
     </div>
@@ -90,7 +97,7 @@ export function SettingsGrid({ children, className, cols = 2 }: { children: Reac
 
 type BtnKind = "primary" | "ghost" | "secondary" | "row" | "primary-sm" | "danger-row";
 const BTN_BASE =
-  "inline-flex items-center justify-center gap-2 rounded-[8px] border px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap cursor-pointer disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 rounded-[8px] border px-4 text-sm leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap cursor-pointer disabled:cursor-not-allowed disabled:opacity-50";
 const BTN: Record<BtnKind, string> = {
   primary: "h-9 border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]",
   ghost: "h-9 border-transparent bg-transparent text-[var(--ink)] hover:bg-[var(--surface-alt)]",
@@ -120,8 +127,8 @@ export function Callout({ tone, title, children, className }: { tone: Tone; titl
       role={tone === "error" || tone === "warning" ? "note" : undefined}
       className={cn("rounded-[12px] border border-[var(--border)] border-l-[3px] px-4 py-3.5", t.edge, t.ground, className)}
     >
-      <div className={cn("text-[14px] leading-[1.5] font-semibold tracking-[-0.02em]", t.ink)}>{title}</div>
-      {children && <div className="mt-1.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{children}</div>}
+      <div className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em]", t.ink)}>{title}</div>
+      {children && <div className="mt-1.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{children}</div>}
     </div>
   );
 }
@@ -151,8 +158,8 @@ export function SettingsCard({
       {(title || sub || action) && (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            {title && <h3 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h3>}
-            {sub && <p className="mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
+            {title && <h3 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h3>}
+            {sub && <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
           </div>
           {action}
         </div>
@@ -169,8 +176,8 @@ export function DashedCard({ icon, title, children, action }: { icon?: ReactNode
       {icon && (
         <span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]">{icon}</span>
       )}
-      <div className="mt-2.5 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</div>
-      {children && <p className="mt-1.5 max-w-[46ch] text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{children}</p>}
+      <div className="mt-2.5 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</div>
+      {children && <p className="mt-1.5 max-w-[46ch] text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{children}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>
   );
@@ -182,7 +189,7 @@ export function SettingsTableCard({ title, actions, children, className }: { tit
   return (
     <section className={cn("flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]", className)}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-        <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
+        <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
         {actions && <span className="flex flex-wrap items-center gap-2.5">{actions}</span>}
       </div>
       <div className="min-w-0 overflow-x-auto">{children}</div>
@@ -194,18 +201,19 @@ export function SettingsTableCard({ title, actions, children, className }: { tit
 export const st = {
   table: "w-full border-collapse text-left",
   headRow: "bg-[var(--surface-alt)]",
-  th: "px-3 py-2 text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]",
-  td: "border-t border-[var(--border)] px-3 py-2 align-middle text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]",
+  th: "px-3 py-2 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]",
+  td: "border-t border-[var(--border)] px-3 py-2 align-middle text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]",
   num: "text-right tabular-nums",
   strong: "font-semibold text-[var(--ink)]",
-  sub: "block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]",
-  code: "font-mono text-[13px] text-[var(--ink)]",
+  sub: "block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]",
+  code: "font-mono text-sm text-[var(--ink)]",
 };
 
 /* ── pill ───────────────────────────────────────────────────────────────── */
 
-export type PillTone = "success" | "warning" | "error" | "info" | "neutral" | "brand";
-const PILL_TONE: Record<PillTone, StatusTone> = { success: "good", warning: "warning", error: "danger", info: "info", neutral: "neutral", brand: "action" };
+// The tone map lives in lib/ui/pillTone.ts so server components can call it; re-exported for the
+// client call sites that import it from here.
+export { pillTone, type PillTone } from "@/lib/ui/pillTone";
 
 /**
  * @deprecated UX-5: use `StatusChip` from components/ui/status-chip. A thin alias kept while its call
@@ -223,7 +231,7 @@ export function Pill({ tone = "neutral", dot, children, className }: { tone?: Pi
 
 /** 36px, 14px type (16px on phones, so iOS does not zoom), strong edge: the same height as a Button and the shared Input (UI standard §5, 2026-09-28). */
 export const control =
-  "mt-1.5 box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] md:text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+  "mt-1.5 box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-base md:text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 
 export function Field({
   label,
@@ -244,15 +252,15 @@ export function Field({
 }) {
   return (
     <div className={cn("block min-w-0", className)}>
-      <label htmlFor={htmlFor} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
+      <label htmlFor={htmlFor} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
         {label}
         {required && <span className="text-[var(--error-ink)]"> *</span>}
       </label>
       {children}
       {error ? (
-        <span role="alert" className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{error}</span>
+        <span role="alert" className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{error}</span>
       ) : (
-        hint && <span className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{hint}</span>
+        hint && <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{hint}</span>
       )}
     </div>
   );
@@ -277,24 +285,45 @@ export function ToggleRow({
   return (
     <div className="flex items-start justify-between gap-4">
       <span className="min-w-0">
-        <label htmlFor={id} className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{title}</label>
-        {help && <span className="mt-1 block max-w-[420px] text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{help}</span>}
+        <label htmlFor={id} className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{title}</label>
+        {help && <span className="mt-1 block max-w-[420px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{help}</span>}
       </span>
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange?.(!checked)}
-        className={cn(
-          "inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-          checked ? "justify-end bg-[var(--success)]" : "justify-start bg-[var(--border-strong)]"
-        )}
-      >
-        <span className="size-[18px] rounded-full bg-[var(--surface)] shadow-[var(--shadow-rest)]" />
-      </button>
+      <Switch id={id} checked={checked} onChange={onChange} disabled={disabled} />
     </div>
+  );
+}
+
+/** The bare 38×22 switch, for a table cell or anywhere the label sits elsewhere. */
+export function Switch({
+  id,
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  id?: string;
+  checked: boolean;
+  onChange?: (next: boolean) => void;
+  disabled?: boolean;
+  /** The accessible name when no <label> points at it. */
+  label?: string;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange?.(!checked)}
+      className={cn(
+        "inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        checked ? "justify-end bg-[var(--success)]" : "justify-start bg-[var(--border-strong)]"
+      )}
+    >
+      <span className="size-[18px] rounded-full bg-[var(--surface)] shadow-[var(--shadow-rest)]" />
+    </button>
   );
 }
 
@@ -305,10 +334,10 @@ export function KeyValues({ items, cols = 2 }: { items: { label: ReactNode; valu
     <dl className={cn("m-0 grid gap-x-6 gap-y-4", cols === 2 ? "grid-cols-2" : "grid-cols-1")}>
       {items.map((item, i) => (
         <div key={i} className="min-w-0">
-          <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{item.label}</dt>
+          <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{item.label}</dt>
           <dd
             className={cn(
-              "m-0 mt-1 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums break-words",
+              "m-0 mt-1 text-sm leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums break-words",
               item.tone === "warning" ? "text-[var(--warning-ink)]" : item.tone === "error" ? "text-[var(--error-ink)]" : "text-[var(--ink)]"
             )}
           >
@@ -352,7 +381,7 @@ export function SettingsMeter({
   return (
     <div className="min-w-0">
       {(label || valueLabel) && (
-        <div className="mb-[5px] flex justify-between gap-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
+        <div className="mb-[5px] flex justify-between gap-3 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
           <span>{label}</span>
           <span>{valueLabel}</span>
         </div>
@@ -367,7 +396,7 @@ export function SettingsMeter({
       >
         <span className={cn("block h-1.5 rounded-full", METER_FILL[tone])} style={{ width: `${pct}%` }} />
       </span>
-      {caption && <div className="mt-1 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{caption}</div>}
+      {caption && <div className="mt-1 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{caption}</div>}
     </div>
   );
 }
@@ -382,8 +411,8 @@ export function Timeline({ items }: { items: { title: ReactNode; sub?: ReactNode
         <li key={i} className="flex gap-3">
           <span aria-hidden className={cn("mt-1.5 size-[7px] shrink-0 rounded-full", dot[item.tone ?? "primary"])} />
           <span className="min-w-0">
-            <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{item.title}</span>
-            {item.sub && <span className="mt-0.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{item.sub}</span>}
+            <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{item.title}</span>
+            {item.sub && <span className="mt-0.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{item.sub}</span>}
           </span>
         </li>
       ))}

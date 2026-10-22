@@ -46,9 +46,9 @@ export function PrefillHint({ fv, fieldKey, readOnly, extra, confirmable = true 
   confirmable?: boolean;
 }) {
   const { markReviewed } = useWorkspace();
-  if (!isPrefilled(fv)) return extra ? <span className="mt-1.5 block text-[12px] leading-[1.5] text-[var(--muted)]">{extra}</span> : null;
+  if (!isPrefilled(fv)) return extra ? <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">{extra}</span> : null;
   return (
-    <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] leading-[1.5] text-[var(--accent-ink)]">
+    <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-xs leading-[1.5] text-[var(--accent-ink)]">
       {PREFILL_FROM[fv.source]}
       {!confirmable ? null : fv.reviewed ? (
         <span className="text-[var(--muted)]">· checked</span>
@@ -76,7 +76,7 @@ export function ValueBox({ id, children, prefilled, className }: { id?: string; 
       id={id}
       tabIndex={id ? -1 : undefined}
       className={cn(
-        "mt-1.5 flex h-9 min-w-0 items-center rounded-[8px] border px-3 text-[14px] leading-[1.5] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+        "mt-1.5 flex h-9 min-w-0 items-center rounded-[8px] border px-3 text-sm leading-[1.5] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
         prefilled ? PREFILL_SURFACE : "border-[var(--border)] bg-[var(--surface-alt)]",
         className,
       )}

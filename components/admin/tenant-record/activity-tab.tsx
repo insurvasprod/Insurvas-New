@@ -6,13 +6,14 @@ import { fetchTenantActivity, TENANT_ACTIVITY_PAGE_SIZE, type TenantActivityRow 
 import { recordDateTime, sentenceCase } from "@/lib/tenants/recordFormat";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Pager } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 
 // The boards' table vocabulary (settings primitives' `st`), restated here because a server
 // component cannot read values out of a "use client" module.
-const TH = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
-const TD = "border-t border-[var(--border)] px-3 py-2 align-top text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
-const SUB = "block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
+const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
+const TD = "border-t border-[var(--border)] px-3 py-2 align-top text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const SUB = "block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
 const TARGET_LABELS: Record<string, string> = {
   tenant: "Agency",
@@ -47,10 +48,7 @@ function target(row: TenantActivityRow, tenantId: string): { name: string; sub: 
 export async function TenantActivityTab({ tenantId, page }: TenantTabProps & { page: number }) {
   const { rows, total, partial } = await fetchTenantActivity(tenantId, { page });
 
-  const pages = Math.max(1, Math.ceil(total / TENANT_ACTIVITY_PAGE_SIZE));
   const base = `/admin/tenants/${tenantId}?tab=activity`;
-  const first = total === 0 ? 0 : (page - 1) * TENANT_ACTIVITY_PAGE_SIZE + 1;
-  const last = (page - 1) * TENANT_ACTIVITY_PAGE_SIZE + rows.length;
 
   return (
     <TableCard
@@ -61,36 +59,14 @@ export async function TenantActivityTab({ tenantId, page }: TenantTabProps & { p
           </p>
         ) : undefined
       }
-      footer={
-        total > 0 || page > 1 ? (
-          <>
-            <span className="tabular-nums">{rows.length ? `${first}–${last} of ${total} · newest first` : `Page ${page}`}</span>
-            <span className="flex items-center gap-2">
-              {page > 1 && (
-                <Button asChild variant="outline" size="sm">
-                  <Link href={page === 2 ? base : `${base}&page=${page - 1}`} scroll={false} className="no-underline">
-                    Newer
-                  </Link>
-                </Button>
-              )}
-              {page < pages && (
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`${base}&page=${page + 1}`} scroll={false} className="no-underline">
-                    Older
-                  </Link>
-                </Button>
-              )}
-            </span>
-          </>
-        ) : undefined
-      }
+      footer={total > 0 ? <Pager page={page} pageSize={TENANT_ACTIVITY_PAGE_SIZE} total={total} noun="actions" suffix="newest first" pageHref={base} /> : undefined}
     >
       {rows.length === 0 ? (
         <div className="px-4 py-10 text-center">
-          <p className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+          <p className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
             {page > 1 ? "Nothing on this page" : "No recorded actions yet"}
           </p>
-          <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+          <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
             {page > 1
               ? "The history is shorter than this."
               : "Staff and system actions on this agency appear here."}

@@ -3,11 +3,35 @@ import "server-only";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from "./db";
 import { PRODUCT_LABEL, type ApplicationOutcome, type ApplicationStatus, type InsuredRole } from "./constants";
 import { quoteOutcome, type ApplicationRow, type QuoteRow } from "./listRules";
+import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 /**
  * LA-3 list reads (LA-3.5 Quotes, LA-3.15 Applications / Missing reference). Every query names the
  * tenant — the service client bypasses RLS. No sensitive value is read, masked or otherwise.
+ *
+ * AG-0.5 · every read here takes an optional producer scope (from `scopeFor(auth.context)`, never from the
+ * request). An application, a quote, a requirement, a counteroffer and an issued policy belong to whoever
+ * opened their case (D1: tenant_application_cases.opened_by); the filter runs in the database through an
+ * inner embed of the case, so limits and totals are computed over the visible rows only. null = no filter.
  */
+
+/** How a table reaches its case: the FK column it embeds through. The column hint keeps the embed unambiguous. */
+const CASE_EMBED = {
+  case_id: { select: "tenant_application_cases!case_id!inner(opened_by)", path: "tenant_application_cases.opened_by" },
+  application_case_id: { select: "tenant_application_cases!application_case_id!inner(opened_by)", path: "tenant_application_cases.opened_by" },
+  application_id: { select: "tenant_applications!application_id!inner(tenant_application_cases!case_id!inner(opened_by))", path: "tenant_applications.tenant_application_cases.opened_by" },
+} as const;
+export type CaseLink = keyof typeof CASE_EMBED;
+
+/** The select list, plus the case embed the scope filter needs (nothing added when the scope is null). */
+export function caseScopedColumns(columns: string, scope: ProducerScope, via: CaseLink = "case_id"): string {
+  return scope === null ? columns : `${columns}, ${CASE_EMBED[via].select}`;
+}
+
+/** Narrows a query built with `caseScopedColumns` to cases opened by a visible producer. No-op for null. */
+export function scopeByCase<Q extends { in(column: string, values: readonly string[]): Q }>(query: Q, scope: ProducerScope, via: CaseLink = "case_id"): Q {
+  return scopeQuery(query, CASE_EMBED[via].path, scope);
+}
 
 type Attempt = {
   id: string; case_id: string; lead_id: string; insured_role: InsuredRole; attempt_no: number; carrier_id: string | null; product_code: string | null;
@@ -17,6 +41,12 @@ type Submission = { application_id: string; carrier_reference: string | null; po
 
 const NONE = ["00000000-0000-0000-0000-000000000000"];
 const CHUNK = 150;
+
+/** AG-0.5 · the case a quote (tenant_quotes.id) is on, for `guardCase`; null when it is not this tenant's. */
+export async function quoteCaseId(tenantId: string, quoteId: string): Promise<string | null> {
+  const { data } = await db().from("tenant_quotes").select("case_id").eq("tenant_id", tenantId).eq("id", quoteId).maybeSingle();
+  return (data?.case_id as string | null | undefined) ?? null;
+}
 
 /** Optional reads: absent schema reads as empty. */
 export async function optional<T>(query: PromiseLike<{ data: unknown; error: { code?: string; message?: string } | null }>): Promise<T[]> {
@@ -91,11 +121,11 @@ async function latestSubmissions(tenantId: string, applicationIds: string[]) {
 
 // ── Applications (LA-3.15) ──────────────────────────────────────────────────
 
-export async function listApplicationRows(tenantId: string): Promise<ApplicationRow[]> {
+export async function listApplicationRows(tenantId: string, scope: ProducerScope = null): Promise<ApplicationRow[]> {
   const client = db();
-  const q = await client.from("tenant_applications")
-    .select("id, case_id, lead_id, insured_role, attempt_no, carrier_id, product_code, carrier_product_id, quote_id, status, outcome, updated_at, submitted_at, created_at")
-    .eq("tenant_id", tenantId).order("updated_at", { ascending: false }).limit(2000);
+  const q = await scopeByCase(client.from("tenant_applications")
+    .select(caseScopedColumns("id, case_id, lead_id, insured_role, attempt_no, carrier_id, product_code, carrier_product_id, quote_id, status, outcome, updated_at, submitted_at, created_at", scope))
+    .eq("tenant_id", tenantId), scope).order("updated_at", { ascending: false }).limit(2000);
   if (isMissingSchema(q.error)) throw new SchemaPendingError("The application record");
   if (q.error) throw new ApplicationError("APPLICATION_UNAVAILABLE", q.error.message, 500);
   const list = rows<Attempt>(q.data);
@@ -134,11 +164,11 @@ type Quote = {
 };
 
 /** Every quote the tenant has saved, discarded ones included, newest first. No commission, ever. */
-export async function listQuoteRows(tenantId: string): Promise<QuoteRow[]> {
+export async function listQuoteRows(tenantId: string, scope: ProducerScope = null): Promise<QuoteRow[]> {
   const client = db();
-  const q = await client.from("tenant_quotes")
-    .select("id, case_id, lead_id, insured_role, application_id, carrier_id, carrier_product_id, product_code, tier, face_amount_cents, monthly_premium_cents, warnings, status, created_at")
-    .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(5000);
+  const q = await scopeByCase(client.from("tenant_quotes")
+    .select(caseScopedColumns("id, case_id, lead_id, insured_role, application_id, carrier_id, carrier_product_id, product_code, tier, face_amount_cents, monthly_premium_cents, warnings, status, created_at", scope))
+    .eq("tenant_id", tenantId), scope).order("created_at", { ascending: false }).limit(5000);
   if (isMissingSchema(q.error)) throw new SchemaPendingError("Quotes");
   if (q.error) throw new ApplicationError("APPLICATION_UNAVAILABLE", q.error.message, 500);
   const list = rows<Quote>(q.data);

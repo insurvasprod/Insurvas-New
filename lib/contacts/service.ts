@@ -3,7 +3,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { TemplateField } from "@/lib/templates/constants";
-import { getAgentTemplate } from "@/lib/agentTemplates/service";
+import { getAgentTemplate, latestLeadOwners, readByLeadIds } from "@/lib/agentTemplates/service";
+import { keepVisible, type ProducerScope } from "@/lib/agency/visibility";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { csvContactLine, csvHeaderLine } from "./csv";
 import { planForMatches } from "./matchPolicy";
@@ -33,6 +34,9 @@ export class ContactConflictError extends Error {}
 const CONTACT_COLUMNS = "id, tenant_id, household_id, first_name, last_name, dob, primary_phone, state, custom_fields, merged_into_id, created_at, updated_at";
 type ContactBase = Omit<ContactRow, "phones" | "emails" | "address_line1" | "city" | "postal_code">;
 
+/** Keys that are columns on the contact itself, so never custom fields (the lead form names some of them differently). */
+const CONTACT_CORE_KEYS = new Set(["first_name", "last_name", "dob", "date_of_birth", "phone", "primary_phone", "email", "state", "address_line1", "address", "city", "postal_code", "zip"]);
+
 export async function fieldSchemaForTenant(tenantId: string, userId?: string): Promise<FieldSchemaRow[]> {
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("field_schema").select("id, tenant_id, entity, field_key, label, type, options, is_required, sort_order, created_at, updated_at").eq("tenant_id", tenantId).order("sort_order").order("field_key");
@@ -45,7 +49,13 @@ export async function fieldSchemaForTenant(tenantId: string, userId?: string): P
   let template;
   try { template = await getAgentTemplate(tenantId, userId); } catch { return rows; }
   const createdAt = new Date(0).toISOString();
-  const templateFields = template.template.fields.map((field: TemplateField, index) => ({ id: `template:${template.tenant_template_id}:${field.field_key}`, tenant_id: tenantId, entity: "contact" as const, field_key: field.field_key, label: field.label, type: field.type, options: field.options, is_required: field.is_required, sort_order: index, created_at: createdAt, updated_at: createdAt }));
+  // A vocabulary, not a rule set (QA 2026-10-22): the lead form's identity fields are a contact's own
+  // columns, and its "required" flags are about an application. Carried over as they were, they made
+  // first_name a required *custom* field — every Add contact on a new workspace failed with "First
+  // name is required" however the form was filled.
+  const templateFields = template.template.fields
+    .filter((field: TemplateField) => !CONTACT_CORE_KEYS.has(field.field_key))
+    .map((field: TemplateField, index) => ({ id: `template:${template.tenant_template_id}:${field.field_key}`, tenant_id: tenantId, entity: "contact" as const, field_key: field.field_key, label: field.label, type: field.type, options: field.options, is_required: false, sort_order: index, created_at: createdAt, updated_at: createdAt }));
   return [...templateFields, ...rows.filter((row) => row.entity !== "contact")];
 }
 
@@ -111,11 +121,14 @@ async function hydrate(tenantId: string, contacts: ContactBase[]): Promise<Array
   const supabase = getSupabaseServiceClient();
   const ids = contacts.map((row) => row.id);
   const householdIds = [...new Set(contacts.map((row) => row.household_id).filter(Boolean))] as string[];
-  const [households, phones, emails] = await Promise.all([
+  const [provisionalRead, households, phones, emails] = await Promise.all([
+    // LA-4.9: which of these were built from a carrier file and not yet confirmed (none before 20261008180000).
+    (supabase as unknown as { from: (t: string) => any }).from("contacts").select("id").eq("tenant_id", tenantId).eq("provisional", true).in("id", ids), // eslint-disable-line @typescript-eslint/no-explicit-any
     householdIds.length ? supabase.from("households").select("id, address_line1, city, state, postal_code").eq("tenant_id", tenantId).in("id", householdIds) : Promise.resolve({ data: [], error: null }),
     supabase.from("contact_phones").select("contact_id, phone, type, is_primary").eq("tenant_id", tenantId).in("contact_id", ids).order("is_primary", { ascending: false }),
     supabase.from("contact_emails").select("contact_id, email, is_primary").eq("tenant_id", tenantId).in("contact_id", ids).order("is_primary", { ascending: false }),
   ]);
+  const provisional = new Set<string>(provisionalRead.error ? [] : ((provisionalRead.data ?? []) as Array<{ id: string }>).map((row) => row.id));
   const errorMessage = [households.error, phones.error, emails.error].find(Boolean)?.message;
   if (errorMessage) throw new Error(`Could not load contact details: ${errorMessage}`);
   const householdMap = new Map(((households.data ?? []) as Array<{ id: string; address_line1: string | null; city: string | null; state: string | null; postal_code: string | null }>).map((row) => [row.id, row]));
@@ -125,7 +138,7 @@ async function hydrate(tenantId: string, contacts: ContactBase[]): Promise<Array
   for (const row of emails.data ?? []) emailMap.set(row.contact_id, [...(emailMap.get(row.contact_id) ?? []), { email: row.email, is_primary: row.is_primary }]);
   return contacts.map((row) => {
     const household = householdMap.get(row.household_id ?? "");
-    return { ...row, custom_fields: asObject(row.custom_fields), phones: phoneMap.get(row.id) ?? [], emails: emailMap.get(row.id) ?? [], address_line1: household?.address_line1 || null, city: household?.city || null, postal_code: household?.postal_code || null, household_state: household?.state || null };
+    return { ...row, provisional: provisional.has(row.id), custom_fields: asObject(row.custom_fields), phones: phoneMap.get(row.id) ?? [], emails: emailMap.get(row.id) ?? [], address_line1: household?.address_line1 || null, city: household?.city || null, postal_code: household?.postal_code || null, household_state: household?.state || null };
   });
 }
 
@@ -142,15 +155,50 @@ function householdLabel(row: { household_id: string | null; last_name: string; c
   return [row.last_name, place].filter(Boolean).join(", ") || null;
 }
 
+/* ── AG-0.5 · producer visibility ────────────────────────────────────────── */
+
+/**
+ * A contact has no producer column of its own: it is visible to a narrowed agency session when one of
+ * its leads (agent_leads.contact_id) is — and a lead is its latest work item's owner's (decision D1). A
+ * contact with no lead is unattributed and visible to the all-seeing roles only.
+ *
+ * The directory, its tiles and the export of a narrowed session ask SQL for that set (migration
+ * 20261019420000: agency_scope_contact_leads, the same rule as visibleLeadIds). Before the migration nothing
+ * else is safe to read — the old directory function cannot be told which contacts to keep — so they refuse.
+ */
+export const SCOPED_CONTACTS_PENDING = "The team contact directory needs database update 20261019420000, which has not been applied yet.";
+
+function scopedRpcError(error: DbError, what: string): Error {
+  return isMissingSchema(error) ? new Error(SCOPED_CONTACTS_PENDING) : new Error(`Could not load ${what}: ${error?.message}`);
+}
+
+/** Which of these contacts a scope may see — all of them for a null scope, with no read. */
+export async function visibleAmongContacts(tenantId: string, scope: ProducerScope, contactIds: readonly string[]): Promise<Set<string>> {
+  const unique = [...new Set(contactIds)];
+  if (scope === null) return new Set(unique);
+  if (!unique.length || !scope.length) return new Set();
+  // Along agent_leads_contact_idx (tenant_id, contact_id), then each lead's latest owner.
+  const leads = await readByLeadIds<{ id: string; contact_id: string }>(unique, (chunk) => loose().from("agent_leads").select("id, contact_id").eq("tenant_id", tenantId).in("contact_id", chunk), "contacts");
+  const owners = leads.length ? await latestLeadOwners(tenantId, leads.map((lead) => lead.id)) : new Map<string, string | null>();
+  return new Set(keepVisible(scope, leads, (lead) => owners.get(lead.id)).map((lead) => lead.contact_id));
+}
+
 /* ── directory ───────────────────────────────────────────────────────────── */
 
-export async function getContactDirectory(tenantId: string, options: { q?: string; page?: number; pageSize?: number } = {}): Promise<ContactDirectory> {
+/**
+ * `scope` (AG-0.5, from scopeFor(auth.context)): null — the default — pages the whole directory as before.
+ * A narrowed agency session pages only the contacts it may see — contact_directory_page's p_scope, so the
+ * search, page, total and each lead count are SQL's, over that set; neither a row nor a number is another
+ * producer's. Its open_review stays null: the duplicate-review queue is not a narrowed session's to work.
+ */
+export async function getContactDirectory(tenantId: string, options: { q?: string; page?: number; pageSize?: number } = {}, scope: ProducerScope = null): Promise<ContactDirectory> {
   const query = (options.q ?? "").trim().slice(0, 120);
   const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize ?? 25)));
   const page = Math.max(0, Math.floor(options.page ?? 0));
   const nameQuery = normalizeText(query) || null;
   const digitsOnly = query.replace(/\D/g, "");
   const digits = digitsOnly.length >= 3 ? digitsOnly : null;
+  if (scope !== null && !scope.length) return { rows: [], total: 0, page: 0, pageSize, query };
 
   const rpc = await loose().rpc("contact_directory_page", {
     p_tenant_id: tenantId,
@@ -159,10 +207,12 @@ export async function getContactDirectory(tenantId: string, options: { q?: strin
     p_digits: digits,
     p_limit: pageSize,
     p_offset: page * pageSize,
+    ...(scope !== null ? { p_scope: scope } : {}),
   });
+  if (rpc.error && scope !== null) throw scopedRpcError(rpc.error, "contacts");
   if (!rpc.error) {
     const rows = (rpc.data ?? []) as Array<{ contact_id: string; lead_count: number | string; open_review: boolean; total_count: number | string; household_state: string | null; created_at: string }>;
-    if (!rows.length && page > 0) return getContactDirectory(tenantId, { ...options, page: 0 });
+    if (!rows.length && page > 0) return getContactDirectory(tenantId, { ...options, page: 0 }, scope);
     const base = await getSupabaseServiceClient().from("contacts").select(CONTACT_COLUMNS).eq("tenant_id", tenantId).in("id", rows.map((row) => row.contact_id));
     if (base.error) throw new Error(`Could not load contacts: ${base.error.message}`);
     const byId = new Map(((base.data ?? []) as unknown as ContactBase[]).map((row) => [row.id, row]));
@@ -170,7 +220,7 @@ export async function getContactDirectory(tenantId: string, options: { q?: strin
     const hydrated = await hydrate(tenantId, ordered);
     const extra = new Map(rows.map((row) => [row.contact_id, row]));
     return {
-      rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: Number(extra.get(row.id)?.lead_count ?? 0), open_review: Boolean(extra.get(row.id)?.open_review) })),
+      rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: Number(extra.get(row.id)?.lead_count ?? 0), open_review: scope !== null ? null : Boolean(extra.get(row.id)?.open_review) })),
       total: Number(rows[0]?.total_count ?? 0),
       page,
       pageSize,
@@ -313,7 +363,24 @@ export async function dismissReview(tenantId: string, userId: string, reviewId: 
 
 /* ── workspace ───────────────────────────────────────────────────────────── */
 
-export async function getContactWorkspace(tenantId: string, userId: string | undefined, options: { q?: string; page?: number; pageSize?: number } = {}): Promise<ContactWorkspace & { queue: ReviewQueue }> {
+/**
+ * `scope` (AG-0.5): null — the default — is the workspace as before. For a narrowed agency session the
+ * directory and its counts cover the contacts it may see, and the duplicate-review half (merges, the
+ * review queue and their month figures) is left out: those are agency-wide, and the routes that act on
+ * them (contacts/reviews, contacts/merge) refuse a narrowed session.
+ */
+export async function getContactWorkspace(tenantId: string, userId: string | undefined, options: { q?: string; page?: number; pageSize?: number } = {}, scope: ProducerScope = null): Promise<ContactWorkspace & { queue: ReviewQueue }> {
+  if (scope !== null) {
+    const [directory, fieldSchema, timezone, visible] = await Promise.all([
+      getContactDirectory(tenantId, options, scope),
+      fieldSchemaForTenant(tenantId, userId),
+      getWorkspaceTimezone(tenantId).catch(() => null),
+      scopedContactTotals(tenantId, scope),
+    ]);
+    const stats: DuplicateStats = { contacts: visible.contacts, households: visible.households, pending: null, oldestPendingAt: null, mergedThisMonth: null, undoneThisMonth: null, undoableThisMonth: null, flaggedContacts: null, timezone: timezone ?? "UTC" };
+    const queue: ReviewQueue = { ready: true, total: 0, index: 0, pair: null };
+    return { directory, stats, merges: [], fieldSchema, reviewsReady: true, queue };
+  }
   const [directory, stats, merges, fieldSchema, queue] = await Promise.all([
     getContactDirectory(tenantId, options),
     getDuplicateStats(tenantId),
@@ -324,23 +391,60 @@ export async function getContactWorkspace(tenantId: string, userId: string | und
   return { directory, stats, merges, fieldSchema, reviewsReady: queue.ready, queue };
 }
 
+/** Active contacts and their distinct households, over the contacts a narrowed session may see. */
+async function scopedContactTotals(tenantId: string, scope: readonly string[]): Promise<{ contacts: number; households: number }> {
+  if (!scope.length) return { contacts: 0, households: 0 };
+  const { data, error } = await loose().rpc("contact_scope_totals", { p_tenant_id: tenantId, p_scope: scope });
+  if (error) throw scopedRpcError(error, "contact totals");
+  const row = ((data ?? []) as Array<{ contacts: number | string; households: number | string }>)[0];
+  return { contacts: Number(row?.contacts ?? 0), households: Number(row?.households ?? 0) };
+}
+
+/** The active contacts a narrowed session may see, sorted by id (the export's walk). */
+async function scopedContactIds(tenantId: string, scope: readonly string[]): Promise<string[]> {
+  if (!scope.length) return [];
+  const { data, error } = await loose().rpc("contact_scope_ids", { p_tenant_id: tenantId, p_scope: scope });
+  if (error) throw scopedRpcError(error, "contacts");
+  return Array.isArray(data) ? (data as string[]) : [];
+}
+
 /* ── export ──────────────────────────────────────────────────────────────── */
 
 /**
  * Every active contact, streamed 200 at a time in id order, so an export is complete however large
  * the book is (the old export read the same 200-row page the directory showed).
  */
-export function streamContactsCsv(tenantId: string, schemaFields: FieldSchemaRow[]): ReadableStream<Uint8Array> {
+export function streamContactsCsv(tenantId: string, schemaFields: FieldSchemaRow[], scope: ProducerScope = null): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const BATCH = 200;
   let cursor: string | null = null;
   let done = false;
+  // AG-0.5: a narrowed agency session exports only the contacts it may see — resolved once, in id order,
+  // and walked BATCH ids at a time with the same cursor. Null (the default) streams every contact as before.
+  let visibleIds: string[] | null = null;
   return new ReadableStream<Uint8Array>({
     start(controller) { controller.enqueue(encoder.encode(csvHeaderLine(schemaFields))); },
     async pull(controller) {
       if (done) { controller.close(); return; }
       try {
         let select = getSupabaseServiceClient().from("contacts").select(CONTACT_COLUMNS).eq("tenant_id", tenantId).is("merged_into_id", null).order("id").limit(BATCH);
+        if (scope !== null) {
+          visibleIds ??= await scopedContactIds(tenantId, scope);
+          // The cursor walks the visible ids, not the rows returned: a batch of merged contacts returns
+          // no row and must neither end the export early nor leave this pull without output.
+          for (;;) {
+            const after = cursor;
+            const next = visibleIds.filter((id) => after === null || id > after).slice(0, BATCH);
+            if (!next.length) { controller.close(); return; }
+            const { data, error } = await getSupabaseServiceClient().from("contacts").select(CONTACT_COLUMNS).eq("tenant_id", tenantId).is("merged_into_id", null).in("id", next).order("id");
+            if (error) throw new Error(error.message);
+            const rows = (data ?? []) as unknown as ContactBase[];
+            cursor = next[next.length - 1];
+            if (next.length < BATCH) done = true;
+            if (rows.length) { controller.enqueue(encoder.encode((await hydrate(tenantId, rows)).map((contact) => csvContactLine(schemaFields, contact)).join(""))); return; }
+            if (done) { controller.close(); return; }
+          }
+        }
         if (cursor) select = select.gt("id", cursor);
         const { data, error } = await select;
         if (error) throw new Error(error.message);
@@ -375,7 +479,13 @@ export type CreateContactResult = {
  * to the review queue; only a confident best match merges on its own, and that merge resolves its
  * own review row, so undoing it puts the pair back in the queue.
  */
-export async function createContact(tenantId: string, userId: string, input: ContactInput, options: { schema?: FieldSchemaRow[] } = {}): Promise<CreateContactResult> {
+/**
+ * `options.scope` (AG-0.5, from scopeFor(auth.context)): for a narrowed agency session the matches it is
+ * shown, the count of pairs queued and the contact it may be auto-merged into are limited to contacts it
+ * may see. Matches against another producer's contacts still go to the agency's review queue (the owner
+ * resolves them); they are just not named to this session. Null — the default — is today's behaviour.
+ */
+export async function createContact(tenantId: string, userId: string, input: ContactInput, options: { schema?: FieldSchemaRow[]; scope?: ProducerScope } = {}): Promise<CreateContactResult> {
   const normalized = normalizedPayload(input); await validateCustomFields(tenantId, normalized.value.custom_fields ?? {}, userId, options.schema);
   const duplicates = await findDuplicates(tenantId, normalized.value);
   const supabase = getSupabaseServiceClient();
@@ -394,17 +504,50 @@ export async function createContact(tenantId: string, userId: string, input: Con
     } else for (const row of (inserted.data ?? []) as Array<{ id: string; candidate_id: string }>) reviewIds.set(row.candidate_id, row.id);
   }
 
-  if (plan.auto) {
+  const scope = options.scope ?? null;
+  const visible = await visibleAmongContacts(tenantId, scope, duplicates.map((match) => match.contact_id));
+  const shown = scope === null ? duplicates : duplicates.filter((match) => visible.has(match.contact_id));
+  const queuedShown = scope === null ? plan.queue.length : plan.queue.filter((match) => visible.has(match.contact_id)).length;
+  // A contact this session may not see is never merged into on its behalf: that would hand it the other
+  // producer's contact. The pair stays in the agency's queue for the owner.
+  if (plan.auto && visible.has(plan.auto.contact_id)) {
     try {
       const mergeId = await mergeContacts(tenantId, userId, { kept_id: plan.auto.contact_id, merged_id: contact.id, field_choices: {}, review_id: reviewIds.get(plan.auto.contact_id) ?? null }, "auto");
-      return { contact: await loadContact(tenantId, plan.auto.contact_id), duplicates, outcome: "auto_merged", mergeId, queued: Math.max(0, plan.queue.length - 1), reviewsReady };
+      return { contact: await loadContact(tenantId, plan.auto.contact_id), duplicates: shown, outcome: "auto_merged", mergeId, queued: Math.max(0, queuedShown - 1), reviewsReady };
     } catch (mergeError) {
       // The candidate changed underneath us (merged, or resolved by someone else). The pair stays in
       // the queue for a person instead of failing the save that already happened.
       console.error("[contacts] auto-merge refused; left for review", mergeError);
     }
   }
-  return { contact, duplicates, outcome: plan.queue.length ? "review" : "created", mergeId: null, queued: plan.queue.length, reviewsReady };
+  return { contact, duplicates: shown, outcome: queuedShown ? "review" : "created", mergeId: null, queued: queuedShown, reviewsReady };
+}
+
+/**
+ * LA-0.6's one duplicate check, for a contact a carrier file or a proven sale created (LA-4.8/4.9):
+ * the probable duplicates found before it was saved go to the Duplicate check review queue. Nothing
+ * merges on its own here — a client built from carrier data is checked by a person first (LA-4.9).
+ * Never throws: a failed check leaves the client as it is.
+ */
+export async function queueDuplicateReviews(tenantId: string, contactId: string, dob: string | null, duplicates: readonly DuplicateMatch[]): Promise<number> {
+  const queue = planForMatches(dob, duplicates.filter((match) => match.contact_id !== contactId)).queue;
+  if (!queue.length) return 0;
+  const inserted = await loose().from("contact_duplicate_reviews").insert(queue.map((match) => ({ tenant_id: tenantId, contact_id: contactId, candidate_id: match.contact_id, score: match.score, confidence: match.confidence, matched_on: match.matched_on })));
+  if (inserted.error) {
+    if (!isMissingSchema(inserted.error)) console.error("[contacts] review pairs could not be queued", inserted.error);
+    return 0;
+  }
+  return queue.length;
+}
+
+/** findDuplicates for a caller that must not fail on it (a carrier file, a sale's client). */
+export async function findDuplicatesQuietly(tenantId: string, input: ContactInput): Promise<DuplicateMatch[]> {
+  try {
+    return await findDuplicates(tenantId, input);
+  } catch (error) {
+    console.error("[contacts] duplicate check skipped", error instanceof Error ? error.message : error);
+    return [];
+  }
 }
 
 export async function mergeContacts(tenantId: string, userId: string, input: { kept_id: string; merged_id: string; field_choices: Record<string, "kept" | "merged">; review_id?: string | null }, source: "manual" | "auto" = "manual") {

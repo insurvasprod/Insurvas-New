@@ -5,6 +5,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import type { PreflightResult } from "@/lib/existingCustomerPreflight/types";
 import { isWithAgent, languageName, screeningSignal, transferPhase, TRANSFER_PHASE_LABEL, type InboxSummary } from "./constants";
+import { inboxItemVisible } from "./scopeCore";
+import type { ProducerScope } from "../agency/visibilityCore";
 
 export type InboxFilters = {
   /** `open` is unclaimed plus in progress (20260924170000): what Agent Floor shows, without history. */
@@ -73,7 +75,14 @@ function summaryFrom(row: SummaryRow | null | undefined): InboxSummary | null {
   return { waiting: n(row.waiting), longestWaitSeconds: n(row.longest_wait_seconds), averageWaitSeconds: n(row.average_wait_seconds), claimed: n(row.claimed), claimedWithoutCall: n(row.claimed_without_call), needsReview: n(row.needs_review) };
 }
 
-export async function getTransferInbox(tenantId: string, filters: InboxFilters, currentUserId: string, role?: string) {
+/**
+ * AG-0.5: `scope` is the session's producer scope (lib/agency/visibility.ts scopeFor), from the session,
+ * never the request. Omitted or null = every row, exactly as before. A list keeps the waiting live
+ * transfers (claimable by anyone who takes transfers) and the transfers with a visible producer; the
+ * bundle's whole-inbox `summary` is dropped, because it counts every producer's claims — the caller
+ * computes a scoped one with getInboxSummaryFallback(tenantId, scope).
+ */
+export async function getTransferInbox(tenantId: string, filters: InboxFilters, currentUserId: string, role?: string, scope: ProducerScope = null) {
   const supabase = getSupabaseServiceClient();
   // Keep the inbox and handoff reads in one service-only RPC. This removes a second PostgREST
   // round trip from the 500-row hot path and gives callers one response boundary.
@@ -89,7 +98,7 @@ export async function getTransferInbox(tenantId: string, filters: InboxFilters, 
   });
   if (error) throw new Error(`Could not load transfer inbox: ${error.message}`);
   const payload = (bundle ?? {}) as unknown as TransferInboxBundle;
-  const rows = payload.items ?? [];
+  const rows = (payload.items ?? []).filter((row) => inboxItemVisible(scope, { status: row.status, ownerUserId: row.owner_user_id }, currentUserId));
   const items = (rows ?? []).map((row) => ({
     id: row.id,
     leadId: row.lead_id,
@@ -121,11 +130,11 @@ export async function getTransferInbox(tenantId: string, filters: InboxFilters, 
 
   return {
     items,
-    // The RPC keeps the newest 500 matching rows; true when it reached that cap, so older ones may be missing.
+    // The RPC keeps 500 matching rows (the longest-waiting for waiting views, 20261015593000); true when it reached that cap.
     truncated: payload.truncated === true,
     // The KPI tiles over the whole open set (20260924335200). Null until that migration is applied;
     // the inbox route then computes it with getInboxSummaryFallback.
-    summary: summaryFrom(payload.summary) ?? null,
+    summary: scope === null ? summaryFrom(payload.summary) ?? null : null,
     partners,
     products: [...new Set(items.map((row) => row.productLine))].sort(),
     states: [...new Set(items.map((item) => item.state).filter((state) => state !== "—"))].sort(),
@@ -165,14 +174,15 @@ export async function postPartnerClaimMessage(tenantId: string, workItemId: stri
  * is capped at the newest 500, which only matters to a queue that deep), and "no open call record"
  * from the tenant's open active_calls rows.
  */
-export async function getInboxSummaryFallback(tenantId: string): Promise<InboxSummary> {
+export async function getInboxSummaryFallback(tenantId: string, scope: ProducerScope = null, viewerId?: string): Promise<InboxSummary> {
   const supabase = getSupabaseServiceClient();
   const [open, calls] = await Promise.all([
     supabase.rpc("list_transfer_inbox", { p_tenant_id: tenantId, p_status: "open" }),
     supabase.from("active_calls").select("work_item_id").eq("tenant_id", tenantId).is("ended_at", null),
   ]);
   if (open.error) throw new Error(`Could not load the inbox summary: ${open.error.message}`);
-  const rows = (open.data ?? []) as unknown as TransferInboxRow[];
+  // AG-0.5: the tiles count only what the session may see (waiting transfers and its producers' claims).
+  const rows = ((open.data ?? []) as unknown as TransferInboxRow[]).filter((row) => inboxItemVisible(scope, { status: row.status, ownerUserId: row.owner_user_id }, viewerId));
   const onCall = new Set(((calls.data ?? []) as Array<{ work_item_id: string }>).map((row) => row.work_item_id));
   const waiting = rows.filter((row) => row.status === "unclaimed");
   const withAgent = rows.filter((row) => isWithAgent(row.status));
@@ -269,6 +279,9 @@ export async function announceTransferClaim(params: { tenantId: string; userId: 
     console.error("Partner claim message failed after claim", chatError);
     await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claim_chat_failed", targetType: "lead_queue", targetId: params.workItemId, reason: chatError instanceof Error ? chatError.message : "Unknown chat error", request: params.request }).catch(() => undefined);
   }
-  await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claimed", targetType: "lead_queue", targetId: params.workItemId, metadata: { activeCallId: claim.active_call_id ?? null, verificationSessionId: claim.verification_session_id ?? null, chatPosted, ...(claimWasResumed(claim) ? { resumedVerification: true, requeueCount: claim.requeue_count ?? null } : {}), ...(params.via === "claim_next" ? { via: "claim_next" } : {}) }, request: params.request });
+  // The claim has committed: the agent owns the lead. An audit row that cannot be written is logged,
+  // never turned into a 500 that tells the agent the claim failed (LA-1 audit).
+  await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claimed", targetType: "lead_queue", targetId: params.workItemId, metadata: { activeCallId: claim.active_call_id ?? null, verificationSessionId: claim.verification_session_id ?? null, chatPosted, ...(claimWasResumed(claim) ? { resumedVerification: true, requeueCount: claim.requeue_count ?? null } : {}), ...(params.via === "claim_next" ? { via: "claim_next" } : {}) }, request: params.request })
+    .catch((auditError) => console.error("Transfer claim audit failed after the claim committed", params.workItemId, auditError));
   return { chatPosted };
 }

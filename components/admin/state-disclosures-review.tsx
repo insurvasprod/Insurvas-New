@@ -1,11 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState } from "react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Callout, Field, KeyValues, Pill, btn, control, st } from "@/components/app/settings/primitives";
+import { Callout, Field, KeyValues, btn, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { formatEffectiveDate, STATE_NAME, type CoverageRow, type ScopeProduct } from "@/lib/stateDisclosures/board";
@@ -60,7 +62,11 @@ export function StateDisclosuresReviewCard({
 }) {
   const [open, setOpen] = useState<DisclosureProposal | null>(null);
   const [showRecent, setShowRecent] = useState(false);
+  const [page, setPage] = useState(1);
   const names = useMemo(() => new Map(scope.map((entry) => [entry.code, entry.name])), [scope]);
+  // One pager over the rows on screen: the pending proposals first, then the recent decisions when shown.
+  const visible = showRecent ? [...proposals.pending, ...proposals.recent] : proposals.pending;
+  const { current, rows: pageRows } = paginate(visible, page);
 
   if (proposals.error) {
     return <Callout tone="error" title="Proposals could not be loaded">{proposals.error}</Callout>;
@@ -70,6 +76,7 @@ export function StateDisclosuresReviewCard({
   return (
     <TableCard
       title={`Awaiting review · ${proposals.pending.length}`}
+      footer={<Pager page={current} total={visible.length} noun="proposals" onPage={setPage} />}
       action={
         proposals.recent.length > 0 && (
           <Button type="button" variant="outline" onClick={() => setShowRecent((value) => !value)} aria-expanded={showRecent}>
@@ -100,7 +107,7 @@ export function StateDisclosuresReviewCard({
                 </td>
               </tr>
             )}
-            {proposals.pending.map((proposal) => (
+            {pageRows.filter((proposal) => proposal.status === "pending").map((proposal) => (
               <tr key={proposal.id} className="m-row">
                 <td className={st.td}>
                   {names.get(proposal.product_code) ?? proposal.product_code}
@@ -126,7 +133,7 @@ export function StateDisclosuresReviewCard({
               </tr>
             ))}
             {showRecent &&
-              proposals.recent.map((proposal) => {
+              pageRows.filter((proposal) => proposal.status !== "pending").map((proposal) => {
                 const outcome = OUTCOME[proposal.status as keyof typeof OUTCOME] ?? OUTCOME.cancelled;
                 return (
                   <tr key={proposal.id} className="m-row bg-[var(--canvas)]">
@@ -135,7 +142,7 @@ export function StateDisclosuresReviewCard({
                     <td className={cn(st.td, st.num)}>{formatEffectiveDate(proposal.effective_from)}</td>
                     <td className={st.td}>{proposal.proposed_by_name ?? "A former admin"}</td>
                     <td className={cn(st.td, "whitespace-nowrap")}>
-                      <Pill tone={outcome.tone}>{outcome.label}</Pill>
+                      <StatusChip dot={false} tone={pillTone(outcome.tone)}>{outcome.label}</StatusChip>
                       <span className={st.sub}>
                         {proposal.reviewed_by_name ?? "A former admin"}, <When iso={proposal.reviewed_at} />
                       </span>
@@ -266,10 +273,10 @@ function ReviewDialog({
     <Dialog open onOpenChange={(next) => !next && !busy && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[720px]">
         <DialogHeader>
-          <DialogTitle className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em]">
+          <DialogTitle className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em]">
             {pending ? (mine ? "Your proposal" : "Review proposed wording") : "Proposal"} · {productName}
           </DialogTitle>
-          <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+          <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
             Approving publishes it to the dialer for every state listed, from the effective date. Nothing changes before then.
           </DialogDescription>
         </DialogHeader>
@@ -292,8 +299,8 @@ function ReviewDialog({
         )}
 
         <div>
-          <h3 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Proposed wording</h3>
-          <p className="m-0 mt-2 max-h-64 overflow-y-auto rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] p-3 text-[14px] leading-[1.5] tracking-[-0.02em] whitespace-pre-wrap text-[var(--body)]">
+          <h3 className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Proposed wording</h3>
+          <p className="m-0 mt-2 max-h-64 overflow-y-auto rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] p-3 text-sm leading-[1.5] tracking-[-0.02em] whitespace-pre-wrap text-[var(--body)]">
             {proposal.required_text}
           </p>
         </div>
@@ -370,7 +377,7 @@ function ReviewDialog({
             )}
 
             {canApprove && !datePassed && (
-              <label className="flex items-start gap-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+              <label className="flex items-start gap-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
                 <input type="checkbox" className="mt-1" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
                 I have checked this wording, word for word, against the approved source, and it is right for every state listed.
               </label>
@@ -379,7 +386,7 @@ function ReviewDialog({
         )}
 
         {error && (
-          <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+          <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
             {error}
           </p>
         )}

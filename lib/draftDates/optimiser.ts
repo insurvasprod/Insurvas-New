@@ -62,27 +62,37 @@ function dayDiff(a: IsoDate, b: IsoDate) {
 
 /** Every date money lands in the window, one month either side of the drafted months. */
 function paydays(input: DraftDateInput, months: { year: number; month: number }[]): IsoDate[] {
-  const out: IsoDate[] = [];
+  return payments(input, months).map((p) => p.date);
+}
+
+/**
+ * Each deposit with the month it is FOR (YYYY-MM). A payment due on a weekend or holiday arrives the
+ * business day before — SSI due 1 January arrives 31 December — and it is still January's money.
+ */
+function payments(input: DraftDateInput, months: { year: number; month: number }[]): { date: IsoDate; forMonth: string }[] {
+  const out: { date: IsoDate; forMonth: string }[] = [];
+  const push = (due: IsoDate) => out.push({ date: previousBusinessDay(due), forMonth: due.slice(0, 7) });
   const window = [
     (() => { const f = months[0]; return f.month === 1 ? { year: f.year - 1, month: 12 } : { year: f.year, month: f.month - 1 }; })(),
     ...months,
   ];
   const t = input.incomeType;
   for (const { year, month } of window) {
-    if (t === "ssa" && !input.before1997) out.push(previousBusinessDay(iso(year, month, nthWeekday(year, month, 3, ssaWeek(input.birthDay ?? 1)))));
-    if ((t === "ssa" && input.before1997) || t === "ssa_ssi") out.push(previousBusinessDay(iso(year, month, 3)));
-    if (t === "ssi" || t === "va") out.push(previousBusinessDay(iso(year, month, 1)));
+    if (t === "ssa" && !input.before1997) push(iso(year, month, nthWeekday(year, month, 3, ssaWeek(input.birthDay ?? 1))));
+    if ((t === "ssa" && input.before1997) || t === "ssa_ssi") push(iso(year, month, 3));
+    if (t === "ssi" || t === "va") push(iso(year, month, 1));
     if (t === "pension" && input.pensionDay) {
       const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
-      out.push(previousBusinessDay(iso(year, month, Math.min(input.pensionDay, last))));
+      push(iso(year, month, Math.min(input.pensionDay, last)));
     }
     if (t === "payroll" && input.payFrequency === "semimonthly") {
-      out.push(previousBusinessDay(iso(year, month, 1)), previousBusinessDay(iso(year, month, 15)));
+      push(iso(year, month, 1));
+      push(iso(year, month, 15));
     }
     if (t === "payroll" && input.payFrequency === "monthly" && input.payAnchor) {
       const day = Number(input.payAnchor.slice(8, 10));
       const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
-      out.push(previousBusinessDay(iso(year, month, Math.min(day, last))));
+      push(iso(year, month, Math.min(day, last)));
     }
   }
   if (t === "payroll" && (input.payFrequency === "weekly" || input.payFrequency === "biweekly") && input.payAnchor) {
@@ -91,9 +101,9 @@ function paydays(input: DraftDateInput, months: { year: number; month: number }[
     const end = iso(months[months.length - 1].year, months[months.length - 1].month, 28);
     let d = input.payAnchor;
     while (d > start) d = addDays(d, -step);
-    for (; d <= end; d = addDays(d, step)) if (d >= start) out.push(previousBusinessDay(d));
+    for (; d <= end; d = addDays(d, step)) if (d >= start) push(d);
   }
-  return out.sort();
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function describe(input: DraftDateInput): string {
@@ -166,8 +176,17 @@ export function recommendDraftDay(input: DraftDateInput): DraftRecommendation {
   }
   const safe = scored.filter((s) => s.minGap >= 2 && Number.isFinite(s.minGap));
   const pick = (target: number) => safe.filter((s) => s.minGap >= target).sort((a, b) => a.minGap - b.minGap || a.maxGap - b.maxGap || a.day - b.day)[0];
-  const best = pick(buffer) ?? pick(2) ?? scored.sort((a, b) => b.minGap - a.minGap)[0];
   const lead = describe(input);
+  const found = pick(buffer) ?? pick(2);
+  if (!found) {
+    // No day of the month is at least two days after a deposit in every month — weekly and
+    // every-two-weeks pay move through the calendar, so some month's draft lands on a payday or the
+    // day after. That is not a recommendation, and it does not say the money is always there first.
+    const guess = [...scored].sort((a, b) => b.minGap - a.minGap || a.maxGap - b.maxGap || a.day - b.day)[0];
+    const reason = `${lead}, so the payday moves through the month and no draft day stays 2–4 days after it every month. We will draft on the ${ordinal(guess.day)} — some months that is on or right after payday, so check the money is in the account by then.`;
+    return { kind: "neutral", recommended: { day: guess.day, minGapDays: guess.minGap, reason }, alternates: [], schedule: lead, arrivals: [], why: "Paydays move through the month, so no day of the month is always 2–4 days after one." };
+  }
+  const best = found;
   const option = (s: { day: number; minGap: number }): DraftOption => ({
     day: s.day,
     minGapDays: s.minGap,
@@ -180,10 +199,13 @@ export function recommendDraftDay(input: DraftDateInput): DraftRecommendation {
     .sort((a, b) => a.day - b.day)
     .map(option);
 
+  // Each drafted month's arrival is the money FOR that month (its last deposit, for twice-monthly
+  // pay): SSI's 31 December early payment is January's, not December's.
+  const owed = payments(input, months);
   const firstPerMonth = months.map(({ year, month }) => {
     const prefix = iso(year, month, 1).slice(0, 7);
-    const inMonth = pays.filter((p) => p.startsWith(prefix));
-    return { month: prefix, date: inMonth[inMonth.length - 1] ?? pays.filter((p) => p < `${prefix}-01`).pop() ?? `${prefix}-01` };
+    const forMonth = owed.filter((p) => p.forMonth === prefix);
+    return { month: prefix, date: forMonth[forMonth.length - 1]?.date ?? `${prefix}-01` };
   });
   return { kind: "recommended", recommended: option(best), alternates, schedule: lead, arrivals: firstPerMonth };
 }
@@ -191,7 +213,10 @@ export function recommendDraftDay(input: DraftDateInput): DraftRecommendation {
 /** Is `day` safe — at least two days after every deposit in the next twelve months? */
 export function isSafeDraftDay(input: DraftDateInput, day: number) {
   const rec = recommendDraftDay({ ...input });
-  if (rec.kind !== "recommended") return rec.kind === "neutral";
+  if (rec.kind === "not_applicable") return false;
+  // Unknown income: nothing to be unsafe against. A known schedule with no safe day (weekly pay) is
+  // judged day by day below, like any other.
+  if (input.incomeType === "none") return true;
   const months = monthsFrom(input.from ?? new Date());
   const pays = paydays(input, months);
   return months.every(({ year, month }) => {
@@ -199,6 +224,41 @@ export function isSafeDraftDay(input: DraftDateInput, day: number) {
     const last = pays.filter((p) => p <= draft).pop();
     return last ? dayDiff(draft, last) >= 2 : false;
   });
+}
+
+/**
+ * Where an existing draft day sits against the money (LA-5.1, Sign 1), over the next three drafted
+ * months, worst month first. `daysDraftBeforeIncome` is the spec's signal:
+ *   · 2–7: the draft lands that many days AFTER the deposit — the money is there (positive = safe);
+ *   · 0 or below: the draft lands that many days BEFORE the next deposit, when the last one has had
+ *     the longest to be spent (a draft 0–1 day after a deposit counts as landing with it: 0).
+ * Null when there is no income schedule to compare with (unknown income, or inputs missing).
+ */
+export type DraftTiming = { daysDraftBeforeIncome: number; incomeDay: number };
+
+export function draftTiming(input: DraftDateInput, day: number): DraftTiming | null {
+  if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+  const rec = recommendDraftDay(input);
+  // A known schedule is measured even when no day is safe every month (weekly pay answers "neutral").
+  if (rec.kind === "not_applicable" || input.incomeType === "none") return null;
+  const all = monthsFrom(input.from ?? new Date()).slice(0, 4);
+  const drafted = all.slice(0, 3);
+  const pays = paydays(input, all);
+  let worst: DraftTiming | null = null;
+  for (const { year, month } of drafted) {
+    const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const draft = iso(year, month, Math.min(day, last));
+    const before = pays.filter((p) => p <= draft).pop();
+    const after = pays.find((p) => p > draft);
+    if (!before && !after) continue;
+    const gapAfter = before ? dayDiff(draft, before) : Infinity;
+    let timing: DraftTiming | null = null;
+    if (before && gapAfter <= 7) timing = { daysDraftBeforeIncome: gapAfter >= 2 ? gapAfter : 0, incomeDay: Number(before.slice(8, 10)) };
+    else if (after) timing = { daysDraftBeforeIncome: -dayDiff(after, draft), incomeDay: Number(after.slice(8, 10)) };
+    if (!timing) continue;
+    if (!worst || timing.daysDraftBeforeIncome < worst.daysDraftBeforeIncome) worst = timing;
+  }
+  return worst;
 }
 
 export { federalHolidays, isBusinessDay };

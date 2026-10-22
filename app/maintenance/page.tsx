@@ -31,7 +31,7 @@ export default async function MaintenancePage() {
       <div className="m-stagger flex min-h-screen items-center justify-center bg-[var(--canvas)] p-6 sm:p-10">
         <div className="w-full max-w-[620px]">
           <div className="rounded-xl border border-border bg-card p-6 sm:p-10">
-            <h1 className="text-center text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">{copy.title}</h1>
+            <h1 className="text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">{copy.title}</h1>
             <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">{copy.body}</p>
             {status.level !== "off" && status.message ? (
               <p className="mt-4 rounded-xl border border-border bg-[var(--surface-alt)] px-4 py-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
@@ -53,7 +53,7 @@ export default async function MaintenancePage() {
     <div className="m-stagger flex min-h-screen items-center justify-center bg-[var(--canvas)] p-6 sm:p-10">
       <div className="w-full max-w-[620px]">
         <div className="rounded-xl border border-border bg-card p-6 sm:p-10">
-          <h1 className="text-center text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+          <h1 className="text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
             We&rsquo;ll be back shortly
           </h1>
           <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">

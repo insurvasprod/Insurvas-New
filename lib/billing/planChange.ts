@@ -61,6 +61,55 @@ async function planName(planId: string): Promise<string> {
   return data?.name ?? "plan";
 }
 
+/** A plan's price on a billing cycle, for the agency's Plan & billing screen (LA-8.5). Null: not sold on it. */
+export function planPriceCents(planId: string, cycle: BillingCycle): Promise<number | null> {
+  return priceOf(planId, cycle);
+}
+
+/** What a plan change would cost and when it would apply, before anything is changed (LA-8.5). */
+export type PlanChangePreview = {
+  /** The subscription's price on its own cycle, for the current and the new plan. Null: not sold on it. */
+  currentPriceCents: number | null;
+  newPriceCents: number | null;
+  /** SA-2's rule, the one changePlanSchema states: an upgrade applies now, a downgrade at period end. */
+  applyNow: boolean;
+  /** What the upgrade adds to the next invoice for the rest of this period; null when nothing does. */
+  proration: { netCents: number; creditCents: number; chargeCents: number; remainingDays: number } | null;
+};
+
+/**
+ * The same arithmetic settleMidPeriodPlanChange runs, without settling anything: the agency's
+ * self-service screen (LA-8.5) shows the figure before the owner confirms, and owns no pricing of
+ * its own. Null when the subscription is not found.
+ */
+export async function previewPlanChange(input: { subscriptionId: string; fromPlanId: string; toPlanId: string; at?: Date }): Promise<PlanChangePreview | null> {
+  const supabase = getSupabaseServiceClient();
+  const { data: subscription } = await supabase
+    .from("subscriptions")
+    .select("id, tenant_id, billing_cycle, current_period_start, current_period_end, whop_membership_id")
+    .eq("id", input.subscriptionId)
+    .maybeSingle<SubscriptionForProration>();
+  if (!subscription) return null;
+
+  const [currentPriceCents, newPriceCents] = await Promise.all([
+    priceOf(input.fromPlanId, subscription.billing_cycle),
+    priceOf(input.toPlanId, subscription.billing_cycle),
+  ]);
+  const applyNow = currentPriceCents !== null && newPriceCents !== null && newPriceCents > currentPriceCents;
+  if (!applyNow || !subscription.current_period_start || !subscription.current_period_end) {
+    return { currentPriceCents, newPriceCents, applyNow, proration: null };
+  }
+  const periodStart = new Date(subscription.current_period_start);
+  const periodEnd = new Date(subscription.current_period_end);
+  const p = prorate({
+    oldPriceCents: currentPriceCents,
+    newPriceCents,
+    periodDays: periodLengthInDays(periodStart, periodEnd),
+    daysElapsed: daysElapsedBetween(periodStart, input.at ?? new Date()),
+  });
+  return { currentPriceCents, newPriceCents, applyNow, proration: p.remainingDays > 0 && p.netCents > 0 ? p : null };
+}
+
 /**
  * Prorate an immediate plan change and park the difference.
  *

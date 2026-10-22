@@ -9,6 +9,7 @@
  * progress stay pinned to the version they started on (the RPC's contract, unchanged).
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { notify } from "@/lib/notify";
@@ -20,19 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  Field,
-  Pill,
-  SettingsCard,
-  SettingsGrid,
-  SettingsSectionHeader,
-  SettingsStack,
-  Timeline,
-  ToggleRow,
-  control,
-  st,
-} from "@/components/app/settings/primitives";
+import { Callout, Field, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, Timeline, ToggleRow, control, st } from "@/components/app/settings/primitives";
 import {
   TEMPLATE_FIELD_TYPES,
   TEMPLATE_FIELD_TYPE_LABELS,
@@ -74,7 +63,7 @@ function draftFrom(current: Current): TemplateDraft {
 }
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-const small = "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] text-[var(--ink)]";
+const small = "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]";
 
 function numberOrUndefined(value: string) { return value === "" ? undefined : Number(value); }
 
@@ -131,8 +120,8 @@ function SettingsDialog({ open, onOpenChange, title, description, children }: { 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-[18px] text-[var(--ink)]">{title}</DialogTitle>
-          {description && <DialogDescription className="text-[14px] leading-[1.5] text-[var(--muted)]">{description}</DialogDescription>}
+          <DialogTitle className="text-title-sm text-[var(--ink)]">{title}</DialogTitle>
+          {description && <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">{description}</DialogDescription>}
         </DialogHeader>
         {children}
       </DialogContent>
@@ -360,7 +349,7 @@ export function TemplateSettings() {
     <tr key={fieldKey}>
       <td className={st.td}>{field ? field.label : <span className="text-[var(--muted)]">{fieldKey} (no such field)</span>}</td>
       <td className={st.td}>{field ? TEMPLATE_FIELD_TYPE_TABLE_LABELS[field.type] ?? field.type : "—"}</td>
-      <td className={st.td}>{required ? <Pill tone="success">Yes</Pill> : <Pill tone="neutral">No</Pill>}</td>
+      <td className={st.td}>{required ? <StatusChip dot={false} tone="good">Yes</StatusChip> : <StatusChip dot={false} tone="neutral">No</StatusChip>}</td>
       <td className={st.td}>{field?.help_text ? field.help_text : <span className="text-[var(--muted)]">—</span>}</td>
       <td className={cn(st.td, st.num)}><Button type="button" variant="outline" size="sm" onClick={onEdit} aria-label={`Edit ${field?.label ?? fieldKey}`}>Edit</Button></td>
     </tr>
@@ -401,7 +390,7 @@ export function TemplateSettings() {
             >
               {productOptions.map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
             </select>
-            {dirty && <Pill tone="warning" dot>{changes.length} {changes.length === 1 ? "change" : "changes"} before commit</Pill>}
+            {dirty && <StatusChip tone="warning" dot>{changes.length} {changes.length === 1 ? "change" : "changes"} before commit</StatusChip>}
           </DataToolbar>
         }
       >
@@ -446,7 +435,7 @@ export function TemplateSettings() {
               </Field>
             </div>
           ) : (
-            <p className="m-0 text-[14px] leading-[1.5] text-[var(--muted)]">This form has no date-of-birth field, so it sets no age limits. Add a Date field for the date of birth to set them.</p>
+            <p className="m-0 text-sm leading-[1.5] text-[var(--muted)]">This form has no date-of-birth field, so it sets no age limits. Add a Date field for the date of birth to set them.</p>
           )}
         </SettingsCard>
 
@@ -463,7 +452,7 @@ export function TemplateSettings() {
               {saveError && <Callout tone="error" title={`Nothing was committed: ${saveError}`} />}
             </div>
           ) : (
-            <p className="m-0 text-[14px] leading-[1.5] text-[var(--muted)]">No pending changes. This is the live form, version {current.assignment.definition_version}.</p>
+            <p className="m-0 text-sm leading-[1.5] text-[var(--muted)]">No pending changes. This is the live form, version {current.assignment.definition_version}.</p>
           )}
         </SettingsCard>
       </SettingsGrid>
@@ -479,7 +468,7 @@ export function TemplateSettings() {
           ) : undefined}
         >
           <div className="flex flex-col gap-4">
-            <p className="m-0 text-[14px] leading-[1.5] text-[var(--body)]">
+            <p className="m-0 text-sm leading-[1.5] text-[var(--body)]">
               <strong className={st.strong}>{current.template.name}</strong>
               <span className={st.sub}>{current.template.product_name} · {current.template.fields.length} fields · form version {current.assignment.definition_version}</span>
             </p>
@@ -501,9 +490,9 @@ export function TemplateSettings() {
               <Button type="button" variant="outline" disabled={!chosen} onClick={() => void showPreview()}>Preview</Button>
               <Button type="button" disabled={!chosen || !preview || applying || dirty} onClick={() => void apply()}>{applying ? "Applying…" : "Apply"}</Button>
             </div>
-            {dirty && chosen && <p className="m-0 text-[12px] text-[var(--muted)]">Commit or discard the pending changes before applying a platform template.</p>}
+            {dirty && chosen && <p className="m-0 text-xs text-[var(--muted)]">Commit or discard the pending changes before applying a platform template.</p>}
             {chosen && preview && (
-              <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-[14px] leading-[1.5] text-[var(--body)]">
+              <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-sm leading-[1.5] text-[var(--body)]">
                 <p className="m-0 font-semibold text-[var(--ink)]">{preview.alreadyApplied ? "Already applied" : "What applying adds"}</p>
                 <p className="m-0 mt-1.5">Fields: {preview.fieldsToAdd.length ? preview.fieldsToAdd.join(", ") : "none"}</p>
                 <p className="m-0">Form sections: {preview.sectionsToAdd.length ? preview.sectionsToAdd.join(", ") : "none"}</p>
@@ -533,7 +522,7 @@ export function TemplateSettings() {
               <Button type="button" variant="ghost" className="mb-0.5 text-[var(--error-ink)]" onClick={() => update((d) => ({ ...d, stages: d.stages.filter((item) => item.stage_key !== stage.stage_key) }))} aria-label={`Remove stage ${stage.label}`}>Remove</Button>
             </div>
             {/* The key was a read-only input; it reads as what it is, a fact about the stage. */}
-            <span className="text-[12px] leading-[1.5] text-[var(--muted)]">Key <code className="font-mono text-[12px]">{stage.stage_key}</code></span>
+            <span className="text-xs leading-[1.5] text-[var(--muted)]">Key <code className="font-mono text-xs">{stage.stage_key}</code></span>
             </div>
           ))}
         </div>
@@ -579,7 +568,7 @@ export function TemplateSettings() {
               </Field>
             )}
             <fieldset className="m-0 flex flex-col gap-3 rounded-[12px] border border-[var(--border)] p-4">
-              <legend className="px-1 text-[14px] font-semibold text-[var(--ink)]">Validation rules</legend>
+              <legend className="px-1 text-sm font-semibold text-[var(--ink)]">Validation rules</legend>
               {["number", "currency"].includes(editingField.type) && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Minimum" htmlFor="field-edit-min"><input id="field-edit-min" className={small} type="number" value={editingField.validation?.min ?? ""} onChange={(event) => setValidation(editingField.field_key, { min: numberOrUndefined(event.target.value) })} /></Field>
@@ -603,14 +592,14 @@ export function TemplateSettings() {
                   </Field>
                 </>
               )}
-              {["boolean", "single_select", "multi_select"].includes(editingField.type) && <p className="m-0 text-[14px] text-[var(--muted)]">This type has no validation rules; its options are the rule.</p>}
-              {editingField.type === "bank_routing" && <p className="m-0 text-[14px] text-[var(--muted)]">Always nine digits that pass the bank routing checksum. Stored as the digits alone.</p>}
-              {editingField.type === "bank_account" && <p className="m-0 text-[14px] text-[var(--muted)]">Always {BANK_ACCOUNT_MIN_DIGITS} to {BANK_ACCOUNT_MAX_DIGITS} digits. Stored as the digits alone.</p>}
+              {["boolean", "single_select", "multi_select"].includes(editingField.type) && <p className="m-0 text-sm text-[var(--muted)]">This type has no validation rules; its options are the rule.</p>}
+              {editingField.type === "bank_routing" && <p className="m-0 text-sm text-[var(--muted)]">Always nine digits that pass the bank routing checksum. Stored as the digits alone.</p>}
+              {editingField.type === "bank_account" && <p className="m-0 text-sm text-[var(--muted)]">Always {BANK_ACCOUNT_MIN_DIGITS} to {BANK_ACCOUNT_MAX_DIGITS} digits. Stored as the digits alone.</p>}
             </fieldset>
 
             {editingPlacementSection && editingPlacement && (
               <fieldset className="m-0 flex flex-col gap-3 rounded-[12px] border border-[var(--border)] p-4">
-                <legend className="px-1 text-[14px] font-semibold text-[var(--ink)]">On the partner form, in “{editingPlacementSection.label}”</legend>
+                <legend className="px-1 text-sm font-semibold text-[var(--ink)]">On the partner form, in “{editingPlacementSection.label}”</legend>
                 <ToggleRow id="field-edit-form-required" title="Required on this form" help="Partners must answer it here even when the lead field itself is optional." checked={editingPlacement.is_required} onChange={(is_required) => setPlacement(editingPlacementSection.section_key, editingField.field_key, { is_required })} />
                 <ToggleRow
                   id="field-edit-conditional"
@@ -654,10 +643,10 @@ export function TemplateSettings() {
               <Field label="Label" htmlFor="section-edit-label" required><input id="section-edit-label" className={control} maxLength={120} value={editingSection.label} onChange={(event) => setSection(editingSection.section_key, { label: event.target.value })} /></Field>
             </div>
             <div className="flex flex-col gap-2">
-              <span className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">Fields in this section</span>
-              {editingSection.fields.length === 0 && <p className="m-0 text-[14px] text-[var(--muted)]">None yet.</p>}
+              <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">Fields in this section</span>
+              {editingSection.fields.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">None yet.</p>}
               {editingSection.fields.map((formField) => (
-                <div key={formField.field_key} className="flex items-center justify-between gap-3 rounded-[8px] bg-[var(--surface-alt)] px-3 py-2 text-[14px]">
+                <div key={formField.field_key} className="flex items-center justify-between gap-3 rounded-[8px] bg-[var(--surface-alt)] px-3 py-2 text-sm">
                   <span>{fieldMap.get(formField.field_key)?.label ?? formField.field_key}</span>
                   <Button type="button" variant="outline" size="sm" onClick={() => setEditing({ kind: "field", fieldKey: formField.field_key, sectionKey: editingSection.section_key })}>Edit</Button>
                 </div>
