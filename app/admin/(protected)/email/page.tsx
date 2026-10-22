@@ -43,7 +43,7 @@ export default async function EmailPage() {
       {/* "Mail Setup" to match the sidebar. Route stays /admin/email. */}
       <PageHeader title="Mail Setup" />
       <StatStrip label="Mail at a glance">
-        <StatTile label="Delivery mode" valueSize="text" value={smtp ? "SMTP" : "Off"} footnote={smtp ? "set for this environment" : "EMAIL_DELIVERY_MODE not smtp"} />
+        <StatTile label="Delivery mode" valueSize="text" value={smtp ? "SMTP" : "Off"} footnote={smtp ? "on for this environment" : "off here: set EMAIL_DELIVERY_MODE=smtp (production sends unless it is off)"} />
         <StatTile label="Settings missing" value={missing.length.toLocaleString("en-US")} valueTone={missing.length > 0 ? "warning" : undefined} footnote={missing.length > 0 ? missing.join(", ") : "all set"} />
         <StatTile label="Email sent" valueSize="text" value={sending ? "Yes" : "No"} valueTone={sending ? "good" : "warning"} footnote={sending ? "every attempt logged" : "logged as skipped"} />
       </StatStrip>

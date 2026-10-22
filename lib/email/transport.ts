@@ -54,12 +54,23 @@ type SmtpConfig = {
 };
 
 /**
- * External mail must be an explicit opt-in. The local rebuild has real SMTP credentials in some
- * developer environments, but its QA fixtures intentionally use reserved domains. Credentials
- * alone must never turn a local test run into a real delivery run.
+ * Whether mail leaves the platform.
+ *
+ * The deployed production site sends (VERCEL_ENV=production, which Vercel sets on production deployments
+ * and nowhere else). It sends whatever EMAIL_DELIVERY_MODE says, unless that says "off", which is the
+ * deliberate kill switch. Until 2026-10-22, production skipped every signup verification because the
+ * variable there was not "smtp". "disabled" is .env.example's template value, and may have been copied in
+ * without anyone meaning to stop real signups, so it does not stop production.
+ *
+ * Everywhere else needs EMAIL_DELIVERY_MODE=smtp: local dev, `next start` on a laptop, scripts and preview
+ * deployments. Those have real SMTP credentials in some developer environments, while QA fixtures and
+ * seed data are full of addresses that must never receive mail. Credentials alone must never turn a test
+ * run into a delivery run.
  */
-export function emailDeliveryMode(): "disabled" | "smtp" {
-  return process.env.EMAIL_DELIVERY_MODE?.trim().toLowerCase() === "smtp" ? "smtp" : "disabled";
+export function emailDeliveryMode(env: Record<string, string | undefined> = process.env): "disabled" | "smtp" {
+  const mode = env.EMAIL_DELIVERY_MODE?.trim().toLowerCase() ?? "";
+  if (env.VERCEL_ENV?.trim().toLowerCase() === "production") return mode === "off" ? "disabled" : "smtp";
+  return mode === "smtp" ? "smtp" : "disabled";
 }
 
 /** RFC-reserved and local-only domains must never receive application mail. */
