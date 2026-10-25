@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/lib/notify";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -118,7 +119,7 @@ function UpdateRow({ message }: { message: PartnerMessage }) {
   // One line; a click opens the rest (who, product, timing and the note) under it.
   return (
     <article aria-label="Automatic update">
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} title={open ? "Hide details" : "Show details"} className="flex h-7 w-full items-center gap-2 rounded-md px-1 text-left text-sm hover:bg-[var(--surface-alt)]">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} title={open ? "Hide details" : "Show details"} className="flex min-h-8 w-full items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--primary)_28%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-2 py-1 text-left text-sm shadow-[0_0_18px_color-mix(in_srgb,var(--primary)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--primary)_12%,transparent)]">
         <span aria-hidden="true" className={cn(
           "inline-flex size-5 shrink-0 items-center justify-center rounded-full",
           dropped ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : counts ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--info-surface)] text-[var(--info-ink)]",
@@ -156,7 +157,11 @@ function byActivity(channels: Channel[]) {
   return [...channels].sort((a, b) => Number(a.status !== "active") - Number(b.status !== "active") || lastAt(b) - lastAt(a) || a.name.localeCompare(b.name));
 }
 
-export function AgentPartnerChatWorkspace() {
+/**
+ * `partnerId`: only that partner's channels. `openPartnerId`: every conversation, opened on that
+ * partner's latest one (the partner record's Message button, 2026-10-25).
+ */
+export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLinks = false }: { partnerId?: string; openPartnerId?: string; recordLinks?: boolean } = {}) {
   const [data, setData] = useState<{ channels: Channel[]; directory: DirectoryUser[]; facts: Record<string, PartnerFacts> }>({ channels: [], directory: [], facts: {} });
   const [loaded, setLoaded] = useState(false);
   // The signed-in person, from the server: their own messages sit on the right of the thread.
@@ -179,12 +184,14 @@ export function AgentPartnerChatWorkspace() {
     const response = await fetch("/api/app/partner-chat", { cache: "no-store" });
     const body = await response.json().catch(() => null) as ChatResponse | { error?: string } | null;
     if (!response.ok) throw new Error(body && "error" in body ? body.error : "Could not load partner chat");
-    const next = normalize(body as ChatResponse); setData(next); setViewerId((body as ChatResponse).viewerId ?? null); setLoaded(true);
+    const all = normalize(body as ChatResponse);
+    const next = partnerId ? { ...all, channels: all.channels.filter((channel) => channel.partner_id === partnerId) } : all;
+    setData(next); setViewerId((body as ChatResponse).viewerId ?? null); setLoaded(true);
     // Open on the conversation with the latest activity, not whichever happens to sort first: an empty
     // channel on top made the whole screen look blank.
-    setSelectedId((current) => current && next.channels.some((channel) => channel.id === current) ? current : byActivity(next.channels)[0]?.id ?? null);
+    setSelectedId((current) => current && next.channels.some((channel) => channel.id === current) ? current : byActivity(openPartnerId ? next.channels.filter((channel) => channel.partner_id === openPartnerId) : [])[0]?.id ?? byActivity(next.channels)[0]?.id ?? null);
     return next;
-  }, []);
+  }, [partnerId, openPartnerId]);
   useEffect(() => { const timer = window.setTimeout(() => { void load().catch((reason: unknown) => { setLoaded(true); setError(reason instanceof Error ? reason.message : "Could not load partner chat"); }); }, 0); return () => window.clearTimeout(timer); }, [load]);
   // Give attachment-only messages a valid, editable message body so the shared API can persist them.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -255,9 +262,9 @@ export function AgentPartnerChatWorkspace() {
       />
       {error && <p role="alert" className="m-0 rounded-md border border-[var(--error)]/40 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      <div className={cn("relative grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] md:grid-cols-[272px_minmax(0,1fr)]", detailsOpen && selected && "xl:grid-cols-[300px_minmax(0,1fr)_300px]")}>
+      <div className={cn("relative grid min-h-0 flex-1 gap-3.5 md:grid-cols-[300px_minmax(0,1fr)]", detailsOpen && selected && "xl:grid-cols-[300px_minmax(0,1fr)_300px]")}>
         {/* Conversations */}
-        <section className="flex max-h-80 min-h-0 min-w-0 flex-col border-b border-border md:max-h-none md:border-r md:border-b-0" aria-label="Conversations">
+        <section className="m-glass rounded-xl border border-border flex max-h-80 min-h-0 min-w-0 flex-col overflow-hidden md:max-h-none" aria-label="Conversations">
           <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-3 pt-3 pb-2.5">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -312,7 +319,7 @@ export function AgentPartnerChatWorkspace() {
         </section>
 
         {/* Thread: the messages scroll, the composer stays at the bottom of the pane. */}
-        <section className="flex h-[70dvh] min-h-0 min-w-0 flex-col md:h-auto" aria-label="Selected conversation">
+        <section className="m-glass rounded-xl border border-border flex h-[70dvh] min-h-0 min-w-0 flex-col overflow-hidden md:h-auto" aria-label="Selected conversation">
           {newConversationOpen ? (
             <>
               <div className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-3">
@@ -461,7 +468,7 @@ export function AgentPartnerChatWorkspace() {
             title="Details"
             onClose={() => setDetailsOpen(false)}
             bodyClassName="flex flex-col"
-            className="xl:w-auto xl:min-w-0 xl:rounded-none xl:border-0 xl:border-l xl:shadow-none"
+            className="xl:m-glass xl:w-auto xl:min-w-0 xl:rounded-xl xl:shadow-none"
           >
               <div className="flex items-start gap-2.5 border-b border-border px-4 py-3">
                 <Face name={selected.name} kind={faceKind(selected)} />
@@ -473,6 +480,10 @@ export function AgentPartnerChatWorkspace() {
                     {selectedFacts && selectedFacts.status !== "active" && <span className="rounded-full bg-[var(--warning-surface)] px-2 text-xs font-semibold leading-5 text-[var(--warning-ink)]">{factsLine(selectedFacts)}</span>}
                     {selectedFacts?.payout && <span className="text-xs text-muted-foreground">{selectedFacts.payout}</span>}
                   </div>
+                  {/* The partner's own record, on its Chat tab, for someone who may open partner records (2026-10-25). */}
+                  {recordLinks && !partnerId && selected.channel_type === "partner" && selected.partner_id && (
+                    <Link href={`/app/publishers/${selected.partner_id}`} className="mt-1 inline-block text-xs font-semibold text-[var(--accent-ink)] hover:underline">Open the partner record</Link>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-4 p-4">

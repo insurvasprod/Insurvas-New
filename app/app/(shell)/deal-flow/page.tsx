@@ -4,6 +4,7 @@ import { getViewerTimezone } from "@/lib/users/viewerTimezone";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DealFlowWorkspace } from "@/components/app/deal-flow-workspace";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
 
 export default async function DealFlowPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("daily_deal_flow");
@@ -12,5 +13,10 @@ export default async function DealFlowPage({ searchParams }: { searchParams: Pro
   const [params, timeZone] = await Promise.all([searchParams, getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
   const focusLeadId = typeof params.focus_lead_id === "string" ? params.focus_lead_id : null;
   // "Today" is the agency's day when Settings › Agency profile stores a timezone, else the browser's.
-  return <DealFlowWorkspace focusLeadId={focusLeadId} timeZone={timeZone} />;
+  // Leads A2 (2026-10-25): on the dashboard's moving ribbon.
+  return (
+    <DashboardStage ribbon>
+      <DealFlowWorkspace focusLeadId={focusLeadId} timeZone={timeZone} />
+    </DashboardStage>
+  );
 }

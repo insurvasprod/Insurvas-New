@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ import {
   Download,
   Edit3,
   MapPin,
+  MessagesSquare,
   MoreHorizontal,
   Pause,
   Play,
@@ -62,7 +64,7 @@ import {
 } from "@/lib/partners/constants";
 import { PageHeader } from "@/components/ui/page-header";
 import { PartnerOnboarding } from "@/components/app/partner-onboarding";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { Ring } from "@/components/app/inbound/stream-parts";
 import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -135,22 +137,33 @@ type PartnerDraft = {
   notes: string;
 };
 type DetailTab =
-  "overview" | "terms" | "products" | "markets" | "forms" | "team" | "activity";
+  "overview" | "terms" | "products" | "markets" | "forms" | "team" | "activity" | PartnerExtraTab;
 
-// The board's strip: Overview, Team, Products, Forms, Commercial terms, then the two that sat
-// behind "More" — all on the one row now there is no side column beside it (2026-10-06 redesign).
+/**
+ * Module 1 simplified (2026-10-25): one partner's quality and payout runs used to be pages of their
+ * own; they are sections of the record's Overview now, with its users (Partner record B, chosen
+ * 2026-10-25). Each keeps its own feature and role gate: the record page passes in only the
+ * sections this person may see. Chat is not here: it stays in Partner chat, and the record's
+ * Message button opens this partner's conversation there.
+ */
+export type PartnerExtraTab = "quality" | "payouts";
+
+// Overview is one scroll (figures, quality, money, people, products, contact); the set-up sections
+// keep their tabs. Old links to ?tab=quality / payouts / team land on Overview at that section.
 const detailTabs: DetailTab[] = [
   "overview",
-  "team",
   "products",
   "forms",
   "terms",
   "markets",
   "activity",
 ];
+const OVERVIEW_SECTIONS = ["quality", "payouts", "team"] as const;
 
 const detailTabLabel = (tab: DetailTab) =>
-  tab === "markets"
+  tab === "team"
+    ? "Users"
+    : tab === "markets"
     ? "Carrier & states"
     : tab === "terms"
       ? "Commercial terms"
@@ -239,13 +252,16 @@ function CapacityMetric({
       : Math.min(100, limit === 0 ? 100 : (usage / limit) * 100);
   // Said before the ceiling is hit, in the same count the server enforces: only an ACTIVE partner
   // holds a slot (LA-1.19). Drafts, paused and offboarded partners do not.
+  // Partners A1 (2026-10-25): the plan's room as a ring, amber from four fifths full.
   return (
-    <StatTile
-      label={label}
-      value={usage}
-      meter={{ value: percent, tone: "info", label: `${label} capacity used` }}
-      footnote={`${capacityLabel(usage, limit, usage === 1 && limit == null ? noun.replace(/s$/, "") : noun)}${activeOnly && limit != null ? " · active only" : ""}`}
-    />
+    <div className="m-glass rounded-xl border border-border flex min-w-0 items-center gap-3.5 px-4 py-3.5">
+      <Ring value={percent / 100} tone={percent >= 80 ? "warning" : "success"} size={52} label={`${label} capacity used`}>{limit == null ? usage : `${usage}/${limit}`}</Ring>
+      <div className="min-w-0">
+        <p className="m-0 text-xs leading-[1.5] font-semibold tracking-[0.06em] uppercase text-muted-foreground">{label}</p>
+        <p className="m-0 mt-0.5 text-xl leading-tight font-semibold tracking-[-0.02em] tabular-nums text-foreground">{limit == null ? usage : `${usage} of ${limit}`}</p>
+        <p className="m-0 text-xs leading-[1.5] text-muted-foreground">{`${capacityLabel(usage, limit, usage === 1 && limit == null ? noun.replace(/s$/, "") : noun)}${activeOnly && limit != null ? " · active only" : ""}`}</p>
+      </div>
+    </div>
   );
 }
 
@@ -254,11 +270,18 @@ export function PartnersWorkspace({
   canManageProductConfig = false,
   initialSelectedId = null,
   detailOnly = false,
+  extraTabs = {},
+  initialTab = null,
+  messageHref = null,
 }: {
   readOnly: boolean;
   canManageProductConfig?: boolean;
   initialSelectedId?: string | null;
   detailOnly?: boolean;
+  extraTabs?: Partial<Record<PartnerExtraTab, ReactNode>>;
+  initialTab?: string | null;
+  /** Partner chat, opened on this partner's conversation; null when this person has no Partner chat. */
+  messageHref?: string | null;
 }) {
   const router = useRouter();
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -297,7 +320,21 @@ export function PartnersWorkspace({
       const next = typeof value === "function" ? value(current) : value;
       return typeof value === "string" && current === value ? null : next;
     });
-  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const shownTabs = detailTabs;
+  const [detailTab, setDetailTab] = useState<DetailTab>(() => (shownTabs.find((tab) => tab === initialTab) ?? "overview"));
+  // A link to one of Overview's sections (?tab=quality, the cross-partner lists) scrolls to it once,
+  // as soon as the section has rendered (it waits on the partner's data), giving up after ~6 s.
+  const overviewSection = OVERVIEW_SECTIONS.find((section) => section === initialTab) ?? null;
+  useEffect(() => {
+    if (!overviewSection) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const target = document.getElementById(`partner-section-${overviewSection}`);
+      if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
+      if (target || ++tries > 30) window.clearInterval(timer);
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [overviewSection]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | PartnerType>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | PartnerStatus>(
@@ -628,8 +665,13 @@ export function PartnersWorkspace({
           detailOnly ? (
             selectedPartner ? (
               <>
+                {messageHref && (
+                  <Button asChild type="button" variant="outline">
+                    <Link href={messageHref}><MessagesSquare data-icon="inline-start" aria-hidden="true" />Message</Link>
+                  </Button>
+                )}
                 <Button type="button" variant="outline" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
-                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit
+                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit partner
                 </Button>
                 {!readOnly && selectedPartner.status !== "offboarded" && (
                   <DropdownMenu>
@@ -665,7 +707,7 @@ export function PartnersWorkspace({
         }
       />
       {!detailOnly && (
-        <StatStrip label="Partner capacity" className="portal-partners-capacity">
+        <section aria-label="Partner capacity" className="portal-partners-capacity grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <CapacityMetric
             label="Publishers"
             noun="publishers"
@@ -691,7 +733,7 @@ export function PartnersWorkspace({
             limit={limits.max_partner_users}
             activeOnly={false}
           />
-        </StatStrip>
+        </section>
       )}
       {!detailOnly && selectedPartner && (
         <div className="flex justify-end lg:hidden">
@@ -806,7 +848,14 @@ export function PartnersWorkspace({
                         )}
                         {!selectedPartner && <td className="text-right tabular-nums">{partner.transfers_this_month}</td>}
                         {!selectedPartner && <td className="text-right tabular-nums">{partner.completed_this_month}</td>}
-                        {!selectedPartner && <td className={cn("text-right tabular-nums", dropHeavy && "font-semibold text-[var(--warning-ink)]")}>{partner.dropped_this_month}</td>}
+                        {!selectedPartner && (
+                          <td className="tabular-nums">
+                            <span className="flex items-center justify-end gap-2">
+                              <span className={cn("w-8 text-right", dropHeavy && "font-semibold text-[var(--warning-ink)]")}>{partner.dropped_this_month}</span>
+                              <span aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={cn("block h-full rounded-full", dropHeavy ? "bg-[var(--warning)]" : "bg-[var(--muted-foreground)]")} style={{ width: `${partner.transfers_this_month ? Math.min(100, (partner.dropped_this_month / partner.transfers_this_month) * 300) : 0}%` }} /></span>
+                            </span>
+                          </td>
+                        )}
                         {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{dateLabel(partner.last_submission)}</td>}
                         <td className="text-right">
                           {selectedPartner?.id === partner.id ? (
@@ -846,7 +895,7 @@ export function PartnersWorkspace({
         {detailOnly && selectedPartner && (
           <div className="flex min-w-0 flex-col gap-6" aria-label={`${selectedPartner.name} details`}>
             {/* The key facts in one compact block (2026-10-06 redesign): state chips, then the figures. */}
-            <section className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-lg border border-border bg-card px-5 py-4 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+            <section aria-label="Partner facts" className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-2">
                 <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", STATUS_CHIP[selectedPartner.status])}>
                   <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />
@@ -857,17 +906,19 @@ export function PartnersWorkspace({
                   {selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}
                 </span>
               </div>
-              <PartnerFact label="Submitted">{selectedPartner.lead_volume_this_month.toLocaleString()} this month</PartnerFact>
-              <PartnerFact label="Last submission">{dateLabel(selectedPartner.last_submission)}</PartnerFact>
-              <PartnerFact label="Approved products">{selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}</PartnerFact>
-              <PartnerFact label="Pays">{termText(selectedPartner.active_term)}</PartnerFact>
-              <PartnerFact label="Since">{earliestTerm(selectedPartner) ? dateLabel(earliestTerm(selectedPartner)) : "—"}</PartnerFact>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Submitted">{selectedPartner.lead_volume_this_month.toLocaleString()} this month</PartnerFact></div>
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Last submission">{dateLabel(selectedPartner.last_submission)}</PartnerFact></div>
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Approved products">{selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}</PartnerFact></div>
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Pays">{termText(selectedPartner.active_term)}</PartnerFact></div>
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Since">{earliestTerm(selectedPartner) ? dateLabel(earliestTerm(selectedPartner)) : "—"}</PartnerFact></div>
+              </div>
             </section>
 
             <div className="flex min-w-0 flex-col gap-6">
-              <section className="min-w-0 overflow-visible rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+              <section className="m-glass rounded-xl border border-border min-w-0 overflow-visible">
                 <div role="tablist" className="flex flex-wrap items-center gap-x-6 border-b border-border px-5" aria-label="Partner detail sections">
-                  {detailTabs.map((tab) => (
+                  {shownTabs.map((tab) => (
                     <button
                       type="button"
                       role="tab"
@@ -888,7 +939,40 @@ export function PartnersWorkspace({
             {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
             <div key={detailTab} role="tabpanel" id="partner-detail-view" aria-labelledby={`partner-detail-tab-${detailTab}`} className="space-y-5 p-5">
               {detailTab === "overview" && (
-                <div className="space-y-5">
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+                <div className="min-w-0 space-y-5">
+                  {extraTabs.quality && (
+                    <section id="partner-section-quality" className="scroll-mt-24 space-y-3">
+                      <h3 className="text-base font-semibold">Quality</h3>
+                      {extraTabs.quality}
+                    </section>
+                  )}
+                  {extraTabs.payouts && (
+                    <section id="partner-section-payouts" className="scroll-mt-24 space-y-3">
+                      <h3 className="text-base font-semibold">Money</h3>
+                      {extraTabs.payouts}
+                    </section>
+                  )}
+                  <section id="partner-section-team" className="scroll-mt-24 space-y-3">
+                    <h3 className="text-base font-semibold">People</h3>
+                    <PartnerUsersPanel
+                      key={selectedPartner.id}
+                      partnerId={selectedPartner.id}
+                      readOnly={readOnly}
+                      offboarded={selectedPartner.status === "offboarded"}
+                      // The admin-assignment route is owner-only; this page's owner flag is the same check.
+                      canAssignAdmin={canManageProductConfig}
+                      seatUsage={usage.partnerUsers}
+                      seatLimit={limits.max_partner_users}
+                      onSeatsChanged={() => void refreshCapacity()}
+                    />
+                  </section>
+                  {/* Compliance: the screening dependency, said once and kept visible. */}
+                  <p role="note" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--body)]">
+                    <strong className="font-semibold text-[var(--error-ink)]">The lead form must keep its phone field.</strong> Phone is required for screening and cannot be deleted from a partner form.
+                  </p>
+                </div>
+                <div className="min-w-0 space-y-5">
                   <PartnerOnboarding
                     partnerId={selectedPartner.id}
                     hasTerm={Boolean(selectedPartner.active_term)}
@@ -896,10 +980,6 @@ export function PartnersWorkspace({
                     approved={partnerProducts[selectedPartner.id] ? { count: selectedProducts.filter((product) => product.approved).length, total: selectedProducts.length } : null}
                     lastSubmission={selectedPartner.last_submission}
                   />
-                  {/* Compliance: the screening dependency, said once and kept visible. */}
-                  <p role="note" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--body)]">
-                    <strong className="font-semibold text-[var(--error-ink)]">The lead form must keep its phone field.</strong> Phone is required for screening and cannot be deleted from a partner form.
-                  </p>
                   <section>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <h3 className="text-base font-semibold">Products this partner may submit</h3>
@@ -909,7 +989,7 @@ export function PartnersWorkspace({
                     </div>
                     {selectedProducts.length > 0 ? (
                       <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-                        <table className="portal-lead-table w-full min-w-[520px]! text-left text-sm">
+                        <table className="portal-lead-table w-full min-w-0! text-left text-sm">
                           <thead>
                             <tr>
                               <th>Product</th>
@@ -940,7 +1020,7 @@ export function PartnersWorkspace({
                       )
                     )}
                   </section>
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className="grid gap-3">
                     <section className="rounded-lg border border-border p-4">
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="text-sm font-semibold">Contact</h3>
@@ -975,6 +1055,7 @@ export function PartnersWorkspace({
                       readOnly={readOnly}
                     />
                   )}
+                </div>
                 </div>
               )}
               {detailTab === "terms" && (
@@ -1119,19 +1200,6 @@ export function PartnersWorkspace({
                 <PartnerFormStudio
                   partnerId={selectedPartner.id}
                   readOnly={readOnly || selectedPartner.status === "offboarded"}
-                />
-              )}
-              {detailTab === "team" && (
-                <PartnerUsersPanel
-                  key={selectedPartner.id}
-                  partnerId={selectedPartner.id}
-                  readOnly={readOnly}
-                  offboarded={selectedPartner.status === "offboarded"}
-                  // The admin-assignment route is owner-only; this page's owner flag is the same check.
-                  canAssignAdmin={canManageProductConfig}
-                  seatUsage={usage.partnerUsers}
-                  seatLimit={limits.max_partner_users}
-                  onSeatsChanged={() => void refreshCapacity()}
                 />
               )}
               {detailTab === "activity" && (

@@ -7,6 +7,10 @@ import { Bell, ChevronDown, ChevronLeft, Loader2 } from "lucide-react";
 
 import { Callout, KeyValues, SettingsMeter, Timeline, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
+import type { RecordedOutcome } from "@/components/app/use-disposition-walk";
+import { InboundSteps, LiveTransfersColumn, OutcomeEffects, ScreeningCard, useTakeNext } from "@/components/app/inbound/call-cockpit-parts";
+import { Ring } from "@/components/app/inbound/stream-parts";
+import { SamePersonPrompt, type SamePersonCheck } from "@/components/app/same-person-prompt";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -34,6 +38,8 @@ type Panel = {
   /** Keys whose values arrive masked ("•••• 4021"); the full value comes from ./reveal. */
   sensitiveKeys?: string[];
   context?: Context | null;
+  /** The existing-customer pre-flight stored on the lead (LA-1.24), for the "Same person?" prompt. */
+  preflight?: SamePersonCheck | null;
 };
 type HandoffContext = { canOffer: boolean; licensedAgents: Array<{ id: string; name: string; role: "owner" | "producer" }> };
 
@@ -129,6 +135,14 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [outcomeOpen, setOutcomeOpen] = useState(false);
+  // What the recorded outcome did (Inbound A): shown in the call dock instead of leaving for Deal flow.
+  const [recorded, setRecorded] = useState<RecordedOutcome | null>(null);
+  const { taking, takeNext } = useTakeNext();
+  // "Same person?" (Module 1 simplified): a re-check replaces the stored result; an existing customer
+  // holds Continue to underwriting until the agent says they checked.
+  const [preflight, setPreflight] = useState<SamePersonCheck | null | undefined>(undefined);
+  const [rechecking, setRechecking] = useState(false);
+  const [customerChecked, setCustomerChecked] = useState(false);
   const [continuing, setContinuing] = useState(false);
   const [continueError, setContinueError] = useState<string | null>(null);
   // Sections the agent opened again after they completed. Everything else complete stays folded.
@@ -252,30 +266,26 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     }
   }
 
-  const actions = (
-    <>
-      {!readOnly && panel && (
-        <Button type="button" variant="outline" onClick={() => void nudgeTeam()} disabled={nudgeSaving}>
-          {nudgeSaving ? <Loader2 aria-hidden className="animate-spin" /> : <Bell aria-hidden />}Nudge team
-        </Button>
-      )}
-      {/* Opens the call-outcome dialog over this panel; "Back to verification" in it just closes it.
-          /app/inbound/[id]/disposition stays for deep links. */}
-      {/* LA-3: the same application workspace the dialer opens. Assistants verify; the licensed agent underwrites. */}
-      {!readOnly && panel && !canHandoff && (
-        <Button type="button" variant="outline" onClick={() => void continueToUnderwriting()} disabled={continuing}>
-          {continuing && <Loader2 aria-hidden className="animate-spin" />}Continue to underwriting
-        </Button>
-      )}
-      <Button type="button" onClick={() => setOutcomeOpen(true)}>Record call outcome</Button>
-      <DispositionWizardDialog workItemId={workItemId} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} onBackToVerification={() => setOutcomeOpen(false)} />
-    </>
-  );
+  /** Run the existing-customer check again (the lead page's Re-check), and show its answer here. */
+  async function recheckSamePerson() {
+    if (!panel) return;
+    setRechecking(true);
+    try {
+      const response = await fetch(`/api/app/leads/${encodeURIComponent(panel.workItem.leadId)}/preflight`, { method: "POST" });
+      const body = await response.json().catch(() => null) as { result?: SamePersonCheck; error?: string } | null;
+      if (!response.ok || !body?.result) { notify.block(body?.error ?? "Could not re-check this lead"); return; }
+      setPreflight(body.result);
+      setCustomerChecked(false);
+      notify.done("Checked again");
+    } catch { notify.block("Could not reach Insurvas. Try again."); }
+    finally { setRechecking(false); }
+  }
+
   /* A detail page keeps one back link above its title instead of a breadcrumb or a header button. */
   const backLink = (
     <Link href="/app/inbound" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
       <ChevronLeft className="size-4" aria-hidden="true" />
-      Inbound transfers
+      Inbound
     </Link>
   );
 
@@ -291,6 +301,8 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   }
 
   const requiredDone = panel.session.progress_percentage === 100;
+  const samePerson = preflight === undefined ? panel.preflight : preflight;
+  const heldAsCustomer = samePerson?.status === "already_customer" && !customerChecked;
   const allFields = panel.sections.flatMap((section) => section.fields);
   const requiredConfirmed = allFields.filter((field) => field.is_required && ["confirmed", "corrected"].includes(field.state)).length;
   const progressText = `${requiredConfirmed} of ${panel.requiredCount} required fields confirmed`;
@@ -307,43 +319,58 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     return entry.kind === "corrected" ? `${label} corrected` : entry.kind === "outstanding" ? `${label} marked outstanding` : `${label} confirmed`;
   };
 
+  // Inbound A (redesign 2026-10-25): the Dialer A cockpit for a transfer — who else is waiting on the
+  // left, this caller and their verification in the middle, the call dock on the right. The fields,
+  // their folding and every write are unchanged (LA-1.11); the outcome is still the disposition walk.
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
       {revealReasonDialog}
       {backLink}
-      <PageHeader title={`Verification — ${leadName}`} actions={actions} />
-      {continueError && <Callout tone="error" title={continueError} />}
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="max-lg:order-3 lg:sticky lg:top-[calc(var(--top-bar-h,56px)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h,56px)-48px)] lg:w-[280px] lg:shrink-0 lg:flex lg:flex-col">
+          <LiveTransfersColumn canTake={Boolean(recorded)} onTake={() => void takeNext()} taking={taking} />
+          {/* Inbound A3 (2026-10-25): what was checked before the call sits under the line. */}
+          <div className="mt-4"><ScreeningCard workItemId={workItemId} /></div>
+        </div>
 
-      <section aria-label="Call" className="grid min-w-0 gap-4 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4 sm:grid-cols-3 lg:grid-cols-5">
-        {[["Customer", leadName], ["State", leadState], ["Product", panel.template.product_name || productLineLabel(panel.workItem.productLine)], ["Lead source", source], ["Session status", requiredDone ? "Complete" : "In progress"]].map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <div className={label12}>{label}</div>
-            <div className="mt-1 truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{value}</div>
-          </div>
-        ))}
-      </section>
+        <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1">
+          <section aria-label="Caller" className="m-glass flex min-w-0 flex-col gap-4 rounded-[16px] border border-[var(--border)] p-4">
+            <div className="flex items-center gap-4">
+              <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">{leadName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+              <div className="min-w-0 flex-1">
+                <PageHeader title={leadName} description={[panel.template.product_name || productLineLabel(panel.workItem.productLine), leadState, context?.partnerName ?? source].filter(Boolean).join(" · ")} />
+              </div>
+            </div>
+            <InboundSteps verified={requiredDone} recorded={Boolean(recorded)} />
+          </section>
+          <SamePersonPrompt
+            check={samePerson}
+            duplicateFlagged={panel.lead.values?.duplicate_warning === true}
+            onRecheck={readOnly ? undefined : () => void recheckSamePerson()}
+            busy={rechecking}
+            acknowledged={customerChecked}
+            onAcknowledge={() => setCustomerChecked(true)}
+          />
+          {continueError && <Callout tone="error" title={continueError} />}
+          {context?.claim.at && new Date(panel.session.started_at).getTime() < new Date(context.claim.at).getTime() - 5_000 && (
+            <Callout tone="info" title="Resumed from an earlier call: fields confirmed or corrected then are kept below." />
+          )}
+          {readOnly && <Callout tone="info" title="Your account is read-only: field changes are disabled." />}
+          {error && <Callout tone="error" title={error} />}
 
-      {context?.claim.at && new Date(panel.session.started_at).getTime() < new Date(context.claim.at).getTime() - 5_000 && (
-        <Callout tone="info" title="Resumed from an earlier call: fields confirmed or corrected then are kept below." />
-      )}
-      {readOnly && <Callout tone="info" title="Your account is read-only: field changes are disabled." />}
-      {error && <Callout tone="error" title={error} />}
+          {canHandoff && handoffContext && (
+            <section aria-label="Hand off to a licensed agent" className="flex min-w-0 flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+              <label htmlFor="handoff-agent" className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Hand off to a licensed agent</label>
+              <select id="handoff-agent" className={cn(toolbarControl, "min-w-56 flex-1 sm:flex-none")} value={handoffTarget} disabled={readOnly || handoffSaving} onChange={(event) => setHandoffTarget(event.target.value)}>
+                <option value="">Choose an agent…</option>
+                {handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}
+              </select>
+              <Button type="button" onClick={() => void offerHandoff()} disabled={readOnly || handoffSaving || !handoffTarget}>{handoffSaving ? "Offering…" : "Offer handoff"}</Button>
+              {handoffError && <p role="alert" className="m-0 w-full text-sm leading-[1.5] text-[var(--error-ink)]">{handoffError}</p>}
+            </section>
+          )}
+          {canHandoff && handoffError && !handoffContext && <Callout tone="error" title={`Handoff is unavailable: ${handoffError}`} />}
 
-      {canHandoff && handoffContext && (
-        <section aria-label="Hand off to a licensed agent" className="flex min-w-0 flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-          <label htmlFor="handoff-agent" className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Hand off to a licensed agent</label>
-          <select id="handoff-agent" className={cn(toolbarControl, "min-w-56 flex-1 sm:flex-none")} value={handoffTarget} disabled={readOnly || handoffSaving} onChange={(event) => setHandoffTarget(event.target.value)}>
-            <option value="">Choose an agent…</option>
-            {handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}
-          </select>
-          <Button type="button" onClick={() => void offerHandoff()} disabled={readOnly || handoffSaving || !handoffTarget}>{handoffSaving ? "Offering…" : "Offer handoff"}</Button>
-          {handoffError && <p role="alert" className="m-0 w-full text-sm leading-[1.5] text-[var(--error-ink)]">{handoffError}</p>}
-        </section>
-      )}
-      {canHandoff && handoffError && !handoffContext && <Callout tone="error" title={`Handoff is unavailable: ${handoffError}`} />}
-
-      <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex min-w-0 flex-1 flex-col gap-6">
           <section aria-label="Application fields" className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
               <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Application fields</span>
@@ -431,10 +458,43 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
           </section>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-4 lg:w-[360px] lg:shrink-0">
-          <Card title="Verification progress">
+        {/* The call dock: the clock, how far verification is, and the call's next step. */}
+        <aside aria-label="Call" className="flex min-w-0 flex-col gap-4 max-lg:order-2 lg:sticky lg:top-[calc(var(--top-bar-h,56px)+16px)] lg:w-[340px] lg:shrink-0">
+          <section className="m-glass flex flex-col gap-3 rounded-[16px] border border-[var(--border)] p-4">
+            {/* Inbound A3: the clock inside a ring that fills as the required fields are confirmed. */}
+            <div className="flex justify-center py-1">
+              <Ring value={panel.session.progress_percentage / 100} tone={requiredDone ? "success" : "brand"} size={132} thickness={8} label={`${progressText}${callStartedAt ? `, on the call ${elapsed(callStartedAt, now)}` : ""}`}>
+                <span className="block text-center">
+                  <span className="block text-2xl leading-[1.1] font-semibold tracking-[-0.02em]">{callStartedAt ? elapsed(callStartedAt, now) : "—"}</span>
+                  <span className="block text-xs font-medium text-muted-foreground">{callStartedAt ? "on the call" : "no open call"}</span>
+                </span>
+              </Ring>
+            </div>
             <SettingsMeter value={panel.session.progress_percentage} max={100} tone={requiredDone ? "success" : "primary"} caption={progressText} ariaLabel={progressText} />
-            <div className="mt-4">
+            {recorded ? (
+              <>
+                <OutcomeEffects outcome={recorded} />
+                <Button type="button" onClick={() => void takeNext()} disabled={taking} className="h-12 w-full text-base">{taking ? "Claiming…" : "Take the next transfer"}</Button>
+              </>
+            ) : (
+              <>
+                <Button type="button" onClick={() => setOutcomeOpen(true)} className="h-12 w-full text-base">Record call outcome</Button>
+                {!readOnly && !canHandoff && (
+                  <Button type="button" variant="outline" onClick={() => void continueToUnderwriting()} disabled={continuing || heldAsCustomer} title={heldAsCustomer ? "They are already a customer. Check it under Same person? first." : undefined}>
+                    {continuing && <Loader2 aria-hidden className="animate-spin" />}Continue to underwriting
+                  </Button>
+                )}
+                {!readOnly && (
+                  <Button type="button" variant="outline" onClick={() => void nudgeTeam()} disabled={nudgeSaving}>
+                    {nudgeSaving ? <Loader2 aria-hidden className="animate-spin" /> : <Bell aria-hidden />}Nudge team
+                  </Button>
+                )}
+              </>
+            )}
+            <DispositionWizardDialog workItemId={workItemId} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} onBackToVerification={() => setOutcomeOpen(false)} onRecorded={(result) => { setOutcomeOpen(false); setRecorded(result); notify.done(result.label ? `Recorded: ${result.label}` : "Call outcome recorded"); }} />
+          </section>
+          <Card title="This call">
+            <div>
               <KeyValues items={[
                 { label: "Claimed by", value: context?.claim.byName ? `${context.claim.byName}, ${clock(context.claim.at)}` : "—" },
                 { label: "Partner", value: context?.partnerName ?? "—" },
@@ -465,7 +525,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
               { label: "Started", value: new Date(panel.session.started_at).toLocaleString() },
             ]} />
           </Card>
-        </div>
+        </aside>
       </div>
     </div>
   );

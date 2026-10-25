@@ -22,6 +22,7 @@ import { OverdueComplaintBanner } from "@/components/app/overdue-complaint-banne
 import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
 import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
 import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
+import { LiveTransferCard } from "@/components/app/inbound/live-transfer-card";
 import { Suspense } from "react";
 
 /**
@@ -120,6 +121,10 @@ export default async function AgentShellLayout({ children }: { children: React.R
       available.includes("true_cpa"),
   };
 
+  // Inbound A (2026-10-25): the live-transfer card on every page, for the roles that take transfers
+  // (the inbox's own gate: owner, producer, assistant) on a plan that has them.
+  const takesTransfers = moduleAccess.inbound && [context.role, ...(context.roles ?? [])].some((role) => role === "owner" || role === "producer" || role === "assistant");
+
   const plan = {
     name: planName,
     seats: entitlement.limits.max_seats,
@@ -138,6 +143,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
           two together are the whole sound story on this plane: the bridge covers call sites
           not yet migrated, this primes the layer that governs the ones that are. */}
       <NotifySoundPrimer />
+      {takesTransfers && <LiveTransferCard />}
 
       {/* min-w-0 is load-bearing, for the same reason it is on the admin shell: a flex item
           defaults to min-width:auto, so <main> refuses to shrink below its widest child and one

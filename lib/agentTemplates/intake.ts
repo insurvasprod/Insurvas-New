@@ -7,6 +7,7 @@ import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import { runExistingCustomerPreflight } from "@/lib/existingCustomerPreflight/service";
 import { linkLeadsToContacts } from "@/lib/contacts/leadLink";
 import { notifyTenantAgents } from "@/lib/agentAlerts/service";
+import { inboundSettingsOrDefaults } from "@/lib/inboundSettings/service";
 import { intakeLocalDate } from "@/lib/dealFlow/localDate";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 
@@ -109,7 +110,8 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
 
   // The durable per-user alert is a side effect of intake. Dedupe is in the notification table,
   // so a retried submission cannot make a single lead ring repeatedly.
-  void notifyTenantAgents({
+  // Settings › Inbound can turn this alert off for the workspace (the claim card still shows the wait).
+  void inboundSettingsOrDefaults(input.tenantId).then((settings) => settings.alertNewTransfer ? notifyTenantAgents({
     tenantId: input.tenantId,
     // Buffer agents (role `assistant`, LA-1.14) take the call first, so they are told too. An agency
     // without buffer agents has no assistant members and nobody extra is alerted.
@@ -119,7 +121,7 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
     body: `${name || "A new lead"} is waiting to be claimed${phone ? ` · ${phone}` : ""}.`,
     link: `/app/leads/${input.lead.id}`,
     sourceKey: `new-lead:${input.lead.id}`,
-  }).catch((error) => console.error("Agent new-lead alert failed", error));
+  }) : undefined).catch((error) => console.error("Agent new-lead alert failed", error));
 
   // Chat is a notification side effect. The lead/queue write remains successful when chat
   // is unavailable, while this event key prevents a retry from announcing the lead twice.

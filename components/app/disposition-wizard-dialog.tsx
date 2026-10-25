@@ -10,7 +10,7 @@ import { CallbackDetailsFields, OutcomeChoices, OutcomeEffects, QuestionAnswer, 
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
-import { CALLBACK_KEY, answerLabel, useDispositionWalk, type DispositionWalk, type WalkView } from "@/components/app/use-disposition-walk";
+import { CALLBACK_KEY, answerLabel, useDispositionWalk, type DispositionWalk, type WalkView, type RecordedOutcome } from "@/components/app/use-disposition-walk";
 import type { DispositionOption } from "@/lib/dispositions/types";
 import { cn } from "@/lib/utils";
 
@@ -93,7 +93,7 @@ export function DispositionWizardDialog({
   onOpenChange: (open: boolean) => void;
   readOnly: boolean;
   /** Replaces the default after-record step (a toast and Daily deal flow). */
-  onRecorded?: (result: { leadId: string | null }) => void;
+  onRecorded?: (result: RecordedOutcome) => void;
   /** Where "Back to verification" goes; the verification page when not given. */
   onBackToVerification?: () => void;
 }) {

@@ -59,7 +59,11 @@ function rate(value: number | null, sent: number) { return sent ? percent(value)
 function countDelta(current: number, previous: number, goodWhen: "up" | "down" = "up") { const value = percentChange(current, previous); return value == null ? undefined : { value, goodWhen }; }
 function rateDelta(current: number | null, previous: number | null, goodWhen: "up" | "down" = "up") { const value = pointChange(current, previous); return value == null ? undefined : { value, unit: " pts", goodWhen }; }
 
-export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { partnerId: string; initialPeriod?: Period | null }) {
+/**
+ * `embedded`: shown as the Quality tab of the partner's own record (2026-10-25, Module 1 simplified):
+ * the record already names the partner, so the back link and the title are left out here.
+ */
+export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedded = false }: { partnerId: string; initialPeriod?: Period | null; embedded?: boolean }) {
   const [period, setPeriod] = useState<Period>(() => initialPeriod ?? defaultPartnerQualityPeriod());
   const [data, setData] = useState<PartnerQualityDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,8 +155,8 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
   const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    {back}
-    <PageHeader title={name} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />
+    {!embedded && back}
+    {embedded ? <p className="m-0 text-sm leading-[1.5] text-muted-foreground">{periodText(active)}</p> : <PageHeader title={name} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />}
 
     {/* Four figures (2026-10-06 redesign): claimed and worked ride on Sent's footnote, duplicates
         on DQ's. Every count is still in the Team and Daily tabs, and opens its leads there. */}

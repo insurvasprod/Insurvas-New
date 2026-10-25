@@ -4,6 +4,7 @@ import { getClientIp } from "@/lib/request/clientInfo";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import { notifyAgentUser } from "@/lib/agentAlerts/service";
+import { inboundSettingsOrDefaults } from "@/lib/inboundSettings/service";
 import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
 
 export type LicensedAgent = { id: string; name: string; role: "owner" | "producer" };
@@ -63,12 +64,13 @@ function mapError(message: string): BufferHandoffError {
 }
 
 export async function offerBufferHandoff(params: { tenantId: string; workItemId: string; bufferUserId: string; targetUserId: string; request: Request }) {
+  const { handoffTimeoutSeconds } = await inboundSettingsOrDefaults(params.tenantId);
   const { data, error } = await getSupabaseServiceClient().rpc("offer_buffer_handoff", {
     p_tenant_id: params.tenantId,
     p_work_item_id: params.workItemId,
     p_buffer_user_id: params.bufferUserId,
     p_target_user_id: params.targetUserId,
-    p_timeout_seconds: 30,
+    p_timeout_seconds: handoffTimeoutSeconds,
     p_ip: getClientIp(params.request),
     p_user_agent: params.request.headers.get("user-agent"),
   });

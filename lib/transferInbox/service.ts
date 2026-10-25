@@ -198,7 +198,7 @@ export async function getInboxSummaryFallback(tenantId: string, scope: ProducerS
 }
 
 export class ClaimNextError extends Error {
-  constructor(public code: "no_transfer_waiting" | "role_not_allowed" | "language_not_spoken" | "schema_pending" | "claim_failed", message: string) { super(message); }
+  constructor(public code: "no_transfer_waiting" | "role_not_allowed" | "language_not_spoken" | "agent_on_break" | "not_licensed" | "schema_pending" | "claim_failed", message: string) { super(message); }
 }
 
 /** What claim_transfer_lead returns. The last three arrive with 20260925709860; absent before it. */
@@ -239,6 +239,10 @@ export async function claimNextTransfer(params: { tenantId: string; userId: stri
     if (error.message === "NO_TRANSFER_WAITING") throw new ClaimNextError("no_transfer_waiting", "No transfer is waiting that matches these filters.");
     // 20260925709860: every waiting caller that matches the filters asked for a language this agent does not list.
     if (error.message === "LANGUAGE_NOT_SPOKEN") throw new ClaimNextError("language_not_spoken", `The callers waiting asked for ${languageName(error.details)}, which is not among your languages. A ${languageName(error.details)}-speaking agent or buffer can take them.`);
+    // 20261025100000 (Settings › Inbound): the workspace skips agents on a break, and offers licensed
+    // agents only callers in states they hold a live licence for.
+    if (error.message === "AGENT_ON_BREAK") throw new ClaimNextError("agent_on_break", "You are on a break, so no transfer is offered to you. Set yourself to Ready on the floor to take one.");
+    if (error.message === "NOT_LICENSED_FOR_WAITING") throw new ClaimNextError("not_licensed", `The callers waiting are in ${error.details ?? "a state"} you hold no live licence for. A licensed agent or a buffer can take them.`);
     if (error.message === "ROLE_NOT_ALLOWED") throw new ClaimNextError("role_not_allowed", "Your role cannot claim transfers.");
     if (error.code === "42883" || error.code === "PGRST202") throw new ClaimNextError("schema_pending", "This setting needs a database update that has not been applied yet.");
     console.error("[claim-next] claim_next_transfer failed", error.code, error.message, error.details);

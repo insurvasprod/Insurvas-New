@@ -20,7 +20,7 @@ import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
 import { cn } from "@/lib/utils";
 import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
-import { DispositionPicker, ListView, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
+import { DispositionPicker, ListView, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, initials, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 
 type Lead = { id: string; pipeline_id: string; stage_id: string; values: Record<string, unknown>; screening_outcome?: string | null; screening_warning?: string | null; created_at: string; updated_at: string; submitter_name?: string | null; owner_user_id?: string | null; owner_name?: string | null; disposition?: string | null; disposition_at?: string | null; stage_entered_at?: string | null; monthly_premium_cents?: number | null };
@@ -102,14 +102,17 @@ function PipelineCard({ lead, selected, readOnly, now, money, late, onSelect, on
   // Time in the current stage when it is known (20260925100000); until then, time since arrival.
   const stageMs = inStageMs(lead, now);
   return (
-    <article draggable={!readOnly} onDragStart={onDragStart} className={cn("m-card w-full shrink-0 overflow-hidden rounded-lg border border-border bg-card", !readOnly && "cursor-grab active:cursor-grabbing", late && "border-l-[3px] border-l-[var(--error)]", selected && "border-[var(--primary)] shadow-[var(--shadow-hover)]")}>
-      <button type="button" onClick={onSelect} className="block w-full px-3 py-2.5 text-left" title={readOnly ? undefined : "Open to see the lead, or drag it to another stage — you will be asked which disposition"}>
-        <span className="block truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{leadName(lead)}</span>
-        <span className={cn("mt-[3px] block truncate text-xs leading-normal tracking-[-0.01em] tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-muted-foreground")}>
-          {lead.submitter_name ?? "Workspace"} · {premium ?? (stageMs != null ? `${durationLabel(stageMs)} in stage` : <span title={`Arrived ${when(lead.created_at)}`}>{now ? age(lead.created_at, now) : ""}</span>)}
+    <article draggable={!readOnly} onDragStart={onDragStart} className={cn("m-card w-full shrink-0 overflow-hidden rounded-xl border bg-[color-mix(in_srgb,var(--color-card)_70%,transparent)]", !readOnly && "cursor-grab active:cursor-grabbing", late ? "border-[color-mix(in_srgb,var(--error)_55%,transparent)]" : "border-border", selected && "border-[var(--primary)] shadow-[var(--shadow-hover)]")}>
+      <button type="button" onClick={onSelect} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left" title={readOnly ? undefined : "Open to see the lead, or drag it to another stage — you will be asked which disposition"}>
+        <span aria-hidden className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--accent-ink)]">{initials(leadName(lead))}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{leadName(lead)}</span>
+          <span className={cn("mt-[3px] block truncate text-xs leading-normal tracking-[-0.01em] tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-muted-foreground")}>
+            {lead.submitter_name ?? "Workspace"} · {premium ?? (stageMs != null ? `${durationLabel(stageMs)} in stage` : <span title={`Arrived ${when(lead.created_at)}`}>{now ? age(lead.created_at, now) : ""}</span>)}
+          </span>
         </span>
-        {lead.screening_warning && <span role="status" className="mt-2 block rounded-md bg-[var(--warning-surface)] px-2 py-1 text-xs text-[var(--warning-ink)]">{lead.screening_warning}</span>}
       </button>
+      {lead.screening_warning && <span role="status" className="mx-3 mb-2.5 block rounded-md bg-[var(--warning-surface)] px-2 py-1 text-xs text-[var(--warning-ink)]">{lead.screening_warning}</span>}
     </article>
   );
 }
@@ -145,12 +148,13 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
           <section
             key={column.id}
             aria-label={`${column.name}: ${columnLeads.length} ${columnLeads.length === 1 ? "lead" : "leads"}`}
-            className={cn("flex min-h-0 min-w-[264px] flex-1 basis-0 flex-col overflow-hidden rounded-lg border border-border bg-[var(--surface-alt)]", dragOver === column.id && "border-[var(--primary)] bg-[var(--primary-soft)]")}
+            className={cn("m-glass flex min-h-0 min-w-[240px] flex-1 basis-0 flex-col overflow-hidden rounded-xl border border-t-[3px] border-border", dragOver === column.id && "border-[var(--primary)] bg-[var(--primary-soft)]")}
+            style={{ borderTopColor: column.color }}
             onDragOver={(event) => { if (column.id === UNMAPPED || readOnly) return; event.preventDefault(); setDragOver(column.id); }}
             onDragLeave={() => setDragOver(null)}
             onDrop={(event) => { event.preventDefault(); setDragOver(null); const lead = leads.find((item) => item.id === draggedId); setDraggedId(null); if (!lead || lead.stage_id === column.id) return; if (!dropTarget) { notify.block(`Map a disposition to ${column.name} in Settings › Dispositions to move leads there.`); return; } onStageChange(lead, column.id); }}
           >
-            <header className="border-b-2 bg-card p-3" style={{ borderBottomColor: column.color }}>
+            <header className="px-3 pt-3 pb-1">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{column.name}</h3>
                 <span className="text-sm font-semibold tabular-nums text-muted-foreground">{columnLeads.length.toLocaleString()}</span>
@@ -304,7 +308,7 @@ export function LeadWorkspace() {
       setMoving(false);
     }
   }
-  if (error && !data) return <div className="flex flex-col gap-6"><PageHeader title="Lead workspace" /><TableCard><ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load(query)}>Try again</Button>} /></TableCard></div>;
+  if (error && !data) return <div className="flex flex-col gap-6"><PageHeader title="Leads" /><TableCard><ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load(query)}>Try again</Button>} /></TableCard></div>;
   if (!data || !template) return <PageLoading strip={false} />;
   const exportParams = query ? `?${query}` : "";
   const toggle = (lead: Lead) => setSelected((current) => (current?.id === lead.id ? null : lead));
@@ -342,7 +346,8 @@ export function LeadWorkspace() {
   return (
     <div className="m-stagger lead-workspace-page flex flex-col gap-6">
       <PageHeader
-        title="Lead workspace"
+        title="Leads"
+        description="Every lead by stage. Drag a card to record the outcome that moves it."
         actions={
           <>
             {data.template.latest && <Button type="button" variant="outline" onClick={async () => { const response = await fetch("/api/app/templates/assignment", { method: "POST" }); if (!response.ok) notify.block("Could not update the template"); else { notify.done("Template updated"); void load(query); } }}>Update template</Button>}
@@ -354,16 +359,9 @@ export function LeadWorkspace() {
 
       {error && <p role="alert" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      {/* The board or table, with the lead preview split beside it from lg (DetailPanel). */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <TableCard
-          // Full height in every view: the card reaches the bottom of the window even when a view is short.
-          className="min-w-0 flex-1 min-h-[calc(100dvh-var(--top-bar-h)-121px)]"
-          toolbar={
-            <div className="flex w-full flex-col gap-3">
-              {/* One pipeline per page: each is a tab with its lead count. */}
-              {pipelines.length > 0 && (
-                <div role="tablist" aria-label="Pipeline" className="-mx-4 -mt-3 flex overflow-x-auto overflow-y-hidden border-b border-border px-4">
+      {/* Leads A1 (2026-10-25): one pipeline at a time, its tabs under the title. */}
+      {pipelines.length > 0 && (
+        <div role="tablist" aria-label="Pipeline" className="-mt-2 flex overflow-x-auto overflow-y-hidden border-b border-border">
                   {pipelines.map((item) => {
                     const active = item.id === activePipeline?.id;
                     return (
@@ -373,8 +371,17 @@ export function LeadWorkspace() {
                       </button>
                     );
                   })}
-                </div>
-              )}
+        </div>
+      )}
+
+      {/* The board or table, with the lead preview split beside it from lg (DetailPanel). On the board
+          the card itself steps back, so the glass columns sit on the page as in the mockup. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <TableCard
+          // Full height in every view: the card reaches the bottom of the window even when a view is short.
+          className={cn("min-w-0 flex-1 min-h-[calc(100dvh-var(--top-bar-h)-121px)]", view === "board" && "border-transparent bg-transparent shadow-none")}
+          toolbar={
+            <div className="flex w-full flex-col gap-3">
             {/* Enter in the search box searches (server side); the hidden submit is for screen readers
                 that announce the form. */}
             <form onSubmit={applySearch} className="w-full">
@@ -417,7 +424,7 @@ export function LeadWorkspace() {
           }
         >
           {/* The board's columns sit inset; Stages, Table and List render bare, edge to edge in the card. */}
-          <div className={view === "board" ? "p-3" : undefined}>
+          <div className={view === "board" ? "pt-3" : undefined}>
             {view === "stages" && (
               <StagesView
                 pipelines={activePipeline ? [activePipeline] : []}
