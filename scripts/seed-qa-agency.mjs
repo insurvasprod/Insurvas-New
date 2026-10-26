@@ -4,7 +4,7 @@
  *   D2  teammates (2 producers, 2 assistants, 1 bookkeeper, 2 setters, 1 pending + 1 expired invite)
  *   D3  agency profile, tenant carriers with contract levels and writing numbers, commission
  *       schedules, advance rules
- *   D4  carrier appointments, state licences, one E&O policy, CE records
+ *   D4  carrier appointments, state licences (E&O and CE were removed from the platform 2026-10-26)
  *   D5  carrier commission statements with lines and accepted matches, ~10 lines left unmatched
  *   D6  ~120 policies across every status tenant_policies allows
  *   D7  nothing is written: the commission ledger is DERIVED (lib/ledger/service.ts multiplies
@@ -30,7 +30,7 @@
  *
  * Idempotent: every row has a deterministic natural key (policy numbers QA-D1-0001…, statement files
  * qa-d1-…, notification source keys qa-d1:…, lapse signal source_ref qa-d1-lapse-…, usage idempotency
- * keys qa-d1-…, emails @qa-demo.insurvas.test, licence/E&O numbers QAD1-…, writing numbers QAD1-…).
+ * keys qa-d1-…, emails @qa-demo.insurvas.test, licence numbers QAD1-…, writing numbers QAD1-…).
  * audit_log is the only touched table with a jsonb metadata column; it carries qa_seed.
  * A second run inserts nothing.
  *
@@ -433,7 +433,7 @@ await section("commission_schedules", async () => {
 });
 
 // =============================================================================
-// D4 — appointments, licences, E&O, CE
+// D4 — appointments, licences
 // =============================================================================
 const APPOINTMENTS = [
   ["americo", "TX", "active", "2025-01-15", null, null],
@@ -464,14 +464,6 @@ const LICENCES = [
   ["IL", "QAD1-IL-4402277", "2027-08-31", "non_resident"],
 ].map(([state, license_number, expires_at, licence_type]) => ({ state, license_number, expires_at, licence_type, lines_of_authority: ["life", "health"] }));
 
-const CE = [
-  { state: "TX", credits_required: 24, credits_completed: 18, deadline: "2026-11-30", ethics_required: 3, ethics_completed: 3 },
-  { state: "FL", credits_required: 24, credits_completed: 24, deadline: "2027-03-31", ethics_required: 5, ethics_completed: 5 },
-  { state: "AZ", credits_required: 24, credits_completed: 9, deadline: "2026-10-15", ethics_required: 3, ethics_completed: 0 },  // 20 days left
-  { state: "OK", credits_required: 24, credits_completed: 24, deadline: "2027-06-30", ethics_required: 3, ethics_completed: 3 },
-  { state: "GA", credits_required: 24, credits_completed: 10, deadline: "2026-08-30", ethics_required: 3, ethics_completed: 1 },  // overdue
-];
-
 await section("appointments", async () => {
   const rows = must(await db.from("appointments").select("id, carrier_id, state, status, effective_from, expires_at, terminated_at").eq("tenant_id", TENANT_ID), "read appointments");
   const insert = [];
@@ -501,28 +493,6 @@ await section("licenses", async () => {
   bump("licenses", "inserted", insert.length);
   if (!DRY && insert.length) must(await db.from("licenses").insert(insert), "insert licences");
   note(`${rows.length} licence(s) were already on the tenant; ${rows.length + insert.length} after this run`);
-});
-
-await section("eo_policies", async () => {
-  const spec = { carrier: "Northfield Professional Liability", policy_number: "QAD1-EO-2026-0417", expires_at: "2027-02-28", coverage_amount_cents: 100_000_000, per_claim_cents: 100_000_000, aggregate_cents: 200_000_000 };
-  const row = must(await db.from("eo_policies").select("*").eq("tenant_id", TENANT_ID).eq("policy_number", spec.policy_number).maybeSingle(), "read E&O");
-  if (row && Object.keys(spec).every((key) => row[key] === spec[key])) { bump("eo_policies", "kept"); return; }
-  bump("eo_policies", row ? "updated" : "inserted");
-  if (!DRY) must(await db.rpc("save_eo_policy_with_limits", { p_tenant_id: TENANT_ID, p_carrier: spec.carrier, p_policy_number: spec.policy_number, p_expires_at: spec.expires_at, p_coverage_amount_cents: spec.coverage_amount_cents, p_details: { per_claim_cents: spec.per_claim_cents, aggregate_cents: spec.aggregate_cents } }), "save E&O");
-});
-
-await section("ce_records", async () => {
-  const rows = must(await db.from("ce_records").select("*").eq("tenant_id", TENANT_ID), "read CE");
-  const insert = [];
-  for (const spec of CE) {
-    const row = rows.find((r) => r.state === spec.state);
-    if (!row) { insert.push({ tenant_id: TENANT_ID, ...spec }); continue; }
-    const { state, ...values } = spec;
-    if (Object.keys(values).some((key) => row[key] !== values[key])) { bump("ce_records", "updated"); if (!DRY) must(await db.from("ce_records").update(values).eq("id", row.id), `update CE ${state}`); }
-    else bump("ce_records", "kept");
-  }
-  bump("ce_records", "inserted", insert.length);
-  if (!DRY && insert.length) must(await db.from("ce_records").insert(insert), "insert CE");
 });
 
 // =============================================================================

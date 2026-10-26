@@ -34,6 +34,10 @@
 /* The landing intro's hand-off (2026-10-13): while the intro plays (html.intro-play) the nav logo is
  * held back, and fades in at 2.3 s exactly as the intro's flying mark lands on its isotype. The 3D
  * review shot (html.intro-3d) reveals it itself. */
+/* Phones (2026-10-22): one step smaller below 380px, so the bar fits a 320px screen. */
+@media (max-width: 379px) {
+  .introLogo:global(.insurvas-logo-wordmark.insurvas-logo-public) { width: 128px; height: 30px; }
+}
 :global(html.intro-play) .introLogo { animation: intro-logo-in 200ms ease 2300ms both; }
 :global(html.intro-3d) .introLogo { animation: none; }
 /* Held with the rest of the intro while it waits for the 3D shot (landing.module.css). */

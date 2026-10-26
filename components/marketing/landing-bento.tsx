@@ -37,7 +37,7 @@ export function LandingBento() {
           </h2>
         </Reveal>
 
-        <div className="mt-12 grid gap-5 lg:grid-cols-12">
+        <div className="mt-12 grid grid-cols-1 gap-5 lg:grid-cols-12">
           <Reveal className="lg:col-span-7" variant="rise">
             <Tile title="Every live transfer, claimed exactly once." body="Transfers from your partners land on one floor, screened, with the wait on the row. Two closers click — the server settles who won." className="h-full min-h-[480px]">
               <LandingObject kind="sphere" className="pointer-events-none absolute -bottom-4 -right-6 size-[340px] sm:size-[400px] lg:bottom-0 lg:right-0 lg:size-[380px]" />

@@ -47,7 +47,7 @@ function summary(a: AttemptView): string {
 }
 
 export function TimelineStep() {
-  const { caseView, attempt: current, attemptsForInsured, insured, sample, actions, timeZone } = useWorkspace();
+  const { caseView, attempt: current, attemptsForInsured, insured, sample, seatReadOnly, actions, timeZone } = useWorkspace();
   const [events, setEvents] = useState<TimelineEvent[] | null>(sample ? [] : null);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,10 +62,10 @@ export function TimelineStep() {
 
   const carriers = new Set(attemptsForInsured.map((a) => a.carrierId).filter(Boolean)).size;
   const newest = attemptsForInsured[attemptsForInsured.length - 1] ?? null;
-  const canRetry = Boolean(newest && newest.status === "closed" && newest.outcome && RETRYABLE.includes(newest.outcome) && caseView.status === "open");
+  const canRetry = Boolean(!seatReadOnly && newest && newest.status === "closed" && newest.outcome && RETRYABLE.includes(newest.outcome) && caseView.status === "open");
   const onNewest = newest?.id === current.id;
   const retryWhy = !canRetry
-    ? newest && newest.status !== "closed" ? `Attempt ${newest.attemptNo} is still live` : caseView.status !== "open" ? "This case is closed" : "Only a declined, postponed, refused or expired attempt opens a new one"
+    ? seatReadOnly ? "Read-only — your plan does not allow changes" : newest && newest.status !== "closed" ? `Attempt ${newest.attemptNo} is still live` : caseView.status !== "open" ? "This case is closed" : "Only a declined, postponed, refused or expired attempt opens a new one"
     : !onNewest ? `Open attempt ${newest!.attemptNo} first` : sample ? "Sample data" : undefined;
   const visible = (events ?? []).filter((e) => e.insuredRole === null || e.insuredRole === insured);
   const stepFor = (a: AttemptView) => (a.status === "draft" ? (a.attemptNo > 1 ? "quote" : "interview") : a.status === "ready" ? "submit" : "after");

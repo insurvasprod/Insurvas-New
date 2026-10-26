@@ -63,7 +63,7 @@ export default async function CompliancePage() {
         ))}
       </StatStrip>
       {!alerts.length ? (
-        <TableCard><EmptyState title="Nothing needs you today" hint="No deadline is close, no number was called after it should have stopped, and no licence or E&O is about to lapse." /></TableCard>
+        <TableCard><EmptyState title="Nothing needs you today" hint="No deadline is close, no number was called after it should have stopped, and no licence is about to lapse." /></TableCard>
       ) : null}
     </div>
   );

@@ -26,6 +26,12 @@ export type MenuItem = {
   built?: boolean;
   /** False for a settings page reached from Settings, never listed in the rail itself. */
   sidebar?: false;
+  /**
+   * Listed in the rail only when the item with this key is not (2026-10-26 merges): Vendors &
+   * campaigns is a tab of Lead sources, so it is listed on its own only for someone who can open the
+   * tab but not the page's main item (a plan with the dialer and no list import).
+   */
+  sidebar_fallback_for?: string;
   /** One line on the coming-soon page saying what the screen will do. */
   blurb?: string;
   /**
@@ -90,18 +96,21 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Leads",
     items: [
       item("Leads", { key: "leads.workspace", label: "Lead workspace", path: "/app/leads", icon: "square-kanban", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "assistant"] }),
-      item("Leads", { key: "leads.import", label: "List import", path: "/app/import", icon: "list-plus", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
+      // 2026-10-26: import is a side sheet on Lead sources ("Import a list"); /app/import opens it there.
+      item("Leads", { key: "leads.import", label: "List import", path: "/app/import", icon: "list-plus", built: true, sidebar: false, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
       // Directly after the import, because that is the order the work happens in: import a CSV, look
       // at what arrived, hand it out. The lead workspace is organised by pipeline and answers a
       // different question.
-      item("Leads", { key: "leads.lists", label: "Lead lists", path: "/app/lead-lists", icon: "package", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
-      item("Leads", { key: "leads.assignments", label: "Lead assignment", path: "/app/assignments", icon: "route", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "assistant", "setter"] }),
+      // 2026-10-26 (owner pick, split by job): Lead lists, Vendors & campaigns and List import are one
+      // page, Lead sources. The key stays `leads.lists` — team access and saved hidden pages name it.
+      item("Leads", { key: "leads.lists", label: "Lead sources", path: "/app/lead-sources", icon: "package", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
+      item("Leads", { key: "leads.assignments", label: "Lead routing", path: "/app/assignments", icon: "route", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "assistant", "setter"] }),
       item("Leads", { key: "leads.nurture", label: "Lead recycling", path: "/app/nurture", icon: "recycle", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"] }),
       item("Leads", { key: "leads.duplicates", label: "Duplicate check", path: "/app/duplicates", icon: "copy-check", built: true, required_feature: "duplicate_detection", required_roles: ["owner", "producer", "assistant"] }),
       // Owner and producer only. This screen shows what a list cost and what a usable lead cost,
       // which is money — the same boundary the campaigns and vendors routes enforce, and the reason
       // `assistant` is on List import above but not here.
-      item("Leads", { key: "leads.campaigns", label: "Vendors & campaigns", path: "/app/campaigns", icon: "store", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"], blurb: "Who you buy from, what each batch cost, and what a dialable lead really costs." }),
+      item("Leads", { key: "leads.campaigns", label: "Vendors & campaigns", path: "/app/campaigns", icon: "store", built: true, sidebar_fallback_for: "leads.lists", required_feature: "outbound_dialing", required_roles: ["owner", "producer"], blurb: "Who you buy from, what each batch cost, and what a dialable lead really costs." }),
     ],
   },
   {
@@ -110,9 +119,9 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       // LA-3 · the sale itself: interview → quote → application → submit → policy number.
       item("Sales", { key: "sell.applications", label: "Applications", path: "/app/applications", icon: "file-pen-line", built: true, required_feature: "applications", required_roles: ["owner", "producer"], blurb: "Carrier applications, filled in-app." }),
-      item("Sales", { key: "sell.pending", label: "Pending cases", path: "/app/pending", icon: "hourglass", built: true, required_feature: "applications", required_roles: ["owner", "producer"], blurb: "Everything between submitted and issued." }),
-      item("Sales", { key: "sell.quoting", label: "Quotes", path: "/app/quoting", icon: "calculator", built: true, required_feature: "quoting", required_roles: ["owner", "producer"], blurb: "Compare carrier premiums side by side." }),
-      item("Sales", { key: "sell.draft-dates", label: "Draft dates", path: "/app/draft-dates", icon: "calendar-clock", built: true, required_feature: "draft_date_optimizer", required_roles: ["owner", "producer"], blurb: "Pick the draft date least likely to bounce." }),
+      item("Sales", { key: "sell.pending", sidebar_fallback_for: "sell.applications", label: "Pending cases", path: "/app/pending", icon: "hourglass", built: true, required_feature: "applications", required_roles: ["owner", "producer"], blurb: "Everything between submitted and issued." }),
+      item("Sales", { key: "sell.quoting", sidebar_fallback_for: "sell.applications", label: "Quotes", path: "/app/quoting", icon: "calculator", built: true, required_feature: "quoting", required_roles: ["owner", "producer"], blurb: "Compare carrier premiums side by side." }),
+      item("Sales", { key: "sell.draft-dates", sidebar_fallback_for: "sell.applications", label: "Draft dates", path: "/app/draft-dates", icon: "calendar-clock", built: true, required_feature: "draft_date_optimizer", required_roles: ["owner", "producer"], blurb: "Pick the draft date least likely to bounce." }),
       item("Sales", { key: "sell.deal-flow", label: "Daily deal flow", path: "/app/deal-flow", icon: "clipboard-list", required_feature: "daily_deal_flow", required_roles: ["owner", "producer"], built: true }),
     ],
   },
@@ -133,7 +142,7 @@ export const AGENT_MENU: MenuSection[] = [
       // LA-5.9 · whether the radar's bands separate, and whether working the queue beats the holdout.
       item("Book", { key: "retention.results", label: "Does it work?", path: "/app/retention-results", icon: "chart-line", built: true, required_feature: "chargeback_radar", required_roles: ["owner"], blurb: "Whether the risk bands came true, and what working the queue saved, from your own book." }),
       // "Carrier appointments", not "Appointments". This is LA-0.5's vault — which carriers the
-      // agent is appointed with, in which states, plus licences, E&O and CE. LA-2.11 books customer
+      // agent is appointed with, in which states, plus licences. LA-2.11 books customer
       // appointments into a calendar, and the bare label sent anyone looking for that here. The
       // collision already cost something once: LA-2.8's first draft joined `public.appointments`
       // for its appointment tier and would have served leads on the strength of a licensing record.
@@ -147,7 +156,7 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       item("Team", { key: "team.producers", label: "Producers", path: "/app/producers", icon: "user-round-check", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Everyone who writes business under your contracts." }),
       item("Team", { key: "team.hierarchy", label: "Hierarchy & Overrides", navLabel: "Hierarchy", path: "/app/hierarchy", icon: "trending-up", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Who reports to whom, and what the agency keeps on each producer." }),
-      item("Team", { key: "team.routing", label: "Lead routing", path: "/app/lead-routing", icon: "route", required_feature: "lead_assignment", required_roles: ["owner"], built: true, blurb: "Give every lead to a producer who can write it, before it goes cold." }),
+      item("Team", { key: "team.routing", label: "Lead routing", path: "/app/lead-routing", icon: "route", sidebar_fallback_for: "leads.assignments", required_feature: "lead_assignment", required_roles: ["owner"], built: true, blurb: "Give every lead to a producer who can write it, before it goes cold." }),
       item("Team", { key: "team.splits", label: "Commission splits", path: "/app/commission-splits", icon: "hand-coins", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Policies two producers share, split after the override." }),
       item("Team", { key: "team.payouts", label: "Payout runs", navLabel: "Producer payouts", path: "/app/producer-payouts", icon: "wallet-cards", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Close a period and pay your producers, with a statement each." }),
       item("Team", { key: "team.scorecards", label: "Producer scorecards", navLabel: "Scorecards", path: "/app/producer-scorecards", icon: "gauge", required_feature: "producer_scorecards", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Who is profitable, not just busy." }),
@@ -184,8 +193,9 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Accounting",
     items: [
       // LA-7.2 · lead invoices: what the agency paid for leads, per campaign.
-      item("Accounting", { key: "accounting.invoices", label: "Lead invoices", path: "/app/invoices", icon: "file-check", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What you paid for leads, and whether it matches what arrived." }),
-      item("Accounting", { key: "insight.vendor-returns", label: "Vendor returns", path: "/app/vendor-returns", icon: "undo", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Prepare evidence-backed claims and reconcile vendor credits." }),
+      // 2026-10-26: Lead invoices and Vendor returns are one page, Vendor bills (key kept, as above).
+      item("Accounting", { key: "accounting.invoices", label: "Vendor bills", path: "/app/vendor-bills", icon: "file-check", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What you paid for leads, and whether it matches what arrived." }),
+      item("Accounting", { key: "insight.vendor-returns", label: "Vendor returns", path: "/app/vendor-returns", icon: "undo", sidebar_fallback_for: "accounting.invoices", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Prepare evidence-backed claims and reconcile vendor credits." }),
       // LA-7.3 · expenses: tools, insurance, fees — acquisition or overhead.
       item("Accounting", { key: "accounting.expenses", label: "Expenses", path: "/app/expenses", icon: "hand-coins", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Everything you spend that is not a lead." }),
       // LA-7.5 · producer splits: the agency's side, and each producer's own balance.
@@ -223,7 +233,7 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Reports",
     items: [
       item("Reports", { key: "insight.sales-performance", label: "Sales performance", path: "/app/sales-performance", icon: "chart-column", built: true, required_feature: "sales_report", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Funnel, timings and why carriers decline." }),
-      item("Reports", { key: "insight.activity", label: "Activity & scorecard", path: "/app/activity", icon: "activity", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
+      item("Reports", { key: "insight.activity", label: "Team activity", path: "/app/activity", icon: "activity", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
       item("Reports", { key: "insight.scoring", label: "Queue scoring", path: "/app/scoring", icon: "brain", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"], blurb: "The order leads are served in, and whether it beats the plain order." }),
       item("Reports", { key: "insight.book-scorecards", label: "Book scorecards", path: "/app/book-scorecards", icon: "gauge", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Persistency, placement, chargebacks and true cost per sale, from your carrier files." }),
       item("Reports", { key: "insight.true-cpa", label: "True CPA", path: "/app/true-cpa", icon: "badge-dollar-sign", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "What your leads actually cost" }),

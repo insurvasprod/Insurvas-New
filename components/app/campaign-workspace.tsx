@@ -13,6 +13,7 @@ import {
   minutesSince,
   scrubGateReason,
   scrubRunIsStale,
+  scrubStoppedByOutage,
   workedPercent,
   type CampaignProgress,
   type ScrubRun,
@@ -31,6 +32,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { Pager } from "@/components/ui/pager";
 import { NewVendorPanel, SIDE_PANEL_FRAME, VendorRoster } from "@/components/app/vendor-roster";
 import { Callout } from "@/components/app/settings/primitives";
+import { STATE_NAMES } from "@/lib/callbacks/windowFacts";
 import { vendorCampaignWarning, vendorTakesCampaigns } from "@/lib/vendors/types";
 import { cn } from "@/lib/utils";
 import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
@@ -123,7 +125,8 @@ function dropScrubToken(campaignId: string) {
   try { window.sessionStorage.removeItem(`campaign-scrub-token:${campaignId}`); } catch { /* per-tab convenience only */ }
 }
 
-export function CampaignWorkspace() {
+/** `embedded`: drawn as a tab of Lead sources / Vendor bills (2026-10-26), whose header is the page's. */
+export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } = {}) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [rollup, setRollup] = useState<Rollup[]>([]);
@@ -167,6 +170,7 @@ export function CampaignWorkspace() {
   const [progress, setProgress] = useState<Record<string, CampaignProgress> | null>(null);
   const [scrubRuns, setScrubRuns] = useState<Record<string, ScrubRun> | null>(null);
   const [testBatches, setTestBatches] = useState<Record<string, boolean> | null>(null);
+  const [targetStates, setTargetStates] = useState<Record<string, string[]> | null>(null);
   const [outcomes, setOutcomes] = useState<Record<string, Outcome> | null>(null);
   // LA-2.1-3: leads, dialable and contacts per campaign. Null until its migration is applied.
   const [funnel, setFunnel] = useState<Record<string, Funnel> | null>(null);
@@ -194,6 +198,7 @@ export function CampaignWorkspace() {
     setProgress(campaignBody.progress ?? null);
     setScrubRuns(campaignBody.scrubRuns ?? null);
     setTestBatches(campaignBody.testBatches ?? null);
+    setTargetStates(campaignBody.targetStates ?? null);
     setOutcomes(campaignBody.outcomes ?? null);
     setFunnel(campaignBody.funnel ?? null);
     setCanScrub(Boolean(campaignBody.canScrub));
@@ -431,14 +436,17 @@ export function CampaignWorkspace() {
   const fact = (term: string, value: ReactNode, className?: string) => <div><dt className="text-xs text-muted-foreground">{term}</dt><dd className={cn("mt-0.5 font-semibold tabular-nums text-foreground", className)}>{value}</dd></div>;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6 text-[var(--ink)]">
-    <PageHeader title="Vendors & campaigns" />
+    {!embedded && <PageHeader title="Vendors & campaigns" />}
     <StatStrip label="Campaign totals">
       <StatTile label="Vendors" value={vendors.length} footnote={`${buyingVendors} buying now`} />
       <StatTile label="Active campaigns" value={activeWeights.length} footnote={activeLimit ? `${activeLimit.usage} of ${activeLimit.limit} allowed · ${draftCampaigns} draft` : activeUsage ? `${activeUsage.usage} counted · no plan limit · ${draftCampaigns} draft` : `${draftCampaigns} draft`} valueTone={atActiveLimit ? "danger" : undefined} />
       <StatTile label="Spend this period" value={money(spendCents)} footnote={`across ${spendingVendors} vendor${spendingVendors === 1 ? "" : "s"}`} />
       <StatTile label="Effective cost per dialable lead" value={money2(effectiveCostCents)} valueTone={effectiveCostCents === null ? undefined : "primary"} footnote="after suppression" />
     </StatStrip>
-    {atActiveLimit && activeLimit && <Callout tone="error" title={`Pause a finished campaign or upgrade your plan to activate another — ${activeLimit.usage} of ${activeLimit.limit} in use.`} />}
+    {atActiveLimit && activeLimit && <Callout tone="error" title={`Pause a finished campaign or upgrade your plan to activate another — ${activeLimit.usage} of ${activeLimit.limit} in use.`}>
+      {/* LA-2.22: an upgrade prompt that names the limit — Plan & billing is the owner's. */}
+      <Link href="/app/settings#billing" className="font-semibold text-[var(--accent-ink)] hover:underline">See plans</Link>
+    </Callout>}
     {/* Said once, at the top, rather than as a "—" in eleven cells that each look like a bug. */}
     {pending.length > 0 && <Callout tone="warning" title="Some measurements are not available yet">{pending.map((item) => item.detail).join(" ")}</Callout>}
     {faults.length > 0 && <Callout tone="error" title="Part of this page could not be loaded">
@@ -446,6 +454,13 @@ export function CampaignWorkspace() {
     </Callout>}
     {/* The gate: an active campaign that is not scrubbed hands out no leads. The queue enforces it
         (campaigns_servable); this only says so, with the way out. */}
+    {/* LA-2.3: when a screening vendor is down, the page says so once, in plain words. */}
+    {!loadError && (() => {
+      const stopped = campaigns.filter((campaign) => scrubStoppedByOutage(scrubRuns?.[campaign.campaign_id]));
+      return stopped.length > 0 ? <Callout tone="error" title="The screening service can’t be reached right now">
+        {stopped.length === 1 ? stopped[0].name : `${stopped.length} campaigns`} stopped scrubbing because the Do Not Call check did not answer. Unchecked numbers are never let through, so nothing is lost and nobody dials them — resume the scrub once the service is back.
+      </Callout> : null;
+    })()}
     {!loadError && gated.length > 0 && <Callout
       tone="warning"
       title={<>
@@ -651,6 +666,12 @@ export function CampaignWorkspace() {
             {campaign.status !== "exhausted" && <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "exhausted" }, `${campaign.name} marked exhausted — its leads are no longer served.`)}>Mark exhausted</Button>}
             {testBatches !== null && <label className="flex items-center gap-2 text-sm text-[var(--body)]"><input type="checkbox" checked={isTest} disabled={busy === campaign.campaign_id} onChange={(event) => void patchCampaign(campaign.campaign_id, { is_test_batch: event.target.checked }, event.target.checked ? `${campaign.name} marked as a test batch.` : `${campaign.name} is no longer a test batch.`)} />Test batch</label>}
           </div>
+          {targetStates !== null && <TargetStatesField
+            key={campaign.campaign_id}
+            saved={targetStates[campaign.campaign_id] ?? []}
+            busy={busy === campaign.campaign_id}
+            onSave={(states) => void patchCampaign(campaign.campaign_id, { target_states: states }, states.length ? `Target states saved: ${states.join(", ")}.` : "Target states cleared.")}
+          />}
       </DetailPanel>}
     </div>}
 
@@ -722,5 +743,23 @@ function ScrubLine({ campaign, run, canScrub, driving, leads, error, onRun, onSt
         : <Button type="button" variant="outline" size="sm" disabled={Boolean(cannot) || driving !== null} title={cannot ?? (driving !== null ? "Another campaign is being scrubbed from this page." : undefined)} onClick={onRun}>{label}</Button>}
       {!here && cannot && <span className="text-xs text-[var(--muted)]">{cannot}</span>}
     </div>}
+  </div>;
+}
+
+/**
+ * LA-2.1 · the states a campaign is bought for, as two-letter codes. Recorded on the campaign
+ * (tenant_campaigns.target_states); the import review already flags rows outside your licences.
+ */
+function TargetStatesField({ saved, busy, onSave }: { saved: string[]; busy: boolean; onSave: (states: string[]) => void }) {
+  const [text, setText] = useState(saved.join(", "));
+  const states = [...new Set(text.toUpperCase().split(/[\s,;]+/).filter(Boolean))];
+  const bad = states.filter((code) => !STATE_NAMES[code]);
+  const changed = states.slice().sort().join(",") !== [...saved].sort().join(",");
+  return <div className="flex flex-col gap-1.5">
+    <label className="portal-campaigns-field"><span>Target states</span><input className={focusRing} value={text} onChange={(event) => setText(event.target.value)} placeholder="TX, OK, LA — blank for anywhere" maxLength={240} /></label>
+    <div className="flex flex-wrap items-center gap-2">
+      <Button type="button" variant="outline" size="sm" disabled={busy || !changed || bad.length > 0} onClick={() => onSave(states.sort())}>Save states</Button>
+      <span className={cn("text-xs", bad.length ? "text-[var(--error-ink)]" : "text-muted-foreground")}>{bad.length ? `Not a state: ${bad.join(", ")}` : states.length ? states.map((code) => STATE_NAMES[code]).join(", ") : "Any state"}</span>
+    </div>
   </div>;
 }

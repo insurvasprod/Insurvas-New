@@ -3,8 +3,8 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { requireTenant } from "@/lib/tenantAuth/requireTenant";
-import { tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
+import { getTenantSession, requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { continuedTenantSession, tenantSessionCookie, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
 import { endTenantSessions, issueTenantSession } from "@/lib/tenantAuth/sessionStore";
 import { verifiedMembership } from "@/lib/tenantAuth/workspaceService";
 import { signupDestination } from "@/lib/signup/context";
@@ -47,7 +47,9 @@ export async function POST(request: NextRequest) {
 
     // A new session row for the other workspace, carrying over whether this browser passed the second
     // factor; the old row ends, so the person has one live session here, not two (LA-8.2).
-    const { token } = await issueTenantSession({ userId: auth.context.userId, tenantId, sessionVersion: user.session_version, request, twoFactorAt: auth.context.twoFactorAt ?? null });
+    // ...and the "Keep me signed in" choice and expiry of the session it replaces.
+    const carried = continuedTenantSession(await getTenantSession());
+    const { token } = await issueTenantSession({ userId: auth.context.userId, tenantId, sessionVersion: user.session_version, request, twoFactorAt: auth.context.twoFactorAt ?? null, ...carried });
     if (auth.context.sessionId) await endTenantSessions({ userId: auth.context.userId, sessionId: auth.context.sessionId, reason: "switched_workspace", by: auth.context.userId });
     await audit({
       actorType: "tenant",
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       redirectTo: signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state }) ?? "/app/dashboard",
     });
-    response.cookies.set(TENANT_SESSION_COOKIE, token, tenantSessionCookieOptions);
+    response.cookies.set(TENANT_SESSION_COOKIE, token, tenantSessionCookie(carried.remember, carried.maxAge));
     return response;
   } catch {
     return NextResponse.json({ error: "That workspace could not be opened right now. You are still signed in here." }, { status: 503 });

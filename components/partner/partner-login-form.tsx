@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -13,20 +13,43 @@ import { PartnerAuthFrame } from "@/components/partner/partner-auth-frame";
 
 const validEmail = (value: string) => /^\S+@\S+\.\S+$/.test(value.trim());
 
+/** The address that last signed in at this door on this browser. */
+const LAST_EMAIL_KEY = "insurvas:last-partner-email";
+
 /**
  * The partner sign-in, in the shared partner frame (PartnerAuthFrame: logo, legal links, and the brand
- * panel saying what a partner can and cannot see). Compact (2026-10-13): it fits one screen, with the
- * invitation pointer as one line rather than a card.
+ * panel saying what a partner can and cannot see). Laid out like the agent sign-in since the redesign
+ * (2026-10-24): "Forgot password?" beside the field, and a real reset (it used to email support).
  */
 export function PartnerLoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // "Forgot password?" swaps the form for a one-field reset request in the same panel.
+  const [resetting, setResetting] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetState, setResetState] = useState<"idle" | "sending" | "sent">("idle");
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let remembered = "";
+    try { remembered = window.localStorage.getItem(LAST_EMAIL_KEY) ?? ""; } catch { /* storage blocked */ }
+    if (remembered) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
+      setEmail((current) => current || remembered);
+      passwordRef.current?.focus();
+    } else {
+      emailRef.current?.focus();
+    }
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -40,6 +63,7 @@ export function PartnerLoginForm() {
       const response = await fetch("/api/partner/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, remember }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Something went wrong"); return; }
+      try { window.localStorage.setItem(LAST_EMAIL_KEY, email.trim()); } catch { /* storage blocked */ }
       // One navigation, not push + refresh (which rendered the portal twice after sign-in).
       router.replace(body?.redirectTo ?? "/partner");
     } catch {
@@ -49,13 +73,56 @@ export function PartnerLoginForm() {
     }
   }
 
+  async function requestReset(event: FormEvent) {
+    event.preventDefault();
+    setResetError(null);
+    if (!validEmail(resetEmail)) { setResetError("Enter the email address you sign in with."); return; }
+    setResetState("sending");
+    try {
+      const response = await fetch("/api/partner/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: resetEmail }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setResetError(body?.error ?? "Could not send a reset link. Try again."); setResetState("idle"); return; }
+      setResetState("sent");
+    } catch {
+      setResetError("Could not send a reset link. Check your connection and try again.");
+      setResetState("idle");
+    }
+  }
+
+  if (resetting) {
+    return (
+      <PartnerAuthFrame>
+        <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+          {resetState === "sent" ? "Check your inbox" : "Reset your password"}
+        </h1>
+        {resetState === "sent" ? (
+          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+            If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to a partner account, a link to choose a new password is on its way. It works once.
+          </p>
+        ) : (
+          <>
+            <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">Enter the email you sign in with. We send a one-time link to choose a new password.</p>
+            <form className="flex flex-col gap-4" onSubmit={requestReset} noValidate>
+              <div className="space-y-1.5">
+                <Label htmlFor="partner-reset-email">Email</Label>
+                <Input id="partner-reset-email" type="email" inputMode="email" autoComplete="username" autoFocus value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
+              </div>
+              {resetError && <p className="portal-auth-alert" role="alert">{resetError}</p>}
+              <Button type="submit" className="mt-1 h-12 w-full" disabled={resetState === "sending"}>{resetState === "sending" ? "Sending…" : "Send the reset link"}</Button>
+            </form>
+          </>
+        )}
+        <div className="mt-[22px]">
+          <LinkArrow asChild><button type="button" onClick={() => setResetting(false)}>Back to sign in</button></LinkArrow>
+        </div>
+      </PartnerAuthFrame>
+    );
+  }
+
   return (
     <PartnerAuthFrame>
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-        Partner access
-      </div>
-      <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        Sign in to your workspace
+      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+        Partner sign in
       </h1>
       <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
         Submit leads and follow every one to its outcome.
@@ -63,8 +130,9 @@ export function PartnerLoginForm() {
 
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="partner-email">Work email</Label>
+          <Label htmlFor="partner-email">Email</Label>
           <Input
+            ref={emailRef}
             id="partner-email"
             type="email"
             inputMode="email"
@@ -86,9 +154,15 @@ export function PartnerLoginForm() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="partner-password">Password</Label>
+          <div className="flex items-baseline justify-between gap-3">
+            <Label htmlFor="partner-password">Password</Label>
+            <button type="button" onClick={() => { setResetEmail(email); setResetState("idle"); setResetError(null); setResetting(true); }} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+              Forgot password?
+            </button>
+          </div>
           <div className="relative">
             <Input
+              ref={passwordRef}
               id="partner-password"
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
@@ -111,7 +185,7 @@ export function PartnerLoginForm() {
             />
             <button
               type="button"
-              className="absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="portal-auth-visibility"
               onClick={() => setShowPassword((value) => !value)}
               aria-label={showPassword ? "Hide password" : "Show password"}
               aria-pressed={showPassword}
@@ -126,8 +200,8 @@ export function PartnerLoginForm() {
           )}
         </div>
 
-        <label htmlFor="partner-remember" className="portal-remember-me">
-          <input id="partner-remember" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+        <label htmlFor="partner-remember" className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+          <input id="partner-remember" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
           Keep me signed in on this device
         </label>
 
@@ -141,22 +215,18 @@ export function PartnerLoginForm() {
           </p>
         )}
 
-        <Button type="submit" className="mt-2 h-12 w-full" disabled={loading}>
+        <Button type="submit" className="mt-1 h-12 w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
 
-      <p className="mt-6 text-sm text-muted-foreground">
-        Invited by an agency?{" "}
-        <Link href="/partner/accept-invite" className="font-semibold text-[var(--accent-ink)]">Open your invitation</Link> from the email first.
+      <p className="mt-6 text-sm leading-normal text-muted-foreground">
+        Invited by an agency? Use the link in your invitation email to choose your password.
       </p>
-
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-        <LinkArrow href="mailto:support@insurvas.com?subject=Partner%20password%20help">Forgot password</LinkArrow>
-        <LinkArrow asChild>
-          <Link href="/app/login">Agent sign in</Link>
-        </LinkArrow>
-      </div>
+      <p className="mt-3 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+        An agent or agency?{" "}
+        <Link href="/app/login" className="font-semibold text-foreground">Use the agent sign in instead</Link>.
+      </p>
     </PartnerAuthFrame>
   );
 }

@@ -39,18 +39,28 @@ export function SetupGuideBar() {
   // focus) could otherwise land out of order, and an older "not done" overwrote a newer "done" (live
   // walkthrough, 2026-10-22).
   const sequence = useRef(0);
+  // What screen readers hear (redesign, 2026-10-24). The bar used to be one big live region, so every
+  // poll that re-rendered it could be read out again; now only a real change is said: this step
+  // turning done. `seen` is the step's last known state, null until the first answer.
+  const [announcement, setAnnouncement] = useState("");
+  const watched = useRef<{ key: string | null; seen: boolean | null }>({ key: null, seen: null });
   const load = useCallback(async () => {
     const mine = ++sequence.current;
     const response = await fetch("/api/app/setup", { cache: "no-store" }).catch(() => null);
     if (mine !== sequence.current) return;
     if (!response?.ok) { setFailed(true); return; }
-    const body = (await response.json()) as SetupResponse;
+    const body = (await response.json().catch(() => null)) as SetupResponse | null;
     if (mine !== sequence.current) return;
+    if (!body) { setFailed(true); return; }
+    const current = body.checklist.steps.find((item) => item.key === watched.current.key);
+    if (current && watched.current.seen === false && current.complete) setAnnouncement(`${current.label} is done.`);
+    if (current) watched.current.seen = current.complete;
     setFailed(false);
     setData(body);
   }, []);
 
   useEffect(() => {
+    watched.current = { key: stepKey, seen: null };
     if (!stepKey) return;
     const again = () => void load();
     // The first check runs from a timer callback, not the effect body (react-hooks/set-state-in-effect).
@@ -115,7 +125,18 @@ export function SetupGuideBar() {
     };
   }, [target, pathname]);
 
-  if (!stepKey || failed || !data || !step) return null;
+  // A failed check used to make the bar vanish, so the reader lost the walkthrough with no word why
+  // (redesign, 2026-10-24). Now it says so and offers Retry; a later check that works brings the bar
+  // back, and a failed poll while the bar is up keeps it up with the same line beneath.
+  const retryLine = failed ? (
+    <p role="alert" className="m-0 flex flex-wrap items-center gap-2 text-sm text-[var(--error-ink)]">
+      Could not check your setup progress.
+      <Button type="button" variant="ghost" onClick={() => void load()}>Retry</Button>
+    </p>
+  ) : null;
+
+  if (!stepKey) return null;
+  if (!data || !step) return retryLine && !data ? <div data-setup-guide="" className="mb-4">{retryLine}</div> : null;
 
   const position = `Step ${index + 1} of ${steps.length}`;
   // The next step after this one (wrapping round), not the first undone one: that may be this step.
@@ -132,11 +153,10 @@ export function SetupGuideBar() {
 
   return (
     <div
-      role="status"
-      aria-live="polite"
       data-setup-guide=""
       className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-primary bg-[var(--color-card)] px-4 py-3"
     >
+      <span role="status" aria-live="polite" className="sr-only">{announcement}</span>
       {step.complete ? (
         <span aria-hidden="true" className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--success)] text-[var(--on-success)]">
           <Check className="size-3" strokeWidth={3} />
@@ -161,6 +181,7 @@ export function SetupGuideBar() {
           </Link>
         ) : null}
       </span>
+      {retryLine ? <div className="w-full">{retryLine}</div> : null}
     </div>
   );
 }

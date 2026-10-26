@@ -157,7 +157,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* No context strip under the bar (removed 2026-09-28): the workspace, plan and role are in
             the account menu and the plan card, and the read-only and maintenance states it echoed
             are the banners just below, which say what to do about them. */}
-        <AppTopBar user={identity} userId={context.userId} />
+        <AppTopBar user={identity} userId={context.userId} plan={{ name: plan.name, seats: plan.seats, isOwner: plan.isOwner }} />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         {/* Louder than everything below it, and not dismissible (LA-6.4). */}
         {/* AG-0.5: complaints are the agency's, and their screen is refused to a narrowed session inside one. */}

@@ -414,7 +414,7 @@ function PaymentStepFor() {
                     role="radio"
                     aria-checked={on}
                     disabled={readOnly}
-                    title={closed ? "This attempt is closed" : paymentShared ? "Shared with the primary insured — detach it to change it here." : refused ? `${attempt.carrierName ?? "This carrier"} does not list ${PAYMENT_METHOD_LABEL[m].toLowerCase()}` : PAYMENT_METHOD_LABEL[m]}
+                    title={closed ? "Read-only — nothing on this attempt can change" : paymentShared ? "Shared with the primary insured — detach it to change it here." : refused ? `${attempt.carrierName ?? "This carrier"} does not list ${PAYMENT_METHOD_LABEL[m].toLowerCase()}` : PAYMENT_METHOD_LABEL[m]}
                     onClick={() => pickMethod(m)}
                     className={cn(
                       "h-[30px] rounded-[6px] border px-3.5 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",

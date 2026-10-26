@@ -66,7 +66,7 @@ function Control({ q, value, labelId, readOnly, onAnswer, toneFor }: {
       {list.map((o, i) => {
         const on = value === o.v;
         return (
-          <button key={o.label} id={i === 0 ? id : undefined} type="button" aria-pressed={on} disabled={readOnly} title={readOnly ? "This attempt is closed" : undefined} className={chipClass(on, toneFor(o.v))} onClick={() => onAnswer(on ? null : o.v)}>
+          <button key={o.label} id={i === 0 ? id : undefined} type="button" aria-pressed={on} disabled={readOnly} title={readOnly ? "Read-only — nothing on this attempt can change" : undefined} className={chipClass(on, toneFor(o.v))} onClick={() => onAnswer(on ? null : o.v)}>
             {on && toneFor(o.v) === "danger" && <span className="size-1.5 rounded-full bg-[var(--error)]" aria-hidden="true" />}
             {o.label}
           </button>
@@ -93,7 +93,7 @@ function Control({ q, value, labelId, readOnly, onAnswer, toneFor }: {
           {options.map((o, i) => {
             const on = picked.includes(o);
             return (
-              <button key={o} id={i === 0 ? id : undefined} type="button" aria-pressed={on} disabled={readOnly} title={readOnly ? "This attempt is closed" : undefined} className={chipClass(on, "good")} onClick={() => onAnswer(on ? picked.filter((p) => p !== o) : [...picked, o])}>
+              <button key={o} id={i === 0 ? id : undefined} type="button" aria-pressed={on} disabled={readOnly} title={readOnly ? "Read-only — nothing on this attempt can change" : undefined} className={chipClass(on, "good")} onClick={() => onAnswer(on ? picked.filter((p) => p !== o) : [...picked, o])}>
                 {o}
               </button>
             );

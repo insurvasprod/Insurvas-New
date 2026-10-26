@@ -8,35 +8,17 @@ import { Callout, KeyValues } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
 import type { DispositionOption } from "@/lib/dispositions/types";
 import { US_CUSTOMER_TIMEZONES } from "@/lib/callbacks/timezone";
 import { cn } from "@/lib/utils";
-import { answerLabel, useDispositionWalk, when, type DispositionWalk, type Step, type WalkView } from "@/components/app/use-disposition-walk";
+import { answerLabel, useDispositionWalk, when, type DispositionWalk, type WalkView } from "@/components/app/use-disposition-walk";
 
 const b = {
   edit: "cursor-pointer border-0 bg-transparent p-1 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
 };
 const control = "mt-1.5 box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 const fieldLabel = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-
-function Stepper({ steps }: { steps: Step[] }) {
-  return (
-    <ol aria-label="Call outcome steps" className="m-0 flex list-none items-center overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-5 py-3.5">
-      {steps.map((step, index) => (
-        <li key={step.key} aria-current={step.state === "current" ? "step" : undefined} className={cn("flex min-w-0 items-center", index < steps.length - 1 && "flex-1")}>
-          <span className="flex shrink-0 items-center gap-2.5">
-            <span className={cn("inline-flex size-6 items-center justify-center rounded-full text-xs leading-[1.5] font-semibold", step.state === "done" ? "bg-[var(--success)] text-[var(--surface)]" : step.state === "current" ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--muted)]")}>
-              {step.state === "done" ? <Check aria-hidden className="size-3.5" strokeWidth={3} /> : index + 1}
-            </span>
-            <span className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em] whitespace-nowrap", step.state === "upcoming" ? "text-[var(--muted)]" : "text-[var(--ink)]")}>{step.label}</span>
-          </span>
-          {index < steps.length - 1 && <span aria-hidden className={cn("m-track mx-3 h-0.5 min-w-4 flex-1", step.state === "done" ? "bg-[var(--success)]" : "bg-[var(--border)]")} />}
-        </li>
-      ))}
-    </ol>
-  );
-}
 
 function Choice({ name, checked, disabled, onSelect, title, sub, multi }: { name: string; checked: boolean; disabled: boolean; onSelect: () => void; title: string; sub?: ReactNode; multi?: boolean }) {
   return (
@@ -113,7 +95,7 @@ export function QuestionAnswer({ walk, view, readOnly, consequence }: { walk: Di
 }
 
 /** The mapped outcomes, or why there are none. `card` draws them as the overlay board's cards. */
-export function OutcomeChoices({ walk, readOnly, card }: { walk: DispositionWalk; readOnly: boolean; card?: boolean }) {
+export function OutcomeChoices({ walk, readOnly, card, grid }: { walk: DispositionWalk; readOnly: boolean; card?: boolean; /** Two columns from sm (the one-page outcome, 2026-10-26). */ grid?: boolean }) {
   const wizard = walk.wizard;
   const options = wizard ? wizard.outcomeOptions ?? null : null;
   if (options === null) return <Callout tone="error" title="The outcomes could not be loaded">Reload this page. Nothing has been recorded.</Callout>;
@@ -126,7 +108,7 @@ export function OutcomeChoices({ walk, readOnly, card }: { walk: DispositionWalk
   }
   const Item = card ? OptionCard : Choice;
   return (
-    <div role="radiogroup" aria-label="Call outcome" className="flex flex-col gap-2.5">
+    <div role="radiogroup" aria-label="Call outcome" className={grid ? "grid gap-2.5 sm:grid-cols-2" : "flex flex-col gap-2.5"}>
       {options.map((option) => (
         <Item
           key={option.disposition_key}
@@ -236,70 +218,54 @@ export function OutcomeEffects({ walk, view }: { walk: DispositionWalk; view: Wa
 
 /* ── the full page ─────────────────────────────────────────────────────────── */
 
+/**
+ * Option B, "One page" (owner pick 2026-10-26, canvas M1 · Inbound): the questions answered so far
+ * fold into a list you can change, the open question sits under them, then the outcome, then the
+ * callback when the outcome books one — all on one page, with a bar at the foot that says what will
+ * happen and records it. The same walk, the same server calls: only the arrangement changed.
+ */
 export function DispositionWizard({ workItemId, readOnly }: { workItemId: string; readOnly: boolean }) {
   const walk = useDispositionWalk({ workItemId, readOnly });
-  const { wizard, loading, saving, error, editingSequence, phase, view } = walk;
+  const { wizard, loading, saving, error, editingSequence, view } = walk;
+  const backHref = `/app/inbound/${workItemId}/verification`;
 
   const header = (
     <PageHeader
       title="Record the call outcome"
-      actions={<Button asChild variant="outline"><Link href={`/app/inbound/${workItemId}/verification`}>Back to verification</Link></Button>}
+      description={view?.customerName}
+      actions={<Button asChild variant="outline"><Link href={backHref}>Back to the call</Link></Button>}
     />
   );
 
   if (loading && !wizard) return <PageLoading strip={false} rows={6} />;
-  if (!wizard || !view) return <div className="flex w-full min-w-0 flex-col gap-6">{header}<Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "The call outcome wizard is unavailable."}<Button type="button" variant="outline" onClick={() => void walk.load()}>Try again</Button></span>} /></div>;
+  if (!wizard || !view) return <DashboardStage ribbon><div className="flex w-full min-w-0 flex-col gap-6">{header}<Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "The call outcome wizard is unavailable."}<Button type="button" variant="outline" onClick={() => void walk.load()}>Try again</Button></span>} /></div></DashboardStage>;
 
-  const { node, multi, selected, completed, chosen, isCallback, orderedSteps, firstSequence, nodesById, walking, steps } = view;
-
-  const preview = chosen && !completed && !walking ? (
-    <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--primary)] bg-[var(--brand-50)] px-4 py-3">
-      <div className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--accent-ink)]">What this outcome will do</div>
-      <p className="mt-1 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]"><OutcomeEffects walk={walk} view={view} /></p>
-    </div>
-  ) : null;
-
-  // The board puts Back and the primary action under the walked path and the preview, not in the card.
-  const footer = completed ? null : node ? (
-    <div className="flex justify-between gap-3">
-      {editingSequence !== null
-        ? <Button type="button" variant="outline" onClick={walk.cancelEdit} disabled={saving}>Cancel</Button>
-        : <Button asChild variant="outline"><Link href={`/app/inbound/${workItemId}/verification`}>Back</Link></Button>}
-      <Button type="button" onClick={() => void walk.saveAnswer(node, editingSequence ?? wizard.steps.length)} disabled={readOnly || saving || (multi ? selected.length === 0 : !walk.answer)}>
-        {saving && <Loader2 aria-hidden className="animate-spin" />}{editingSequence !== null ? "Save answer" : "Continue"}
-      </Button>
-    </div>
-  ) : phase === "outcome" ? (
-    <div className="flex justify-between gap-3">
-      <Button asChild variant="outline"><Link href={`/app/inbound/${workItemId}/verification`}>Back</Link></Button>
-      <Button type="button" onClick={walk.next} disabled={readOnly || !chosen}>Continue</Button>
-    </div>
-  ) : phase === "details" ? (
-    <div className="flex justify-between gap-3">
-      <Button type="button" variant="outline" onClick={walk.back}>Back</Button>
-      <Button type="button" onClick={walk.next} disabled={readOnly || !walk.callbackLocal}>Continue</Button>
-    </div>
-  ) : (
-    <div className="flex justify-between gap-3">
-      <Button type="button" variant="outline" onClick={walk.back} disabled={saving}>Back</Button>
-      <Button type="button" onClick={walk.record} disabled={readOnly || saving || !chosen || (isCallback && !walk.callbackLocal)}>
-        {saving && <Loader2 aria-hidden className="animate-spin" />}Record outcome
-      </Button>
+  const { node, multi, selected, completed, chosen, isCallback, orderedSteps, firstSequence, nodesById, walking, callbackAt, customerZone } = view;
+  const verification = wizard.verification ?? null;
+  const blockedByVerification = Boolean(chosen?.needs_verification && verification && !verification.complete);
+  const canRecord = !readOnly && !saving && !walking && Boolean(chosen) && (!isCallback || Boolean(walk.callbackLocal && customerZone)) && !blockedByVerification;
+  const card = "m-glass min-w-0 rounded-xl border border-border";
+  const sectionHead = (number: number, title: string, note?: ReactNode) => (
+    <div className="flex items-baseline justify-between gap-3 px-5 pt-4 pb-3">
+      <h2 className="m-0 text-base font-semibold tracking-[-0.015em] text-[var(--ink)]">{number} · {title}</h2>
+      {note && <span className="text-xs text-[var(--muted)]">{note}</span>}
     </div>
   );
 
-  return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {header}
+  // What is still missing, said in the bar instead of a disabled button that gives no reason.
+  const missing = walking ? "Answer the open question first."
+    : !chosen ? "Choose the outcome."
+    : isCallback && !walk.callbackLocal ? "Choose the callback time."
+    : isCallback && !customerZone ? "Choose the customer’s timezone."
+    : blockedByVerification ? "Finish verification to record this outcome."
+    : null;
 
-      <div className="flex w-full min-w-0 justify-center">
-        <div className="flex w-full max-w-[720px] min-w-0 flex-col gap-4">
-          <Stepper steps={steps} />
-
-          {readOnly && <Callout tone="info" title="Your account is read-only: the outcome cannot be changed." />}
-          {error && <Callout tone="error" title={`The outcome was not recorded: ${error}`} />}
-
-          {completed ? (
+  if (completed) {
+    return (
+      <DashboardStage ribbon>
+        <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+          {header}
+          <div className="w-full max-w-[760px]">
             <Panel title="Outcome recorded" sub="This call is closed.">
               <div className="flex items-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] px-4 py-3">
                 <Check aria-hidden className="mt-1 size-4 shrink-0 text-[var(--success-ink)]" />
@@ -313,49 +279,111 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
                 <Button asChild><Link href={`/app/deal-flow?focus_lead_id=${encodeURIComponent(wizard.lead.id)}`}>Open Daily deal flow</Link></Button>
               </div>
             </Panel>
-          ) : node ? (
-            <Panel title={node.prompt || node.label}>
-              <QuestionAnswer walk={walk} view={view} readOnly={readOnly} />
-            </Panel>
-          ) : phase === "outcome" ? (
-            <Panel title="What was the outcome?">
-              <OutcomeChoices walk={walk} readOnly={readOnly} />
-            </Panel>
-          ) : phase === "details" ? (
-            <Panel title="Callback details">
-              <CallbackDetailsFields walk={walk} view={view} readOnly={readOnly} />
-            </Panel>
-          ) : (
-            <Panel title="Review">
-              <ReviewSummary walk={walk} view={view} workItemId={workItemId} />
-            </Panel>
-          )}
+          </div>
+        </div>
+      </DashboardStage>
+    );
+  }
 
-          <section aria-label="Walked path" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
-            <div className={label12}>Walked path</div>
-            {orderedSteps.length === 0 ? (
-              <p className="mt-2 mb-0 border-t border-[var(--border)] pt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No answers recorded yet.</p>
-            ) : (
-              <ol className="m-0 mt-2 list-none p-0">
-                {orderedSteps.map((step, index) => {
+  return (
+    <DashboardStage ribbon>
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+        {header}
+        {readOnly && <Callout tone="info" title="Your account is read-only: the outcome cannot be changed." />}
+        {error && <Callout tone="error" title={`The outcome was not recorded: ${error}`} />}
+
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <div className="flex min-w-0 flex-col gap-4">
+            {/* 1 · The call: every answer so far, each one changeable; the open question below them. */}
+            <section aria-label="The call" className={card}>
+              {sectionHead(1, "The call", orderedSteps.length ? `${orderedSteps.length} answered` : undefined)}
+              {orderedSteps.length === 0 && !node && <p className="m-0 border-t border-[var(--border)] px-5 py-3 text-sm text-[var(--muted)]">No questions for this call.</p>}
+              <ol className="m-0 list-none p-0">
+                {orderedSteps.map((step) => {
                   const stepNode = nodesById.get(step.node_id);
+                  const editing = editingSequence === step.sequence;
                   return (
-                    <li key={step.id} className="flex items-center gap-2.5 border-t border-[var(--border)] py-2">
-                      <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs leading-[1.5] font-semibold text-[var(--ink)]">{index + 1}</span>
-                      <span className="min-w-0 flex-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{stepNode?.prompt || step.node_label}</span>
-                      <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{answerLabel(step, stepNode)}</span>
-                      <button type="button" onClick={() => walk.beginEdit(step.sequence)} disabled={readOnly || saving} className={b.edit} aria-label={`Edit the answer to ${stepNode?.prompt || step.node_label}`}>Edit</button>
+                    <li key={step.id} className={cn("flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-5 py-3", editing && "bg-[var(--primary-soft)]")}>
+                      <Check aria-hidden className="size-4 shrink-0 text-[var(--accent-ink)]" />
+                      <span className="min-w-0 flex-1 text-sm text-[var(--body)]">{stepNode?.prompt || step.node_label}</span>
+                      <strong className="text-sm font-semibold text-[var(--ink)]">{answerLabel(step, stepNode)}</strong>
+                      <button type="button" onClick={() => walk.beginEdit(step.sequence)} disabled={readOnly || saving || editing} className={b.edit} aria-label={`Change the answer to ${stepNode?.prompt || step.node_label}`}>Change</button>
                     </li>
                   );
                 })}
               </ol>
-            )}
-          </section>
+              {node && (
+                <div className="flex flex-col gap-4 border-t border-[var(--primary)]/40 bg-[var(--surface-alt)]/40 px-5 py-5">
+                  <h3 className="m-0 text-base font-semibold tracking-[-0.015em] text-[var(--ink)]">{node.prompt || node.label}</h3>
+                  <QuestionAnswer walk={walk} view={view} readOnly={readOnly} />
+                  <div className="flex justify-end gap-2">
+                    {editingSequence !== null && <Button type="button" variant="outline" onClick={walk.cancelEdit} disabled={saving}>Cancel</Button>}
+                    <Button type="button" onClick={() => void walk.saveAnswer(node, editingSequence ?? wizard.steps.length)} disabled={readOnly || saving || (multi ? selected.length === 0 : !walk.answer)}>
+                      {saving && <Loader2 aria-hidden className="animate-spin" />}{editingSequence !== null ? "Save answer" : "Continue"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </section>
 
-          {preview}
-          {footer}
+            {/* 2 · The outcome: open once the questions are answered. */}
+            <section aria-label="What was the outcome?" className={cn(card, walking && "opacity-60")}>
+              {sectionHead(2, "What was the outcome?", walking ? "after the questions" : undefined)}
+              <div className="px-5 pb-5">
+                {walking
+                  ? <p className="m-0 text-sm text-[var(--muted)]">Answer the open question above, then choose how the call ended.</p>
+                  : <OutcomeChoices walk={walk} readOnly={readOnly} card grid />}
+                {!walking && chosen?.needs_verification && verification && !verification.complete && (
+                  <div className="mt-4">
+                    <Callout tone="warning" title={`Verification is ${verification.progress ?? 0}% complete`}>
+                      “{chosen.label}” records an application, so it is refused until every required field is confirmed. <Link href={backHref} className="font-semibold text-[var(--ink)] underline underline-offset-2">Finish verification</Link>
+                    </Callout>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* 3 · The callback, only for the outcome that books one. */}
+            {!walking && isCallback && (
+              <section aria-label="Callback" className={card}>
+                {sectionHead(3, "Callback")}
+                <div className="px-5 pb-5"><CallbackDetailsFields walk={walk} view={view} readOnly={readOnly} /></div>
+              </section>
+            )}
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)]">
+            <section aria-label="The caller" className={cn(card, "flex flex-col gap-3 p-5")}>
+              <strong className="text-base font-semibold tracking-[-0.015em] text-[var(--ink)]">{view.customerName}</strong>
+              {verification && (
+                <div className="flex flex-col gap-1.5 text-sm">
+                  <span className="flex justify-between"><span className="text-[var(--muted)]">Verification</span><strong className={verification.complete ? "text-[var(--accent-ink)]" : "text-[var(--warning-ink)]"}>{verification.complete ? "Complete" : `${verification.progress ?? 0}%`}</strong></span>
+                  <span className="block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={cn("block h-full rounded-full", verification.complete ? "bg-[var(--primary)]" : "bg-[var(--warning)]")} style={{ width: `${verification.complete ? 100 : verification.progress ?? 0}%` }} /></span>
+                </div>
+              )}
+            </section>
+            {chosen && !walking && (
+              <section aria-label="What this outcome will do" className="m-glass rounded-xl border border-border border-l-[3px] border-l-[var(--primary)] px-4 py-3">
+                <div className="text-sm font-semibold text-[var(--accent-ink)]">What this outcome will do</div>
+                <p className="mt-1 mb-0 text-sm leading-[1.5] text-[var(--body)]"><OutcomeEffects walk={walk} view={view} /></p>
+              </section>
+            )}
+          </div>
         </div>
+
+        {/* The bar: what will happen, and the one button that does it. */}
+        <section aria-label="Record" className="m-glass sticky bottom-4 z-10 flex flex-wrap items-center gap-4 rounded-xl border border-border px-5 py-3.5 shadow-[var(--shadow-overlay)]">
+          <span className="min-w-0 flex-1 text-sm text-[var(--body)]">
+            {chosen && !walking
+              ? <><strong className="font-semibold text-[var(--accent-ink)]">{chosen.label}</strong>{isCallback && callbackAt ? ` · ${when(callbackAt, customerZone ?? undefined)} their time` : ""}{chosen.stage ? ` · ${chosen.stage.is_current ? "stays in" : "moves to"} ${chosen.stage.name}` : ""}</>
+              : <span className="text-[var(--muted)]">{missing}</span>}
+            {chosen && !walking && missing && <span className="ml-2 text-[var(--warning-ink)]">{missing}</span>}
+          </span>
+          <Button type="button" onClick={walk.record} disabled={!canRecord}>
+            {saving && <Loader2 aria-hidden className="animate-spin" />}Record outcome
+          </Button>
+        </section>
       </div>
-    </div>
+    </DashboardStage>
   );
 }

@@ -32,7 +32,7 @@ export function CounterofferPanel({ offer, carrierName, now, readOnly, busy, onA
     ["Difference", `${d.faceCents === 0 ? "No change" : d.face} face · ${d.monthlyCents === 0 ? "no change" : d.monthly}/mo`],
     ["As a percentage", `${d.facePercent} face · ${d.monthlyPercent} premium`],
   ];
-  const disabledWhy = readOnly ? "This attempt is closed" : busy ? "Saving…" : undefined;
+  const disabledWhy = readOnly ? "Read-only — nothing on this attempt can change" : busy ? "Saving…" : undefined;
   return (
     <section aria-label="Counteroffer" className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] p-5">
       <div className="flex flex-col gap-3">

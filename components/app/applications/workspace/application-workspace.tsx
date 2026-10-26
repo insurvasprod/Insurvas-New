@@ -2,9 +2,10 @@
 
 /**
  * /app/applications/[caseId] — the application workspace (LA-3; boards l3-ws-*). One case, its
- * attempts, one step at a time: the numbered step rail on the left, the step's card in the middle,
- * the live pre-submission check on the right of every step. Inbound, outbound and lead-detail all
- * open this same page (build it once).
+ * attempts, one step at a time. Redesign 2026-10-26 (owner pick A, canvas M3 · Case): the ten steps
+ * grouped into four stages — Qualify, Apply, Submit, After — as a bar across the top, the stage's steps
+ * as tabs under it, the step's card in the middle and the live pre-submission check on the right of
+ * every step. Inbound, outbound and lead-detail all open this same page (build it once).
  */
 
 import { useState } from "react";
@@ -54,7 +55,7 @@ const STEP_COMPONENT: Record<WorkspaceStep, () => React.ReactNode> = {
 };
 
 const NUMBERED = WORKSPACE_STEPS.filter((s) => s.key !== "timeline");
-const READ_ONLY_TITLE = "This attempt is closed, so nothing on it can change";
+const READ_ONLY_TITLE = "Read-only — nothing on this attempt can change";
 
 /** "Pat Household" from the attempt's own insured name fields; "" when neither is set. */
 function insuredName(a: AttemptView | undefined) {
@@ -82,65 +83,94 @@ export function stepDone(key: WorkspaceStep, ws: Pick<WorkspaceState, "attempt" 
   }
 }
 
-function StepRail() {
+/** The ten steps in four stages (2026-10-26). The step keys, URLs and order are unchanged. */
+const STAGES: ReadonlyArray<{ key: string; label: string; steps: WorkspaceStep[] }> = [
+  { key: "qualify", label: "Qualify", steps: ["verify", "interview", "quote"] },
+  { key: "apply", label: "Apply", steps: ["application", "beneficiaries", "payment", "disclosures"] },
+  { key: "submit", label: "Submit", steps: ["review", "submit"] },
+  { key: "after", label: "After", steps: ["after"] },
+];
+const STEP_LABEL = new Map(WORKSPACE_STEPS.map((s) => [s.key, s.label]));
+const STEP_NUMBER = new Map<string, number>(NUMBERED.map((s, i) => [s.key, i + 1]));
+
+/** The four stages across the top: done, here, or still to come. A stage opens on its first unfinished step. */
+function StageBar() {
   const ws = useWorkspace();
   const { step, goTo, attempt } = ws;
   const submitted = attempt.status !== "draft" && attempt.status !== "ready";
   return (
-    <nav aria-label="Application steps" className="w-full shrink-0 lg:sticky lg:top-20 lg:w-[186px]">
-      <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex flex-col p-2.5">
-          {NUMBERED.map((s, i) => {
-            const active = step === s.key;
-            const done = !active && stepDone(s.key, ws);
-            const locked = s.key === "after" && !submitted;
-            return (
-              <button
-                key={s.key}
-                type="button"
-                aria-current={active ? "step" : undefined}
-                disabled={locked}
-                title={locked ? "Opens once the application is submitted" : undefined}
-                onClick={() => goTo(s.key)}
-                className={cn(
-                  "flex h-[34px] items-center gap-[9px] rounded-[8px] px-2.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
-                  active ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]" : done ? "text-[var(--body)] hover:bg-[var(--surface-alt)]" : "text-[var(--muted)] hover:bg-[var(--surface-alt)]",
-                )}
-              >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    active ? "bg-[var(--primary)] text-[var(--ink)]" : done ? "bg-[var(--success)] text-white" : "bg-[var(--surface-alt)] text-[var(--muted)]",
-                  )}
-                >
-                  {done ? <Check className="size-3" strokeWidth={3} /> : i + 1}
-                </span>
-                {s.label}
-                {done && <span className="sr-only"> (done)</span>}
-              </button>
-            );
-          })}
+    <nav aria-label="Application stages" className="m-glass flex flex-wrap items-stretch gap-2.5 rounded-xl border border-border px-4 py-3">
+      {STAGES.map((stage) => {
+        const here = (stage.steps as readonly string[]).includes(step);
+        const done = stage.steps.every((key) => stepDone(key, ws));
+        const locked = stage.key === "after" && !submitted;
+        const target = stage.steps.find((key) => !stepDone(key, ws)) ?? stage.steps[0];
+        return (
           <button
+            key={stage.key}
             type="button"
-            aria-current={step === "timeline" ? "step" : undefined}
-            onClick={() => goTo("timeline")}
-            className={cn(
-              "mt-1 flex items-center border-t border-[var(--border)] px-2.5 pt-2.5 pb-1 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              step === "timeline" ? "font-semibold text-[var(--accent-ink)]" : "text-[var(--body)] hover:text-[var(--ink)]",
-            )}
+            aria-current={here ? "step" : undefined}
+            disabled={locked}
+            title={locked ? "Opens once the application is submitted" : undefined}
+            onClick={() => goTo(target)}
+            style={{ flexGrow: stage.steps.length }}
+            className="flex min-w-[120px] basis-0 flex-col gap-1.5 rounded-lg px-1 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Case timeline
+            <span aria-hidden className={cn("h-1.5 rounded-full", done ? "bg-[var(--primary)]" : here ? "bg-[var(--primary)]/45" : "bg-[var(--surface-alt)]")} />
+            <span className={cn("inline-flex items-center gap-1.5 text-sm font-semibold", done ? "text-[var(--accent-ink)]" : here ? "text-[var(--ink)]" : "text-[var(--muted)]")}>
+              {done && <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />}{stage.label}
+              {done && <span className="sr-only"> (done)</span>}
+            </span>
           </button>
-        </div>
-      </div>
+        );
+      })}
+      <button
+        type="button"
+        aria-current={step === "timeline" ? "step" : undefined}
+        onClick={() => goTo("timeline")}
+        className={cn("self-center border-l border-border pl-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring", step === "timeline" ? "font-semibold text-[var(--accent-ink)]" : "text-[var(--body)] hover:text-[var(--ink)]")}
+      >
+        Case timeline
+      </button>
     </nav>
+  );
+}
+
+/** The current stage's steps as tabs, each with its tick or its number. */
+function StepTabs() {
+  const ws = useWorkspace();
+  const { step, goTo } = ws;
+  const stage = STAGES.find((s) => (s.steps as readonly string[]).includes(step));
+  if (!stage || stage.steps.length < 2) return null;
+  return (
+    <div role="tablist" aria-label={`${stage.label} steps`} className="flex flex-wrap gap-5 border-b border-border">
+      {stage.steps.map((key) => {
+        const active = step === key;
+        const done = !active && stepDone(key, ws);
+        return (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => goTo(key)}
+            className={cn("-mb-px inline-flex h-9 items-center gap-2 border-b-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring", active ? "border-[var(--primary)] text-[var(--ink)]" : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]")}
+          >
+            <span aria-hidden className={cn("inline-flex size-[18px] items-center justify-center rounded-full text-xs", done ? "bg-[var(--success)] text-white" : active ? "bg-[var(--primary)] text-[var(--ink)]" : "bg-[var(--surface-alt)] text-[var(--muted)]")}>
+              {done ? <Check className="size-3" strokeWidth={3} /> : STEP_NUMBER.get(key)}
+            </span>
+            {STEP_LABEL.get(key)}
+            {done && <span className="sr-only"> (done)</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 function Workspace() {
   const ws = useWorkspace();
-  const { caseView, attempt, attemptsForInsured, insured, step, readOnly, sample, selectAttempt } = ws;
+  const { caseView, attempt, attemptsForInsured, insured, step, readOnly, seatReadOnly, sample, selectAttempt } = ws;
   const [spouseOpen, setSpouseOpen] = useState(false);
   // Back to where the agent came from (the verification panel, a lead, the dialer…), not always the list.
   const back = backLink(useSearchParams().get("from"));
@@ -202,15 +232,17 @@ function Workspace() {
         {household && <StatusChip tone="info">Household · {liveInsureds} applications</StatusChip>}
       </div>
       {sample && <SampleDataNotice />}
+      {seatReadOnly && <p role="status" className="m-0 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]">Your plan is read-only: you can read this case, not change it.</p>}
       {/* Both sides and the combined premium, on every step of a household case (LA-3.24). */}
       {household && <HouseholdHeader caseView={caseView} insured={insured} />}
 
+      <StageBar />
       <div className="flex flex-col items-start gap-5 lg:flex-row">
-        <StepRail />
         <div role="region" aria-label={WORKSPACE_STEPS.find((s) => s.key === step)?.label} className="flex min-w-0 w-full flex-grow flex-col gap-5">
+          <StepTabs />
           <Step />
         </div>
-        <div className="w-full shrink-0 lg:sticky lg:top-20 lg:w-[268px]">
+        <div className="w-full shrink-0 lg:sticky lg:top-20 lg:w-[280px]">
           <QaRail />
         </div>
       </div>
@@ -219,9 +251,9 @@ function Workspace() {
   );
 }
 
-export function ApplicationWorkspace({ initial, sample, timeZone }: { initial: CaseView; sample: boolean; timeZone?: string }) {
+export function ApplicationWorkspace({ initial, sample, timeZone, seatReadOnly = false }: { initial: CaseView; sample: boolean; timeZone?: string; /** A read-only plan (2026-10-26): every control off, like Pending cases. */ seatReadOnly?: boolean }) {
   return (
-    <WorkspaceProvider key={initial.caseId} initial={initial} sample={sample} timeZone={timeZone}>
+    <WorkspaceProvider key={initial.caseId} initial={initial} sample={sample} timeZone={timeZone} seatReadOnly={seatReadOnly}>
       <Workspace />
     </WorkspaceProvider>
   );

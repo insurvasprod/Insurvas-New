@@ -13,6 +13,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { WAITING_ON_TONE } from "@/lib/applications/constants";
 import { TableCard } from "@/components/ui/table-card";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { useFittingPageSize, ViewTabs } from "@/components/app/book-views";
@@ -53,6 +54,7 @@ export function PendingCases({
   readOnly = false,
   sample = false,
   timeZone,
+  embedded = false,
 }: {
   requirements: RequirementRow[];
   counteroffers: CounterofferRow[];
@@ -62,6 +64,8 @@ export function PendingCases({
   readOnly?: boolean;
   sample?: boolean;
   timeZone?: string;
+  /** The Waiting on the carrier tab of Applications (2026-10-26): no header of its own. */
+  embedded?: boolean;
 }) {
   const [tab, setTab] = useState<PendingTab>(initialTab);
   const [data, setData] = useState<PendingPayload>({ requirements: initialRequirements, counteroffers: initialCounteroffers, awaiting: initialAwaiting, ageingDays: initialAgeingDays });
@@ -78,7 +82,11 @@ export function PendingCases({
   function changeTab(next: PendingTab) {
     setTab(next); setPage(1); setSearch("");
     // Keep the tab in the address so a dashboard card can link straight to it.
-    try { window.history.replaceState(null, "", next === "requirements" ? window.location.pathname : `?tab=${next}`); } catch { /* not fatal */ }
+    try {
+      const url = new URL(window.location.href);
+      if (next === "requirements") url.searchParams.delete("tab"); else url.searchParams.set("tab", next);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    } catch { /* not fatal */ }
   }
 
   async function logChase(row: RequirementRow) {
@@ -169,7 +177,7 @@ export function PendingCases({
           ? <EmptyState title="No open requirements" hint="Carrier requests after submission show here." />
           : shownRequirements.length === 0
             ? <NoMatches noun="requirements" onClear={clearFilters} />
-            : <table className="portal-lead-table w-full min-w-[1120px] text-left text-sm">
+            : <table className="portal-lead-table w-full min-w-[1230px] text-left text-sm">
                 <thead>
                   <tr>
                     <th>Client</th>
@@ -177,6 +185,7 @@ export function PendingCases({
                     <th className="w-[180px]">Requirement</th>
                     <th className="w-[150px]">Waiting on</th>
                     <th className="w-[100px]"><span className="inline-flex items-center gap-1">Age<InfoTip label="About age">Days since the carrier raised it. Amber from {ageingDays} days, red from {ageingDays * 2}.</InfoTip></span></th>
+                    <th className="w-[110px] text-right">At stake</th>
                     <th className="w-[130px]">Last chased</th>
                     <th className="w-[80px] text-right">Chases</th>
                     <th className="w-[140px] text-right"><span className="sr-only">Log a chase</span></th>
@@ -191,9 +200,11 @@ export function PendingCases({
                         <td className="max-w-[220px] truncate" title={row.clientName}><Link href={href} className={clientLinkClass}>{row.clientName}</Link></td>
                         <td className="max-w-[150px] truncate" title={row.carrierName ?? undefined}>{row.carrierName ?? "—"}</td>
                         <td className="max-w-[180px] truncate" title={row.description || undefined}>{REQUIREMENT_SHORT_LABEL[row.kind]}</td>
-                        <td>{waitingOnText(row)}</td>
+                        <td><StatusChip tone={WAITING_ON_TONE[row.waitingOn]} dot={false}>{waitingOnText(row)}</StatusChip></td>
                         <td title={`Raised ${dayMonth(row.raisedAt)} · amber from ${ageingDays} days, red from ${ageingDays * 2}`}><AgeChip days={row.daysOpen} ageing={ageingFor(row.daysOpen, ageingDays)} /></td>
-                        <td>{row.lastChasedAt ? `${dayMonth(row.lastChasedAt, timeZone)}${who ? ` · ${who}` : ""}` : <span className="text-muted-foreground">Not yet</span>}</td>
+                        <td className="text-right tabular-nums" title="The monthly premium this requirement holds up">{row.monthlyPremiumCents === null ? "—" : `${money(row.monthlyPremiumCents)}/mo`}</td>
+                        {/* Days since the last chase, as a number (LA-3.18); the date and who on hover. */}
+                        <td title={row.lastChasedAt ? `${dayMonth(row.lastChasedAt, timeZone)}${who ? ` · ${who}` : ""}` : undefined}>{row.lastChasedAt ? `${row.daysSinceChase ?? 0} ${(row.daysSinceChase ?? 0) === 1 ? "day" : "days"} ago${who ? ` · ${who}` : ""}` : <span className="text-muted-foreground">Not yet</span>}</td>
                         <td className="text-right tabular-nums">{row.chaseCount}</td>
                         <td className="text-right">
                           <Button type="button" variant="outline" size="sm" onClick={() => void logChase(row)} disabled={readOnly || busy !== null} title={readOnly ? "Read-only — your plan does not allow changes" : undefined} aria-label={`Log a chase for ${row.clientName}`}>
@@ -215,11 +226,12 @@ export function PendingCases({
           ? <EmptyState title="No counteroffers waiting" hint="Offers at a different rate or benefit show here." />
           : shownCounteroffers.length === 0
             ? <NoMatches noun="counteroffers" onClear={clearFilters} />
-            : <table className="portal-lead-table w-full min-w-[1040px] text-left text-sm">
+            : <table className="portal-lead-table w-full min-w-[1260px] text-left text-sm">
                 <thead>
                   <tr>
                     <th>Client</th>
                     <th className="w-[150px]">Carrier</th>
+                    <th className="w-[220px]">Reason</th>
                     <th className="w-[110px] text-right">Applied for</th>
                     <th className="w-[110px] text-right">Offered</th>
                     <th className="w-[150px] text-right">Face change</th>
@@ -237,6 +249,7 @@ export function PendingCases({
                       <tr key={row.id} className="m-row">
                         <td className="max-w-[220px] truncate" title={row.clientName}><Link href={href} className={clientLinkClass}>{row.clientName}</Link></td>
                         <td className="max-w-[150px] truncate" title={row.carrierName ?? undefined}>{row.carrierName ?? "—"}</td>
+                        <td className="max-w-[220px]"><span className="block truncate" title={row.reason}>{row.reason || "—"}</span><span className="block text-xs text-muted-foreground">received {dayMonth(row.receivedAt, timeZone)}</span></td>
                         <td className="text-right tabular-nums">{face(row.applied.faceCents)}</td>
                         <td className="text-right tabular-nums">{face(row.offered.faceCents)}</td>
                         <td className="text-right tabular-nums">{deltaText(row.applied.faceCents, row.offered.faceCents, true)}</td>
@@ -306,8 +319,8 @@ export function PendingCases({
   }
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Pending cases" />
+    <div className={embedded ? "flex flex-col gap-6" : "m-stagger flex flex-col gap-6"}>
+      {!embedded && <PageHeader title="Pending cases" />}
       {sample && <SampleDataNotice />}
 
       {/* One strip, under the header, for all three lists (2026-10-06 redesign): each figure is one

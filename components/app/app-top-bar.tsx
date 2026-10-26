@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -221,7 +222,17 @@ export function TopBarShell({
   signOutRedirect,
   workspacesEndpoint,
   switchWorkspaceEndpoint,
+  accountHostId,
+  accountExtra,
 }: {
+  /**
+   * The id of an element in the side rail that holds the account button instead of the bar (agent
+   * shell, owner ask 2026-10-26: "the account goes bottom left, in the sidebar"). Its menu then opens
+   * beside the rail. Below md the rail is hidden, so the bar keeps its own button there.
+   */
+  accountHostId?: string;
+  /** Shown in the account menu under who you are: the agent shell puts the plan there. */
+  accountExtra?: ReactNode;
   user: TopBarUser;
   feed: TopBarFeed | null;
   searchEndpoint: string;
@@ -270,6 +281,12 @@ export function TopBarShell({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The rail's account slot, found once mounted (the rail renders before the bar).
+  const [accountHost, setAccountHost] = useState<HTMLElement | null>(null);
+  const [accountFromRail, setAccountFromRail] = useState(false);
+  useEffect(() => {
+    if (accountHostId) setAccountHost(document.getElementById(accountHostId)); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [accountHostId]);
 
   const notifications = feed?.notifications ?? [];
   const alerts = feed?.alerts ?? [];
@@ -374,6 +391,8 @@ export function TopBarShell({
     function onPointerDown(event: MouseEvent) {
       // An InfoTip inside a panel opens in a portal; reading it is not a click outside the bar.
       if ((event.target as Element | null)?.closest?.("[data-radix-popper-content-wrapper]")) return;
+      // The rail's account button and its menu sit outside the bar but belong to it.
+      if (accountHost?.contains(event.target as Node)) return;
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         close();
         setQuery("");
@@ -382,7 +401,7 @@ export function TopBarShell({
     }
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [menu, searchOpen, focused, close]);
+  }, [menu, searchOpen, focused, close, accountHost]);
 
   // ---- keyboard ----------------------------------------------------------
   useEffect(() => {
@@ -605,8 +624,8 @@ export function TopBarShell({
         <button
           type="button"
           aria-haspopup="true"
-          aria-expanded={accountOpen}
-          onClick={() => toggle("account")}
+          aria-expanded={accountOpen && !accountFromRail}
+          onClick={() => { setAccountFromRail(false); toggle("account"); }}
           className="portal-top-account"
         >
           <span className="portal-top-avatar" aria-hidden="true"><AvatarFace user={user} /></span>
@@ -729,8 +748,22 @@ export function TopBarShell({
         )}
 
         {/* ------------------------------------------------- account menu */}
-        {menu === "account" && (
-          <section aria-label="Your account" className="portal-top-panel portal-top-panel-account m-swap">
+        {accountHost && createPortal(
+          <button
+            type="button"
+            aria-haspopup="true"
+            aria-label="Your account"
+            aria-expanded={accountOpen && accountFromRail}
+            onClick={() => { setAccountFromRail(true); toggle("account"); }}
+            className="portal-rail-account"
+            title={`${user.name} · ${user.roleLabel}`}
+          >
+            <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
+          </button>,
+          accountHost,
+        )}
+        {menu === "account" && (accountFromRail && accountHost ? (panel: ReactNode) => createPortal(panel, accountHost) : (panel: ReactNode) => panel)(
+          <section aria-label="Your account" className={`portal-top-panel portal-top-panel-account m-swap ${accountFromRail && accountHost ? "portal-top-panel-rail" : ""}`}>
             <div className="portal-top-identity">
               <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
               <span>
@@ -739,6 +772,7 @@ export function TopBarShell({
                 <span className="portal-top-identity-role">{user.roleLabel} · {user.workspaceName}</span>
               </span>
             </div>
+            {accountExtra && <div className="portal-top-account-extra">{accountExtra}</div>}
             {choosingWorkspace && canSwitch ? (
               <div className="portal-top-menu" role="group" aria-label="Your workspaces" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
                 {workspaces.map((workspace) => (
@@ -801,7 +835,7 @@ export function TopBarShell({
             <div className="portal-top-signout">
               <TopBarSignOut endpoint={signOutEndpoint} redirect={signOutRedirect} />
             </div>
-          </section>
+          </section>,
         )}
       </div>
 
@@ -876,7 +910,26 @@ function agentFeedLists(alerts: AgentAlert[]) {
  * The agent's bar. Owns the one poller for the whole page — the alert centre used to own it, and
  * mounting both would mean two requests every 2.5 seconds and two toasts per alert.
  */
-export function AppTopBar({ user, userId }: { user: TopBarUser; /** Keys this browser's snoozes to the person. */ userId?: string }) {
+/**
+ * The plan, in the account menu (owner ask 2026-10-26): it used to be a rail icon of its own that
+ * only opened a card. What the plan is and how big; owners get the way to change it.
+ */
+export type TopBarPlan = { name: string | null; seats: number | null; isOwner: boolean };
+
+function PlanLine({ plan, onNavigate }: { plan: TopBarPlan; onNavigate?: () => void }) {
+  const size = [plan.name ?? "No plan", plan.seats === null ? null : `${plan.seats} ${plan.seats === 1 ? "seat" : "seats"}`].filter(Boolean).join(" · ");
+  return (
+    <div className="portal-top-plan">
+      <span>
+        <span className="portal-top-plan-label">Plan</span>
+        <span className="portal-top-plan-name">{size}</span>
+      </span>
+      {plan.isOwner && <Link href="/app/settings#billing" onClick={onNavigate} className="portal-top-plan-link">Plan &amp; billing</Link>}
+    </div>
+  );
+}
+
+export function AppTopBar({ user, userId, plan }: { user: TopBarUser; /** Keys this browser's snoozes to the person. */ userId?: string; plan?: TopBarPlan }) {
   const source = useAgentAlertFeed();
   const lists = useMemo(() => agentFeedLists(source.alerts), [source.alerts]);
   // The notification centre (2026-10-09): the same feed, grouped, filtered and snoozable. Snoozed
@@ -912,6 +965,8 @@ export function AppTopBar({ user, userId }: { user: TopBarUser; /** Keys this br
       signOutRedirect="/app/login"
       workspacesEndpoint="/api/app/auth/workspaces"
       switchWorkspaceEndpoint="/api/app/auth/switch-workspace"
+      accountHostId="agent-rail-account"
+      accountExtra={plan ? <PlanLine plan={plan} /> : undefined}
     />
   );
 }

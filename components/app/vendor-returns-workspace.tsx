@@ -247,7 +247,8 @@ function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: 
  * strip of figures, then one row of tabs (claims, claimable rows, undialable share) with New claim on
  * its right; each tab is one table with its own toolbar, and a claim or a preview opens in a dialog.
  */
-export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: string }) {
+/** `embedded`: drawn as a tab of Lead sources / Vendor bills (2026-10-26), whose header is the page's. */
+export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { initialVendorId?: string; embedded?: boolean }) {
   const [report, setReport] = useState<VendorReturnsPageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -419,7 +420,7 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
   const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="Vendor returns" description="Return claims, and what each vendor credited." />
+    {!embedded && <PageHeader title="Vendor returns" description="Return claims, and what each vendor credited." />}
 
     <StatStrip label="Vendor return totals">
       <StatTile label="Open claims" value={openClaims} footnote={`${draftCount} draft`} />

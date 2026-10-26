@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 
 import { resolveTenantSuspended } from "@/lib/tenantAuth/requireTenant";
 import { TENANT_SUSPENDED_MESSAGE } from "@/lib/tenants/suspension";
-import { AuthCard, AuthPage } from "@/components/app/auth-card";
+import { AppAuthFrame } from "@/components/app/app-auth-frame";
+import { AuthCard } from "@/components/app/auth-card";
+import { Button } from "@/components/ui/button";
 import { LogoutButton } from "@/components/app/logout-button";
 
 export const metadata: Metadata = { title: "Account suspended · Insurvas" };
@@ -21,18 +23,22 @@ export default async function TenantSuspendedPage() {
   if (!(await resolveTenantSuspended())) redirect("/app/login");
 
   return (
-    <AuthPage>
-      <AuthCard width={640} eyebrow="Account suspended" title="You can't sign in right now" description={TENANT_SUSPENDED_MESSAGE}>
+    <AppAuthFrame>
+      <AuthCard width={640} title="You can't sign in right now" description={TENANT_SUSPENDED_MESSAGE}>
         <p className="mt-4 text-center text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
           Your data is kept as it was. Once the agency is reinstated, you can sign in again with the same email and password.
         </p>
-        <div className="mt-6 flex justify-center">
+        {/* A way to someone who can help, not only a way out (redesign, 2026-10-24). */}
+        <Button asChild className="mt-6 h-12 w-full">
+          <a href="mailto:support@insurvas.com?subject=Suspended%20account">Contact support</a>
+        </Button>
+        <div className="mt-4 flex justify-center">
           <LogoutButton
             variant="link"
             className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-ink)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
       </AuthCard>
-    </AuthPage>
+    </AppAuthFrame>
   );
 }

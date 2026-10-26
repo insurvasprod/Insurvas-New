@@ -33,6 +33,11 @@ export type SetupChecklistStep = {
   why: string;
   /** `data-guide` on the control the guide bar outlines; absent = the bar alone. */
   target?: string;
+  /**
+   * Rough minutes the step takes, shown as "About N min" on the setup page (redesign, 2026-10-24).
+   * Honest round figures for a first pass with the data to hand, not a promise; absent = no estimate.
+   */
+  minutes?: number;
   complete: boolean;
   /** Put aside by the reader ("skip it and come back", Basic Idea step 8). Not done, not blocking. */
   skipped?: boolean;
@@ -63,14 +68,14 @@ type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped">;
  * each further module needs before it can be trusted.
  */
 const SETUP_STEPS = [
-  { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carrier-library", action: "Open settings tab", target: "carrier-library-add",
+  { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers", action: "Open settings tab", target: "carrier-library-add",
     instruction: "Tick the carriers you are contracted with and enter your contract level and writing number.",
     why: "Every commission figure is worked out from your contract level, so this comes first." },
   // LA-4.6: straight to the import, which is the activation step ("You appear to be owed $X").
   { key: "statement", module: "book", label: "Upload a carrier statement", path: "/app/statements?import=1", action: "Import a statement",
     instruction: "Drop in your latest carrier statement — PDF, Excel or CSV.",
     why: "One statement is enough to show what you are owed and what was paid wrong." },
-  { key: "appointments", module: "book", label: "Confirm your appointments", path: "/app/settings#states-licences", action: "Open settings tab",
+  { key: "appointments", module: "book", label: "Confirm your appointments", path: "/app/settings#carriers/carriers-states", action: "Open settings tab",
     instruction: "Confirm the states and carriers you are appointed with.",
     why: "Leads and applications are only routed to agents who are appointed for that state and carrier." },
   { key: "lead-sources", module: "inbound", label: "Add your lead sources", path: "/app/publishers", action: "Open lead sources", target: "publisher-add",
@@ -353,6 +358,38 @@ export type SetupProgress = {
   finished?: boolean;
 };
 
+/**
+ * Rough minutes per step (redesign, 2026-10-24), kept beside the definitions rather than inside each
+ * so the long step lines stay readable. Rounded up for someone doing it the first time: a form is a
+ * couple of minutes, an upload or an import with column matching ten, writing disclosures or a
+ * hierarchy longer. A step not listed shows no estimate.
+ */
+const STEP_MINUTES: Partial<Record<string, number>> = {
+  carriers: 5,
+  statement: 3,
+  book: 10,
+  appointments: 5,
+  "lead-sources": 5,
+  phone: 1,
+  team: 3,
+  import: 10,
+  "calling-windows": 2,
+  assign: 5,
+  outcomes: 5,
+  "queue-sla": 2,
+  "sales-carriers": 10,
+  disclosures: 15,
+  retention: 3,
+  compliance: 5,
+  accounting: 2,
+  hierarchy: 10,
+  "first-call": 5,
+  "first-transfer": 2,
+  "first-outcome": 2,
+  statements: 5,
+  ledger: 3,
+};
+
 const PROGRESS_FIELD: Record<string, keyof SetupProgress> = {
   carriers: "carriersAdded",
   statement: "statementImported",
@@ -403,7 +440,8 @@ export function setupChecklistForState(onboardingState: string, progress: SetupP
     // Finished holds every step done ("does not come back") — except one the reader skipped, which
     // stays shown as skipped rather than claiming work that was never done (live walkthrough, 2026-10-22).
     const complete = proven || (finished && !skippedKeys.has(step.key));
-    return { ...step, complete, skipped: !complete && skippedKeys.has(step.key) };
+    const minutes = step.minutes ?? STEP_MINUTES[step.key];
+    return { ...step, ...(minutes ? { minutes } : {}), complete, skipped: !complete && skippedKeys.has(step.key) };
   });
   const completed = steps.filter((step) => step.complete).length;
   const skipped = steps.filter((step) => step.skipped).length;

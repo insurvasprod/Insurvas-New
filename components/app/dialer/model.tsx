@@ -99,7 +99,9 @@ export const FILTERS: Array<{ key: QueueFilter; label: string }> = [
   { key: "low", label: "Low priority" },
 ];
 
-export const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)]";
+// Frosted over the page's moving ribbon since the redesign (2026-10-25, Dialer A): `m-glass` is the
+// shared card surface (app/globals.css), blurred inside the page's DashboardStage.
+export const card = "m-glass min-w-0 rounded-[16px] border border-[var(--border)]";
 
 export const h2 = "m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
 
@@ -111,7 +113,7 @@ export const small = "text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted
 
 export const body14 = "text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
-export const barHead = "flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3";
+export const barHead = "flex items-center justify-between gap-4 border-b border-[var(--border)] px-4 py-3";
 
 export const barTitle = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
 

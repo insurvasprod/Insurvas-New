@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ViewTransition, useEffect, useState } from "react";
+import { ViewTransition, useEffect, useRef, useState } from "react";
 import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,12 @@ import { ThemeSwitch } from "@/components/public/theme-switch";
  *
  * `floating` (the landing page) lets the hero run underneath it; the other public pages keep it in
  * the flow. The section links are anchors on the landing page (/#…), so they work from every public
- * page. Below md the nav folds into a native <details> menu — no script needed to open it.
+ * page. Below xl the nav folds into a native <details> menu — no script needed to open it; a tap on
+ * one of its links, or anywhere outside it, closes it again.
+ *
+ * Phones (2026-10-22): the pill tightens below sm and the logo steps down below 380px, so logo, trial
+ * button and menu fit a 320px screen; below that (fold covers) the trial button moves into the
+ * menu. The menu also carries the light/dark switch the bar drops below sm.
  */
 const NAV: Array<{ href: string; label: string; key?: "home" | "pricing" }> = [
   { href: "/#product", label: "Product" },
@@ -29,6 +34,16 @@ const NAV: Array<{ href: string; label: string; key?: "home" | "pricing" }> = [
 
 export function SiteHeader({ current, floating = false }: { current?: "home" | "pricing"; floating?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const closeMenu = () => menuRef.current?.removeAttribute("open");
+  useEffect(() => {
+    const onPointer = (event: PointerEvent) => {
+      const menu = menuRef.current;
+      if (menu?.open && !menu.contains(event.target as Node)) menu.removeAttribute("open");
+    };
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, []);
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 24);
     update();
@@ -41,7 +56,7 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
       <div
         // Borderless frosted glass: mostly transparent, with a strong blur and a little extra
         // saturation so whatever scrolls underneath shows through softened, like a reflection.
-        className={`relative mx-auto flex items-center gap-3 overflow-visible rounded-full border-0 py-3 pl-6 pr-3 backdrop-blur-2xl backdrop-saturate-150 transition-[max-width,background-color,box-shadow] duration-500 ease-[cubic-bezier(.16,1,.3,1)] md:gap-8 ${
+        className={`relative mx-auto flex items-center gap-2 overflow-visible rounded-full border-0 py-2.5 pl-4 pr-2 backdrop-blur-2xl sm:gap-3 sm:py-3 sm:pl-6 sm:pr-3 backdrop-saturate-150 transition-[max-width,background-color,box-shadow] duration-500 ease-[cubic-bezier(.16,1,.3,1)] md:gap-8 ${
           scrolled
             ? "max-w-6xl bg-[color-mix(in_srgb,var(--color-card)_38%,transparent)] shadow-[0_12px_40px_-24px_rgba(13,64,55,.35)]"
             : "max-w-7xl bg-[color-mix(in_srgb,var(--color-card)_18%,transparent)] shadow-none"
@@ -79,21 +94,26 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
           <Button asChild variant="ghost" className="hidden h-10 rounded-full px-4 sm:inline-flex">
             <Link href="/app/login">Sign in</Link>
           </Button>
-          <Button asChild className="h-10 rounded-full px-4 text-sm sm:px-5">
+          <Button asChild className="h-10 rounded-full px-3 text-sm max-[319px]:hidden sm:px-5">
             <Link href="/signup"><span className="sm:hidden">Try free</span><span className="hidden sm:inline">Start free trial</span></Link>
           </Button>
-          <details className="relative xl:hidden">
+          <details ref={menuRef} className="relative xl:hidden">
             <summary aria-label="Menu" className="flex size-10 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border-strong)] text-foreground [&::-webkit-details-marker]:hidden">
               <Menu className="size-4" aria-hidden="true" />
             </summary>
-            <div className="absolute right-0 top-14 w-56 rounded-2xl border border-border bg-card p-2 shadow-[var(--shadow-overlay)]">
+            <div className="absolute right-0 top-14 max-h-[calc(100dvh-5rem)] w-56 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-[var(--shadow-overlay)]">
               {NAV.map((item) => (
-                <Link key={item.href} href={item.href} className="block rounded-lg px-3 py-2 text-sm font-semibold text-foreground no-underline hover:bg-[var(--surface-alt)]">
+                <Link key={item.href} href={item.href} onClick={closeMenu} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-[var(--surface-alt)]">
                   {item.label}
                 </Link>
               ))}
               <div className="my-1 border-t border-border" />
-              <Link href="/app/login" className="block rounded-lg px-3 py-2 text-sm font-semibold text-foreground no-underline hover:bg-[var(--surface-alt)]">Sign in</Link>
+              <Link href="/app/login" onClick={closeMenu} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-[var(--surface-alt)]">Sign in</Link>
+              <Link href="/signup" onClick={closeMenu} className="mt-1 block rounded-lg bg-[var(--primary)] px-3 py-2.5 text-center text-sm font-semibold text-[var(--on-primary)] no-underline min-[320px]:hidden">Start free trial</Link>
+              <div className="flex items-center justify-between rounded-lg px-3 py-1 sm:hidden">
+                <span className="text-sm font-semibold text-foreground">Theme</span>
+                <ThemeSwitch />
+              </div>
             </div>
           </details>
         </div>

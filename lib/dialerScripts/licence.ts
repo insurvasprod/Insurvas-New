@@ -45,8 +45,8 @@ export function decideDialLicence(input: LicenceInput): LicenceDecision {
   const fallbackNote = input.agentStates === null ? " (Your own licensed states cannot be recorded until a database update is applied, so the agency's licences are what is checked.)" : "";
   if (!current) {
     return held.length
-      ? { allowed: false, reason: "agency_expired", message: `Dialing is refused: the agency's ${state} licence has expired. Renew it on Settings › States & licences before calling ${state} leads.${fallbackNote}` }
-      : { allowed: false, reason: "agency_unlicensed", message: `Dialing is refused: the agency holds no ${state} licence. Add it on Settings › States & licences before calling ${state} leads.${fallbackNote}` };
+      ? { allowed: false, reason: "agency_expired", message: `Dialing is refused: the agency's ${state} licence has expired. Renew it on Settings › Carriers › State licences before calling ${state} leads.${fallbackNote}` }
+      : { allowed: false, reason: "agency_unlicensed", message: `Dialing is refused: the agency holds no ${state} licence. Add it on Settings › Carriers › State licences before calling ${state} leads.${fallbackNote}` };
   }
   if (input.agentStates === null) return { allowed: true, basis: "agency" };
   const own = input.agentStates.map((code) => code.trim().toUpperCase());

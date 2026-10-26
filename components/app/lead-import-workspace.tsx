@@ -105,7 +105,8 @@ function useLeadPreview(csv: string, stages: Array<{ id: string; name: string }>
   );
 }
 
-export function LeadImportWorkspace() {
+/** `embedded`: drawn as a tab of Lead sources / Vendor bills (2026-10-26), whose header is the page's. */
+export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean } = {}) {
   const [info, setInfo] = useState<ImportInfo | null>(null);
   const [file, setFile] = useState<{ name: string; size: number } | null>(null);
   const [csv, setCsv] = useState("");
@@ -374,10 +375,12 @@ export function LeadImportWorkspace() {
   if (!info && !loadFailed) return <PageLoading rows={6} />;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader
-      title="List import"
-      actions={info && info.fields.length > 0 ? <Button type="button" variant="outline" onClick={() => setFieldsOpen(true)}>Expected fields</Button> : undefined}
-    />
+    {embedded
+      ? info && info.fields.length > 0 && <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setFieldsOpen(true)}>Expected fields</Button></div>
+      : <PageHeader
+        title="List import"
+        actions={info && info.fields.length > 0 ? <Button type="button" variant="outline" onClick={() => setFieldsOpen(true)}>Expected fields</Button> : undefined}
+      />}
 
     {loadFailed && !info && <p role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
       The import settings could not be loaded.

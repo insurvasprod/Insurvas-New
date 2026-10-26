@@ -15,15 +15,20 @@ import { cn } from "@/lib/utils";
 import { dateTime } from "@/lib/format/dates";
 import { attemptOfCeiling, formatUsPhone, localClock, priorityForTier, returnWindowLine, zoneShort } from "@/lib/dialerScripts/display";
 import { APPLICATION_OUTCOME, outcomeButtonLabel, outcomeHotkey } from "@/lib/dialerScripts/outcomes";
-import { CALLBACK_OUTCOME, DNC_OUTCOME, FILTERS, PRIORITY_TONE, type QueueFilter, barHead, barTitle, body14, card, fieldClass, fieldLabel, instantInZone, label, leadName, small } from "@/components/app/dialer/model";
+import { CALLBACK_OUTCOME, DNC_OUTCOME, FILTERS, Kbd, PRIORITY_TONE, barHead, barTitle, body14, card, fieldClass, fieldLabel, instantInZone, label, leadName, small } from "@/components/app/dialer/model";
 import { useDialer } from "@/components/app/dialer/use-dialer";
 import { DialerLeadColumn } from "@/components/app/dialer/lead-column";
 import { useNow } from "@/components/app/applications/outcome/use-now";
+import { BookAppointmentDialog } from "@/components/app/dialer/book-appointment-dialog";
+import { CalendarPlus } from "lucide-react";
+import { useState } from "react";
 
 export function DialerWorkspace({ readOnly = false, role = "producer", canCheckNumber = false, requestedLeadId = null }: { readOnly?: boolean; role?: string; canCheckNumber?: boolean; requestedLeadId?: string | null }) {
   const dialer = useDialer({ readOnly, role, canCheckNumber, requestedLeadId });
   const now = useNow();
-  const { isSetter, search, setSearch, searchMode, searching, selectedId, panel, attempt, working, dialled, served, serving, queue, queueError, queueFilter, setQueueFilter, picking, pickRefusals, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, outcomeOpen, setOutcomeOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, resetCall, selectLead, searchLeads, clearLeadSearch, visibleLeads, serveNext, serveNextNow, pickLead, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, primaryCount, blockers, callReady, stats, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep } = dialer;
+  const { isSetter, search, setSearch, searchMode, searching, selectedId, panel, attempt, working, dialled, served, serving, queue, queueError, queueFilter, setQueueFilter, picking, pickRefusals, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, outcomeOpen, setOutcomeOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, resetCall, selectLead, searchLeads, clearLeadSearch, visibleLeads, serveNext, serveNextNow, pickLead, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, primaryCount, blockers, callReady, stats, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep, confirmed, calendar, autoNext, setAutoNext, clearLead } = dialer;
+  const [bookOpen, setBookOpen] = useState(false);
+  const canBook = !readOnly && Boolean(calendar && calendar.agents.length > 0);
 
   return (
     /* From 1024px the dialer fills the screen under the top bar and each column scrolls on its own
@@ -72,16 +77,27 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                 <Button type="button" variant="outline" onClick={clearLeadSearch}>Back to queue</Button>
               </div>
             ) : (
-              <div className="border-b border-[var(--border)] px-3 py-2.5">
-                <select aria-label="Filter the queue by priority" className={cn(toolbarControl, "w-full")} value={queueFilter} onChange={(event) => setQueueFilter(event.target.value as QueueFilter)}>
-                  {FILTERS.map((filter) => <option key={filter.key} value={filter.key}>{filter.label}</option>)}
-                </select>
+              <div className="flex flex-col gap-2.5 border-b border-[var(--border)] px-3 py-2.5">
                 {/* Your own calls today, from midnight in the agency's timezone. */}
                 {stats && (
-                  <p className={cn(small, "mt-2 tabular-nums")} title={`Your calls since midnight ${zoneShort(stats.zone) || stats.zone}. A contact is a recorded outcome that was a conversation.`}>
+                  <p className={cn(small, "m-0 tabular-nums")} title={`Your calls since midnight ${zoneShort(stats.zone) || stats.zone}. A contact is a recorded outcome that was a conversation.`}>
                     Today: <strong className="font-semibold text-[var(--ink)]">{stats.dials.toLocaleString()}</strong> {stats.dials === 1 ? "dial" : "dials"} · <strong className="font-semibold text-[var(--ink)]">{stats.contacts.toLocaleString()}</strong> {stats.contacts === 1 ? "contact" : "contacts"} · {stats.contactRate === null ? "no contact rate yet" : <><strong className="font-semibold text-[var(--ink)]">{Math.round(stats.contactRate)}%</strong> contact rate</>}
                   </p>
                 )}
+                {/* The priority filter as chips (Dialer A, 2026-10-25): every tier one click, no menu to open. */}
+                <div role="group" aria-label="Filter the queue by priority" className="flex flex-wrap gap-1.5">
+                  {FILTERS.map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => setQueueFilter(filter.key)}
+                      aria-pressed={queueFilter === filter.key}
+                      className={cn("h-7 rounded-full px-2.5 text-xs leading-[1.5] font-semibold transition-colors", queueFilter === filter.key ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--muted)] hover:text-[var(--ink)]")}
+                    >
+                      {filter.key === "all" ? "All" : filter.label.replace(/ priority$/, "")}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -165,9 +181,43 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
         <div className="contents min-w-0 flex-col gap-4 lg:flex lg:min-h-0 lg:w-[320px] lg:shrink-0">
           {panel && (
             <section id="dialer-disposition" className={cn(card, "flex flex-col overflow-hidden max-lg:order-2 lg:min-h-0 lg:flex-1")} aria-label="Disposition">
-              <div className={barHead}>
-                <span className={barTitle}>Disposition</span>
-                {phoneLabel && <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums" aria-label={`Customer's number ${phoneLabel}`}>{phoneLabel}</span>}
+              {/* The call dock (Dialer A, 2026-10-25): the number, then ONE button that is always the call's
+                  next step — Click to call, I read the disclosure, Start call — and, when the call cannot
+                  be placed, why, in words (the audit: a reason in a disabled button's tooltip reaches
+                  nobody on a phone or a screen reader). Below 1024px the call bar at the foot of the
+                  screen carries these steps, so here they are desktop only. */}
+              <div className="flex shrink-0 flex-col gap-3 border-b border-[var(--border)] p-4">
+                <div className="text-center">
+                  <p className={cn(small, "m-0")}>{dialled ? "On the call with" : "Calling"}</p>
+                  <p className="m-0 text-2xl leading-[1.25] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums" aria-label={phoneLabel ? `Customer's number ${phoneLabel}` : undefined}>{phoneLabel ?? "No phone number"}</p>
+                </div>
+                <div className="flex flex-col gap-2 max-lg:hidden">
+                  {!attempt ? (
+                    <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={readOnly || working || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"} className="h-12 w-full text-base">
+                      {readOnly ? "Read-only account" : searchMode ? "Log inbound return call" : "Click to call"}{!readOnly && <Kbd>C</Kbd>}
+                    </Button>
+                  ) : !confirmed ? (
+                    <Button type="button" onClick={() => void confirmRead()} disabled={readOnly || working || confirmed || panel.disclosure.blocking} aria-keyshortcuts="R" className="h-12 w-full text-base">
+                      I read this disclosure<Kbd>R</Kbd>
+                    </Button>
+                  ) : dialled ? (
+                    <Button type="button" disabled title="The call has started; record what happened." className="h-12 w-full text-base">Call started</Button>
+                  ) : (
+                    <Button type="button" disabled={!confirmed || !eligibility?.allowed || !panel.lead.phone || working} aria-describedby="dial-status" aria-keyshortcuts="D" onClick={() => void dial()} className="h-12 w-full text-base">
+                      {working ? "Checking…" : eligibility?.allowed ? "Start call" : "Dialing blocked"}<Kbd>D</Kbd>
+                    </Button>
+                  )}
+                  {!attempt && !readOnly && !callReady && blockers.length > 0 && (
+                    <ul id="dialer-blockers" className="m-0 list-none space-y-0.5 p-0 text-center">
+                      {blockers.map((line) => <li key={line} className="text-xs leading-[1.5] font-semibold text-[var(--error-ink)]">{line}</li>)}
+                    </ul>
+                  )}
+                  {/* Book an appointment opens once the call is being prepared (2026-10-06). */}
+                  {attempt && canBook && (
+                    <Button type="button" variant="outline" onClick={() => setBookOpen(true)}><CalendarPlus aria-hidden="true" />Book appointment</Button>
+                  )}
+                </div>
+                <BookAppointmentDialog d={dialer} open={bookOpen} onOpenChange={setBookOpen} />
               </div>
               <div className="flex flex-col gap-4 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
               {/* Where the call is, in one line: the buttons stay disabled until the call starts. */}
@@ -176,7 +226,15 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                 {!attempt ? (searchMode ? "Log the return call to record its outcome." : "Click to call to begin.") : !dialled ? "Start the call, then record what happened here." : "Call in progress · choose the outcome."}
               </p>
               <div role="group" aria-label="Outcome" className="flex flex-col gap-1.5">
-                <p className={cn(label, "m-0 mb-0.5")}>Outcome</p>
+                <div className="mb-0.5 flex items-center justify-between gap-2">
+                  <p className={cn(label, "m-0")}>Outcome</p>
+                  {/* Auto-next: serve the next lead as soon as an outcome is recorded (on by default). */}
+                  {!searchMode && !readOnly && (
+                    <button type="button" onClick={() => setAutoNext(!autoNext)} aria-pressed={autoNext} title={autoNext ? "The next lead is served as soon as you record an outcome." : "After an outcome the screen clears; serve the next lead when you are ready."} className={cn("h-7 rounded-full border px-2.5 text-xs leading-[1.5] font-semibold transition-colors", autoNext ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)]")}>
+                      Auto-next {autoNext ? "on" : "off"}
+                    </button>
+                  )}
+                </div>
                 {outcomes.slice(0, searchMode ? outcomes.length : primaryCount).map((item, index) => (
                   <OutcomeButton key={item.key} label={outcomeButtonLabel(item)} hotkey={searchMode ? null : outcomeHotkey(index)} tone={item.key === APPLICATION_OUTCOME ? "primary" : "default"} pressed={pendingCallback && item.key === CALLBACK_OUTCOME} disabled={!dialled || working} onClick={() => choose(item.key)} />
                 ))}
@@ -299,7 +357,8 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                 setOutcomeOpen(false);
                 notify.done("Call outcome recorded");
                 resetCall();
-                void serveNextNow();
+                if (autoNext) void serveNextNow();
+                else clearLead();
               }}
             />
           )}

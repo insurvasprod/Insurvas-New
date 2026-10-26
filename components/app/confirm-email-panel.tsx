@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,13 @@ export function ConfirmEmailPanel() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
-    });
+    }).catch(() => null);
+    // A dropped connection hands the button back with a reason, and the link is still unused.
+    if (!res) {
+      setLoading(false);
+      setError("Could not reach Insurvas. Check your connection and press Confirm again.");
+      return;
+    }
     const body = await res.json().catch(() => null);
     setLoading(false);
 
@@ -116,8 +123,9 @@ export function ConfirmEmailPanel() {
         title="This link no longer works"
         lede="It has expired or was already used. Your email address is unchanged."
       >
-        <p className="mt-6 text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          Still need the change? <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">Contact your administrator</a> for a new link.
+        <Button asChild className="mt-6 h-12 w-full"><Link href="/app/login">Sign in</Link></Button>
+        <p className="mt-4 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+          Still need the change? Ask for it again from your profile, or <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">contact your administrator</a>.
         </p>
       </Card>
     );
@@ -148,20 +156,13 @@ export function ConfirmEmailPanel() {
         </div>
       )}
 
-      <Button onClick={confirm} disabled={loading} className="mt-6 h-11 w-full px-4">
+      <Button onClick={confirm} disabled={loading} className="mt-6 h-12 w-full px-4">
         {loading ? "Confirming…" : "Confirm email address"}
       </Button>
 
-      <p className="mt-4 text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-        This link is single-use. Didn’t request the change? <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">Contact your administrator</a>.
+      <p className="mt-4 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+        Didn’t ask for this change? <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">Contact your administrator</a>.
       </p>
-
-      <div className="mt-5 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-        <p className="font-semibold text-[var(--info-ink)]">Nothing is confirmed by loading this page</p>
-        <p className="mt-1.5 text-[var(--body)]">
-          Only the button above changes your address, so a link preview or an email security scanner opening this page cannot change it for you.
-        </p>
-      </div>
     </Card>
   );
 }

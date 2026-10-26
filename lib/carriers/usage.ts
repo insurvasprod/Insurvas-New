@@ -82,8 +82,8 @@ export function blockingSentence(name: string, usage: CarrierBlockingUsage): str
 
 /** What deactivating does to tenants — shown in the override dialog, and true of the code today. */
 export const DEACTIVATION_CONSEQUENCES = [
-  "It disappears from every tenant's carrier pickers: Settings › Carrier library, Appointments and the commission statement import. Tenants cannot save a new contract level for it.",
-  "Tenants' existing contract rows for it drop out of Settings › Carrier library, and the carrier counts there go down.",
+  "It disappears from every tenant's carrier pickers: Settings › Carriers, Appointments and the commission statement import. Tenants cannot save a new contract level for it.",
+  "Tenants' existing contract rows for it drop out of Settings › Carriers, and the carrier counts there go down.",
   "Their appointments with it stay recorded but show as “Carrier” instead of its name.",
   "Lead routing does not change: appointments with it still make agents eligible in their states.",
   "Nothing is deleted. Reactivating brings all of it back.",

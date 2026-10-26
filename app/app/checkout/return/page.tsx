@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
 import { CheckoutReturnStatus } from "@/components/public/checkout-return-status";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -19,9 +20,15 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
  *
  * Note this page never sees a card. Whop collected it; we learn only whether checkout finished.
  */
-export default async function CheckoutReturnPage() {
+export default async function CheckoutReturnPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const context = await resolveSignupContext();
   if (!context) redirect("/app/login");
+
+  // The embedded form returns here after an off-site step (a bank page, 3-D Secure) whatever happened,
+  // with Whop's `status`. A failed or cancelled one goes back to Payment with the reason, not into a
+  // wait for a payment that will never arrive. "succeeded" is still only a hint: Whop is asked below.
+  const { status } = await searchParams;
+  if (status === "failed" || status === "canceled") redirect("/app/checkout?failed=1");
 
   // No open checkout means there is nothing here to confirm — either they already finished (the
   // webhook got there first) or they never started. Either way, the shell decides where they go.
@@ -35,19 +42,9 @@ export default async function CheckoutReturnPage() {
   if (!session) redirect("/app/dashboard");
 
   return (
-    <div className="portal-agent flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] px-4 py-10 sm:p-10">
-      {/* Not a direct `main` child: the shell's `.portal-agent > main` reserves 264px for a sidebar. */}
-      <div className="w-full max-w-[680px]">
-        <main className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
-          <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
-            Confirming with the payment provider
-          </h1>
-          <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            This usually takes a few seconds. Access is granted by the provider’s answer, never by arriving at this URL.
-          </p>
-          <CheckoutReturnStatus />
-        </main>
-      </div>
-    </div>
+    <FunnelFrame step={5}>
+      <FunnelHeading title="Starting your trial">This usually takes a few seconds.</FunnelHeading>
+      <CheckoutReturnStatus />
+    </FunnelFrame>
   );
 }

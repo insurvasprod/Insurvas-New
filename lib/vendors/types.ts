@@ -52,8 +52,14 @@ export type VendorCardFacts = {
   ranked: boolean;
   /** Returns' summary, aggregated by vendor. Null when nothing is claimable or it is unavailable. */
   claimable: { cents: number; rows: number; days_left: number } | null;
-  /** Returns' vendor_undialable_rates. */
+  /** Returns' vendor_undialable_rates. LOW is good: is their product any good? */
   undialable_percent: number | null;
+  /**
+   * The scorecard's claim acceptance rate (credited ÷ claimed). HIGH is good: are they decent to
+   * deal with? Decision 11 put this in place of the old per-vendor dispute measure; the two vendor
+   * figures answer different questions and are never combined.
+   */
+  claim_acceptance_percent: number | null;
   /** tenant_vendor_consent_coverage.claimed_coverage_pct. */
   certificate_pct: number | null;
   /** Facts only — never an action. Null when nothing crosses a threshold (or the vendor is trialling). */

@@ -41,7 +41,7 @@ const per1000 = (row: QuoteRow) => premiumPer1000(row.monthlyPremiumCents, row.f
 const dollars = (value: number | null) => (value === null ? "—" : `$${value.toFixed(2)}`);
 const average = (values: number[]) => (values.length ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : null);
 
-export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC" }: { rows: QuoteRow[]; sample?: boolean; timeZone?: string }) {
+export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC", embedded = false }: { rows: QuoteRow[]; sample?: boolean; timeZone?: string; /** A tab of Applications (2026-10-26): no header of its own; Export sits in the toolbar. */ embedded?: boolean }) {
   const [rows, setRows] = useState(initialRows);
   // No filter on entry (2026-10-06 redesign): the list opens on every quote, newest first.
   const [range, setRange] = useState<RangeKey>("all");
@@ -87,11 +87,11 @@ export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC"
   }
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
+    <div className={embedded ? "flex flex-col gap-6" : "m-stagger flex flex-col gap-6"}>
+      {!embedded && <PageHeader
         title="Quotes"
         actions={<Button type="button" variant="outline" onClick={exportCsv} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>}
-      />
+      />}
       {sample && <SampleDataNotice />}
 
       <StatStrip label="Quote totals">
@@ -107,6 +107,7 @@ export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC"
           <DataToolbar actions={<>
             {filtered && <ClearFiltersButton onClick={clearFilters} />}
             <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+            {embedded && <Button type="button" variant="outline" onClick={exportCsv} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>}
           </>}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search client, carrier, product" />
             <select aria-label="Captured" className={toolbarControl} value={range} onChange={(event) => { setRange(event.target.value as RangeKey); setPage(1); }}>

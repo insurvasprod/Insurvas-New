@@ -45,7 +45,7 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
   onAnswerOffer: (response: "reject" | "expire") => void;
   busy: boolean;
 }) {
-  const { caseView, attempt, attemptsForInsured, readOnly, sample, actions, updateAttempt, goTo, timeZone } = useWorkspace();
+  const { caseView, attempt, attemptsForInsured, readOnly, seatReadOnly, sample, actions, updateAttempt, goTo, timeZone } = useWorkspace();
   const [choice, setChoice] = useState<Choice | "">("");
   const [reason, setReason] = useState("");
   const [text, setText] = useState("");
@@ -103,7 +103,7 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
   if (status === "closed") {
     const label = OUTCOME_REASONS.find((r) => r.code === attempt.outcomeReasonCode)?.label ?? null;
     const newest = attemptsForInsured.every((a) => a.attemptNo <= attempt.attemptNo);
-    const retry = newest && caseView.status === "open" && attempt.outcome !== null && RETRYABLE.includes(attempt.outcome);
+    const retry = !seatReadOnly && newest && caseView.status === "open" && attempt.outcome !== null && RETRYABLE.includes(attempt.outcome);
     // Any last attempt that ended without a policy can close the case — a withdrawn retry too, which
     // otherwise left the case open with no way to close it.
     const canLose = newest && caseView.status === "open" && attempt.outcome !== null && attempt.outcome !== "issued";
@@ -112,7 +112,7 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
     // Issued without a number: the Missing reference list sends the agent here, so the number is
     // added here (QA pass 2026-10-22: the card was read-only and the sale could never reach the book).
     const latestSubmission = attempt.submissions.at(-1) ?? null;
-    const canAddNumber = attempt.outcome === "issued" && !policyNo && latestSubmission !== null;
+    const canAddNumber = !seatReadOnly && attempt.outcome === "issued" && !policyNo && latestSubmission !== null;
     async function saveLateNumber() {
       const number = lateNumber.trim().toUpperCase();
       if (!number || !latestSubmission) return;
@@ -131,7 +131,7 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
         footerNote={retry ? CARRY_LINE : canAddNumber ? "This attempt is closed. Only the missing policy number can still be added." : "This attempt is closed, so nothing on it changes."}
         actions={<>
           <Button type="button" variant="outline" onClick={() => goTo("submit")}><ArrowLeft aria-hidden="true" />Back to Submit</Button>
-          {canLose && (
+          {canLose && !seatReadOnly && (
             <span title={anyLive ? "Close or withdraw the other open application first" : undefined}>
               <Button type="button" variant="outline" onClick={() => setClosing(true)} disabled={anyLive}>Close the case as lost</Button>
             </span>
@@ -157,7 +157,7 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
   }
 
   // ── recording it ─────────────────────────────────────────────────────────
-  const why = readOnly ? "This attempt is closed" : saving || busy ? "Saving…" : !choice ? "Choose the outcome" : undefined;
+  const why = readOnly ? "Read-only — nothing on this attempt can change" : saving || busy ? "Saving…" : !choice ? "Choose the outcome" : undefined;
   return (
     <StepCard
       title="Outcome"

@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useState, type FormEvent } from "react";
+import { startTransition, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff } from "lucide-react";
@@ -11,7 +11,13 @@ import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { AuthBrand, PortalAuthSplitShell, type PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { OtpInput } from "@/components/app/otp-input";
+import { TRIAL_DAYS } from "@/lib/checkout/constants";
+import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
 import type { MaintenanceStatus } from "@/lib/system/constants";
+
+/** The address that last signed in on this browser, so a returning agent types only the password. */
+const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
 
 /**
  * The panel is reassurance, not content.
@@ -119,6 +125,53 @@ export function TenantAuthWorkspace({
   const [resetEmail, setResetEmail] = useState("");
   const [resetState, setResetState] = useState<"idle" | "sending" | "sent">("idle");
   const [resetError, setResetError] = useState<string | null>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  // "Keep me signed in on this device" (ticked by default, the cookie the app always gave) and
+  // "Trust this device for 30 days" at the code step.
+  const [remember, setRemember] = useState(true);
+  const [trustDevice, setTrustDevice] = useState(false);
+
+  // "Email me a sign-in link": the request panel, and the link itself when this page was opened from one.
+  const [linkRequest, setLinkRequest] = useState<"closed" | "open" | "sending" | "sent">("closed");
+  const [linkEmail, setLinkEmail] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkCooldown, setLinkCooldown] = useState(0);
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+
+  // A link arrives as /app/login#link=…: the fragment never reaches a server, and it is cleared from
+  // the address bar at once so it is not left in history or shared by accident.
+  useEffect(() => {
+    const match = /^#link=(.+)$/.exec(window.location.hash);
+    if (!match) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the fragment is only readable after mount
+    setLinkToken(decodeURIComponent(match[1]));
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
+
+  useEffect(() => {
+    if (linkCooldown <= 0) return;
+    const timer = window.setInterval(() => setLinkCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [linkCooldown]);
+
+  // A remembered address fills the field and puts the cursor in the password; otherwise the email.
+  useEffect(() => {
+    if (/^#link=/.test(window.location.hash)) return;
+    let remembered = "";
+    try { remembered = window.localStorage.getItem(LAST_EMAIL_KEY) ?? ""; } catch { /* storage blocked */ }
+    if (remembered) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
+      setLoginEmail((current) => current || remembered);
+      passwordRef.current?.focus();
+    } else {
+      emailRef.current?.focus();
+    }
+  }, []);
+
+  function rememberEmail() {
+    try { window.localStorage.setItem(LAST_EMAIL_KEY, loginEmail.trim()); } catch { /* storage blocked */ }
+  }
 
   function openReset() {
     startTransition(() => {
@@ -145,14 +198,56 @@ export function TenantAuthWorkspace({
     }
   }
 
+  function openLinkRequest() {
+    setLinkEmail(loginEmail);
+    setLinkError(null);
+    setLinkRequest("open");
+  }
+
+  async function requestLink(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (linkCooldown > 0) return;
+    setLinkError(null);
+    if (!linkEmail.trim()) { setLinkError("Enter the email address you sign in with."); return; }
+    setLinkRequest("sending");
+    try {
+      const response = await fetch("/api/app/auth/sign-in-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: linkEmail, remember }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setLinkError(body?.error ?? "Could not send a sign-in link. Try again."); setLinkRequest("open"); return; }
+      setLinkRequest("sent");
+      setLinkCooldown(30);
+    } catch {
+      setLinkError("Could not send a sign-in link. Check your connection and try again.");
+      setLinkRequest("open");
+    }
+  }
+
+  /** The password, or the emailed link, goes to the same sign-in route. */
+  async function submitSignIn(payload: Record<string, unknown>) {
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, remember }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setLoginError(body?.error ?? "Something went wrong"); return; }
+      if (body?.twoFactor) { setLinkToken(null); setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
+      router.replace(body?.redirectTo ?? "/app/dashboard");
+    } catch {
+      setLoginError("Could not sign in. Check your connection and try again.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoginError(null);
     setLoginLoading(true);
     try {
-      const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
+      const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword, remember }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setLoginError(body?.error ?? "Something went wrong"); return; }
+      rememberEmail();
       if (body?.twoFactor) { setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
       // Straight to the landing page, once. The old push("/app") + refresh() rendered the landing page
       // twice and bounced through /app's redirect — the slowest part of "11 seconds after login".
@@ -165,16 +260,18 @@ export function TenantAuthWorkspace({
     }
   }
 
-  async function handleTwoFactor(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleTwoFactor(event: FormEvent<HTMLFormElement> | null, typed?: string) {
+    event?.preventDefault();
+    const code = typed ?? twoFactorCode;
+    if (loginLoading || !code.trim()) return;
     setLoginError(null);
     setLoginLoading(true);
     try {
-      const payload = useRecoveryCode ? { recoveryCode: twoFactorCode.trim() } : { code: twoFactorCode.replace(/\s/g, "") };
+      const payload = useRecoveryCode ? { recoveryCode: code.trim(), trust: trustDevice } : { code: code.replace(/\s/g, ""), trust: trustDevice };
       const response = await fetch("/api/app/auth/verify-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json().catch(() => null);
       if (response.status === 401 && /Sign in again/.test(body?.error ?? "")) { setTwoFactorStep(false); setLoginError(body.error); return; }
-      if (!response.ok) { setLoginError(body?.error ?? "That code is not right."); return; }
+      if (!response.ok) { setLoginError(body?.error ?? "That code is not right."); if (!useRecoveryCode) setTwoFactorCode(""); return; }
       router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
       setLoginError("Could not check the code. Check your connection and try again.");
@@ -182,6 +279,13 @@ export function TenantAuthWorkspace({
       setLoginLoading(false);
     }
   }
+
+  const rememberBox = (
+    <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+      <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+      Keep me signed in on this device
+    </label>
+  );
 
   const brand = (
     <AuthBrand href="/" label="Insurvas home">
@@ -192,10 +296,7 @@ export function TenantAuthWorkspace({
   const signIn = (
     <div className="m-stagger portal-auth-form-inner">
       {brand}
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-        Licensed agent
-      </div>
-      <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
         Welcome back
       </h1>
       <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
@@ -204,8 +305,9 @@ export function TenantAuthWorkspace({
 
       <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="tenant-login-email">Work email</Label>
+          <Label htmlFor="tenant-login-email">Email</Label>
           <Input
+            ref={emailRef}
             id="tenant-login-email"
             type="email"
             inputMode="email"
@@ -220,9 +322,15 @@ export function TenantAuthWorkspace({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="tenant-login-password">Password</Label>
+          <div className="flex items-baseline justify-between gap-3">
+            <Label htmlFor="tenant-login-password">Password</Label>
+            <button type="button" onClick={openReset} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+              Forgot password?
+            </button>
+          </div>
           <div className="relative">
             <Input
+              ref={passwordRef}
               id="tenant-login-password"
               type={showLoginPassword ? "text" : "password"}
               autoComplete="current-password"
@@ -246,6 +354,8 @@ export function TenantAuthWorkspace({
           </div>
         </div>
 
+        {rememberBox}
+
         {maintenance?.level === "locked" && (
           <div role="alert" className="portal-auth-alert">
             <strong>Sign in is temporarily unavailable</strong>
@@ -258,23 +368,26 @@ export function TenantAuthWorkspace({
           </p>
         )}
 
-        <Button type="submit" className="mt-2 h-12 w-full" disabled={loginLoading || maintenance?.level === "locked"}>
+        <Button type="submit" className="mt-1 h-12 w-full" disabled={loginLoading || maintenance?.level === "locked"}>
           {loginLoading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
 
-      <div className="mt-[22px] flex flex-wrap items-center justify-between gap-4">
-        <LinkArrow asChild>
-          <button type="button" onClick={openReset}>
-            Forgot password
-          </button>
-        </LinkArrow>
-        <LinkArrow asChild>
-          <Link href="/signup">Create a workspace</Link>
-        </LinkArrow>
+      <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
+        <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
       </div>
+      <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={openLinkRequest} disabled={maintenance?.level === "locked"}>
+        Email me a sign-in link
+      </Button>
 
-      <p className="mt-[18px] text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+      <p className="mt-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+        New to Insurvas?{" "}
+        <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+          Start a {TRIAL_DAYS}-day trial
+        </Link>
+      </p>
+
+      <p className="mt-3 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
         Partner or affiliate?{" "}
         <Link href="/partner/login" className="font-semibold text-foreground">
           Use the partner portal instead
@@ -293,16 +406,13 @@ export function TenantAuthWorkspace({
   const reset = (
     <div className="m-stagger portal-auth-form-inner">
       {brand}
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-        Licensed agent
-      </div>
-      <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
         {resetState === "sent" ? "Check your inbox" : "Reset your password"}
       </h1>
       {resetState === "sent" ? (
         <>
           <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to an agent account, a link to choose a new password is on its way. It works once. The answer is the same for every address, so this page cannot be used to learn who has an account.
+            If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to an agent account, a link to choose a new password is on its way. It works once.
           </p>
           <p className="text-sm leading-normal text-[var(--body)]">Nothing arrived after a few minutes? Check spam, then write to <a href="mailto:support@insurvas.com?subject=Password%20help" className="font-semibold text-foreground">support@insurvas.com</a>.</p>
         </>
@@ -313,7 +423,7 @@ export function TenantAuthWorkspace({
           </p>
           <form className="flex flex-col gap-4" onSubmit={handleReset} noValidate>
             <div className="space-y-1.5">
-              <Label htmlFor="tenant-reset-email">Work email</Label>
+              <Label htmlFor="tenant-reset-email">Email</Label>
               <Input id="tenant-reset-email" type="email" inputMode="email" autoComplete="username" required value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
             </div>
             {resetError && <p className="portal-auth-alert" role="alert">{resetError}</p>}
@@ -336,29 +446,44 @@ export function TenantAuthWorkspace({
   const twoFactor = (
     <div className="m-stagger portal-auth-form-inner">
       {brand}
-      <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        Enter your code
+      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+        {useRecoveryCode ? "Enter a recovery code" : "Enter your 6-digit code"}
       </h1>
       <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-        {useRecoveryCode ? "Type one of the recovery codes you saved. Each one works once." : "Open your authenticator app and type the six-digit code for Insurvas."}
+        {useRecoveryCode ? "Type one of the recovery codes you saved. Each one works once." : "From your authenticator app. You are signed in as soon as the sixth digit is in."}
       </p>
-      <form className="flex flex-col gap-4" onSubmit={handleTwoFactor} noValidate>
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-login-code">{useRecoveryCode ? "Recovery code" : "Authentication code"}</Label>
-          <Input
-            id="tenant-login-code"
-            inputMode={useRecoveryCode ? "text" : "numeric"}
-            autoComplete="one-time-code"
-            autoFocus
-            required
-            maxLength={useRecoveryCode ? 20 : 6}
+      <form className="flex flex-col gap-4" onSubmit={(event) => void handleTwoFactor(event)} noValidate>
+        {useRecoveryCode ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="tenant-login-code">Recovery code</Label>
+            <Input
+              id="tenant-login-code"
+              autoComplete="off"
+              autoFocus
+              required
+              maxLength={20}
+              placeholder="xxxx-xxxx"
+              value={twoFactorCode}
+              onChange={(event) => { setTwoFactorCode(event.target.value); setLoginError(null); }}
+            />
+          </div>
+        ) : (
+          <OtpInput
+            idPrefix="tenant-login-code"
             value={twoFactorCode}
-            onChange={(event) => { setTwoFactorCode(event.target.value); setLoginError(null); }}
+            autoFocus
+            disabled={loginLoading}
+            onChange={(next) => { setTwoFactorCode(next); setLoginError(null); }}
+            onComplete={(code) => void handleTwoFactor(null, code)}
           />
-        </div>
+        )}
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+          <input type="checkbox" checked={trustDevice} onChange={(event) => setTrustDevice(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+          Trust this device for {TRUSTED_DEVICE_DAYS} days
+        </label>
         {loginError && <p className="portal-auth-alert" role="alert">{loginError}</p>}
-        <Button type="submit" className="mt-2 h-12 w-full" disabled={loginLoading || !twoFactorCode.trim()}>
-          {loginLoading ? "Checking…" : "Continue"}
+        <Button type="submit" className="mt-1 h-12 w-full" disabled={loginLoading || !twoFactorCode.trim()}>
+          {loginLoading ? "Checking…" : "Verify and sign in"}
         </Button>
       </form>
       <div className="mt-[22px] flex flex-wrap items-center justify-between gap-4">
@@ -376,7 +501,88 @@ export function TenantAuthWorkspace({
     </div>
   );
 
-  const form = twoFactorStep ? twoFactor : resetting ? reset : signIn;
+  const backToPassword = (
+    <div className="mt-[22px]">
+      <LinkArrow asChild>
+        <button type="button" onClick={() => { setLinkRequest("closed"); setLinkToken(null); setLoginError(null); }}>
+          Use my password instead
+        </button>
+      </LinkArrow>
+    </div>
+  );
+
+  const linkRequestPanel = (
+    <div className="m-stagger portal-auth-form-inner">
+      {brand}
+      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+        {linkRequest === "sent" ? "Check your inbox" : "Sign in with a link"}
+      </h1>
+      {linkRequest === "sent" ? (
+        <>
+          <p className="mb-6 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+            If <strong className="font-semibold text-foreground">{linkEmail.trim()}</strong> belongs to an agent account, a sign-in link is on its way. It works once, for {SIGN_IN_LINK_MINUTES} minutes.
+          </p>
+          <div className="flex flex-wrap gap-2.5">
+            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+              <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
+            </Button>
+            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+              <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
+            </Button>
+          </div>
+          {linkError && <p className="portal-auth-alert mt-4" role="alert">{linkError}</p>}
+          <p className="mt-5 text-sm leading-normal text-[var(--body)]">
+            Nothing arrived?{" "}
+            <button type="button" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline disabled:text-muted-foreground disabled:no-underline" disabled={linkCooldown > 0} onClick={() => void requestLink()}>
+              {linkCooldown > 0 ? `Send it again in ${linkCooldown}s` : "Send it again"}
+            </button>
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+            We email you a link that signs you in once, within {SIGN_IN_LINK_MINUTES} minutes. No password needed.
+          </p>
+          <form className="flex flex-col gap-4" onSubmit={(event) => void requestLink(event)} noValidate>
+            <div className="space-y-1.5">
+              <Label htmlFor="tenant-link-email">Email</Label>
+              <Input id="tenant-link-email" type="email" inputMode="email" autoComplete="username" autoFocus required value={linkEmail} onChange={(event) => { setLinkEmail(event.target.value); setLinkError(null); }} />
+            </div>
+            {rememberBox}
+            {linkError && <p className="portal-auth-alert" role="alert">{linkError}</p>}
+            <Button type="submit" className="mt-1 h-12 w-full" disabled={linkRequest === "sending" || maintenance?.level === "locked"}>
+              {linkRequest === "sending" ? "Sending…" : "Email me the link"}
+            </Button>
+          </form>
+        </>
+      )}
+      {backToPassword}
+    </div>
+  );
+
+  // Opened from the emailed link. Nothing happens until the button is pressed, so a mail scanner that
+  // opens the link does not use it up.
+  const linkFinishPanel = (
+    <div className="m-stagger portal-auth-form-inner">
+      {brand}
+      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+        Finish signing in
+      </h1>
+      <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+        You opened your sign-in link. Press the button to sign in on this device.
+      </p>
+      <div className="flex flex-col gap-4">
+        {rememberBox}
+        {loginError && <p className="portal-auth-alert" role="alert">{loginError}</p>}
+        <Button type="button" className="h-12 w-full" autoFocus disabled={loginLoading || maintenance?.level === "locked"} onClick={() => void submitSignIn({ link: linkToken })}>
+          {loginLoading ? "Signing in…" : "Sign in"}
+        </Button>
+      </div>
+      {backToPassword}
+    </div>
+  );
+
+  const form = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
 
   return <PortalAuthSplitShell mode="sign-in" className="portal-agent portal-tenant-auth-shell" form={form} story={<StoryPanel mode="sign-in" />} />;
 }

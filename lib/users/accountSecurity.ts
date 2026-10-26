@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 import { checkLoginAllowed, clearLoginFailures, recordLoginFailure } from "@/lib/authProtection";
 import { sendEmailChangeConfirmation } from "@/lib/email/sendInvitationEmail";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import type { TenantContext } from "@/lib/tenantAuth/requireTenant";
-import { signTenantSessionToken } from "@/lib/tenantAuth/session";
+import { getTenantSession, type TenantContext } from "@/lib/tenantAuth/requireTenant";
+import { continuedTenantSession, signTenantSessionToken, tenantSessionCookie } from "@/lib/tenantAuth/session";
 import { endTenantSessions, issueTenantSession, type SessionRevokeReason } from "@/lib/tenantAuth/sessionStore";
 import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/tenantAuth/securityRules";
 import { buildEmailChangeUrl, generateInviteToken, hashInviteToken } from "@/lib/users/invitations";
@@ -60,16 +60,18 @@ async function checkCurrentPassword(email: string, password: string, request: Re
  * were rows, and by row, which the session list reads — and hand this browser a cookie at the new
  * version, so the person pressing the button stays signed in.
  */
-export async function endOtherSessions(context: TenantContext, reason: SessionRevokeReason, request: Request): Promise<{ token: string; ended: number }> {
+export async function endOtherSessions(context: TenantContext, reason: SessionRevokeReason, request: Request): Promise<{ token: string; ended: number; cookie: ReturnType<typeof tenantSessionCookie> }> {
   const user = await me(context.userId);
   const next = user.session_version + 1;
   const bumped = await db().from("users").update({ session_version: next }).eq("id", user.id).eq("session_version", user.session_version).select("id");
   if (bumped.error || !bumped.data?.length) throw new AccountSecurityError("Your sessions changed while this was running. Try again.", 409);
   const ended = await endTenantSessions({ userId: user.id, except: context.sessionId ?? null, reason, by: user.id });
+  // The cookie this browser keeps is the one it chose at sign-in, for the time it had left.
+  const carried = continuedTenantSession(await getTenantSession());
   const token = context.sessionId
-    ? await signTenantSessionToken(user.id, context.tenantId, next, context.sessionId)
-    : (await issueTenantSession({ userId: user.id, tenantId: context.tenantId, sessionVersion: next, request, twoFactorAt: context.twoFactorAt ?? null })).token;
-  return { token, ended };
+    ? await signTenantSessionToken(user.id, context.tenantId, next, context.sessionId, carried)
+    : (await issueTenantSession({ userId: user.id, tenantId: context.tenantId, sessionVersion: next, request, twoFactorAt: context.twoFactorAt ?? null, ...carried })).token;
+  return { token, ended, cookie: tenantSessionCookie(carried.remember, carried.maxAge) };
 }
 
 /**
@@ -77,7 +79,7 @@ export async function endOtherSessions(context: TenantContext, reason: SessionRe
  * every other session ends and the person is emailed — so if it was not them, they know at once, and
  * if it was them because of a worry, the other sessions really are gone.
  */
-export async function changePassword(context: TenantContext, current: string, next: string, request: Request): Promise<{ token: string; ended: number }> {
+export async function changePassword(context: TenantContext, current: string, next: string, request: Request): Promise<Awaited<ReturnType<typeof endOtherSessions>>> {
   if (next.length < PASSWORD_MIN) throw new AccountSecurityError(`A password needs at least ${PASSWORD_MIN} characters.`);
   if (next.length > PASSWORD_MAX) throw new AccountSecurityError(`A password can be at most ${PASSWORD_MAX} characters.`);
   if (next === current) throw new AccountSecurityError("The new password is the same as the current one.");

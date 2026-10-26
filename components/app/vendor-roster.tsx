@@ -111,9 +111,9 @@ function FactLine({ tone, icon, children }: { tone: "danger" | "info"; icon: Rea
 
 type Draft = {
   name: string; category: string; lead_type: string; status: VendorStatus; return_window_days: string; renews_on: string;
-  contact_name: string; contact_email: string; contact_phone: string; terms: string;
+  contact_name: string; contact_email: string; contact_phone: string; terms: string; notes: string;
 };
-const EMPTY_DRAFT: Draft = { name: "", category: "", lead_type: "list", status: "active", return_window_days: "30", renews_on: "", contact_name: "", contact_email: "", contact_phone: "", terms: "" };
+const EMPTY_DRAFT: Draft = { name: "", category: "", lead_type: "list", status: "active", return_window_days: "30", renews_on: "", contact_name: "", contact_email: "", contact_phone: "", terms: "", notes: "" };
 
 function draftOf(vendor: Vendor): Draft {
   const contact = contactOf(vendor);
@@ -122,6 +122,7 @@ function draftOf(vendor: Vendor): Draft {
     status: (["active", "under_review", "inactive"].includes(vendor.status) ? vendor.status : "active") as VendorStatus,
     return_window_days: String(vendor.return_window_days ?? 0), renews_on: vendor.renews_on ?? "",
     contact_name: contact.name ?? "", contact_email: contact.email ?? "", contact_phone: contact.phone ?? "", terms: vendor.terms ?? "",
+    notes: vendor.notes ?? "",
   };
 }
 function payloadOf(draft: Draft) {
@@ -134,6 +135,7 @@ function payloadOf(draft: Draft) {
     renews_on: draft.renews_on || null,
     contact: { name: draft.contact_name.trim(), email: draft.contact_email.trim(), phone: draft.contact_phone.trim() },
     terms: draft.terms.trim() || null,
+    notes: draft.notes.trim() || null,
   };
 }
 
@@ -156,6 +158,7 @@ function VendorFields({ draft, onChange, idPrefix, allowInactive }: { draft: Dra
     <Field label="Contact email" htmlFor={id("email")}><input id={id("email")} className={control} type="email" value={draft.contact_email} onChange={set("contact_email")} maxLength={200} placeholder="accounts@apexdata.io" /></Field>
     <Field label="Contact phone" htmlFor={id("phone")}><input id={id("phone")} className={control} type="tel" value={draft.contact_phone} onChange={set("contact_phone")} maxLength={40} /></Field>
     <Field label="Terms" htmlFor={id("terms")} className="col-span-full"><input id={id("terms")} className={control} value={draft.terms} onChange={set("terms")} maxLength={2000} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
+    <Field label="Notes" htmlFor={id("notes")} className="col-span-full"><textarea id={id("notes")} className={`${control} min-h-16 py-2`} value={draft.notes} onChange={set("notes")} maxLength={2000} placeholder="Anything your team should know about this vendor" /></Field>
   </div>;
 }
 
@@ -434,12 +437,15 @@ function VendorPanel({ vendor, row, fact, draft, onDraft, saving, saveError, onS
         : "—"}</dd></div>
       <div><dt className="text-xs text-muted-foreground">Unit price</dt><dd className="mt-0.5 tabular-nums text-foreground">{money2(vendor.cost_per_record_cents)} per record</dd></div>
       <div><dt className="text-xs text-muted-foreground">Return window</dt><dd className="mt-0.5 text-foreground">{vendor.return_window_days > 0 ? plural(vendor.return_window_days, "day") : "No returns agreed"}{fact?.claimable ? ` · soonest claimable ${daysLeft(fact.claimable.days_left)}` : ""}</dd></div>
-      <div><dt className="text-xs text-muted-foreground">Undialable</dt><dd className="mt-0.5 tabular-nums text-foreground">{percent(fact?.undialable_percent)}</dd></div>
+      {/* Decision 11: the two vendor-quality figures, each with its direction, never combined. */}
+      <div><dt className="text-xs text-muted-foreground">Undialable · low is good</dt><dd className="mt-0.5 tabular-nums text-foreground">{percent(fact?.undialable_percent)}</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Claim acceptance · high is good</dt><dd className="mt-0.5 tabular-nums text-foreground" title="Of what you claimed back from this vendor, the share they credited">{percent(fact?.claim_acceptance_percent)}</dd></div>
       <div><dt className="text-xs text-muted-foreground">Renews on</dt><dd className="mt-0.5 text-foreground">{calendarDate(row?.renews_on ?? fact?.renews_on) ?? "—"}</dd></div>
       <div><dt className="text-xs text-muted-foreground">Lead type</dt><dd className="mt-0.5 text-foreground">{LEAD_TYPE[vendor.lead_type] ?? vendor.lead_type}</dd></div>
     </dl>
     <CampaignSpeedToLead vendorId={vendor.vendor_id} />
     {row?.terms && <p className="m-0 text-sm text-[var(--body)]"><span className="font-semibold text-foreground">Terms:</span> {row.terms}</p>}
+    {row?.notes && <p className="m-0 text-sm text-[var(--body)]"><span className="font-semibold text-foreground">Notes:</span> {row.notes}</p>}
     {draft && <>
       <VendorFields draft={draft} onChange={onDraft} idPrefix={`vendor-${vendor.vendor_id}`} allowInactive />
       {warning && <p className="m-0 text-sm text-[var(--warning-ink)]">{warning}</p>}

@@ -64,6 +64,11 @@ export async function hasTwoFactor(userId: string): Promise<boolean> {
   return Boolean((await row(userId))?.enabled_at);
 }
 
+/** When the authenticator now in use was set up; null when two-factor is off. A trusted device is bound to it. */
+export async function twoFactorEnabledAt(userId: string): Promise<string | null> {
+  return (await row(userId))?.enabled_at ?? null;
+}
+
 /** Begin enrolment: a fresh secret, stored unconfirmed. Returns what the authenticator app needs. */
 export async function startEnrolment(userId: string, email: string): Promise<{ uri: string; secret: string }> {
   const existing = await row(userId);

@@ -6,7 +6,8 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { CountUp } from "@/components/ui/count-up";
 import { cn } from "@/lib/utils";
 
-export type FlowStage = { label: string; value: string; count: number; note?: string; href?: string };
+export type FlowStage = { label: string; value: string; count: number; note?: string; href?: string; kept?: string; trend?: { text: string; tone: "good" | "danger" | "neutral"; title: string } };
+export type FlowFact = { label: string; value: string; note?: string; tone?: "default" | "good" | "warning"; href?: string };
 export type FlowDrop = { text: string; lost: number; href?: string };
 
 /**
@@ -23,7 +24,7 @@ export type FlowDrop = { text: string; lost: number; href?: string };
  * assistant's inbox, callbacks and lists, the retention rep's queues — nothing peels off; the ribbon
  * runs through every stop and `hot` (a stage index) is the stop that needs them first, in amber.
  */
-export function LeadFlowMap({ stages, drops, worst, label = "Where every lead went", aside, mode = "flow", hot = null }: { stages: FlowStage[]; drops: FlowDrop[]; worst: number | null; label?: string; aside?: ReactNode; mode?: "flow" | "path"; hot?: number | null }) {
+export function LeadFlowMap({ stages, drops, worst, label = "Where every lead went", aside, mode = "flow", hot = null, facts = [] }: { stages: FlowStage[]; drops: FlowDrop[]; worst: number | null; label?: string; aside?: ReactNode; mode?: "flow" | "path"; hot?: number | null; /** More figures in a row under the drawing. */ facts?: FlowFact[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const counts = mode === "path" ? stages.map(() => 1).join(",") : stages.map((stage) => stage.count).join(",");
 
@@ -165,8 +166,28 @@ export function LeadFlowMap({ stages, drops, worst, label = "Where every lead we
           </li>
         ))}
       </ol>
+
+      {facts.length > 0 && (
+        <dl className="m-0 flex flex-wrap border-t border-border">
+          {facts.map((fact) => <FactCell key={fact.label} fact={fact} />)}
+        </dl>
+      )}
     </section>
   );
+}
+
+function FactCell({ fact }: { fact: FlowFact }) {
+  const body = (
+    <>
+      <dt className="text-xs leading-normal text-muted-foreground">{fact.label}</dt>
+      <dd className={cn("m-0 truncate text-sm font-semibold leading-tight tracking-[-0.02em] tabular-nums", fact.tone === "good" ? "text-[var(--accent-ink)]" : fact.tone === "warning" ? "text-[var(--warning-ink)]" : "text-foreground")}>{fact.value}</dd>
+      {fact.note && <dd className="m-0 truncate text-xs leading-normal text-muted-foreground">{fact.note}</dd>}
+    </>
+  );
+  const className = "flex min-w-0 basis-1/2 flex-col gap-0.5 px-4 py-3 text-inherit no-underline sm:basis-1/3 lg:basis-0 lg:flex-1";
+  return fact.href
+    ? <Link href={fact.href} className={cn(className, "transition-colors hover:bg-[var(--surface-alt)]/40")}>{body}</Link>
+    : <div className={className}>{body}</div>;
 }
 
 function StageChip({ stage, hot, row = false }: { stage: FlowStage; hot: boolean; row?: boolean }) {
@@ -175,6 +196,13 @@ function StageChip({ stage, hot, row = false }: { stage: FlowStage; hot: boolean
       <span className="block text-xs leading-normal text-muted-foreground">{stage.label}</span>
       <span className="m-figure block text-lg font-semibold leading-tight tracking-[-0.02em] tabular-nums text-foreground">{/\d/.test(stage.value) ? <CountUp text={stage.value} fromZero /> : stage.value}</span>
       {stage.note && <span className="block text-xs leading-normal text-[var(--accent-ink)]">{stage.note}</span>}
+      {(stage.kept || stage.trend) && (
+        <span className="block text-xs leading-normal text-muted-foreground">
+          {stage.kept}
+          {stage.kept && stage.trend ? " · " : ""}
+          {stage.trend && <span title={stage.trend.title} className={stage.trend.tone === "good" ? "text-[var(--success-ink)]" : stage.trend.tone === "danger" ? "text-[var(--error-ink)]" : undefined}>{stage.trend.text}</span>}
+        </span>
+      )}
     </>
   );
   const className = cn(

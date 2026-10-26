@@ -69,7 +69,7 @@ export function LandingCompliance() {
   return (
     <section id="compliance" className="relative isolate scroll-mt-20 overflow-hidden bg-[var(--footer-bg)] px-4 py-24 text-[var(--nav-ink)] sm:px-6 lg:px-16 lg:py-32">
       <div aria-hidden="true" className={`${styles.aurora} -right-80 -top-60 opacity-50`} />
-      <div className="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         <Reveal>
           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[color-mix(in_srgb,var(--primary)_70%,white)]">Compliance</p>
           <h2 className="mt-3 text-title-lg font-semibold leading-[1.1] tracking-[-0.03em] sm:text-headline-lg"><SplitWords text="The browser can’t talk its way past a refusal." /></h2>
@@ -84,7 +84,7 @@ export function LandingCompliance() {
             <div><div className="text-headline-lg font-semibold tracking-[-0.03em]"><CountUp value={1} /></div><div className="mt-1 text-sm text-[var(--nav-muted)]">record per attempt, kept</div></div>
           </div>
         </Reveal>
-        <div className="grid gap-4 sm:grid-cols-2" style={{ perspective: 1400 }}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" style={{ perspective: 1400 }}>
           {CHECKS.map((check, index) => (
             <Reveal key={check.title} variant="tilt" delay={index * 110}>
               <div className={`rounded-2xl border border-[var(--nav-line)] bg-[color-mix(in_srgb,white_4%,transparent)] p-6 backdrop-blur ${styles.scan}`} style={{ animationDelay: `${index * 0.9}s` }}>
@@ -132,7 +132,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
         </Reveal>
 
         {ladder.length > 0 && (
-          <div className={`mt-12 grid gap-5 ${ladder.length >= 3 ? "lg:grid-cols-3" : "md:grid-cols-2"}`}>
+          <div className={`mt-12 grid grid-cols-1 gap-5 ${ladder.length >= 3 ? "lg:grid-cols-3" : "md:grid-cols-2"}`}>
             {ladder.map((plan, index) => {
               const below = index > 0 ? new Set(ladder[index - 1].features.map((feature) => feature.module)) : new Set<string>();
               const modules = featuresByModule(plan.features).filter((group) => !below.has(group.module));
@@ -170,7 +170,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
         )}
 
         <div className="mt-8 flex justify-center">
-          <Button asChild variant="outline" className="h-11 rounded-full px-6"><Link href="/pricing">See every plan, module by module<ArrowRight className="size-4" aria-hidden="true" /></Link></Button>
+          <Button asChild variant="outline" className="h-11 rounded-full px-6"><Link href="/pricing"><span className="min-[400px]:hidden">See every plan</span><span className="hidden min-[400px]:inline">See every plan, module by module</span><ArrowRight className="size-4" aria-hidden="true" /></Link></Button>
         </div>
       </div>
     </section>
@@ -189,7 +189,7 @@ const FAQS = [
 export function LandingFaq() {
   return (
     <section id="faq" className="scroll-mt-24 bg-background px-4 pb-24 sm:px-6 lg:px-16 lg:pb-32">
-      <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
         <Reveal>
           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--accent-ink)]">Questions</p>
           <h2 className="mt-3 text-title-lg font-semibold leading-[1.1] tracking-[-0.03em] text-foreground sm:text-headline-lg">The ones people actually ask</h2>

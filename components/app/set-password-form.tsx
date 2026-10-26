@@ -1,31 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check } from "lucide-react";
 
-import { AuthCard, AuthFact, authControl, authLabel } from "@/components/app/auth-card";
+import { AuthCard, AuthFact } from "@/components/app/auth-card";
+import { NewPasswordField, passwordLongEnough } from "@/components/app/password-field";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 
 type TokenState =
   | { status: "checking" }
   | { status: "valid"; email: string; name: string; purpose: "invite" | "password_reset"; expiresAt: string | null; organization: string | null; role: string | null; hasAccount?: boolean }
-  | { status: "invalid" };
-
-/**
- * The four rules the board lists. The server's floor is 12 characters (setPasswordSchema); the
- * other three are this page's, and the button waits for all four so the list is a gate rather than
- * advice. An unmet rule is an outline circle, never red: the reader has not done anything wrong yet.
- */
-const RULES = [
-  { label: "At least 12 characters", test: (value: string) => value.length >= 12 },
-  { label: "One uppercase letter", test: (value: string) => /[A-Z]/.test(value) },
-  { label: "One number", test: (value: string) => /\d/.test(value) },
-  { label: "One symbol", test: (value: string) => /[^A-Za-z0-9]/.test(value) },
-];
+  | { status: "invalid" }
+  | { status: "unreachable" };
 
 function expiry(value: string | null) {
   if (!value) return "—";
@@ -44,16 +32,17 @@ export function SetPasswordForm({
   // something an effect corrects afterwards.
   const [tokenState, setTokenState] = useState<TokenState>(token ? { status: "checking" } : { status: "invalid" });
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  // Bumped by "Try again" after the link could not be checked at all (a dropped connection is not an expired link).
+  const [attempt, setAttempt] = useState(0);
 
   // Check the link up front so an expired invite says so before anyone types a password.
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    fetch(`${endpoint}?token=${encodeURIComponent(token)}`)
+    fetch(`${endpoint}?token=${encodeURIComponent(token)}`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
         if (cancelled) return;
@@ -61,14 +50,12 @@ export function SetPasswordForm({
           ? { status: "valid", email: body.email, name: body.name, purpose: body.purpose === "password_reset" ? "password_reset" : "invite", expiresAt: body.expiresAt ?? null, organization: body.organization ?? null, role: body.role ?? null, hasAccount: body.hasAccount === true }
           : { status: "invalid" });
       })
-      .catch(() => !cancelled && setTokenState({ status: "invalid" }));
+      .catch(() => !cancelled && setTokenState({ status: "unreachable" }));
     return () => { cancelled = true; };
-  }, [endpoint, token]);
+  }, [endpoint, token, attempt]);
 
-  const rules = useMemo(() => RULES.map((rule) => ({ ...rule, met: rule.test(password) })), [password]);
-  const met = rules.filter((rule) => rule.met).length;
-  const matches = confirm.length > 0 && confirm === password;
-  const ready = met === RULES.length && matches;
+  // The server's one rule (setPasswordSchema), the same as sign-up's: length, not complexity.
+  const ready = passwordLongEnough(password);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -83,7 +70,14 @@ export function SetPasswordForm({
         return;
       }
       setDone(true);
-      setTimeout(() => router.push(loginPath), 1800);
+      // Straight in with the password just chosen (redesign, 2026-10-24): the same sign-in route and
+      // checks as the form, so nobody is sent back to type it again. Two-factor, a suspended agency or
+      // anything else the sign-in refuses falls back to the sign-in page, which explains it.
+      const email = tokenState.status === "valid" ? tokenState.email : "";
+      const signIn = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, remember: true }) }).catch(() => null);
+      const signedIn = signIn?.ok ? await signIn.json().catch(() => null) : null;
+      if (signedIn?.redirectTo && !signedIn.twoFactor && loginPath === "/app/login") { router.replace(signedIn.redirectTo); return; }
+      setTimeout(() => router.push(loginPath), 1200);
     } catch {
       setError("Could not set your password. Check your connection and try again.");
     } finally {
@@ -95,17 +89,25 @@ export function SetPasswordForm({
     return <AuthCard width={640}><p className="text-center text-sm text-muted-foreground" role="status">Checking your link…</p></AuthCard>;
   }
 
+  if (tokenState.status === "unreachable") {
+    return (
+      <AuthCard width={640} title="We could not check your link" description="Insurvas could not be reached. Your link has not been used.">
+        <Button type="button" className="mt-6 h-12 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
+      </AuthCard>
+    );
+  }
+
   if (tokenState.status === "invalid") {
     return (
       <AuthCard width={640} title="This link no longer works" description="It has expired or has already been used. A link works once.">
-        <p className="mt-6 text-center text-sm text-[var(--body)]">Invited to a workspace? Ask whoever invited you to send a new invitation. Resetting a password? Request a new link from sign in.</p>
-        <Button asChild className="mt-6 h-11 w-full"><Link href={loginPath}>Back to sign in</Link></Button>
+        <p className="mt-6 text-sm text-[var(--body)]">Invited to a workspace? Ask whoever invited you to send a new invitation. Resetting a password? Ask for a new link from sign in, or sign in with an emailed link instead.</p>
+        <Button asChild className="mt-6 h-12 w-full"><Link href={loginPath}>Go to sign in</Link></Button>
       </AuthCard>
     );
   }
 
   if (done) {
-    return <AuthCard width={640} title={tokenState.hasAccount ? "You've joined" : "Password set"} description={tokenState.hasAccount ? "Sign in with your usual password, then pick this workspace." : "Taking you to sign in…"} />;
+    return <AuthCard width={640} title={tokenState.hasAccount ? "You've joined" : "Password set"} description={tokenState.hasAccount ? "Sign in with your usual password, then pick this workspace." : "Signing you in…"} />;
   }
 
   const invite = tokenState.purpose === "invite";
@@ -154,37 +156,10 @@ export function SetPasswordForm({
       <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         {/* The account the password is for, so a password manager files it under the right name. */}
         <input type="email" name="username" autoComplete="username" value={tokenState.email} readOnly hidden />
-        <label className="block">
-          <span className={authLabel}>New password</span>
-          <input type="password" autoComplete="new-password" className={authControl} value={password} onChange={(event) => { setPassword(event.target.value); setError(null); }} />
-        </label>
-        <label className="block">
-          <span className={authLabel}>Confirm password</span>
-          <input type="password" autoComplete="new-password" className={authControl} value={confirm} onChange={(event) => { setConfirm(event.target.value); setError(null); }} />
-          <span className="mt-1.5 block text-xs text-muted-foreground" aria-live="polite">{confirm ? (matches ? "Matches." : "Does not match yet.") : " "}</span>
-        </label>
-
-        <section className="rounded-lg bg-[var(--surface-alt)] p-4" aria-label="Password requirements">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">Requirements</span>
-            <span className="flex w-[110px] gap-1" role="img" aria-label={`${met} of ${RULES.length} met`}>
-              {RULES.map((rule, index) => <span key={rule.label} className={cn("h-[5px] flex-1 rounded-full", index < met ? "bg-[var(--success)]" : "bg-[var(--border)]")} />)}
-            </span>
-          </div>
-          <ul className="mt-1">
-            {rules.map((rule) => (
-              <li key={rule.label} className="flex items-center gap-2.5 py-1.5">
-                <span className={cn("inline-flex size-[18px] shrink-0 items-center justify-center rounded-full", rule.met ? "bg-[var(--success)] text-white" : "border-[1.5px] border-[var(--border-strong)]")} aria-hidden="true">
-                  {rule.met && <Check className="size-3 stroke-[3]" />}
-                </span>
-                <span className={cn("text-sm", rule.met ? "text-[var(--body)]" : "text-muted-foreground")}>{rule.label}<span className="sr-only">{rule.met ? " — met" : " — not yet"}</span></span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <NewPasswordField id="new-password" label="New password" autoFocus value={password} onChange={(next) => { setPassword(next); setError(null); }} inputClassName="h-11 border-[var(--border-strong)] bg-card px-3 text-base" />
 
         {error && <p role="alert" className="rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
-        <Button type="submit" className="mt-2 h-11 w-full" disabled={!ready || loading}>{loading ? "Saving…" : "Set password & continue"}</Button>
+        <Button type="submit" className="mt-2 h-12 w-full" disabled={!ready || loading}>{loading ? "Saving…" : invite ? "Set password and open Insurvas" : "Set password and sign in"}</Button>
       </form>
     </AuthCard>
   );

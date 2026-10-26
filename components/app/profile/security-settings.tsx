@@ -7,7 +7,7 @@
  * Every call is the signed-in person's own; nothing here can touch anyone else's account.
  */
 
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,9 @@ type TwoFactor = { enabled: boolean; enabledAt: string | null; pending: boolean;
 type Session = { id: string; tenantName: string; createdAt: string; lastSeenAt: string; ip: string | null; location: string | null; device: string; current: boolean; twoFactor: boolean };
 type SecurityEvent = { id: string; type: string; label: string; at: string; ip: string | null };
 
-function Section({ id, title, sub, children }: { id: string; title: string; sub?: ReactNode; children: ReactNode }) {
+function Section({ id, title, sub, children, sectionRef }: { id: string; title: string; sub?: ReactNode; children: ReactNode; sectionRef?: Ref<HTMLElement> }) {
   return (
-    <section aria-labelledby={id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+    <section ref={sectionRef} aria-labelledby={id} className="scroll-mt-24 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
       <header className="border-b border-[var(--border)] px-5 py-4">
         <h2 id={id} className="text-base font-semibold text-[var(--ink)]">{title}</h2>
         {sub ? <p className="mt-0.5 text-sm text-[var(--muted)]">{sub}</p> : null}
@@ -45,6 +45,18 @@ async function call<T>(url: string, init?: RequestInit): Promise<{ ok: true; dat
 }
 
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
+
+const TWO_FACTOR_UNAVAILABLE = "Two-factor is not available yet. Contact support.";
+
+/** A read that failed: said plainly, with a way to try again (redesign, 2026-10-24). */
+function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-[var(--error-ink)]">
+      <span>Could not load {what}.</span>
+      <Button type="button" variant="outline" onClick={onRetry}>Retry</Button>
+    </div>
+  );
+}
 
 export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: string; timeZone: string | null; promptTwoFactor: boolean }) {
   const router = useRouter();
@@ -76,6 +88,13 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
   const [events, setEvents] = useState<SecurityEvent[] | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
 
+  // A failed read is said, with Retry, instead of a loader that never ends (redesign, 2026-10-24).
+  const [loadFailed, setLoadFailed] = useState<{ twoFactor: boolean; sessions: boolean; events: boolean }>({ twoFactor: false, sessions: false, events: false });
+  const [twoFactorUnavailable, setTwoFactorUnavailable] = useState(false);
+  const [copyFallback, setCopyFallback] = useState(false);
+  const twoFactorSection = useRef<HTMLElement>(null);
+  const autoStarted = useRef(false);
+
   const [reloads, setReloads] = useState(0);
   const load = useCallback(() => setReloads((n) => n + 1), []);
   useEffect(() => {
@@ -89,9 +108,17 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
       if (tf.ok) setTwoFactor(tf.data);
       setSessions(ss.ok ? ss.data.sessions : null);
       setEvents(ev.ok ? ev.data.events : null);
+      setLoadFailed({ twoFactor: !tf.ok, sessions: !ss.ok, events: !ev.ok });
+      setTwoFactorUnavailable(!tf.ok && tf.status === 503);
     });
     return () => { live = false; };
   }, [reloads]);
+  const retry = () => {
+    setLoadFailed({ twoFactor: false, sessions: false, events: false });
+    setSessions(undefined);
+    setEvents(undefined);
+    load();
+  };
 
   async function changeEmail(event: FormEvent) {
     event.preventDefault();
@@ -126,9 +153,45 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
     setTwoFactorError(null);
     const result = await call<{ qr?: string; secret?: string; recoveryCodes?: string[] }>("/api/app/profile/two-factor", post(body));
     setBusy(false);
-    if (!result.ok) { setTwoFactorError(result.error); return null; }
+    // 503 is the server saying two-factor cannot run here yet (its table missing, or no key to seal
+    // secrets with). That wording was for us, not the reader (redesign, 2026-10-24).
+    if (!result.ok) { setTwoFactorError(result.status === 503 ? TWO_FACTOR_UNAVAILABLE : result.error); return null; }
     return result.data;
   }
+
+  const startEnrolment = () =>
+    void twoFactorAction({ action: "start" }).then((d) => { if (d?.qr && d.secret) { setEnrolment({ qr: d.qr, secret: d.secret }); setCode(""); } });
+
+  // Sent here by sign-in with ?two_factor=required (the role needs it): go straight to the two-factor
+  // section and start enrolment, once, instead of leaving the reader to find the button
+  // (redesign, 2026-10-24). Not when it is already on or a QR code is already showing.
+  useEffect(() => {
+    if (!promptTwoFactor || autoStarted.current || !twoFactor || twoFactor.enabled || enrolment || codes) return;
+    autoStarted.current = true;
+    twoFactorSection.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    startEnrolment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the status first arrives
+  }, [promptTwoFactor, twoFactor]);
+
+  const copyCodes = (list: string[]) => {
+    setCopyFallback(false);
+    const write = navigator.clipboard?.writeText(list.join("\n"));
+    if (!write) { setCopyFallback(true); return; }
+    void write.then(() => notify.done("Recovery codes copied"), () => setCopyFallback(true));
+  };
+
+  // The codes as a plain text file, made in the browser: nothing is sent anywhere to produce it.
+  const downloadCodes = (list: string[]) => {
+    const blob = new Blob([`Insurvas recovery codes for ${email}\nEach code signs you in once.\n\n${list.join("\n")}\n`], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "insurvas-recovery-codes.txt";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
 
   async function endSession(id: string | null) {
     setBusy(true);
@@ -145,9 +208,14 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
       <p className="m-0 text-sm text-[var(--muted)]">Each one signs you in once if your phone is not with you.</p>
       <ul className="m-0 grid list-none grid-cols-2 gap-x-6 gap-y-1 p-0 font-mono text-sm tabular-nums">{codes.map((c) => <li key={c}>{c}</li>)}</ul>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={() => void navigator.clipboard?.writeText(codes.join("\n")).then(() => notify.done("Recovery codes copied"))}>Copy</Button>
-        <Button type="button" onClick={() => setCodes(null)}>I have saved them</Button>
+        <Button type="button" variant="outline" onClick={() => copyCodes(codes)}>Copy</Button>
+        <Button type="button" variant="outline" onClick={() => downloadCodes(codes)}>Download .txt</Button>
+        <Button type="button" onClick={() => { setCodes(null); setCopyFallback(false); }}>I have saved them</Button>
       </div>
+      {/* A refused or missing clipboard (an http page, a browser that says no) said nothing before. */}
+      {copyFallback ? (
+        <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">Could not copy. Download them as a file, or select the codes above and copy them yourself.</p>
+      ) : null}
     </div>
   ) : null;
 
@@ -182,8 +250,12 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
         </form>
       </Section>
 
-      <Section id="security-two-factor" title="Two-factor authentication" sub="A code from an authenticator app each time you sign in. Text messages are not offered.">
-        {!twoFactor ? <SectionLoading rows={2} columns={2} label="Checking two-factor" /> : (
+      <Section id="security-two-factor" sectionRef={twoFactorSection} title="Two-factor authentication" sub="A code from an authenticator app each time you sign in. Text messages are not offered.">
+        {!twoFactor && twoFactorUnavailable ? (
+          <p className="m-0 text-sm text-[var(--muted)]">{TWO_FACTOR_UNAVAILABLE}</p>
+        ) : !twoFactor && loadFailed.twoFactor ? (
+          <LoadFailed what="your two-factor status" onRetry={retry} />
+        ) : !twoFactor ? <SectionLoading rows={2} columns={2} label="Checking two-factor" /> : (
           <>
             {!twoFactor.enabled && twoFactor.required ? (
               <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">
@@ -201,7 +273,11 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
             </div>
 
             {!twoFactor.enabled && !enrolment && !codes ? (
-              <div><Button type="button" disabled={busy} onClick={() => void twoFactorAction({ action: "start" }).then((d) => { if (d?.qr && d.secret) { setEnrolment({ qr: d.qr, secret: d.secret }); setCode(""); } })}>Turn on two-factor</Button></div>
+              <div className="flex flex-col gap-2">
+                <div><Button type="button" disabled={busy} onClick={startEnrolment}>Turn on two-factor</Button></div>
+                {/* Start's own error had nowhere to show until the enrolment form opened. */}
+                {twoFactorError ? <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{twoFactorError}</p> : null}
+              </div>
             ) : null}
 
             {enrolment ? (
@@ -247,8 +323,10 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
       </Section>
 
       <Section id="security-sessions" title="Sessions" sub="Everywhere you are signed in. Ending one signs that device out on its next click.">
-        {sessions === undefined ? <SectionLoading rows={3} columns={4} label="Loading your sessions" /> : sessions === null ? (
-          <p className="m-0 text-sm text-[var(--muted)]">The session list needs a database update.</p>
+        {sessions === undefined ? <SectionLoading rows={3} columns={4} label="Loading your sessions" /> : loadFailed.sessions ? (
+          <LoadFailed what="your sessions" onRetry={retry} />
+        ) : sessions === null ? (
+          <p className="m-0 text-sm text-[var(--muted)]">The session list is not available yet. Contact support.</p>
         ) : (
           <>
             <ul className="m-0 flex list-none flex-col p-0 text-sm">
@@ -270,8 +348,10 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
       </Section>
 
       <Section id="security-log" title="Security log" sub="Changes to how your account signs in, and bursts of failed sign-ins.">
-        {events === undefined ? <SectionLoading rows={3} columns={3} label="Loading your security log" /> : events === null ? (
-          <p className="m-0 text-sm text-[var(--muted)]">The security log needs a database update.</p>
+        {events === undefined ? <SectionLoading rows={3} columns={3} label="Loading your security log" /> : loadFailed.events ? (
+          <LoadFailed what="your security log" onRetry={retry} />
+        ) : events === null ? (
+          <p className="m-0 text-sm text-[var(--muted)]">The security log is not available yet. Contact support.</p>
         ) : events.length === 0 ? (
           <p className="m-0 text-sm text-[var(--muted)]">Nothing yet.</p>
         ) : (

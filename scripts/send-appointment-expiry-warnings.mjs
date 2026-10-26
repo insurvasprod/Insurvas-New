@@ -11,18 +11,14 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.
 const asOf = process.env.APPOINTMENT_WARNING_DATE ?? new Date().toISOString().slice(0, 10);
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
-const [licenses, eoPolicies, ceRecords] = await Promise.all([
-  supabase.from("licenses").select("id, tenant_id, state, license_number, expires_at, created_at, updated_at"),
-  supabase.from("eo_policies").select("id, tenant_id, carrier, policy_number, expires_at, coverage_amount_cents, created_at, updated_at"),
-  supabase.from("ce_records").select("id, tenant_id, state, credits_required, credits_completed, deadline, created_at, updated_at"),
-]);
-const failed = [licenses, eoPolicies, ceRecords].find((result) => result.error)?.error;
-if (failed) throw new Error(`Could not load expiry records: ${failed.message}`);
+// Licences only: E&O cover and continuing education were removed from the platform 2026-10-26.
+const licenses = await supabase.from("licenses").select("id, tenant_id, state, license_number, expires_at, created_at, updated_at");
+if (licenses.error) throw new Error(`Could not load expiry records: ${licenses.error.message}`);
 
-const warnings = dueExpiryWarnings({ licenses: licenses.data ?? [], eoPolicies: eoPolicies.data ?? [], ceRecords: ceRecords.data ?? [] }, asOf);
+const warnings = dueExpiryWarnings({ licenses: licenses.data ?? [] }, asOf);
 if (warnings.length === 0) { console.log(`No appointment-vault warnings due on ${asOf}.`); process.exit(0); }
 
-const tenantIds = [...new Set(warnings.map((warning) => (licenses.data ?? []).find((row) => row.id === warning.sourceId)?.tenant_id ?? (eoPolicies.data ?? []).find((row) => row.id === warning.sourceId)?.tenant_id ?? (ceRecords.data ?? []).find((row) => row.id === warning.sourceId)?.tenant_id))].filter(Boolean);
+const tenantIds = [...new Set(warnings.map((warning) => (licenses.data ?? []).find((row) => row.id === warning.sourceId)?.tenant_id))].filter(Boolean);
 const { data: owners, error: ownersError } = await supabase.from("tenant_users").select("tenant_id, user_id, users!inner(id, name, email, status)").in("tenant_id", tenantIds).eq("role", "owner");
 if (ownersError) throw new Error(`Could not load tenant owners: ${ownersError.message}`);
 

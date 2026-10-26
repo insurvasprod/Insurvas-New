@@ -98,7 +98,7 @@ export function AgentSettingsTabs({
    * A zero is not drawn — a badge that always says something stops being read.
    */
   function badgeFor(id: string): { text: string; warn: boolean } | null {
-    if (id === "states-licences" && workspace && workspace.licencesExpiringSoon > 0) {
+    if (id === "carriers" && workspace && workspace.licencesExpiringSoon > 0) {
       return { text: `${workspace.licencesExpiringSoon} expiring`, warn: true };
     }
     if (id === "team-access" && team && team.seats.max !== null) {
@@ -116,11 +116,13 @@ export function AgentSettingsTabs({
 
   return (
     <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
+      {/* Max height: the window less the top bar, the page title above the rail (84px) and the page's
+          bottom padding (32px), so the rail ends at the window's bottom and never makes the page scroll. */}
       <nav
         aria-label="Settings sections"
         role="tablist"
         aria-orientation="vertical"
-        className="box-border flex w-full shrink-0 gap-1 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 pt-1 pb-2.5 lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] lg:w-[262px] lg:flex-col lg:gap-0 lg:overflow-x-visible lg:overflow-y-auto lg:overscroll-contain"
+        className="box-border flex w-full shrink-0 gap-1 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 pt-1 pb-2.5 lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px] lg:flex-col lg:gap-0 lg:overflow-x-visible lg:overflow-y-auto lg:overscroll-contain"
       >
         {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
             caller's order, and the same name can legitimately open a second run — so the name is not

@@ -1,14 +1,17 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
 import { CheckoutStart } from "@/components/public/checkout-start";
+import { PaymentCoupon, PaymentEmbed, PaymentProvider } from "@/components/public/checkout-embed";
 import { BILLING_CYCLE_LABELS, type BillingCycle } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 const PER: Record<BillingCycle, string> = { monthly: "month", quarterly: "quarter", yearly: "year" };
 
 export type CheckoutViewProps = {
   planName: string | null;
-  /** "Inbound + outbound · 12 seats · billed monthly" — empty when the plan defines none of it. */
+  /** "24 seats · billed monthly" — empty when the plan defines none of it. */
   planLine: string;
   cycle: BillingCycle | null;
   /** "$249.00", or null when the plan has no price on the chosen cycle. */
@@ -20,149 +23,142 @@ export type CheckoutViewProps = {
   trialEnds: string;
   /** Sent back from the return page with an unfinished payment. */
   pending: boolean;
+  /** Sent back from an off-site payment step (a bank page, 3-D Secure) that failed or was cancelled. */
+  failed?: boolean;
   /** CHECKOUT_PAYMENT_MODE=none: the button starts the plan at once; no card, no provider. */
   noPayment?: boolean;
+  /** Add-ons ticked on Step 4 of 5. They are attached when the plan starts and billed on the Insurvas invoice. */
+  addons?: { name: string; price: string; cycle: BillingCycle }[];
+  /** Prefills the email field in Whop's form. */
+  email?: string;
+  /** Which Whop environment the embedded form talks to: the one our API key belongs to. */
+  environment?: "production" | "sandbox";
 };
 
-/** Label over value, the pair both cards on this page are built from. */
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground tabular-nums">{children}</dd>
-    </div>
-  );
-}
-
-function Step({ n, label, done }: { n: number; label: string; done: boolean }) {
-  return (
-    <span className="flex items-center gap-2.5">
-      <span
-        className={
-          done
-            ? "inline-flex size-6 items-center justify-center rounded-full bg-[var(--success)] text-[var(--on-success)]"
-            : "inline-flex size-6 items-center justify-center rounded-full bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]"
-        }
-        aria-hidden="true"
-      >
-        {done ? (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-        ) : (
-          n
-        )}
-      </span>
-      <span className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">
-        {label}
-        <span className="sr-only">{done ? ", complete" : ", current step"}</span>
-      </span>
-    </span>
-  );
-}
-
 /**
- * Step 3 of signup, as the board draws it: progress across the top, what is being bought on the
- * left with the coupon and the way out to the provider, and the order summary on the right.
+ * The automatic-renewal terms, stated once, beside the payment form: what it costs, how often, that it
+ * renews until cancelled, when the first charge lands, that taxes may apply, and where to cancel. Whop
+ * gives one trial per buyer per plan, so a returning buyer is told the first period may be charged
+ * today rather than being promised $0.
  */
-/**
- * The automatic-renewal terms, stated once and shown above the button: what it costs, how often,
- * that it renews until cancelled, when the first charge lands, that taxes may apply, and where to
- * cancel. Whop gives one trial per buyer per plan, so a returning buyer is told the first period
- * may be charged today rather than being promised $0.
- */
-function renewalTerms({ cycle, price, setupFee, trialDays, trialEnds }: Pick<CheckoutViewProps, "cycle" | "price" | "setupFee" | "trialDays" | "trialEnds">): ReactNode {
+function renewalTerms({ cycle, price, setupFee, trialDays, trialEnds, addons }: Pick<CheckoutViewProps, "cycle" | "price" | "setupFee" | "trialDays" | "trialEnds" | "addons">): ReactNode {
   const period = cycle ? PER[cycle] : null;
   const amount = price && period ? <><strong>{price} per {period}</strong>, renewing automatically every {period} until you cancel.</> : <>The subscription renews automatically each billing period until you cancel.</>;
   const firstCharge = trialDays > 0
-    ? <> Nothing is charged today; your card is first charged on <strong>{trialEnds}</strong>, when the {trialDays}-day trial ends. If you have had a trial on this plan before, the payment page charges the first {period ?? "period"} today instead.</>
+    ? <> Nothing is charged today; your card is first charged on <strong>{trialEnds}</strong>, when the {trialDays}-day trial ends. If you have had a trial on this plan before, the first {period ?? "period"} is charged today instead.</>
     : <> The first {period ?? "period"} is charged today.</>;
   return (
     <>
       {amount}
       {firstCharge}
-      {setupFee ? <> A one-time setup fee of {setupFee} also applies; the payment page shows when it is charged.</> : null}
+      {setupFee ? <> A one-time setup fee of {setupFee} also applies; the payment form shows when it is charged.</> : null}
+      {addons?.length ? <> Add-ons are billed on your Insurvas invoice.</> : null}
       {" "}Taxes may apply. Cancel online at any time in Settings › Plan &amp; billing; cancelling stops the next renewal.
     </>
   );
 }
 
-export function CheckoutView({ planName, planLine, cycle, price, setupFee = null, trialDays, trialEnds, pending, noPayment = false }: CheckoutViewProps) {
+/**
+ * The receipt (owner pick A, 2026-10-26): plan and Change plan, the lines, what is due today, the
+ * coupon and the renewal terms. On the brand panel beside the form on a wide screen; above the form,
+ * on the page's own colours, below 1024px where the panel is hidden.
+ */
+function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
+  const { planName, planLine, cycle, price, setupFee = null, trialDays, trialEnds, noPayment = false, addons = [] } = props;
+  const muted = dark ? "text-[var(--nav-muted)]" : "text-[var(--body)]";
+  const strong = dark ? "text-[var(--on-dark)]" : "text-foreground";
+  const line = dark ? "border-[var(--nav-line)]" : "border-border";
+  const rows = [
+    ...(!noPayment && trialDays > 0 ? [{ label: `First charge on ${trialEnds}`, value: price && cycle ? `${price} / ${PER[cycle]}` : "—" }] : []),
+    ...(!noPayment && trialDays === 0 ? [{ label: "Then", value: price && cycle ? `${price} / ${PER[cycle]}` : "—" }] : []),
+    ...addons.map((addon) => ({ label: `${addon.name} add-on · on your Insurvas invoice`, value: `+${addon.price} / ${PER[addon.cycle]}` })),
+    ...(setupFee && !noPayment ? [{ label: "Setup fee", value: `${setupFee} one-time` }] : []),
+    ...(!noPayment && cycle ? [{ label: "Billing", value: `${BILLING_CYCLE_LABELS[cycle]}, until you cancel` }] : []),
+  ];
+
   return (
-    <div className="portal-agent flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] px-4 py-10 sm:p-10">
-      {/* Not a direct `main` child: the shell's `.portal-agent > main` reserves 264px for a sidebar. */}
-      <div className="w-full max-w-[1040px]">
-        <main className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
-          <p className="text-center text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">Step 3 of 3</p>
-          <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">Your workspace is ready</h1>
-          <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            {noPayment
-              ? "Confirm your plan. No payment is taken: your workspace opens as soon as you continue."
-              : "Confirm what you are buying. The card is entered on the provider’s page and never touches Insurvas servers."}
-          </p>
-
-          <ol className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-card px-5 py-3.5 sm:flex-row sm:items-center sm:gap-0" aria-label="Signup progress">
-            <li><Step n={1} label="Account complete" done /></li>
-            <li className="m-track mx-3 hidden h-0.5 flex-1 bg-[var(--success)] sm:block" aria-hidden="true" />
-            <li><Step n={2} label="Business profile" done /></li>
-            <li className="m-track mx-3 hidden h-0.5 flex-1 bg-[var(--success)] sm:block" aria-hidden="true" />
-            <li><Step n={3} label="Checkout" done={false} /></li>
-          </ol>
-
-          <div className="mt-7 flex flex-col gap-6 text-left lg:flex-row">
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
-              <section className="rounded-lg border border-border bg-card p-5">
-                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">{planName ? `${planName} plan` : "Selected plan"}</h2>
-                {planLine && <p className="mt-1 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">{planLine}</p>}
-                <dl className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4">
-                  <Fact label="Trial">{trialDays} days</Fact>
-                  <Fact label="Cancel by">{trialEnds}</Fact>
-                  <Fact label="Today">$0.00</Fact>
-                  <Fact label="After the trial">{noPayment ? "No charge set up" : price && cycle ? `${price} / ${PER[cycle]}` : "—"}</Fact>
-                </dl>
-              </section>
-
-              <CheckoutStart
-                noPayment={noPayment}
-                disclosure={noPayment
-                  ? <>No card is needed and nothing is charged. Your plan starts now{trialDays > 0 ? <> with a {trialDays}-day trial</> : null}, and no billing is set up for it.</>
-                  : renewalTerms({ cycle, price, setupFee, trialDays, trialEnds })}
-              />
-
-              {/* Not on the board, kept on purpose: it is the only way back to pricing from here, and
-                  a buyer who picked the wrong plan must not be stuck paying for it. */}
-              <p className="text-center text-xs leading-normal tracking-[-0.01em]">
-                <Link href="/pricing" className="font-semibold text-foreground underline underline-offset-2">Change plan</Link>
-              </p>
-            </div>
-
-            <aside className="w-full shrink-0 lg:w-[300px]">
-              <section className="rounded-lg border border-border bg-card p-5">
-                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">Order summary</h2>
-                <dl className="mt-3.5 grid grid-cols-1 gap-y-4">
-                  <Fact label="Plan">{planName ?? "—"}</Fact>
-                  <Fact label="Billing">{cycle ? BILLING_CYCLE_LABELS[cycle] : "—"}</Fact>
-                  <Fact label="Price">{price ?? "—"}</Fact>
-                  <Fact label="Today">$0.00</Fact>
-                  <Fact label="Next charge">{noPayment ? "None scheduled" : trialEnds}</Fact>
-                  <Fact label="Renews">{cycle ? `Every ${PER[cycle]}, until cancelled` : "Until cancelled"}</Fact>
-                </dl>
-              </section>
-
-              {/* An abandoned checkout reuses the same open session, and the return page sends an
-                  unfinished payment back here with ?pending=1 — a calm notice, never an error. */}
-              {!noPayment && <div className="mt-4 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-                <p className="font-semibold text-[var(--info-ink)]">Coming back later is fine</p>
-                <p className="mt-1.5 text-[var(--body)]">
-                  {pending
-                    ? // "pending" also covers a payment the provider has not finished recording, so this
-                      // must not tell someone who has paid to pay again.
-                      "We could not confirm a payment yet. If you have already paid, do not pay again — your plan unlocks on its own once the provider records it. If you have not, continue to secure checkout and you will pick up the same session."
-                    : "If you leave before paying, come back here and you will return to the same checkout."}
-                </p>
-              </div>}
-            </aside>
-          </div>
-        </main>
+    <section
+      aria-label="Your plan"
+      className={cn(
+        "flex w-full flex-col gap-5",
+        dark ? "mx-auto max-w-[460px] rounded-[22px] border border-[var(--nav-line)] bg-black/35 p-6 text-[var(--nav-ink)] shadow-[0_30px_80px_rgba(0,0,0,.45)] backdrop-blur-xl" : "rounded-xl border border-border bg-card p-4",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={cn("text-xs font-semibold uppercase tracking-[0.08em]", dark ? "text-[var(--nav-muted)]" : "text-muted-foreground")}>Your plan</p>
+          <h2 className={cn("mt-1 text-2xl font-semibold leading-tight tracking-[-0.02em]", strong)}>{planName ?? "Your plan"}</h2>
+          {planLine && <p className={cn("text-sm", muted)}>{planLine}</p>}
+        </div>
+        {/* Back to Step 4 of 5: a buyer who picked the wrong plan must not be stuck paying for it. */}
+        <Link href="/app/onboarding/plan" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
       </div>
-    </div>
+
+      <dl className="text-sm">
+        {rows.map((row) => (
+          <div key={row.label} className={cn("flex justify-between gap-4 border-t py-2.5", line)}>
+            <dt className={muted}>{row.label}</dt>
+            <dd className={cn("text-right font-semibold tabular-nums", strong)}>{row.value}</dd>
+          </div>
+        ))}
+        <div className={cn("flex items-baseline justify-between gap-4 border-t pt-3.5", line)}>
+          <dt className={cn("font-semibold", strong)}>Due today</dt>
+          <dd className={cn("text-title-lg font-semibold tabular-nums tracking-[-0.02em]", strong)}>{noPayment || trialDays > 0 ? "$0.00" : price ?? "—"}</dd>
+        </div>
+      </dl>
+
+      {!noPayment && <PaymentCoupon dark={dark} />}
+
+      <p id={dark ? "renewal-terms" : undefined} className={cn("text-xs leading-normal tracking-[-0.01em]", muted)}>
+        {noPayment
+          ? <>No card is needed and nothing is charged. Your plan starts now{trialDays > 0 ? <> with a {trialDays}-day trial</> : null}, and no billing is set up for it.</>
+          : renewalTerms(props)}
+      </p>
+    </section>
   );
+}
+
+export function CheckoutView(props: CheckoutViewProps) {
+  const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production" } = props;
+
+  const body = (
+    <FunnelFrame step={5} wide aside={<Receipt props={props} dark />}>
+      <FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day trial` : "Start your plan"}>
+        {noPayment
+          ? "No payment is taken. Your workspace opens as soon as you continue."
+          : "Pay on this page. Your card goes straight to Whop, our payment provider, and never touches Insurvas."}
+      </FunnelHeading>
+
+      {/* "Pending" also covers a payment the provider has not finished recording, so this must not
+          tell someone who has paid to pay again. */}
+      {pending && !noPayment && (
+        <div role="status" className="mb-5 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
+          <p className="font-semibold text-[var(--info-ink)]">We could not confirm a payment yet</p>
+          <p className="mt-1 text-[var(--body)]">If you have already paid, do not pay again: your plan unlocks on its own once the provider records it. If you have not, the form below picks up the same checkout.</p>
+        </div>
+      )}
+      {failed && !noPayment && (
+        <div role="alert" className="mb-5 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3.5 text-sm leading-normal">
+          <p className="font-semibold text-[var(--error-ink)]">Your payment did not go through</p>
+          <p className="mt-1 text-[var(--body)]">No money was taken. Try again below, or use another card or payment method.</p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4">
+        {/* Below 1024px the brand panel is hidden: the receipt, with its coupon and terms, comes first. */}
+        <div className="lg:hidden"><Receipt props={props} dark={false} /></div>
+
+        {noPayment
+          ? <CheckoutStart noPayment />
+          : <PaymentEmbed email={email} environment={environment} />}
+
+        <p className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+          Leave now and come back any time: you will return to this same step.{" "}
+          <Link href="/app/onboarding/business-profile" className="font-semibold text-foreground hover:underline">Edit your agency details</Link>
+        </p>
+      </div>
+    </FunnelFrame>
+  );
+
+  return noPayment ? body : <PaymentProvider>{body}</PaymentProvider>;
 }

@@ -31,6 +31,7 @@ export const REGISTRY_ALERT_EVENTS = [
   "plan_payment_failed",
   "webhook_disabled",
   "allowance_near_cap",
+  "return_window_closing",
 ] as const;
 
 export type AgentAlertEvent = AgentAlertSettingEvent | (typeof REGISTRY_ALERT_EVENTS)[number];

@@ -106,9 +106,9 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
             )}
           </TableCard>
 
-          <TableCard title="Expiring inside 60 days" description="Licences, appointments and E&O. An expiry stops that producer from submitting.">
+          <TableCard title="Expiring inside 60 days" description="Licences and appointments. An expiry stops that producer from submitting.">
             {data.alerts.length === 0 ? (
-              <EmptyState title="Nothing expires in the next 60 days" hint="Licences, appointments and E&O certificates appear here two months before they lapse." />
+              <EmptyState title="Nothing expires in the next 60 days" hint="Licences and appointments appear here two months before they lapse." />
             ) : (
               <Table>
                 <TableHeader>

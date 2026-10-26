@@ -4,6 +4,7 @@ import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds,
 
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { fetchPlans } from "@/lib/plans/queries";
+import { availableBillingCycles, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { audienceForPlanType } from "@/lib/agency/constants";
 import { publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
@@ -16,6 +17,12 @@ import {
   TENANT_SESSION_COOKIE,
 } from "@/lib/tenantAuth/session";
 import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
+
+/** The first cycle a plan is sold on (monthly before yearly), for a sign-up that has not chosen one yet. */
+async function firstSoldCycle(planId: string): Promise<BillingCycle | null> {
+  const { data } = await getSupabaseServiceClient().from("plan_prices").select("*").eq("plan_id", planId).maybeSingle<PlanPrices>();
+  return availableBillingCycles(data)[0] ?? null;
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -59,10 +66,15 @@ export async function POST(request: NextRequest) {
   const acceptance = verifySignupAcceptance(input.acceptedDocumentIds, required.documents);
   if (!acceptance.ok) return NextResponse.json({ error: acceptance.error }, { status: 400 });
 
-  const plan = (await fetchPlans({ includeArchived: false })).find(
-    (candidate) => candidate.code === input.planCode && candidate.is_public,
-  );
+  // The plan is chosen on Step 4 of 5 (owner, 2026-10-26). Until then the workspace holds the plan
+  // picked on the pricing page, or the default one, so signup_selections is never empty.
+  const publicPlans = (await fetchPlans({ includeArchived: false })).filter((candidate) => candidate.is_public);
+  const plan = input.planCode
+    ? publicPlans.find((candidate) => candidate.code === input.planCode)
+    : publicPlans.find((candidate) => candidate.is_default) ?? publicPlans[0];
   if (!plan) return NextResponse.json({ error: "That plan is no longer available" }, { status: 409 });
+  const billingCycle = input.billingCycle ?? (await firstSoldCycle(plan.id));
+  if (!billingCycle) return NextResponse.json({ error: "That plan is no longer available" }, { status: 409 });
 
   const verification = createEmailVerification();
   const supabase = getSupabaseServiceClient();
@@ -95,7 +107,7 @@ export async function POST(request: NextRequest) {
     p_email: input.email,
     p_phone: input.phone,
     p_plan_id: plan.id,
-    p_billing_cycle: input.billingCycle,
+    p_billing_cycle: billingCycle,
     p_token_hash: verification.tokenHash,
     p_expires_at: verification.expiresAt.toISOString(),
   });

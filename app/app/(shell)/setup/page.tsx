@@ -9,8 +9,10 @@ import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { guideHref, isManualStep, nextSetupStep, SETUP_MODULES } from "@/lib/dashboard/checklist";
 import { saveSetupGuideState } from "@/lib/dashboard/setupProgress";
 import { loadViewerSetup } from "@/lib/dashboard/setupViewer";
+import { hasImportedStatement } from "@/lib/dashboard/summaries";
+import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { SetupCelebration } from "@/components/app/setup/setup-celebration";
-import { SetupStepList } from "@/components/app/setup/setup-step-list";
+import { SetupModules } from "@/components/app/setup/setup-modules";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
@@ -49,9 +51,20 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       : "A few first steps on the screens you will use every day.";
 
   const modules = SETUP_MODULES.map((module) => ({
-    ...module,
+    key: module.key,
+    label: module.label,
     steps: checklist.steps.filter((step) => step.module === module.key).map((step) => ({ ...step, manual: isManualStep(step.key) })),
   })).filter((module) => module.steps.length > 0);
+
+  // The first-value row (redesign, 2026-10-24): "Find money the carriers owe you" leads the page, as
+  // checkout leads with /app/welcome. Same gate as that page (owner or bookkeeper, carrier files on
+  // the plan, not read-only), and gone once a statement stands, because from then the figure is on
+  // Discrepancies and Home. The owner's checklist already knows (the statement step); anyone else
+  // costs one head count.
+  const canFindMoney =
+    available.includes("statement_ingestion") && entitlement.access !== "read_only" && hasTenantPermission(context.role, "statements.view");
+  const statementStep = checklist.steps.find((step) => step.key === "statement");
+  const showFirstValue = canFindMoney && !(statementStep ? statementStep.complete : await hasImportedStatement(context.tenantId));
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
@@ -61,6 +74,20 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
         description={description}
         actions={next ? <Link href={guideHref(next)} className={buttonVariants({ variant: "default" })}>Start: {next.label}</Link> : null}
       />
+      {showFirstValue ? (
+        <TableCard>
+          <div className="flex flex-wrap items-start gap-x-3 gap-y-2 bg-[var(--primary-soft)] px-4 py-3 sm:items-center">
+            <span aria-hidden="true" className="mt-0.5 inline-flex size-5 shrink-0 rounded-full border-[1.5px] border-primary sm:mt-0" />
+            <span className="flex min-w-0 flex-1 basis-[calc(100%-2rem)] flex-wrap items-center gap-x-1.5 gap-y-1 sm:basis-0">
+              <span className="min-w-0 break-words text-sm font-semibold text-foreground">Find money the carriers owe you</span>
+              <span className="w-full text-xs tabular-nums text-muted-foreground sm:w-auto">About 3 min</span>
+            </span>
+            <span className="ml-8 flex flex-wrap items-center gap-2 sm:ml-0 sm:shrink-0">
+              <Link href="/app/welcome" className={buttonVariants({ variant: "default" })}>Upload a statement</Link>
+            </span>
+          </div>
+        </TableCard>
+      ) : null}
       {checklist.total > 0 ? (
         <StatStrip label="Setup progress">
           <StatTile label="Done" value={`${checklist.completed} of ${checklist.total}`} />
@@ -73,11 +100,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
           <EmptyState title="Nothing to set up" hint="Your plan has no setup steps for your role." action={<Link href="/app/dashboard" className={buttonVariants({ variant: "outline" })}>Go to the dashboard</Link>} />
         </TableCard>
       ) : (
-        modules.map((module) => (
-          <TableCard key={module.key} title={module.label}>
-            <SetupStepList steps={module.steps} nextKey={next?.key ?? null} />
-          </TableCard>
-        ))
+        <SetupModules modules={modules} nextKey={next?.key ?? null} />
       )}
     </div>
   );

@@ -20,7 +20,7 @@ const RULES: ReadonlyArray<{ test: RegExp; hint: string }> = [
   { test: /calling window|outside (the )?(calling )?hours|quiet hours/i, hint: "Wait until the lead's calling hours open, or book a callback." },
   { test: /\bdnc\b|do not call|do-not-call|suppress/i, hint: "This number can't be called. Move on to the next lead." },
   { test: /disclosure/i, hint: "Read and acknowledge the required disclosure first." },
-  { test: /licen[cs]e|appointed|appointment/i, hint: "Check States & licences in Settings for this state and carrier." },
+  { test: /licen[cs]e|appointed|appointment/i, hint: "Check Settings › Carriers for this state and carrier." },
   { test: /not entitled|upgrade|your plan|not on your plan|feature/i, hint: "Your plan doesn't include this. See Plan & billing in Settings." },
   { test: /\b403\b|forbidden|not allowed|permission|only the owner|your role/i, hint: "Your role can't do this. Ask the account owner for access." },
   { test: /\b404\b|not found|no longer exists|was removed|deleted/i, hint: "It may have been removed. Refresh the page to see the latest." },

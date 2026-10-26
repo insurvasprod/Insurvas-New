@@ -69,8 +69,10 @@ export type WorkspaceState = {
   interview: InterviewView | null;
   step: WorkspaceStep;
   qa: QaVerdict;
-  /** A closed attempt is read-only for ever (STATUS-MODEL §4). */
+  /** A closed attempt is read-only for ever (STATUS-MODEL §4); so is every attempt for a read-only seat (2026-10-26). */
   readOnly: boolean;
+  /** The seat's plan is read-only: the case can be read, not changed. */
+  seatReadOnly: boolean;
   /** True while the page is showing design fixtures. */
   sample: boolean;
   /**
@@ -117,7 +119,7 @@ async function call<T>(url: string, init: { method: string; body?: unknown }): P
 
 const SAVE_DELAY = 600;
 
-export function WorkspaceProvider({ initial, sample, timeZone, children }: { initial: CaseView; sample: boolean; timeZone?: string; children: ReactNode }) {
+export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = false, children }: { initial: CaseView; sample: boolean; timeZone?: string; seatReadOnly?: boolean; children: ReactNode }) {
   const router = useRouter();
   const params = useSearchParams();
   const [caseView, setCaseView] = useState(initial);
@@ -135,7 +137,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, children }: { ini
   const stepParam = params.get("step");
   const step: WorkspaceStep = isWorkspaceStep(stepParam) ? stepParam : attempt.status === "closed" ? "timeline" : attempt.status === "draft" ? "interview" : "after";
   const interview = caseView.interviews[insured] ?? null;
-  const readOnly = attempt.status === "closed";
+  const readOnly = attempt.status === "closed" || seatReadOnly;
 
   useEffect(() => {
     for (const [role, iv] of Object.entries(caseView.interviews)) if (iv && !lastAnswers.current[role]) lastAnswers.current[role] = iv.answers;
@@ -336,6 +338,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, children }: { ini
     // The agency's own QA settings, so the rail blocks exactly where the server's Ready check does.
     qa: runQa({ caseId: caseView.caseId, attempt, interview, settings: caseView.qaSettings }),
     readOnly,
+    seatReadOnly,
     sample,
     timeZone,
     saving: pending > 0,
@@ -359,7 +362,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, children }: { ini
       queueInterview(patch);
     },
     actions,
-  }), [caseView, attempt, insured, interview, step, readOnly, sample, timeZone, pending, saveError, navigate, patchAttempt, queueValue, queueInterview, actions]);
+  }), [caseView, attempt, insured, interview, step, readOnly, seatReadOnly, sample, timeZone, pending, saveError, navigate, patchAttempt, queueValue, queueInterview, actions]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

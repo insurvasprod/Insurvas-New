@@ -15,6 +15,7 @@ import { emailButton, emailFacts, emailNote, emailParagraph, emailShell, escapeH
 export const EMAIL_TEMPLATE_KEYS = [
   "user.invitation",
   "user.password_reset",
+  "user.sign_in_link",
   "user.email_verification",
   "user.email_change_confirmation",
   // LA-8.2: password changed, email change asked for or made, two-factor turned off.
@@ -226,6 +227,26 @@ export function passwordResetEmail(facts: {
       `Hi ${facts.name},\n\nWe received a request to reset your Insurvas password:\n${facts.resetUrl}\n\n` +
       `${expiry} If you did not ask for this, your password has not changed — but tell your ` +
       `administrator, since somebody entered your address.\n`,
+  };
+}
+
+/** "Email me a sign-in link" (2026-10-24): one button, fifteen minutes, once. */
+export function signInLinkEmail(facts: { name: string; signInUrl: string; minutes: number }): RenderedEmail {
+  const expiry = `This link works once, for ${facts.minutes} minutes.`;
+  return {
+    subject: "Your Insurvas sign-in link",
+    html: layout(
+      "Sign in to Insurvas",
+      paragraph(`Hi ${escapeHtml(facts.name)}, here is the link you asked for. It signs you in on the device where you open it.`) +
+        button(facts.signInUrl, "Sign in") +
+        // Said plainly because a sign-in email nobody asked for is how account takeover is noticed.
+        note(`${expiry} If you did not ask for it, ignore this email: nobody can use it without access to your inbox, ` +
+        `but tell your administrator, since somebody entered your address.`),
+      { eyebrow: "Account security", accent: "Insurvas", preheader: "Your one-time Insurvas sign-in link." },
+    ),
+    text:
+      `Hi ${facts.name},\n\nHere is the link you asked for. It signs you in on the device where you open it:\n${facts.signInUrl}\n\n` +
+      `${expiry} If you did not ask for it, ignore this email, but tell your administrator, since somebody entered your address.\n`,
   };
 }
 

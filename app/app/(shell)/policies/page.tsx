@@ -5,6 +5,8 @@ import { PolicyBook } from "@/components/app/policy-book";
 import { PolicyEntryActions } from "@/components/app/policy-entry-actions";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { NextStepLine } from "@/components/app/next-step-line";
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { loadBook, loadHandPolicies, loadIssuedAwaiting, POLICY_BOOK_PENDING_MESSAGE } from "@/lib/ingestion/policyBookStore";
@@ -34,15 +36,13 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Policies"
-        description="Every policy in your carriers' files, as of their latest file, and any you entered by hand. Open one for its money, history and source."
         actions={<PolicyEntryActions canAdd={canAdd} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />}
       />
       {/* LA-4.13: the share of the book no rate can check, and the one place to fix it. */}
       {book.available && book.unpriced && (
-        <p role="status" className="m-0 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
-          {book.unpriced.top.policies.toLocaleString("en-US")} {book.unpriced.top.carrierName} {book.unpriced.top.policies === 1 ? "policy" : "policies"}, ${Math.round(book.unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate, so their commission can&apos;t be checked{book.unpriced.carriers > 1 ? ` (${book.unpriced.policies.toLocaleString("en-US")} policies across ${book.unpriced.carriers} carriers in all)` : ""}.{" "}
-          {guard.role !== "producer" && <Link href="/app/rate-card" className="font-semibold underline">Add rates</Link>}
-        </p>
+        <NextStepLine action={guard.role !== "producer" ? <Button asChild size="sm"><Link href="/app/rate-card">Add rates</Link></Button> : undefined}>
+          <strong className="font-semibold text-[var(--ink)]">{book.unpriced.top.policies.toLocaleString("en-US")} {book.unpriced.top.carrierName} {book.unpriced.top.policies === 1 ? "policy" : "policies"}, ${Math.round(book.unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate</strong>, so their commission can&apos;t be checked{book.unpriced.carriers > 1 ? ` (${book.unpriced.policies.toLocaleString("en-US")} policies across ${book.unpriced.carriers} carriers in all)` : ""}.
+        </NextStepLine>
       )}
       {!book.available && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{POLICY_BOOK_PENDING_MESSAGE}</div>

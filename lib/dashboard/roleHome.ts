@@ -33,8 +33,10 @@ import { allMenuItems } from "../menu/definition.ts";
  *   money         money and retention (LA-4.18, Sixteen #15): the page's one strip on a money
  *                 profile, a list beside the day's figures otherwise (see DASHBOARD_PROFILES)
  *   upgrade       the one upgrade tile (Sixteen #15), in a fixed place under the strip
+ *   flow          the lead-to-money map and its biggest leak (redesign 2026-10-25), from the Daily
+ *                 deal flow funnel; it reads for itself, so it is never streamed with "today"
  */
-export type HomeSectionKey = "closeOut" | "pending" | "figures" | "needs" | "callbacks" | "appointments" | "activity" | "team" | "shortcuts" | "setup" | "money" | "upgrade";
+export type HomeSectionKey = "closeOut" | "pending" | "figures" | "needs" | "callbacks" | "appointments" | "activity" | "team" | "shortcuts" | "setup" | "money" | "upgrade" | "flow";
 
 /** The figures the strip can hold. Each is a number `getDashboardToday` already reads. */
 export type HomeFigureKey = "dials" | "reached" | "rate" | "appointments" | "dials7" | "premium" | "queue" | "booked" | "shown" | "showRate" | "closeOut";
@@ -59,7 +61,7 @@ type Opens = readonly string[];
 export const STREAMED_SECTIONS: ReadonlySet<HomeSectionKey> = new Set(["figures", "needs", "appointments", "activity", "team"]);
 
 export const HOME_SECTIONS: Record<HomeSectionKey, { opens: Opens }> = {
-  // The close-out strip also lives on Activity & scorecard; its route admits owner and producer,
+  // The close-out strip also lives on Team activity; its route admits owner and producer,
   // which is why only those two layouts list it (a setter never records whether their own booking
   // showed — decision 12).
   closeOut: { opens: ["insight.activity"] },
@@ -76,6 +78,8 @@ export const HOME_SECTIONS: Record<HomeSectionKey, { opens: Opens }> = {
   // Only someone who can buy sees an upgrade prompt (Sixteen #15): only the owner's layout lists
   // this section. (Settings opens for every role since LA-8.1; Plan & billing inside it is the owner's.)
   upgrade: { opens: ["settings.root"] },
+  // The same gate as the Daily deal flow page and its funnel route: the feature, owner or producer.
+  flow: { opens: ["sell.deal-flow"] },
 };
 
 /** `money` marks a figure that is premium or commission: never on a setter's or assistant's home. */
@@ -192,7 +196,7 @@ export const ROLE_HOMES: Record<TenantRole, RoleHome> = {
   owner: {
     // Pending cases follow the streamed sections, so the figure strip sits directly under the header
     // (UI-CONSISTENCY §4); only the pinned setup checklist and the close-out strip (LA-2.12) go above.
-    sections: ["setup", "closeOut", "figures", "upgrade", "needs", "money", "appointments", "activity", "team", "pending", "shortcuts", "callbacks"],
+    sections: ["setup", "closeOut", "flow", "figures", "upgrade", "needs", "money", "appointments", "activity", "team", "pending", "shortcuts", "callbacks"],
     figures: ["dials", "reached", "rate", "closeOut", "appointments", "premium", "queue", "dials7"],
     needs: ["transfers", "callbacks", "lapse", "licences"],
     money: ["owed", "statements", "exposure", "lapse", "persistency"],
@@ -207,7 +211,7 @@ export const ROLE_HOMES: Record<TenantRole, RoleHome> = {
   // Their money and retention line is their own book (money.ts scopes it). Lapse risk moved there
   // from "needs", whose count is the agency's open signals, not theirs.
   producer: {
-    sections: ["closeOut", "figures", "needs", "money", "callbacks", "appointments", "activity", "pending", "shortcuts"],
+    sections: ["closeOut", "flow", "figures", "needs", "money", "callbacks", "appointments", "activity", "pending", "shortcuts"],
     figures: ["appointments", "closeOut", "queue", "dials", "reached", "rate", "premium"],
     needs: ["transfers", "callbacks", "licences"],
     money: ["exposure", "lapse", "persistency"],

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { LogoutButton } from "@/components/app/logout-button";
 import { LegalDocumentBody } from "@/components/public/legal-document-body";
 
 export type OutstandingDoc = {
@@ -45,11 +46,17 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
     setSubmitting(true);
     setError(null);
 
+    // A dropped connection hands the button back with a reason instead of spinning forever.
     const response = await fetch("/api/app/legal/accept", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documentIds: documents.map((doc) => doc.id) }),
-    });
+    }).catch(() => null);
+    if (!response) {
+      setSubmitting(false);
+      setError("Could not reach Insurvas. Check your connection and press Accept again.");
+      return;
+    }
     const body = await response.json().catch(() => null);
     setSubmitting(false);
 
@@ -120,9 +127,19 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
             )
           )}
 
-          <div className="mt-5 max-h-[280px] overflow-y-auto rounded-md border border-border bg-card p-5">
-            <LegalDocumentBody content={doc.content} />
-          </div>
+          {/* With a summary to read, the full text waits behind one click; without one, it is the thing to read. */}
+          {doc.changeSummary ? (
+            <details className="mt-4 rounded-md border border-border bg-card">
+              <summary className="flex min-h-[44px] cursor-pointer items-center px-4 text-sm font-semibold text-foreground">Read the full text</summary>
+              <div className="max-h-[320px] overflow-y-auto border-t border-border p-5">
+                <LegalDocumentBody content={doc.content} />
+              </div>
+            </details>
+          ) : (
+            <div className="mt-5 max-h-[280px] overflow-y-auto rounded-md border border-border bg-card p-5">
+              <LegalDocumentBody content={doc.content} />
+            </div>
+          )}
         </section>
       ))}
 
@@ -133,12 +150,12 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
       )}
 
       <div className="mt-5 flex flex-col gap-4 rounded-md bg-[var(--surface-alt)] p-4 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex cursor-pointer items-start gap-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
           <input
             type="checkbox"
             checked={accepted}
             onChange={(event) => setAccepted(event.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+            className="size-5 shrink-0 accent-[var(--accent-ink)]"
           />
           <span>
             I have read and agree to{" "}
@@ -157,9 +174,11 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
         </Button>
       </div>
 
-      <p className="mt-3.5 text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-        Your acceptance, the timestamp and the version are recorded.
-      </p>
+      <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+        <span>Your acceptance, the time and the version are recorded.</span>
+        {/* Not ready to accept: leave without being stuck on this page (it is the only page until then). */}
+        <LogoutButton variant="link" className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground" />
+      </div>
     </div>
   );
 }

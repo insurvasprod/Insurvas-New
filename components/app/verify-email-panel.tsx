@@ -4,14 +4,15 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 
-import { AuthCard, authControl, authLabel } from "@/components/app/auth-card";
+import { authControl, authLabel } from "@/components/app/auth-card";
+import { FunnelHeading } from "@/components/app/funnel-frame";
 import { LogoutButton } from "@/components/app/logout-button";
 import { Button } from "@/components/ui/button";
 
 const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground hover:text-[var(--accent-ink)] disabled:opacity-50 [&_svg]:transition-transform hover:[&_svg]:translate-x-[3px]";
 
 /**
- * Step 1 of 3: the only screen a pending account can reach. It watches for the verification to
+ * Step 2 of 5: the only screen a pending account can reach. It watches for the verification to
  * land — the link can be opened on a phone — and moves on by itself, which is the promise the first
  * line of "What to expect" makes.
  */
@@ -90,21 +91,17 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
     }
   }
 
-  const steps = [
-    "Open the link on any device. You will return here automatically once it is verified.",
-    `The link expires after ${ttlHours} hours, and after the first use.`,
-    noPayment
-      ? "Nothing is charged. After the business profile you confirm your plan and your workspace opens."
-      : "Nothing was charged. Payment happens at checkout, after the business profile.",
-  ];
-
   return (
-    <AuthCard width={680} eyebrow="Step 1 of 3" title="Check your email" description={`We sent a link to the address below. It works once and lasts ${ttlHours} hours.`}>
+    <div>
+      <FunnelHeading title="Confirm your email">
+        Open the link we sent. It works once, for {ttlHours} hours, and keeps anyone else from opening a workspace in your name.
+        {noPayment ? " Nothing is charged." : " Nothing has been charged."}
+      </FunnelHeading>
       {loading ? (
         <div className="flex h-28 items-center justify-center" role="status" aria-label="Loading your account"><LoaderCircle className="animate-spin text-muted-foreground" /></div>
       ) : (
         <>
-          <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-alt)] px-4 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-alt)] px-4 py-3.5">
             <span className="min-w-0 break-all text-base font-semibold tracking-[-0.02em] text-foreground">{email || "—"}</span>
             <span className={sentNow ? "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--success-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--success-ink)]" : "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-card px-2.5 py-[3px] text-xs font-semibold text-[var(--body)]"}>
               <span className={sentNow ? "size-1.5 rounded-full bg-[var(--success)]" : "size-1.5 rounded-full bg-[var(--muted)]"} aria-hidden="true" />
@@ -112,17 +109,19 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
             </span>
           </div>
 
-          <section className="mt-6" aria-labelledby="verify-email-steps">
-            <h2 id="verify-email-steps" className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">What to expect</h2>
-            <ol className="mt-1">
-              {steps.map((step, index) => (
-                <li key={step} className="flex gap-3 border-t border-border py-2.5">
-                  <span className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" aria-hidden="true">{index + 1}</span>
-                  <span className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">{step}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+              <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
+            </Button>
+            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+              <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
+            </Button>
+          </div>
+
+          <p className="mt-4 flex items-center gap-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" role="status">
+            <LoaderCircle className="size-4 shrink-0 animate-spin text-[var(--accent-ink)] motion-reduce:animate-none" aria-hidden="true" />
+            Waiting for the link to be opened. This page moves on by itself, even if you open it on your phone.
+          </p>
 
           {changing && (
             <form onSubmit={(event) => send("change_email", event)} className="mt-4 rounded-lg border border-border p-4">
@@ -141,16 +140,16 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
           {error && <p role="alert" className="mt-4 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
 
           <div className="mt-7 flex flex-col gap-3">
-            <Button type="button" className="h-11 w-full" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
-              {cooldown > 0 ? `Available again in ${cooldown} ${cooldown === 1 ? "second" : "seconds"}` : submitting && !changing ? "Sending…" : "Send the link again"}
+            <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
+              {cooldown > 0 ? `Send again in ${cooldown} ${cooldown === 1 ? "second" : "seconds"}` : submitting && !changing ? "Sending…" : "Send the link again"}
             </Button>
-            <div className="flex flex-wrap justify-center gap-4">
+            <div className="flex flex-wrap justify-between gap-4">
               <button type="button" className={linkButton} aria-expanded={changing} onClick={() => setChanging((value) => !value)}>Wrong address?<ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" /></button>
               <LogoutButton variant="link" className={linkButton} />
             </div>
           </div>
         </>
       )}
-    </AuthCard>
+    </div>
   );
 }

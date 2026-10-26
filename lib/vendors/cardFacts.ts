@@ -26,7 +26,7 @@ export const CERTIFICATES_UNDER = 50;
 export const TRIAL_LEAD_THRESHOLD = 200;
 
 export type CardRow = { vendor_id: string; status: string; category: string | null; renews_on: string | null; campaign_count: number; lead_count: number; trial_lead_threshold: number; trialling: boolean };
-export type CostRow = { vendor_id: string; vendor_name: string; net_spend_cents: number | null; issued_policies: number; cost_per_policy_cents: number | null; cost_rank: number | null; is_test_batch: boolean };
+export type CostRow = { vendor_id: string; vendor_name: string; net_spend_cents: number | null; issued_policies: number; cost_per_policy_cents: number | null; cost_rank: number | null; is_test_batch: boolean; claim_acceptance_percent: number | null };
 export type ClaimableRow = { vendor_id: string; claimable_cents: number; claimable_rows: number; days_left: number | null };
 export type UndialableRow = { vendor_id: string; undialable_percent: number | null };
 export type ConsentRow = { vendor_id: string; leads: number; claimed_coverage_pct: number | null };
@@ -63,6 +63,9 @@ export function parseCostRows(value: unknown): CostRow[] {
     cost_per_policy_cents: num(row.effective_cost_per_issued_policy_cents),
     cost_rank: num(row.cost_rank),
     is_test_batch: row.is_test_batch === true,
+    // Decision 11 (LA-2.19): credited ÷ claimed, the scorecard's own figure — "are they decent to
+    // deal with", HIGH is good. Never blended with the undialable rate.
+    claim_acceptance_percent: num(row.claim_acceptance_rate_percent),
   }));
 }
 
@@ -174,6 +177,7 @@ export function buildVendorCards(input: {
       ranked,
       claimable: claimable && claimable.claimable_rows > 0 ? { cents: claimable.claimable_cents, rows: claimable.claimable_rows, days_left: claimable.days_left ?? 0 } : null,
       undialable_percent: undialablePct,
+      claim_acceptance_percent: money?.claim_acceptance_percent ?? null,
       certificate_pct: certificatePct,
       drop: reasons.length ? { reasons, renews_on: own?.renews_on ?? null } : null,
     };

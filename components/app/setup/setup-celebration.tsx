@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogPortal, DialogTitle } from "@/components/ui/dialog";
 import { playFor } from "@/lib/notify/sound";
 
 /**
@@ -15,29 +16,39 @@ import { playFor } from "@/lib/notify/sound";
  * Confetti is drawn on a canvas in the brand's own tokens and stops by itself; with reduced motion
  * asked for there is no confetti, only the card. "Continue to work" goes home and refreshes the
  * shell, so the "Get set up" item leaves the sidebar there and then.
+ *
+ * Built on the shared Dialog since the redesign (2026-10-24): its focus trap keeps Tab inside the
+ * card and hands focus back on close, and Escape and the backdrop close it the same way as before
+ * ("Review setup"). The chime goes through playFor, which already honours the person's sound
+ * preferences (mute, the `win` switch, do-not-disturb, a live call), so nothing is re-checked here.
  */
 export function SetupCelebration({ steps, done, audience }: { steps: number; done: number; audience: "owner" | "member" }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
-  const canvas = useRef<HTMLCanvasElement>(null);
+  // The canvas lives in the Dialog's portal, which mounts a render after this component, so a callback
+  // ref flags it in state and the confetti effect waits for that.
+  const canvas = useRef<HTMLCanvasElement | null>(null);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const attachCanvas = useCallback((element: HTMLCanvasElement | null) => {
+    canvas.current = element;
+    setCanvasReady(element !== null);
+  }, []);
   const button = useRef<HTMLButtonElement>(null);
 
   const close = (goHome: boolean) => {
+    if (!open) return;
     setOpen(false);
     if (goHome) router.push("/app/dashboard");
     else router.replace("/app/setup");
     router.refresh();
   };
 
+  // Once, when shown. Escape and focus are the Dialog's now.
   useEffect(() => {
     if (!open) return;
-    button.current?.focus();
     playFor("win");
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when shown
-  }, [open]);
+  }, []);
 
   useEffect(() => {
     const element = canvas.current;
@@ -110,30 +121,39 @@ export function SetupCelebration({ steps, done, audience }: { steps: number; don
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
     };
-  }, [open]);
+  }, [open, canvasReady]);
 
   if (!open) return null;
 
+  // The canvas is portalled beside the Dialog and sits between its overlay (z-50) and its card
+  // (z-[60]): confetti over the dimmed page, never over the words.
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="setup-celebration-title">
-      <div className="absolute inset-0 bg-[rgba(8,12,16,.55)] backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in" onClick={() => close(false)} />
-      <canvas ref={canvas} aria-hidden="true" className="pointer-events-none fixed inset-0 size-full" />
-      <div className="relative w-full max-w-[420px] rounded-2xl border border-border bg-[var(--color-card)] p-8 text-center shadow-[0_24px_64px_-16px_rgba(16,20,26,.5)] motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:fade-in motion-safe:duration-300">
-        <span className="mx-auto mb-5 inline-flex size-16 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] text-[var(--accent-ink)] motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500">
-          <Check className="size-8" strokeWidth={3} />
-        </span>
-        <h2 id="setup-celebration-title" className="text-title-sm font-semibold tracking-[-0.02em]">You&apos;re all set up</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {done === steps ? `All ${steps} steps are done.` : `${done} of ${steps} steps are done; the ones you skipped wait on Get set up.`}{" "}
-          {audience === "owner"
-            ? "Insurvas is ready for the way your agency works, and everything stays editable in Settings."
-            : "You know your way around; your work is waiting."}
-        </p>
-        <div className="mt-6 flex flex-col gap-2">
-          <Button ref={button} type="button" onClick={() => close(true)}>Continue to work</Button>
-          <Button type="button" variant="ghost" onClick={() => close(false)}>Review setup</Button>
-        </div>
-      </div>
-    </div>
+    <>
+      <Dialog open={open} onOpenChange={(next) => { if (!next) close(false); }}>
+        <DialogPortal>
+          <canvas ref={attachCanvas} aria-hidden="true" className="pointer-events-none fixed inset-0 z-[55] size-full" />
+        </DialogPortal>
+        <DialogContent
+          showCloseButton={false}
+          onOpenAutoFocus={(event) => { event.preventDefault(); button.current?.focus(); }}
+          className="z-[60] block max-w-[420px] rounded-2xl bg-[var(--color-card)] p-8 text-center shadow-[0_24px_64px_-16px_rgba(16,20,26,.5)] sm:max-w-[420px]"
+        >
+          <span className="mx-auto mb-5 flex size-16 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--primary)_18%,transparent)] text-[var(--accent-ink)] motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-500">
+            <Check className="size-8" strokeWidth={3} />
+          </span>
+          <DialogTitle className="text-title-sm font-semibold tracking-[-0.02em]">You&apos;re all set up</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-muted-foreground">
+            {done === steps ? `All ${steps} steps are done.` : `${done} of ${steps} steps are done; the ones you skipped wait on Get set up.`}{" "}
+            {audience === "owner"
+              ? "Insurvas is ready for the way your agency works, and everything stays editable in Settings."
+              : "You know your way around; your work is waiting."}
+          </DialogDescription>
+          <div className="mt-6 flex flex-col gap-2">
+            <Button ref={button} type="button" onClick={() => close(true)}>Continue to work</Button>
+            <Button type="button" variant="ghost" onClick={() => close(false)}>Review setup</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

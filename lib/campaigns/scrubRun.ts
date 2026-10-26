@@ -5,7 +5,7 @@ import { screenPartnerPhone, type ScreeningDecision } from "@/lib/compliance/scr
 import { assertOutboundLimit, outboundLimitResponse } from "@/lib/metering/outbound";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
-import { SCRUB_BATCH_SIZE, ledgerOutcome, scrubOutcomeAction, type ScrubRun } from "./constants";
+import { SCRUB_BATCH_SIZE, SCRUB_OUTAGE_NOTE, ledgerOutcome, scrubOutcomeAction, type ScrubRun } from "./constants";
 
 /**
  * "Run the scrub" — re-screen every lead in a campaign, one batch per request.
@@ -359,7 +359,7 @@ export async function stepScrubRun(input: {
       run = await advance(input.tenantId, run, input.token, { cursor: leads[settled - 1].id, processed: settled, rejected, suppressed });
 
     if (outageAt !== -1)
-      return fail(`${decisions[outageAt].message} A scrub vendor is unavailable, so the scrub stopped after ${run.processed_leads.toLocaleString("en-US")} leads. Resume it when the vendor is back.`);
+      return fail(`${decisions[outageAt].message} ${SCRUB_OUTAGE_NOTE}, so the scrub stopped after ${run.processed_leads.toLocaleString("en-US")} leads. Resume it when the vendor is back.`);
 
     // A short batch was the last one.
     if (leads.length < SCRUB_BATCH_SIZE)

@@ -1512,7 +1512,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-login-page { display: grid; min-height: 100vh; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); color: var(--portal-ink); }
 .portal-login-form-panel { display: flex; min-width: 0; align-items: center; justify-content: center; background: var(--portal-panel); padding: 3.5rem clamp(1.25rem, 6vw, 6rem); }
 .portal-login-form-inner { width: min(100%, 35rem); }
-.portal-login-footer { display: flex; gap: 1.75rem; margin-top: 5.5rem; color: var(--portal-muted); font-size: .8rem; }
+.portal-login-footer { display: flex; gap: 1.75rem; margin-top: 2rem; color: var(--portal-muted); font-size: .8rem; }
 .portal-login-footer a { text-decoration: none; }
 .portal-login-footer a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .portal-login-feature-panel { display: flex; min-width: 0; align-items: center; background: var(--brand-700); color: var(--nav-ink); padding: 3.5rem clamp(1.25rem, 6vw, 6rem); }
@@ -1540,11 +1540,11 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-auth-split-shell[data-mode="sign-up"] .portal-auth-split-story { transform: translateX(-100%); }
 .portal-auth-form-inner { width: min(100%, 35rem); margin: auto; }
 .portal-auth-signup-inner { width: min(100%, 43rem); }
-/* Agent sign-in and signup (p-pub-app-login, p-pub-app-signup): a 600px form column on the canvas,
-   centred vertically, the story panel filling the rest. The form stays on the left for both — no
+/* Agent sign-in and signup (p-pub-app-login, p-pub-app-signup): the form and the story panel half
+   and half (owner, 2026-10-26: "make the width 50/50"), the form centred vertically. The form stays on the left for both — no
    side swap — and below 1024px the story disappears rather than pushing the form down. Scoped to
    the agent shell; the partner door keeps its own layout. */
-.portal-tenant-auth-shell { grid-template-columns: 600px minmax(0, 1fr); }
+.portal-tenant-auth-shell { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .portal-tenant-auth-shell .portal-auth-split-form { display: flex; flex-direction: column; background: var(--canvas); padding: 48px 64px; }
 .portal-tenant-auth-shell .portal-auth-split-story { padding: 48px 64px; }
 .portal-tenant-auth-shell[data-mode="sign-up"] .portal-auth-split-form,
@@ -1584,6 +1584,28 @@ a.portal-top-foot-action { text-decoration: none; }
   .portal-auth-split-form { padding: 2.2rem 1rem 2.8rem; }
   .portal-auth-split-story { padding: 2.6rem 1rem 3rem; }
   .portal-auth-footer { margin-top: 3rem; }
+}
+
+/* Sign-in and sign-up on phones (2026-10-22). The doors fill the screen that is actually visible —
+   100vh on a phone is the height with the browser bar hidden, so a centred form sat low and the page
+   scrolled — and on touch screens the small text links (Forgot password, Privacy, Terms…) get a
+   44px touch target without moving anything (padding in, the same margin back out), as do the fields. */
+@supports (min-height: 100dvh) {
+  .portal-auth-split-shell, .portal-partner-auth-page, .portal-partner-login-page, .portal-partner-set-password-page,
+  .portal-auth-split-form, .portal-auth-split-story { min-height: 100dvh; }
+  @media (max-width: 900px) { .portal-auth-split-story { min-height: auto; } }
+}
+@media (pointer: coarse) {
+  :is(.portal-auth-split-shell, .portal-partner-auth-page, .portal-partner-login-page, .portal-partner-set-password-page)
+    :is([data-slot="link-arrow"], .portal-login-footer a, .portal-auth-footer a) {
+    padding: .75rem .5rem;
+    margin: -.75rem -.5rem;
+  }
+  :is(.portal-auth-split-shell, .portal-partner-auth-page, .portal-partner-login-page, .portal-partner-set-password-page)
+    :is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select) { min-height: 2.75rem; }
+}
+@media (max-width: 360px) {
+  .portal-login-footer, .portal-auth-footer { gap: 1.25rem; }
 }
 
 .portal-partner-set-password-page { display: flex; min-height: 100vh; flex-direction: column; color: var(--portal-ink); }
@@ -2988,21 +3010,54 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .portal-agent-rail-item { transition: none; } }
 
+/* Owner ask 2026-10-26: no line between the logo and the search — the rail's edge starts under the
+   top bar, so the logo reads as the start of the bar. */
+.portal-agent-rail { border-right: 0; }
+.portal-agent-rail::after {
+  content: ""; position: absolute; top: var(--top-bar-h, 56px); bottom: 0; right: 0; width: 1px;
+  background: var(--nav-line); pointer-events: none;
+}
+/* The account at the foot of the rail (AppTopBar portals its button and menu here). */
+.portal-agent-rail-account { display: flex; justify-content: center; width: 100%; margin-top: .25rem; }
+.portal-rail-account {
+  display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
+  border: 0; border-radius: 12px; background: transparent; cursor: pointer;
+  transition: background-color var(--t-micro) var(--e);
+}
+.portal-rail-account:hover,
+.portal-rail-account:focus-visible { background: color-mix(in srgb, var(--nav-ink), transparent 90%); }
+.portal-rail-account:focus-visible { outline: 2px solid var(--nav-success); outline-offset: 2px; }
+.portal-rail-account[aria-expanded="true"] .portal-top-avatar { box-shadow: 0 0 0 2px var(--nav-success); }
+/* With the account in the rail, the bar drops its own button (the phone keeps it: no rail there). */
+@media (min-width: 768px) {
+  :has(> .portal-agent-rail) .portal-top-account,
+  :has(> .portal-agent-rail) .portal-top-divider { display: none; }
+}
+/* Its menu opens beside the rail, from the bottom. */
+.portal-top-panel.portal-top-panel-rail { position: fixed; top: auto; right: auto; left: 80px; bottom: 12px; z-index: 45; }
+/* The plan, a line in the account menu. */
+.portal-top-account-extra { border-bottom: 1px solid var(--border); }
+.portal-top-plan { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .625rem .875rem; }
+.portal-top-plan-label { display: block; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); }
+.portal-top-plan-name { display: block; font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 600; color: var(--ink); }
+.portal-top-plan-link { flex-shrink: 0; font-size: .75rem; line-height: 1.5; font-weight: 600; color: var(--accent-ink); text-decoration: none; }
+.portal-top-plan-link:hover { text-decoration: underline; }
+
 /* The top bar, as A: one wide command field in the middle, the bell and the account on the right. */
 @media (min-width: 768px) {
   :has(> .portal-agent-rail) .portal-top-bar { gap: 1rem; }
-  :has(> .portal-agent-rail) .portal-top-search { width: min(680px, 100%); flex: 1 1 auto; margin-inline: auto; }
+  :has(> .portal-agent-rail) .portal-top-search { width: min(360px, 100%); flex: 0 1 auto; margin-inline: 0 auto; }
   :has(> .portal-agent-rail) .portal-top-search-input {
-    height: 40px; padding-left: 40px; border-radius: 12px; font-size: .9375rem;
+    height: 36px; padding-left: 36px; border-radius: 10px; font-size: .875rem;
     background: color-mix(in srgb, var(--nav-ink), transparent 93%);
   }
   :has(> .portal-agent-rail) .portal-top-search-input:focus {
     border-color: color-mix(in srgb, var(--nav-success), transparent 40%);
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--nav-success), transparent 86%);
   }
-  :has(> .portal-agent-rail) .portal-top-search-icon { left: 14px; top: 12px; }
-  :has(> .portal-agent-rail) .portal-top-search-keys { top: 11px; right: 12px; }
-  :has(> .portal-agent-rail) .portal-top-panel-search { top: 48px; width: 100%; }
+  :has(> .portal-agent-rail) .portal-top-search-icon { left: 12px; top: 10px; }
+  :has(> .portal-agent-rail) .portal-top-search-keys { top: 9px; right: 10px; }
+  :has(> .portal-agent-rail) .portal-top-panel-search { top: 44px; width: min(520px, calc(100vw - 2rem)); }
 }
 
 /* The ribbon behind a role home (components/ui/ribbon-backdrop.tsx). The layer spans the page's

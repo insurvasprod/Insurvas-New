@@ -89,7 +89,7 @@ export function useAssignmentWorkspace(canManage: boolean) {
 
   /* ── actions ────────────────────────────────────────────────────────── */
 
-  async function post(body: Record<string, unknown>, success: string) {
+  async function post(body: Record<string, unknown>, success: string): Promise<boolean> {
     setBusy("action");
     try {
       const response = await fetch("/api/app/assignments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -111,8 +111,9 @@ export function useAssignmentWorkspace(canManage: boolean) {
         notify.done(success, detail ? { detail } : undefined);
       }
       await refresh();
+      return true;
     }
-    catch (error) { notify.fail(error instanceof Error ? error.message : "Assignment action failed"); }
+    catch (error) { notify.fail(error instanceof Error ? error.message : "Assignment action failed"); return false; }
     finally { setBusy(null); }
   }
 

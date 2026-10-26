@@ -184,7 +184,7 @@ function InvoiceForm({ sources, initial, onClose, onSaved }: { sources: Sources;
   );
 }
 
-function FromTemplate({ templates, onClose, onSaved }: { templates: Template[]; onClose: () => void; onSaved: (id: string) => void }) {
+function FromTemplate({ templates, onClose, onSaved, onRemoved }: { templates: Template[]; onClose: () => void; onSaved: (id: string) => void; onRemoved: () => void }) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const t = templates.find((x) => x.id === templateId);
   const [number, setNumber] = useState("");
@@ -207,6 +207,20 @@ function FromTemplate({ templates, onClose, onSaved }: { templates: Template[]; 
       setBusy(false);
     }
   };
+  const remove = async (templateId: string, name: string) => {
+    if (!window.confirm(`Delete the template “${name}”? Invoices already entered from it stay as they are.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await send(`/api/app/accounting/invoice-templates?id=${encodeURIComponent(templateId)}`, { method: "DELETE" });
+      notify.done("Template deleted");
+      onRemoved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The template wasn't deleted");
+    } finally {
+      setBusy(false);
+    }
+  };
   const field = "flex flex-col gap-1 text-sm";
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -225,6 +239,17 @@ function FromTemplate({ templates, onClose, onSaved }: { templates: Template[]; 
             ))}
           </div>
           {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
+          <details className="rounded-lg border border-border px-3 py-2 text-sm">
+            <summary className="cursor-pointer font-semibold">Your templates ({templates.length})</summary>
+            <ul className="mt-2 flex flex-col">
+              {templates.map((x) => (
+                <li key={x.id} className="flex items-center justify-between gap-3 border-t border-border py-2 first:border-t-0">
+                  <span className="min-w-0"><span className="block truncate font-medium">{x.name}</span><span className="block text-xs text-muted-foreground">{x.sourceName} · {x.lines.length} {x.lines.length === 1 ? "line" : "lines"}</span></span>
+                  <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void remove(x.id, x.name)}>Delete</Button>
+                </li>
+              ))}
+            </ul>
+          </details>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={busy || !t}>{busy ? "Saving…" : "Enter invoice"}</Button>
@@ -241,6 +266,7 @@ function InvoicePanel({ id, sources, readOnly, onClose, onChanged, onEdit }: { i
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState<{ on: string; method: string; reference: string } | null>(null);
   const [voiding, setVoiding] = useState<string | null>(null);
+  const [disputing, setDisputing] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     fetch(`/api/app/accounting/invoices/${id}`).then(async (res) => {
@@ -259,6 +285,7 @@ function InvoicePanel({ id, sources, readOnly, onClose, onChanged, onEdit }: { i
       setInv(body.invoice);
       setPaying(null);
       setVoiding(null);
+      setDisputing(null);
       notify.done(done(body.result));
       onChanged();
     } catch (err) {
@@ -317,7 +344,7 @@ function InvoicePanel({ id, sources, readOnly, onClose, onChanged, onEdit }: { i
           {editable ? <Button disabled={busy} onClick={() => void act({ action: "approve" }, (r) => { const x = r as { entries: number; flagged: boolean }; return `Approved: ${x.entries} cost ${x.entries === 1 ? "entry" : "entries"} booked${x.flagged ? " — flagged for the difference" : ""}`; })}>Approve</Button> : null}
           {inv.status === "approved" ? <Button disabled={busy} onClick={() => setPaying({ on: today(), method: "ach", reference: "" })}>Mark paid</Button> : null}
           {editable ? <Button variant="outline" disabled={busy} onClick={() => onEdit(inv)}>Edit</Button> : null}
-          {inv.status === "received" ? <Button variant="outline" disabled={busy} onClick={() => void act({ action: "dispute", note: null }, () => "Marked disputed")}>Dispute</Button> : null}
+          {inv.status === "received" ? <Button variant="outline" disabled={busy} onClick={() => setDisputing("")}>Dispute</Button> : null}
           {inv.status === "disputed" ? <Button variant="outline" disabled={busy} onClick={() => void act({ action: "undispute" }, () => "Dispute closed")}>Close dispute</Button> : null}
           {inv.status !== "void" ? <Button variant="outline" disabled={busy} onClick={() => setVoiding("")}>Void</Button> : null}
           <Button variant="outline" disabled={busy} onClick={() => void saveTemplate()}>Save as monthly template</Button>
@@ -338,6 +365,15 @@ function InvoicePanel({ id, sources, readOnly, onClose, onChanged, onEdit }: { i
               </div>
             </div>
           ) : null}
+          {disputing !== null ? (
+            <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+              <label className="flex flex-col gap-1 text-sm">Why are you disputing it?<input className={toolbarControl} maxLength={2000} value={disputing} onChange={(e) => setDisputing(e.target.value)} placeholder="For example: 28 leads rejected at the gate" autoFocus /></label>
+              <div className="flex gap-2">
+                <Button disabled={busy} onClick={() => void act({ action: "dispute", note: disputing.trim() || null }, () => "Marked disputed")}>Dispute invoice</Button>
+                <Button variant="outline" onClick={() => setDisputing(null)}>Cancel</Button>
+              </div>
+            </div>
+          ) : null}
           {voiding !== null ? (
             <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
               <label className="flex flex-col gap-1 text-sm">Why is it void?<input className={toolbarControl} maxLength={500} value={voiding} onChange={(e) => setVoiding(e.target.value)} autoFocus /></label>
@@ -350,7 +386,7 @@ function InvoicePanel({ id, sources, readOnly, onClose, onChanged, onEdit }: { i
           ) : null}
           <div className="grid grid-cols-3 gap-3 text-sm">
             <div><div className="text-xs text-muted-foreground">Total</div><div className="font-medium">{money(inv.totalCents)}</div></div>
-            <div><div className="text-xs text-muted-foreground">Paid</div><div>{inv.paidOn ? `${inv.paidOn}${inv.paidMethod ? ` · ${PAID_METHOD_LABELS[inv.paidMethod]}` : ""}` : "Not yet"}</div></div>
+            <div><div className="text-xs text-muted-foreground">Paid</div><div>{inv.paidOn ? `${inv.paidOn}${inv.paidMethod ? ` · ${PAID_METHOD_LABELS[inv.paidMethod]}` : ""}${inv.paymentReference ? ` · ref ${inv.paymentReference}` : ""}` : "Not yet"}</div></div>
             <div><div className="text-xs text-muted-foreground">Document</div><div>{inv.hasDocument ? <a className="underline" href={`/api/app/accounting/invoices/${inv.id}/document`} target="_blank" rel="noreferrer">{inv.documentName ?? "Open"}</a> : "None attached"}</div></div>
           </div>
           {!readOnly ? <label className="text-xs text-muted-foreground">{inv.hasDocument ? "Replace the document" : "Attach the invoice"}<input type="file" className="mt-1 block text-xs" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = ""; }} /></label> : null}
@@ -486,7 +522,7 @@ export function InvoicesBoard({ invoices, sources, templates, readOnly, openId }
         )}
       </TableCard>
       {creating ? <InvoiceForm key={creating === "new" ? "new" : creating.id} sources={sources} initial={creating === "new" ? undefined : creating} onClose={() => setCreating(null)} onSaved={(id) => { setCreating(null); setVersion((v) => v + 1); setOpen(id); refresh(); }} /> : null}
-      {fromTemplate ? <FromTemplate templates={templates} onClose={() => setFromTemplate(false)} onSaved={(id) => { setFromTemplate(false); setOpen(id); refresh(); }} /> : null}
+      {fromTemplate ? <FromTemplate templates={templates} onClose={() => setFromTemplate(false)} onSaved={(id) => { setFromTemplate(false); setOpen(id); refresh(); }} onRemoved={() => { setFromTemplate(false); refresh(); }} /> : null}
       {open ? <InvoicePanel key={`${open}-${version}`} id={open} sources={sources} readOnly={readOnly} onClose={() => setOpen(null)} onChanged={refresh} onEdit={(inv) => { setOpen(null); setCreating(inv); }} /> : null}
     </>
   );

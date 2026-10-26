@@ -18,6 +18,8 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
   const [couponCode, setCouponCode] = useState("");
   const [valid, setValid] = useState<{ code: string; summary: string | null; fullComp: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Most buyers have no code, so the field waits behind "Have a coupon?" instead of asking everyone.
+  const [showCoupon, setShowCoupon] = useState(false);
 
   async function applyCoupon() {
     if (!couponCode.trim()) return;
@@ -69,11 +71,14 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
   return (
     <>
       {/* A coupon only matters on a payment page; with nothing to pay it is not asked for. */}
-      {!noPayment && <div className="rounded-lg border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">
-          <label htmlFor="coupon">Coupon</label>
-        </h2>
-        <div className="mt-3 flex gap-3">
+      {!noPayment && !showCoupon && (
+        <button type="button" className="self-start text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline" aria-expanded={false} onClick={() => setShowCoupon(true)}>
+          Have a coupon?
+        </button>
+      )}
+      {!noPayment && showCoupon && <div className="rounded-lg border border-border bg-card p-4">
+        <label htmlFor="coupon" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">Coupon code</label>
+        <div className="mt-2 flex gap-3">
           <Input
             id="coupon"
             value={couponCode}
@@ -83,6 +88,7 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
             }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void applyCoupon(); } }}
             autoComplete="off"
+            autoFocus
             className="h-11 flex-1 border-[var(--border-strong)] px-3 text-base tracking-[-0.02em]"
             disabled={busy}
           />
@@ -117,8 +123,8 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
         </p>
       ) : null}
 
-      <Button onClick={start} disabled={busy} aria-describedby={disclosure && !valid?.fullComp ? "renewal-terms" : undefined} className="h-11 w-full px-4">
-        {busy && (noPayment || valid?.fullComp) ? "Opening your workspace…" : noPayment || valid?.fullComp ? "Start using Insurvas" : "Continue to secure checkout"}
+      <Button onClick={start} disabled={busy} aria-describedby={disclosure && !valid?.fullComp ? "renewal-terms" : undefined} className="h-12 w-full px-4">
+        {busy && (noPayment || valid?.fullComp) ? "Opening your workspace…" : busy ? "Opening secure payment…" : noPayment || valid?.fullComp ? "Start using Insurvas" : "Continue to secure payment"}
       </Button>
 
       {!noPayment && !valid?.fullComp && <p className="flex items-center justify-center gap-2 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">

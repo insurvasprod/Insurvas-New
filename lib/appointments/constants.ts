@@ -1,4 +1,4 @@
-// The grid uses the USPS abbreviations because appointments, licences and CE records all use
+// The grid uses the USPS abbreviations because appointments and licences both use
 // the same two-letter state key.
 export const US_STATES = [
   ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"], ["CA", "California"],

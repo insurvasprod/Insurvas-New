@@ -1,4 +1,4 @@
-import type { CeRecordRow, EoPolicyRow, LicenseRow } from "./service-types";
+import type { LicenseRow } from "./service-types";
 
 /**
  * The warning window and its severity bands.
@@ -14,7 +14,7 @@ import type { CeRecordRow, EoPolicyRow, LicenseRow } from "./service-types";
  */
 export const EXPIRY_WARNING_DAYS = [90, 60, 30] as const;
 export type ExpiryWarningDays = (typeof EXPIRY_WARNING_DAYS)[number];
-export type ExpiryWarningSource = "license" | "eo_policy" | "ce_record";
+export type ExpiryWarningSource = "license";
 export type ExpiryWarning = {
   source: ExpiryWarningSource;
   sourceId: string;
@@ -47,14 +47,12 @@ export function expiryWarningFor(expiresAt: string, asOf: string | Date): Expiry
   return band;
 }
 
-export function dueExpiryWarnings(rows: { licenses: LicenseRow[]; eoPolicies: EoPolicyRow[]; ceRecords: CeRecordRow[] }, asOf: string | Date): ExpiryWarning[] {
+export function dueExpiryWarnings(rows: { licenses: LicenseRow[] }, asOf: string | Date): ExpiryWarning[] {
   const warnings: ExpiryWarning[] = [];
   const push = (base: Omit<ExpiryWarning, "days" | "daysLeft">) => {
     const days = expiryWarningFor(base.expiresAt, asOf);
     if (days) warnings.push({ ...base, days, daysLeft: daysUntilExpiry(base.expiresAt, asOf) });
   };
   for (const row of rows.licenses) push({ source: "license", sourceId: row.id, label: `${row.state} licence`, state: row.state, expiresAt: row.expires_at });
-  for (const row of rows.eoPolicies) push({ source: "eo_policy", sourceId: row.id, label: `E&O policy ${row.policy_number}`, expiresAt: row.expires_at });
-  for (const row of rows.ceRecords) push({ source: "ce_record", sourceId: row.id, label: `${row.state} continuing education`, state: row.state, expiresAt: row.deadline });
   return warnings.sort((a, b) => a.daysLeft - b.daysLeft || a.label.localeCompare(b.label));
 }

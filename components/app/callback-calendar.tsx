@@ -22,6 +22,9 @@ import { insideWindow, hourLabel, STATE_NAMES, windowSummary, type CallbackWindo
 import type { CallbackView } from "@/lib/callbacks/service";
 import type { CallbackRefusalNotice } from "@/lib/callbacks/refusals";
 import type { NearestLegalTime } from "@/lib/callbacks/nearest";
+import { Chip, DayTimeline, PlanColumn, type ChipTone } from "@/components/app/callbacks/day-plan";
+import { PersonHistory } from "@/components/app/callbacks/person-history";
+import { dayTitle, durationShort, localParts, longTime, shiftDay, shortTime, zoneAbbreviation, zonedToUtc } from "@/components/app/callbacks/time";
 
 /**
  * Callbacks (p-app-callbacks): what is overdue, what is due today, what is coming, and one card to
@@ -37,60 +40,8 @@ const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
 const OPEN_STATUSES = new Set(["scheduled", "due", "missed"]);
 const THIRTY_DAYS = 30 * 86_400_000;
 
-type ChipTone = "neutral" | "success" | "warning" | "error" | "accent";
 type Viewer = { userId: string; role: string };
 type Scope = "mine" | "all";
-
-function localParts(utc: string | Date, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(utc));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour === "24" ? "00" : values.hour}:${values.minute}` };
-}
-
-/** "11:00 am EDT" — the time as a person says it, with the zone it is in. */
-function shortTime(utc: string | Date, timezone: string, withZone = true) {
-  const text = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit", ...(withZone ? { timeZoneName: "short" } : {}) }).format(new Date(utc));
-  return text.replace(" AM", " am").replace(" PM", " pm");
-}
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-// A fixed month list: some browsers' locale data spells September "Sept", and the boards say "Sep".
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "Thu 25 Sep · 2:30 pm MST" */
-function longTime(utc: string | Date, timezone: string) {
-  const { date } = localParts(utc, timezone);
-  const [y, m, d] = date.split("-").map(Number);
-  const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return `${weekday} ${d} ${MONTHS[m - 1]} · ${shortTime(utc, timezone)}`;
-}
-
-function zoneAbbreviation(timezone: string, at: Date = new Date()) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "short" }).formatToParts(at).find((part) => part.type === "timeZoneName")?.value ?? timezone;
-}
-
-/** The instant a customer-local "YYYY-MM-DDTHH:mm" names in `timezone` (DST-safe to the minute). */
-function zonedToUtc(local: string, timezone: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
-  if (!match) return null;
-  const [, y, mo, d, h, mi] = match.map(Number);
-  let guess = Date.UTC(y, mo - 1, d, h, mi);
-  for (let i = 0; i < 2; i += 1) {
-    const seen = localParts(new Date(guess), timezone);
-    const [sy, smo, sd] = seen.date.split("-").map(Number);
-    const [sh, smi] = seen.time.split(":").map(Number);
-    guess -= Date.UTC(sy, smo - 1, sd, sh, smi) - Date.UTC(y, mo - 1, d, h, mi);
-  }
-  return new Date(guess);
-}
-
-function durationShort(minutes: number) {
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m`;
-  const days = Math.floor(hours / 24);
-  return days === 1 ? "1 day" : `${days} days`;
-}
 
 /** Missed once, whatever happened after: a rebooked missed callback still counts as missed. */
 function wasMissed(callback: CallbackView) {
@@ -110,10 +61,6 @@ function rowStatus(callback: CallbackView, now: number, callWindow: CallbackWind
     if (callWindow.effective.end * 60 - (h * 60 + m) <= 90) return { label: `Window closes ${hourLabel(callWindow.effective.end)}`, tone: "warning" };
   }
   return { label: "Scheduled", tone: "neutral" };
-}
-
-function Chip({ tone, children, dot = true }: { tone: ChipTone; children: React.ReactNode; dot?: boolean }) {
-  return <span className={`portal-status-chip is-${tone}`}>{dot && <span aria-hidden="true" />}{children}</span>;
 }
 
 const SHOW_CALLBACK_DEMO = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEMO_CALLBACKS === "true";
@@ -177,7 +124,8 @@ function CallbackTableRow({ compact, rowHeight, ...props }: CallbackRowProps & {
   const { status, due, agent, actions } = callbackRow(callback, props);
   return (
     // One line per cell and one shared height for every row, so every page reads the same.
-    <tr className={cn("m-row", (selected || selection.isSelected(callback.id)) && "bg-[var(--primary-soft)]")} style={{ height: rowHeight }}>
+    // A click anywhere but a control opens the person panel (Callbacks C, 2026-10-25).
+    <tr className={cn("m-row cursor-pointer", (selected || selection.isSelected(callback.id)) && "bg-[var(--primary-soft)]")} style={{ height: rowHeight }} onClick={(event) => { if (!(event.target as HTMLElement).closest("a, button, input, label")) props.onReschedule(); }}>
       <td className={st.td}><RowCheckbox selection={selection} id={callback.id} label={`Select ${callback.customerName}`} /></td>
       <td className={cn(st.td, "whitespace-nowrap")}>
         {callback.isDemo
@@ -305,8 +253,9 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<{ id: string; date: string; time: string } | null>(null);
   const [nearest, setNearest] = useState<{ id: string; local: string; value: NearestLegalTime | null } | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  // Callbacks C (2026-10-25): the day plan first; the full table is the List view.
+  const [view, setView] = useState<"day" | "list">("day");
+  const [planDay, setPlanDay] = useState("");
   const [demoPreview, setDemoPreview] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const selectedIdRef = useRef<string | null>(null);
@@ -410,8 +359,8 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     selectedIdRef.current = callback.id;
     setSelectedId(callback.id);
     setPanelOpen(true);
-    setHistoryOpen(false);
     setDraft(null);
+    void loadHistory(callback);
   }
 
   /** "Use that": the suggestion goes into the picker. The agent still books it. */
@@ -439,15 +388,13 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     await load();
   }
 
-  async function openHistory() {
-    if (!selected || selected.isDemo) { setHistoryOpen((value) => !value); return; }
-    if (historyOpen) { setHistoryOpen(false); return; }
-    setHistoryOpen(true); setHistoryLoading(true);
-    const response = await fetch(`/api/app/callbacks?callback_id=${encodeURIComponent(selected.id)}&include_history=true`, { cache: "no-store" });
-    const body = await response.json().catch(() => null);
-    const detail = response.ok ? (body?.callbacks ?? [])[0] as CallbackView | undefined : undefined;
+  /** The callback's own history, for the person panel when the lead record cannot be read. */
+  async function loadHistory(callback: CallbackView) {
+    if (callback.isDemo) return;
+    const response = await fetch(`/api/app/callbacks?callback_id=${encodeURIComponent(callback.id)}&include_history=true`, { cache: "no-store" }).catch(() => null);
+    const body = response ? await response.json().catch(() => null) : null;
+    const detail = response?.ok ? (body?.callbacks ?? [])[0] as CallbackView | undefined : undefined;
     if (detail) setCallbacks((items) => items.map((item) => item.id === detail.id ? { ...item, history: detail.history } : item));
-    setHistoryLoading(false);
   }
 
   // The quick "when" filter and the date pick the rows; the search was applied upstream (`visible`).
@@ -554,32 +501,57 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     </div>
   );
 
-  // The panel's text buttons get a 36px target on a touch screen (below lg the panel is a sheet).
+  // The panel's text buttons get a 36px target on a touch screen (below xl the panel is a sheet).
   const moreTarget = wide ? undefined : "min-h-9";
-  const bookingPanel = (
-    // Split beside the table (DetailPanel): it stretches to the table's height, so the two end on the
-    // same line; long content scrolls inside, and "Book the callback" stays in the footer.
+  const isSettled = (callback: CallbackView) => !OPEN_STATUSES.has(callback.status);
+  const stateOf = (callback: CallbackView) => (isSettled(callback) ? settledLabel(callback) : rowStatus(callback, now, callback.state ? windows[callback.state] : undefined));
+  const callHrefOf = (callback: CallbackView) => (!isSettled(callback) && (callback.isOverdue || callback.isDueToday) ? (callback.isDemo ? "/app/dialer" : `/app/dialer?lead=${encodeURIComponent(callback.leadId)}`) : null);
+  const selectedCall = selected ? callHrefOf(selected) : null;
+  const fact = (label: string, value: React.ReactNode) => (
+    <div className="min-w-0"><dt className="text-xs font-semibold text-muted-foreground">{label}</dt><dd className="m-0 mt-0.5 text-sm break-words text-[var(--ink)]">{value}</dd></div>
+  );
+  const sectionTitle = "m-0 text-xs font-semibold text-muted-foreground";
+
+  // Callbacks C person panel (owner ask 2026-10-25): click anyone and everything about them is on the
+  // right — when, how to reach them, Call now, moving the callback in their own time, and the whole
+  // conversation and history with them.
+  const personPanel = selected && (
     <DetailPanel
       mode="split"
-      title="Book a callback"
-      subtitle={selected ? <>
-        {selected.customerName}{stateName ? ` · ${stateName}` : ""}
+      splitFrom="xl"
+      title={selected.customerName}
+      subtitle={<>
+        {[selected.productName, stateName].filter(Boolean).join(" · ")}
         {!selected.isDemo && <> · <Link className="font-semibold text-[var(--accent-ink)]" href={`/app/leads/${selected.leadId}`}>Open lead <ExternalLink className="inline size-3.5" aria-hidden="true" /></Link></>}
-      </> : undefined}
+      </>}
+      status={<Chip tone={stateOf(selected).tone}>{stateOf(selected).label}</Chip>}
       onClose={() => setPanelOpen(false)}
-      bodyClassName="flex flex-col"
-      footer={selected ? <Button type="button" className="w-full" disabled={!canBook} onClick={() => void act("reschedule")}>{saving ? "Booking…" : "Book the callback"}</Button> : undefined}
+      bodyClassName="flex flex-col gap-5 p-4"
+      // Stays in view while the page scrolls; long content scrolls inside it.
+      className="xl:sticky xl:top-[calc(var(--top-bar-h)+16px)] xl:max-h-[calc(100dvh-var(--top-bar-h)-32px)] xl:bg-[color-mix(in_srgb,var(--color-card)_var(--glass-alpha),transparent)] xl:backdrop-blur-[16px]"
     >
-      {selected ? (
-        <section className="portal-callbacks-card m-0 border-0 shadow-none">
+      <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-3">
+        {fact("Their time", longTime(selected.scheduledAtUtc, selected.customerTimezone))}
+        {fact("Your time", shortTime(selected.scheduledAtUtc, yourZone))}
+        {fact("Phone", selected.phone ?? "—")}
+        {fact("Attempt", selected.attemptNumber)}
+        {fact("Source", selected.sourceName ?? "—")}
+        {fact("Agent", selected.releasedAt ? "Shared queue" : selected.assigneeName || "—")}
+      </dl>
+      {selectedCall && <Button asChild className="w-full"><Link href={selectedCall}>Call now</Link></Button>}
+      {selected.note && <div className="flex flex-col gap-1"><h3 className={sectionTitle}>Their note</h3><p className="m-0 text-sm text-[var(--body)]">{selected.note}</p></div>}
+
+      {!terminal && (
+        <section className="portal-callbacks-card m-0 flex flex-col gap-3 border-0 p-0 shadow-none" aria-label="Move the callback">
+          <h3 className={sectionTitle}>Move the callback</h3>
           <div className="portal-callbacks-local">
             <span>Their local time</span>
             <strong>{draftAt ? longTime(draftAt, selected.customerTimezone) : "Choose a date and time"}</strong>
             <small>{draftAt ? `${shortTime(draftAt, yourZone, false)} your time (${zoneAbbreviation(yourZone, draftAt)})` : " "}</small>
           </div>
           <div className="portal-callbacks-fields">
-            <label><span>Date</span><input type="date" value={draftDate} disabled={readOnly || selected.isDemo || terminal} onChange={(event) => setDraft({ id: selected.id, date: event.target.value, time: draftTime })} /></label>
-            <label><span>Time &mdash; their timezone</span><input type="time" value={draftTime} disabled={readOnly || selected.isDemo || terminal} onChange={(event) => setDraft({ id: selected.id, date: draftDate, time: event.target.value })} /></label>
+            <label><span>Date</span><input type="date" value={draftDate} disabled={readOnly || selected.isDemo} onChange={(event) => setDraft({ id: selected.id, date: event.target.value, time: draftTime })} /></label>
+            <label><span>Time &mdash; their timezone</span><input type="time" value={draftTime} disabled={readOnly || selected.isDemo} onChange={(event) => setDraft({ id: selected.id, date: draftDate, time: event.target.value })} /></label>
           </div>
           <div className="portal-callbacks-checks">
             <span>
@@ -600,30 +572,65 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
               {inFuture === null ? <Chip tone="neutral">Choose a time</Chip> : inFuture ? <Chip tone="success">In the future</Chip> : <Chip tone="error">In the past</Chip>}
             </span>
           </div>
-          {!terminal && !selected.isDemo && !readOnly && (
-            <div className="portal-callbacks-card-more">
-              <button type="button" className={moreTarget} disabled={saving} onClick={() => void act("complete")} title="Records it as kept by hand. Where the lead goes next is the call's outcome, not this button.">Mark done</button>
-              <button type="button" className={moreTarget} disabled={saving} onClick={() => void act("cancel")}>Cancel callback</button>
-              <button type="button" className={moreTarget} aria-expanded={historyOpen} onClick={() => void openHistory()}>History</button>
-            </div>
-          )}
-          {historyOpen && (
-            historyLoading ? <p className="portal-callbacks-history-note" role="status">Loading history…</p>
-              : selected.history.length === 0 ? <p className="portal-callbacks-history-note">No history recorded yet.</p>
-              : <ol className="portal-callbacks-history">{[...selected.history].reverse().map((entry) => <li key={entry.id}><strong>{longTime(entry.createdAt, yourZone)}</strong><span>{entry.action.replaceAll("_", " ")}{entry.via === "manual" ? " by hand" : entry.via === "call" ? " on the call" : ""} · {entry.actorName}</span>{entry.note && <small>{entry.note}</small>}</li>)}</ol>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" disabled={!canBook} onClick={() => void act("reschedule")}>{saving ? "Booking…" : "Book the new time"}</Button>
+            {!selected.isDemo && !readOnly && (
+              <span className="portal-callbacks-card-more m-0 border-0 p-0">
+                <button type="button" className={moreTarget} disabled={saving} onClick={() => void act("complete")} title="Records it as kept by hand. Where the lead goes next is the call's outcome, not this button.">Mark done</button>
+                <button type="button" className={moreTarget} disabled={saving} onClick={() => void act("cancel")}>Cancel callback</button>
+              </span>
+            )}
+          </div>
         </section>
-      ) : (
-        <p className="m-0 px-4 py-6 text-sm text-muted-foreground">Pick Reschedule on a callback to book it.</p>
       )}
+
+      <section className="flex flex-col gap-2" aria-label="Conversation and history">
+        <h3 className={sectionTitle}>Conversation &amp; history</h3>
+        <PersonHistory key={selected.id} callback={selected} yourZone={yourZone} />
+      </section>
     </DetailPanel>
+  );
+
+  const viewToggle = (
+    <div role="group" aria-label="View" className="inline-flex gap-1">
+      <Button type="button" size={smallSize} variant={view === "day" ? "default" : "outline"} aria-pressed={view === "day"} onClick={() => setView("day")}>Day</Button>
+      <Button type="button" size={smallSize} variant={view === "list" ? "default" : "outline"} aria-pressed={view === "list"} onClick={() => setView("list")}>List</Button>
+    </div>
+  );
+
+  // The day plan: today in the agent's clock, its callbacks by hour, and three numbered steps.
+  const today = localParts(new Date(now), yourZone).date;
+  const shownDay = planDay || today;
+  const onDay = (item: CallbackView) => localParts(item.scheduledAtUtc, yourZone).date;
+  const dayItems = visible.filter((item) => item.status !== "cancelled" && onDay(item) === shownDay).sort((a, b) => a.scheduledAtUtc.localeCompare(b.scheduledAtUtc));
+  const todayItems = visible.filter((item) => item.status !== "cancelled" && onDay(item) === today);
+  const todayLeft = todayItems.filter((item) => OPEN_STATUSES.has(item.status)).length;
+  const earlier = overdue.filter((item) => onDay(item) < today);
+  const planColumn = (
+    <PlanColumn
+      className={panelOpen && selected ? "xl:hidden 2xl:flex" : undefined}
+      title={`Today, ${dayTitle(today)}`}
+      left={todayLeft}
+      total={todayItems.length}
+      steps={[
+        { label: "Call the late ones", count: overdue.length, tone: "error", onClick: overdue[0] ? () => choose(overdue[0]) : undefined },
+        { label: "Work today in time order", count: dueToday.length, tone: "accent", onClick: dueToday[0] ? () => { setPlanDay(""); choose(dueToday[0]); } : undefined },
+        { label: "Fix a refused booking", count: visibleRefusals.length, tone: "warning", onClick: () => document.getElementById("callback-refusals")?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+      ]}
+      earlier={earlier.slice(0, 3)}
+      moreEarlier={Math.max(0, earlier.length - 3)}
+      onSelect={choose}
+      onMoreEarlier={() => { setView("list"); setWhen("overdue"); setListPage(1); }}
+      callHrefOf={callHrefOf}
+      stateOf={stateOf}
+    />
   );
 
   return (
     <main className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Callbacks"
-        actions={<div className="flex flex-wrap items-center gap-2">{scopeToggle}<Button variant="outline" asChild><Link href="/app/dialer">Open the queue</Link></Button></div>}
+        actions={<div className="flex flex-wrap items-center gap-2">{viewToggle}{scopeToggle}<Button variant="outline" asChild><Link href="/app/dialer">Open the queue</Link></Button></div>}
       />
       {demoPreview && <div role="status" className="portal-callbacks-notice">Demo preview — sample callbacks, read-only and not stored.</div>}
       {readOnly && <div role="status" className="portal-callbacks-notice">Account suspended — callbacks are read-only.</div>}
@@ -631,7 +638,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
 
 
       {/* A refused booking is the one note worth keeping on the page: it carries the next legal time. */}
-      {visibleRefusals.map((refusal) => {
+      {visibleRefusals.length > 0 && <div id="callback-refusals" className="flex scroll-mt-24 flex-col gap-3">{visibleRefusals.map((refusal) => {
         const asked = refusal.requestedLocal ? zonedToUtc(refusal.requestedLocal, refusal.timezone) : null;
         const openOne = callbacks.find((item) => item.leadId === refusal.leadId && OPEN_STATUSES.has(item.status) && !item.isDemo);
         return (
@@ -647,9 +654,28 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
             </div>
           </div>
         );
-      })}
+      })}</div>}
 
-      {/* The table takes the full width; "Book a callback" splits it 70 / 30 with the booking panel. */}
+      {view === "day" ? (
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+          {planColumn}
+          <DayTimeline
+            day={shownDay}
+            today={today}
+            yourZone={yourZone}
+            items={dayItems}
+            stateOf={stateOf}
+            settledOf={isSettled}
+            selectedId={panelOpen ? selectedId : null}
+            onSelect={choose}
+            onDay={(delta) => setPlanDay(shiftDay(shownDay, delta))}
+            onToday={() => setPlanDay("")}
+            callHrefOf={callHrefOf}
+          />
+          {panelOpen && personPanel}
+        </div>
+      ) : (
+      // List: the full table; a row opens the person panel beside it (70 / 30).
       <div ref={setFillNode} className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:[height:var(--fill-h)]" style={{ "--fill-h": `${fillHeight}px` } as React.CSSProperties}>
         <TableCard
           className="flex min-h-0 min-w-0 flex-1 flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto"
@@ -736,8 +762,9 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
             )}
           </div>
         </TableCard>
-        {panelOpen && bookingPanel}
+        {panelOpen && personPanel}
       </div>
+      )}
     </main>
   );
 }

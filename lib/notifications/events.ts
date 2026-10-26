@@ -61,6 +61,9 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
   { key: "mentioned", label: "You were mentioned", description: "Someone named you in a lead note or a partner chat.", group: "Acquisition", owned_by_module: "LA-1.21", defaults: on(true, false, true), supports_digest: true, is_protected: false, required_feature: null, kinds: ["lead_note_mention", "partner_message_mention"], email: "outbox" },
   { key: "partner_message", label: "Partner message", description: "A partner wrote in the shared chat.", group: "Acquisition", owned_by_module: "LA-1.16", defaults: on(true, false, true), supports_digest: true, is_protected: false, required_feature: "inbound_transfers", roles: ["owner", "producer", "assistant", "bookkeeper"], kinds: ["partner_message"], email: "outbox" },
   // ── Money ────────────────────────────────────────────────────────────────────────────────────
+  // LA-2.19: a vendor's return window closes within three days with money still claimable. Written daily by
+  // emit_return_window_alerts (20261026100000) to the owner and the bookkeeper — the roles Returns opens for.
+  { key: "return_window_closing", label: "Return window closing", description: "A vendor's return window closes soon and bad leads are still unclaimed.", group: "Money", owned_by_module: "LA-2.19", defaults: on(true, true), supports_digest: false, is_protected: false, required_feature: "true_cpa", roles: ["owner", "bookkeeper"], kinds: ["return_window_closing"], email: "outbox" },
   { key: "carrier_status_unmapped", label: "Carrier status needs mapping", description: "A carrier file used a policy status the layout does not know.", group: "Money", owned_by_module: "LA-4.6", defaults: on(false, true), supports_digest: true, is_protected: false, required_feature: "statement_ingestion", roles: ["owner", "bookkeeper"], kinds: [], email: "sender" },
   // ── Retention ────────────────────────────────────────────────────────────────────────────────
   { key: "servicing_failed", label: "Servicing request failed", description: "A billing or payment change for a client did not go through.", group: "Retention", owned_by_module: "LA-5.4", defaults: on(true, true), supports_digest: true, is_protected: false, required_feature: "payment_repair", kinds: ["servicing_failed"], email: "outbox" },
@@ -77,8 +80,8 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
   { key: "compliance_monthly", label: "Monthly compliance summary", description: "The month's consent, screening and complaint figures.", group: "Compliance", owned_by_module: "LA-6.7", defaults: on(false, true), supports_digest: false, is_protected: false, required_feature: "tcpa_checker", roles: OWNER, kinds: [], email: "sender" },
   // ── Account ──────────────────────────────────────────────────────────────────────────────────
   {
-    key: "credential_expiring", label: "E&O or licence expiring", description: "The agency's errors-and-omissions cover or a state licence is about to lapse.", group: "Account", owned_by_module: "LA-0.5",
-    defaults: on(true, true), supports_digest: false, is_protected: true, protected_reason: "Writing business uninsured or unlicensed.", required_feature: "appointment_vault", roles: OWNER, kinds: ["credential_expiring"], email: "outbox",
+    key: "credential_expiring", label: "Licence expiring", description: "A state licence the agency holds is about to lapse.", group: "Account", owned_by_module: "LA-0.5",
+    defaults: on(true, true), supports_digest: false, is_protected: true, protected_reason: "Writing business unlicensed.", required_feature: "appointment_vault", roles: OWNER, kinds: ["credential_expiring"], email: "outbox",
   },
   {
     key: "plan_payment_failed", label: "Payment failed on your plan", description: "Your Insurvas subscription payment did not go through.", group: "Account", owned_by_module: "LA-8.5",

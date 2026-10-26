@@ -14,8 +14,11 @@ import { configuredAppOrigin } from "@/lib/urls/origin";
 import type { BillingCycle } from "@/lib/money";
 import { completeCheckout } from "./complete";
 
-/** Where the owner goes once the plan is on: the walkthrough (Get set up), the plan's setup steps. */
-export const NO_PAYMENT_LANDING = "/app/setup";
+/**
+ * Where the owner goes once the plan is on: the dashboard, the same as a paid checkout (owner,
+ * 2026-10-26: not the upload-a-statement welcome step). /app/welcome stays reachable from Get set up.
+ */
+export const NO_PAYMENT_LANDING = "/app/dashboard";
 
 export async function completeWithoutPayment(
   tenantId: string,

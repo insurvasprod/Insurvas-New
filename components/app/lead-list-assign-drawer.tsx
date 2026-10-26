@@ -384,7 +384,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
               {capacitySkips && (
                 // User decision: capacity is respected, with no override from here.
                 <p className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
-                  Agents at capacity get no more. <Link href="/app/assignments" className="font-semibold text-inherit underline underline-offset-2">Raise capacity on Lead assignment</Link> to assign more.
+                  Agents at capacity get no more. <Link href="/app/assignments" className="font-semibold text-inherit underline underline-offset-2">Raise capacity on Lead routing</Link> to assign more.
                 </p>
               )}
               {lapsing.length > 0 && (

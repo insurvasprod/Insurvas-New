@@ -1,16 +1,16 @@
 "use client";
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronRight } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { InfoTip } from "@/components/ui/info-tip";
+import { TableCard } from "@/components/ui/table-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { TableCard } from "@/components/ui/table-card";
 import { KeyValues, st } from "@/components/app/settings/primitives";
 import { ImportStepper } from "@/components/app/import-stepper";
 import { normalizeImportState, parseCsv } from "@/lib/agentTemplates/csv";
@@ -87,7 +87,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   const [dnc, setDnc] = useState<"exclude" | "suppress">("exclude");
   const [addSpend, setAddSpend] = useState(true);
   const [committing, setCommitting] = useState(false);
-  const [open, setOpen] = useState<ReviewBucket | null>(null);
+  const [rowsFor, setRowsFor] = useState<(typeof CHECKS)[number] | "no-state" | null>(null);
   const [listing, setListing] = useState<Partial<Record<ReviewBucket, number>>>({});
   const [noStateShown, setNoStateShown] = useState(0);
   const noState = plan.noState ?? [];
@@ -153,16 +153,28 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   }, [territory, parsed, plan.stateHeader, plan.rows]);
   const offTerritoryCents = offTerritory && perDialable !== null ? perDialable * offTerritory.rows : null;
 
-  function choiceFor(decision: Decision) {
-    if (decision === "existing") return existingLeads === "attach" ? "Add the campaign" : "Skip them";
-    if (decision === "infile") return duplicatesInFile === "first" ? "Keep the first" : "Skip every repeat";
-    if (decision === "dnc") return dnc === "exclude" ? "Leave them out" : "Import and suppress";
-    return null;
+  function openRows(check: (typeof CHECKS)[number]) {
+    setRowsFor(check);
+    setListing((current) => ({ ...current, [check.bucket]: current[check.bucket] ?? LIST_PAGE }));
   }
 
-  function viewList(bucket: ReviewBucket) {
-    setOpen(bucket);
-    setListing((current) => ({ ...current, [bucket]: current[bucket] ?? LIST_PAGE }));
+  function openNoState() {
+    setRowsFor("no-state");
+    setNoStateShown((shown) => shown || LIST_PAGE);
+  }
+
+  function noStateTable() {
+    if (!parsed) return <p className="m-0 text-xs text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>;
+    return <TableCard className="min-w-0 overflow-x-auto">
+      <table className={st.table}>
+        <thead><tr className={st.headRow}><th scope="col" className={st.th}>Row</th>{(parsed[0] ?? []).slice(0, 4).map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
+        <tbody>{noState.slice(0, noStateShown).map((rowNumber) => <tr key={rowNumber}>
+          <td className={cn(st.td, "tabular-nums")}>{rowNumber}</td>
+          {(parsed[0] ?? []).slice(0, 4).map((_, index) => <td key={index} className={cn(st.td, "whitespace-nowrap")}>{parsed[rowNumber - 1]?.[index] ?? ""}</td>)}
+        </tr>)}</tbody>
+      </table>
+      {noStateShown < noState.length && <Button type="button" variant="ghost" size="sm" className="m-2" onClick={() => setNoStateShown((shown) => shown + LIST_PAGE)}>Show {Math.min(LIST_PAGE, noState.length - noStateShown)} more</Button>}
+    </TableCard>;
   }
 
   async function commit() {
@@ -218,7 +230,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
     if (!numbers) {
       // A plan from before row numbers were recorded: its bounded sample is all there is.
       const samples = plan.samples[outcomeKey] ?? [];
-      return <div className="min-w-0 overflow-x-auto rounded-[8px] border border-[var(--border)] bg-[var(--surface)]">
+      return <TableCard className="min-w-0">
         <table className={st.table}>
           <thead><tr className={st.headRow}>{["Row", "Name", "Phone", "State", "Why"].map((head) => <th scope="col" key={head} className={st.th}>{head}</th>)}</tr></thead>
           <tbody>{samples.map((row) => <tr key={`${bucket}-${row.rowNumber}`}>
@@ -228,13 +240,13 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
           </tr>)}</tbody>
         </table>
         <p className="px-3 py-2 text-xs leading-[1.5] text-[var(--muted)]">Showing the first {samples.length} of {(counts[bucket] ?? 0).toLocaleString()}. Upload the file again to list every row.</p>
-      </div>;
+      </TableCard>;
     }
     if (!parsed) return <p className="text-sm text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>;
     const headers = parsed[0] ?? [];
     const shown = numbers.slice(0, listing[bucket] ?? LIST_PAGE);
     const withWhy = bucket === "unreadable" || bucket === "invalid_phone";
-    return <div className="min-w-0 rounded-[8px] border border-[var(--border)] bg-[var(--surface)]">
+    return <TableCard className="min-w-0">
       <div className="min-w-0 overflow-x-auto">
         <table className={st.table}>
           <thead><tr className={st.headRow}>
@@ -256,49 +268,63 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
         <span className="tabular-nums">Showing {shown.length.toLocaleString()} of {numbers.length.toLocaleString()} · read from the file in this tab</span>
         {shown.length < numbers.length && <Button type="button" variant="ghost" size="sm" onClick={() => setListing((current) => ({ ...current, [bucket]: (current[bucket] ?? LIST_PAGE) + LIST_PAGE }))}>Show {Math.min(LIST_PAGE, numbers.length - shown.length)} more</Button>}
       </div>
-    </div>;
+    </TableCard>;
   }
 
-  function decisionFieldset(decision: Decision, bucket: ReviewBucket) {
-    const radio = "mt-1 size-4 shrink-0 accent-[var(--primary)]";
-    const option = "flex cursor-pointer gap-2.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-3";
-    const title = "block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
-    const help = "block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
-    const legend = "mb-2 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-    if (decision === "dnc")
-      return <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-        <legend className={legend}>What should happen to do-not-call rows?</legend>
-        <label className={option}><input type="radio" className={radio} name={`dnc-${bucket}`} checked={dnc === "exclude"} onChange={() => setDnc("exclude")} />
-          <span><strong className={title}>Leave them out</strong><span className={help}>Do not import them at all. They stay on the vendor credit claim.</span></span></label>
-        <label className={option}><input type="radio" className={radio} name={`dnc-${bucket}`} checked={dnc === "suppress"} onChange={() => setDnc("suppress")} />
-          <span><strong className={title}>Import and suppress</strong><span className={help}>Keep the record and add the number to your do-not-call list permanently. It can never be dialed.</span></span></label>
-        {/* Said plainly, because the missing option is the one people look for. */}
-        <p className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)]">There is no option to dial these. This choice applies to both do-not-call checks.</p>
-      </fieldset>;
-    if (decision === "existing")
-      return <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-        <legend className={legend}>What should happen to these?</legend>
-        <label className={option}><input type="radio" className={radio} name="existing" checked={existingLeads === "attach"} onChange={() => setExistingLeads("attach")} />
-          <span><strong className={title}>Add this campaign to the person you already have</strong><span className={help}>Keeps one lead and records that this vendor also sold them, so the cost is attributed correctly. No duplicate record, and nobody already worked goes back in the dialer.</span></span></label>
-        <label className={option}><input type="radio" className={radio} name="existing" checked={existingLeads === "skip"} onChange={() => setExistingLeads("skip")} />
-          <span><strong className={title}>Skip them</strong><span className={help}>Ignore these rows. The cost of the rows you paid for will not be attributed anywhere.</span></span></label>
-      </fieldset>;
-    if (decision === "infile")
-      return <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-        <legend className={legend}>What should happen to these?</legend>
-        <label className={option}><input type="radio" className={radio} name="infile" checked={duplicatesInFile === "first"} onChange={() => setDuplicatesInFile("first")} />
-          <span><strong className={title}>Keep the first one</strong><span className={help}>Import one lead per number and drop the repeats.</span></span></label>
-        <label className={option}><input type="radio" className={radio} name="infile" checked={duplicatesInFile === "skip"} onChange={() => setDuplicatesInFile("skip")} />
-          <span><strong className={title}>Skip every repeat</strong><span className={help}>Same result for the repeats; kept as an explicit choice.</span></span></label>
-      </fieldset>;
-    return null;
+  /**
+   * A choice, inside the row it decides (2026-10-26, owner: "put it inside the line … less
+   * scrolling"): a two-option switch under the row's explanation, with one line saying what the
+   * chosen option does. Real radio inputs, so it reads and keys like the fieldset it replaced.
+   */
+  function choiceSwitch(decision: Exclude<Decision, null>) {
+    const options = {
+      existing: [
+        { value: "attach", label: "Add the campaign", help: "One lead, with this vendor recorded too, so the cost is attributed. Nobody already worked goes back in the dialer." },
+        { value: "skip", label: "Skip them", help: "Ignore these rows. Their cost is not attributed anywhere." },
+      ],
+      infile: [
+        { value: "first", label: "Keep the first", help: "One lead per number; the repeats are dropped." },
+        { value: "skip", label: "Skip every repeat", help: "Same result for the repeats, as an explicit choice." },
+      ],
+      // Said plainly, because the missing option is the one people look for.
+      dnc: [
+        { value: "exclude", label: "Leave them out", help: "Not imported. They stay on the vendor credit claim. There is no option to dial these." },
+        { value: "suppress", label: "Import and suppress", help: "Keep the record and add the number to your do-not-call list for good. There is no option to dial these." },
+      ],
+    }[decision];
+    const value = decision === "existing" ? existingLeads : decision === "infile" ? duplicatesInFile : dnc;
+    const pick = (next: string) => {
+      if (decision === "existing") setExistingLeads(next as typeof existingLeads);
+      else if (decision === "infile") setDuplicatesInFile(next as typeof duplicatesInFile);
+      else setDnc(next as typeof dnc);
+    };
+    const chosen = options.find((option) => option.value === value) ?? options[0];
+    return <fieldset className="m-0 mt-2 flex min-w-0 flex-col gap-1.5 border-0 p-0">
+      <legend className="sr-only">What to do with these rows</legend>
+      <span className="inline-flex w-fit rounded-full border border-[var(--border)] bg-[var(--surface-alt)] p-0.5">
+        {options.map((option) => <label key={option.value} className={cn(
+          "cursor-pointer rounded-full px-3 py-1 text-xs leading-[1.5] font-semibold whitespace-nowrap transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--ring-color)]",
+          value === option.value ? "bg-[var(--primary)] text-[var(--on-primary)]" : "text-[var(--muted)] hover:text-[var(--ink)]",
+        )}>
+          <input type="radio" className="sr-only" name={`choice-${decision}`} value={option.value} checked={value === option.value} onChange={() => pick(option.value)} />
+          {option.label}
+        </label>)}
+      </span>
+      <span className="text-xs leading-[1.5] text-[var(--body)]">{chosen.help}</span>
+    </fieldset>;
   }
 
   const description = [plan.fileName ?? "File name not recorded", plan.vendorName, plan.campaignName].filter(Boolean).join(" · ");
+  // 2026-10-26 redesign (canvas M2 · Vendors, "Import, steps 3–4"): the checks are a short list with
+  // their counts, each choice inside the row it decides; the cost and the one Import button sit in a
+  // column beside them; a check's rows open in a side panel instead of a wide table inside the list.
+  const found = checks.filter((check) => (counts[check.bucket] ?? 0) > 0);
+  const none = checks.filter((check) => (counts[check.bucket] ?? 0) === 0);
+  const card = "m-glass min-w-0 rounded-xl border border-border";
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     <PageHeader
-      title="Review before committing"
+      title="Import a list"
       description={description}
       actions={<Button type="button" variant="outline" onClick={() => router.push("/app/import")}>Start over</Button>}
     />
@@ -319,103 +345,55 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
     </Alert>}
 
     {/* LA-2.4-8: flagged before the commit, not discovered on the lead list afterwards. */}
-    {noState.length > 0 && <div className="flex min-w-0 flex-col gap-2">
-      <Alert tone="warning" action={<Button type="button" variant="ghost" size="sm" onClick={() => setNoStateShown((shown) => (shown ? 0 : LIST_PAGE))} aria-expanded={noStateShown !== 0}>{noStateShown ? "Hide rows" : "View rows"}</Button>}>
-        {noState.length.toLocaleString()} new {noState.length === 1 ? "lead has" : "leads have"} no state, so the dialer will not call {noState.length === 1 ? "it" : "them"} until one is added.
-      </Alert>
-      {noStateShown > 0 && (parsed
-        ? <div className="min-w-0 overflow-x-auto rounded-lg border border-border bg-card">
-            <table className={st.table}>
-              <thead><tr className={st.headRow}><th scope="col" className={st.th}>Row</th>{(parsed[0] ?? []).slice(0, 4).map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
-              <tbody>{noState.slice(0, noStateShown).map((rowNumber) => <tr key={rowNumber}>
-                <td className={cn(st.td, "tabular-nums")}>{rowNumber}</td>
-                {(parsed[0] ?? []).slice(0, 4).map((_, index) => <td key={index} className={cn(st.td, "whitespace-nowrap")}>{parsed[rowNumber - 1]?.[index] ?? ""}</td>)}
-              </tr>)}</tbody>
-            </table>
-            {noStateShown < noState.length && <Button type="button" variant="ghost" size="sm" className="m-2" onClick={() => setNoStateShown((shown) => shown + LIST_PAGE)}>Show {Math.min(LIST_PAGE, noState.length - noStateShown)} more</Button>}
-          </div>
-        : <p className="m-0 text-xs text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>)}
-    </div>}
+    {noState.length > 0 && <Alert tone="warning" action={<Button type="button" variant="ghost" size="sm" onClick={() => openNoState()}>View rows</Button>}>
+      {noState.length.toLocaleString()} new {noState.length === 1 ? "lead has" : "leads have"} no state, so the dialer will not call {noState.length === 1 ? "it" : "them"} until one is added.
+    </Alert>}
 
-    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-      <TableCard
-        className="min-w-0"
-        title="Validation & scrub"
-        action={accountedFor ? <StatusChip dot={false}>every row accounted for</StatusChip> : <StatusChip dot={false} tone="warning">rows do not add up</StatusChip>}
-      >
-        <table className={cn(st.table, "min-w-[520px]")}>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={st.th}>Check</th>
-              <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Rows</th>
-              <th scope="col" className={cn(st.th, "w-[120px] text-right")}><span className="sr-only">List</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {checks.map((check) => {
-              const count = counts[check.bucket] ?? 0;
-              const expanded = open === check.bucket;
-              const choice = count > 0 ? choiceFor(check.decision) : null;
-              return <Fragment key={check.bucket}>
-                <tr>
-                  <td className={st.td}>
-                    <span className="flex min-w-0 flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        aria-expanded={expanded}
-                        aria-controls={`check-${check.bucket}`}
-                        onClick={() => setOpen(expanded ? null : check.bucket)}
-                        className="inline-flex min-w-0 items-center gap-1.5 text-left text-sm tracking-[-0.02em] text-[var(--body)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-                      >
-                        <ChevronRight className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", expanded && "rotate-90")} aria-hidden />
-                        {check.label}
-                      </button>
-                      {choice && <StatusChip dot={false}>{choice}</StatusChip>}
-                    </span>
-                  </td>
-                  <td className={cn(st.td, "text-right tabular-nums")}>{count.toLocaleString()}</td>
-                  <td className={cn(st.td, "text-right")}>
-                    {count > 0
-                      ? <button type="button" onClick={() => (listing[check.bucket] && expanded ? setListing((current) => { const next = { ...current }; delete next[check.bucket]; return next; }) : viewList(check.bucket))} className="inline-flex items-center gap-1.5 text-sm font-semibold tracking-[-0.02em] whitespace-nowrap text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
-                          {listing[check.bucket] && expanded ? "Hide list" : "View list"}<ArrowRight className="size-4" aria-hidden />
-                        </button>
-                      : <span className="text-[var(--muted)]">None</span>}
-                  </td>
-                </tr>
-                {expanded && <tr id={`check-${check.bucket}`}>
-                  <td colSpan={3} className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-4">
-                    <div className="flex min-w-0 flex-col gap-3">
-                      <p className="text-xs leading-[1.5] text-[var(--muted)]">{check.blurb}</p>
-                      {count > 0 && decisionFieldset(check.decision, check.bucket)}
-                      {listing[check.bucket] && count > 0 && listTable(check.bucket, check.outcome)}
-                    </div>
-                  </td>
-                </tr>}
-              </Fragment>;
-            })}
-          </tbody>
-          <tfoot>
-            <tr className={st.headRow}>
-              <td className="border-t border-[var(--border-strong)] px-3 py-2.5 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">
-                {outcome.fresh.toLocaleString()} new · {outcome.added.toLocaleString()} added to existing · {outcome.leftOut.toLocaleString()} left out
-              </td>
-              <td className="border-t border-[var(--border-strong)] px-3 py-2.5 text-right text-sm font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">{plan.totalRows.toLocaleString()}</td>
-              <td className="border-t border-[var(--border-strong)] px-3 py-2.5" />
-            </tr>
-          </tfoot>
-        </table>
-      </TableCard>
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+      <section aria-labelledby="every-row" className={card}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3">
+          <h2 id="every-row" className="m-0 text-base font-semibold tracking-[-0.015em]">What we found</h2>
+          {accountedFor ? <StatusChip dot={false} tone="good">every row accounted for</StatusChip> : <StatusChip dot={false} tone="warning">rows do not add up</StatusChip>}
+        </div>
+        <ul className="m-0 list-none p-0">
+          {found.map((check) => {
+            const count = counts[check.bucket] ?? 0;
+            const share = plan.totalRows > 0 ? (count / plan.totalRows) * 100 : 0;
+            // One switch per decision: the do-not-call rows share one, on the first of them.
+            const decision = check.decision && found.find((item) => item.decision === check.decision) === check ? check.decision : null;
+            return <li key={check.bucket} className="flex flex-wrap items-start gap-x-4 gap-y-2 border-t border-[var(--border)] px-5 py-3.5">
+              <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", CHECK_DOT[check.bucket])} />
+              <span className="min-w-0 flex-1 basis-[240px]">
+                <strong className="block text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]">{check.label}</strong>
+                <span className="mt-0.5 block text-xs leading-[1.5] text-[var(--muted)]">{check.blurb}</span>
+                {decision && choiceSwitch(decision)}
+              </span>
+              <span className="w-14 text-right text-sm font-semibold tabular-nums text-[var(--ink)]">{count.toLocaleString()}</span>
+              <span className="hidden w-24 sm:block" aria-hidden>
+                <span className="block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={cn("block h-full rounded-full", CHECK_DOT[check.bucket])} style={{ width: `${Math.max(2, share)}%` }} /></span>
+              </span>
+              <Button type="button" size="sm" variant="outline" onClick={() => openRows(check)}>View rows</Button>
+            </li>;
+          })}
+        </ul>
+        {none.length > 0 && <p className="m-0 border-t border-[var(--border)] px-5 py-3 text-xs leading-[1.5] text-[var(--muted)]">
+          Also checked, none found: {none.map((check) => check.label).join(" · ")}.
+        </p>}
+        <p className="m-0 border-t border-[var(--border-strong)] px-5 py-3 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">
+          {outcome.fresh.toLocaleString()} new · {outcome.added.toLocaleString()} added to existing · {outcome.leftOut.toLocaleString()} left out <span className="font-normal text-[var(--muted)]">of {plan.totalRows.toLocaleString()} rows</span>
+        </p>
+      </section>
 
-      <div className="flex min-w-0 flex-col gap-4">
-        <section aria-labelledby="cost-allocation" className="min-w-0 rounded-lg border border-border bg-card p-4">
-          <h2 id="cost-allocation" className="mb-3 text-sm font-semibold">Cost allocation</h2>
+      <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)]">
+        <section aria-labelledby="cost-allocation" className={cn(card, "p-5")}>
+          <h2 id="cost-allocation" className="mb-3 text-base font-semibold tracking-[-0.015em]">Cost</h2>
           <KeyValues items={[
             { label: "Batch cost", value: plan.costCents === null ? "Not entered" : formatCents(plan.costCents) },
             { label: "Accepted leads", value: accepted.toLocaleString() },
             { label: "Cost per accepted", value: money(perAccepted) },
             {
               label: <>Effective per dialable<InfoTip className="ml-1" label="What effective per dialable means">
-                Batch cost ÷ rows that will be one of your leads and are not suppressed: new leads plus people you already have who get this campaign added. It moves with the choices in the table.
+                Batch cost ÷ rows that will be one of your leads and are not suppressed: new leads plus people you already have who get this campaign added. It moves with your choices.
               </InfoTip></>,
               value: money(perDialable),
             },
@@ -447,20 +425,47 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
           </label>
         </section>
 
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <p className="m-0 min-w-0 flex-1 text-xs leading-[1.5] text-[var(--muted)]">
-            {willImport === 0
-              ? "Nothing in this file will be imported with these choices."
-              : "Nothing has been written until you press this."}
-          </p>
-          <Button type="button" disabled={committing || willImport === 0} onClick={() => void commit()}>
+        <section aria-label="Import" className={cn(card, "flex flex-col gap-3 p-5")}>
+          <Button type="button" className="w-full" disabled={committing || willImport === 0} onClick={() => void commit()}>
             {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
           </Button>
-        </div>
+          <p className="m-0 text-center text-xs leading-[1.5] text-[var(--muted)]">
+            {willImport === 0 ? "Nothing in this file will be imported with these choices." : "Nothing has been written until you press this."}
+          </p>
+        </section>
       </div>
     </div>
+
+    {/* A check's rows, beside the page: the file's own columns are wide, and the list stays readable. */}
+    {rowsFor && <DetailPanel
+      mode="overlay"
+      title={rowsFor === "no-state" ? "New leads with no state" : rowsFor.label}
+      subtitle={rowsFor === "no-state" ? `${noState.length.toLocaleString()} rows` : `${(counts[rowsFor.bucket] ?? 0).toLocaleString()} rows`}
+      onClose={() => setRowsFor(null)}
+      className="lg:w-[min(960px,calc(100vw-120px))]"
+      bodyClassName="flex flex-col gap-4 p-5"
+    >
+      {rowsFor === "no-state"
+        ? noStateTable()
+        : <>
+            <p className="m-0 text-sm text-[var(--body)]">{rowsFor.blurb}</p>
+            {listTable(rowsFor.bucket, rowsFor.outcome)}
+          </>}
+    </DetailPanel>}
   </div>;
 }
+
+const CHECK_DOT: Record<ReviewBucket, string> = {
+  ready: "bg-[var(--primary)]",
+  duplicate_existing: "bg-[var(--warning)]",
+  duplicate_in_file: "bg-[var(--warning)]",
+  dnc_tenant: "bg-[var(--error)]",
+  dnc_registry: "bg-[var(--error)]",
+  dnc: "bg-[var(--error)]",
+  litigator: "bg-[var(--error)]",
+  invalid_phone: "bg-[var(--warning)]",
+  unreadable: "bg-[var(--border-strong)]",
+};
 
 /** A one-line alert: something to act on now, never an explanation. */
 function Alert({ tone, action, children }: { tone: "warning" | "error"; action?: ReactNode; children: ReactNode }) {

@@ -11,8 +11,9 @@
  * Settings › States & licences renders appointment-vault-settings.tsx instead; both share the
  * dialogs and the checkbox grid in appointment-vault-parts.tsx.
  *
- * 2026-10-06 redesign: appointments, licences, and CE with E&O cover are three tabs under the
- * strip; every readiness item stays listed above them, one line each.
+ * 2026-10-06 redesign: appointments, licences and carrier trainings are three tabs under the
+ * strip; every readiness item stays listed above them, one line each. (CE and E&O cover were
+ * removed from the platform 2026-10-26.)
  */
 
 import Link from "next/link";
@@ -33,21 +34,16 @@ import {
   Callout,
   Field,
   KeyValues,
-  SettingsMeter,
   control,
   st,
 } from "@/components/app/settings/primitives";
 import { ViewTabs } from "@/components/app/view-tabs";
 import {
   AppointmentGrid,
-  CeDialog,
-  EoDialog,
   FormFooter,
   LicenceDialog,
   RecordDialog,
   keyFor,
-  longDate,
-  money,
   plural,
   shortDate,
   stateName,
@@ -56,15 +52,13 @@ import {
 } from "@/components/app/appointment-vault-parts";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { US_REGIONS, US_STATES, regionOf } from "@/lib/appointments/constants";
-import { appointmentIsActiveAt, eoCoverState } from "@/lib/appointments/eligibility";
+import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
 import { SCHEMA_PENDING_MESSAGE } from "@/lib/appointments/pendingSchema";
 import {
   READINESS_WINDOW_DAYS,
   appointmentCellStatus,
   appointmentFootprint,
   cellDialogDefaults,
-  currentCeRecord,
-  currentEoPolicy,
   dayMonth,
   latestAppointmentByCell,
   licenceStatus,
@@ -79,8 +73,6 @@ import type {
   AppointmentRow,
   AppointmentStatus,
   CarrierTrainingRow,
-  CeRecordRow,
-  EoPolicyRow,
   LicenseRow,
 } from "@/lib/appointments/service-types";
 
@@ -89,19 +81,15 @@ type Vault = {
   tenantCarriers: Array<{ id: string; carrier_id: string; effective_from: string; is_active: boolean }>;
   appointments: AppointmentRow[];
   licenses: LicenseRow[];
-  eoPolicies: EoPolicyRow[];
-  ceRecords: CeRecordRow[];
   extendedFields?: boolean;
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }> | null;
+  carrierRequirements?: Array<{ carrier_id: string; contracted?: boolean }> | null;
   /** False until 20260924310000: no pending status, no expiry. */
   appointmentDetails?: boolean;
   /** Null until 20260924310100. */
   carrierTrainings?: CarrierTrainingRow[] | null;
-  /** Sixteen #4: the platform's E&O grace, the same number canWrite uses. */
-  eoGraceDays?: number;
 };
 
-type Dialog = null | "license" | "eo" | "ce" | "training" | { carrierId: string; state: string };
+type Dialog = null | "license" | "training" | { carrierId: string; state: string };
 
 type Tab = "appointments" | "licences" | "cover";
 
@@ -246,7 +234,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
       actions={
         isOwner ? (
           <Button asChild variant="outline">
-            <Link href="/app/settings#carrier-library">Connect a carrier</Link>
+            <Link href="/app/settings#carriers">Connect a carrier</Link>
           </Button>
         ) : undefined
       }
@@ -290,11 +278,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const licenceTotal = shownLicences.length + shownUnlicensed.length;
   const licencePageRows = paginate<LicenseRow | string>([...shownLicences, ...shownUnlicensed], licencePage, 10);
 
-  const eoPolicy = currentEoPolicy(vault.eoPolicies, today);
-  const eoDays = eoPolicy ? daysUntilExpiry(eoPolicy.expires_at, today) : null;
-  // Sixteen #4: in the grace after E&O expiry, new business can still be written — say so, in red, every visit.
-  const eoCover = eoCoverState(vault.eoPolicies, today, { graceDays: vault.eoGraceDays });
-  const ceRecord = currentCeRecord(vault.ceRecords, today);
   const outstanding = trainings ? outstandingTrainings(trainings) : null;
   const overdueTrainings = outstanding ? outstanding.filter((row) => row.due_on < today).length : 0;
   const cellDialog = dialog && typeof dialog === "object" ? dialog : null;
@@ -322,14 +305,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
       {header}
       {readOnlyReason && <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{readOnlyReason}</p>}
 
-      {/* Not dismissible, by decision: it stays until a renewal is entered (a backdated effective date closes the gap). */}
-      {eoCover.state === "grace" && eoCover.expiredOn && eoCover.graceEndsOn && (
-        <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
-          <strong className="font-semibold">E&amp;O cover expired {shortDate(eoCover.expiredOn)}.</strong>{" "}
-          New business can still be written until {shortDate(eoCover.graceEndsOn)}, then new applications stop. Your book, servicing and reports stay open. Enter the renewal under CE &amp; E&amp;O cover, with its real effective date, even if that is in the past.
-        </div>
-      )}
-
       {!canEdit && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-2.5 text-sm text-[var(--info-ink)]">
           View only. An owner with full access edits appointments and licences.
@@ -340,8 +315,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
         <StatTile label="Readiness" value={summary.label} valueTone={summary.tone === "error" ? "danger" : summary.tone === "warning" ? "warning" : "good"} footnote={`inside ${READINESS_WINDOW_DAYS} days`} />
         <StatTile label="Appointed states" value={appointedStates.size} footnote={plural(activeAppointments.length, "active appointment")} />
         <StatTile label="Licences" value={licenceRows.length} valueTone={unlicensedAppointedStates.length ? "danger" : undefined} footnote={unlicensedAppointedStates.length ? `${plural(unlicensedAppointedStates.length, "appointed state")} unlicensed` : expiringLicences ? `${expiringLicences} need attention` : "all current"} />
-        <StatTile label="E&O cover" value={eoPolicy ? (eoDays !== null && eoDays < 0 ? "Expired" : `${eoDays}d`) : "None"} valueTone={!eoPolicy || (eoDays !== null && eoDays < 0) ? "danger" : eoDays !== null && eoDays <= READINESS_WINDOW_DAYS ? "warning" : undefined} footnote={eoPolicy ? `until ${shortDate(eoPolicy.expires_at)}` : "no policy on file"} />
-        <StatTile label="CE credits" value={ceRecord ? `${ceRecord.credits_completed}/${ceRecord.credits_required}` : "—"} footnote={ceRecord ? `due ${shortDate(ceRecord.deadline)}` : "no cycle recorded"} />
       </StatStrip>
 
       {/* Every readiness item, one line each, in one block: a fifth blocker is never dropped to keep the page tidy. */}
@@ -370,7 +343,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
         tabs={[
           { key: "appointments", label: "Carrier appointments", count: activeAppointments.length },
           { key: "licences", label: "State licences", count: licenceRows.length },
-          { key: "cover", label: "CE & E&O cover" },
+          { key: "cover", label: "Carrier trainings" },
         ]}
       />
 
@@ -552,31 +525,12 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
       {tab === "cover" && (
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <TableCard
-            title="Continuing education"
-            description={ceRecord ? `${stateName(ceRecord.state)}, ${ceRecord.deadline >= today ? "current cycle" : "last recorded cycle"}` : undefined}
-            action={
-              canEdit ? (
-                <>
-                  <Button type="button" variant="outline" onClick={() => setDialog("training")}>Trainings</Button>
-                  <Button type="button" variant="outline" onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><Plus aria-hidden="true" />Add a cycle</>}</Button>
-                </>
-              ) : undefined
-            }
+            title="Carrier trainings"
+            action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("training")}>Trainings</Button> : undefined}
           >
             <div className="flex flex-col gap-4 border-t border-border px-4 py-4">
-              {!ceRecord && <p className={MUTED}>No continuing-education cycle recorded.</p>}
               <KeyValues
                 items={[
-                  ...(ceRecord
-                    ? [
-                        { label: "Credits earned", value: `${ceRecord.credits_completed} of ${ceRecord.credits_required}` },
-                        { label: "Deadline", value: shortDate(ceRecord.deadline), tone: ceRecord.deadline < today ? ("error" as const) : undefined },
-                        {
-                          label: "Ethics credits",
-                          value: ceRecord.ethics_required !== null && ceRecord.ethics_required !== undefined ? `${ceRecord.ethics_completed ?? 0} of ${ceRecord.ethics_required}` : "Not recorded",
-                        },
-                      ]
-                    : []),
                   {
                     label: "Carrier-specific",
                     value: outstanding === null ? "Not recorded" : `${outstanding.length} outstanding`,
@@ -584,41 +538,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                   },
                 ]}
               />
-              {ceRecord && (
-                <SettingsMeter
-                  value={ceRecord.credits_completed}
-                  max={ceRecord.credits_required}
-                  tone={ceRecord.credits_required > 0 && ceRecord.credits_completed >= ceRecord.credits_required ? "success" : "warning"}
-                  ariaLabel={`${ceRecord.credits_completed} of ${ceRecord.credits_required} credits`}
-                  caption={`${ceRecord.credits_completed} of ${ceRecord.credits_required} credits`}
-                />
-              )}
-            </div>
-          </TableCard>
-
-          <TableCard
-            title="Errors & omissions cover"
-            action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("eo")}>{eoPolicy ? "Edit" : <><Plus aria-hidden="true" />Add a policy</>}</Button> : undefined}
-          >
-            <div className="border-t border-border px-4 py-4">
-              {eoPolicy ? (
-                <KeyValues
-                  items={[
-                    { label: "Carrier", value: eoPolicy.carrier },
-                    { label: "Policy", value: eoPolicy.policy_number },
-                    { label: "Per claim", value: money(eoPolicy.per_claim_cents) },
-                    { label: "Aggregate", value: money(eoPolicy.aggregate_cents) },
-                    { label: "Expires", value: longDate(eoPolicy.expires_at) },
-                    {
-                      label: "Days left",
-                      value: eoDays !== null && eoDays < 0 ? "Expired" : String(eoDays),
-                      tone: eoDays !== null && eoDays < 0 ? "error" : eoDays !== null && eoDays <= READINESS_WINDOW_DAYS ? "warning" : undefined,
-                    },
-                  ]}
-                />
-              ) : (
-                <p className={MUTED}>No E&amp;O policy on file.</p>
-              )}
             </div>
           </TableCard>
         </div>
@@ -634,28 +553,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
               extended={extended}
               saving={saving === "license"}
               onSave={async (payload) => save("/api/app/appointment-vault/licenses", payload, "Licence saved", "license")}
-            />
-          )}
-          {dialog === "eo" && (
-            <EoDialog
-              open
-              onOpenChange={(open) => setDialog(open ? "eo" : null)}
-              policies={vault.eoPolicies}
-              current={eoPolicy}
-              extended={extended}
-              saving={saving === "eo"}
-              onSave={async (payload) => save("/api/app/appointment-vault/eo-policies", payload, "E&O policy saved", "eo")}
-            />
-          )}
-          {dialog === "ce" && (
-            <CeDialog
-              open
-              onOpenChange={(open) => setDialog(open ? "ce" : null)}
-              records={vault.ceRecords}
-              current={ceRecord}
-              extended={extended}
-              saving={saving === "ce"}
-              onSave={async (payload) => save("/api/app/appointment-vault/ce-records", payload, "CE record saved", "ce")}
             />
           )}
           {dialog === "training" && (
@@ -829,7 +726,7 @@ function TrainingDialog({
         if (!next) onClose();
       }}
       title="Carrier-specific trainings"
-      description="Product and AML trainings a carrier requires before you sell for it, separate from the state's CE hours. Each stays outstanding until you mark it complete."
+      description="Product and AML trainings a carrier requires before you sell for it, Each stays outstanding until you mark it complete."
     >
       {!available && (
         <Callout tone="warning" title="Not recordable yet">

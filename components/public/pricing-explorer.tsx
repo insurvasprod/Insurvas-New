@@ -22,7 +22,7 @@ export const FEATURE_DESCRIPTIONS: Record<string, string> = {
   book_of_business: "Every policy in your carriers' files plus any you enter by hand, in one list with its premium, money and history.",
   statement_ingestion: "Bring in carrier policy and commission files however they arrive, and match each policy to its client and agent.",
   commission_ledger: "Every commission line, with the policy or statement behind each amount.",
-  appointment_vault: "Carrier appointments, licences, E&O cover and continuing education, kept in one place.",
+  appointment_vault: "Carrier appointments and licences, kept in one place.",
   discrepancy_report: "What each carrier paid against what your contract says it owes, with a dispute letter for each gap.",
   // Acquisition
   inbound_transfers: "See, screen and claim live transfers as they arrive, with waiting calls and team status on one floor view.",
