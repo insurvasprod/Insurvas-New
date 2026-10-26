@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DisputeLetterPrint, DisputeLetterRecipient } from "@/components/app/dispute-letter-actions";
@@ -10,7 +10,6 @@ import { BusinessIdentityMissingError } from "@/lib/agencyProfile/identity";
 import { BUSINESS_FIELD_ANCHORS } from "@/lib/agencyProfile/requirements";
 import Link from "next/link";
 import { statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 export const metadata: Metadata = { title: "Commission dispute" };
 
@@ -31,7 +30,7 @@ export const metadata: Metadata = { title: "Commission dispute" };
 export default async function DisputeLetterPage({ searchParams }: { searchParams: Promise<{ carrier?: string; ids?: string }> }) {
   const guard = await guardPage("discrepancy_report");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Discrepancies" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
-  if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Discrepancies" detail="Dispute letters are prepared by the account owner or a bookkeeper." />;
+  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Discrepancies" detail="Dispute letters are prepared by the account owner or a bookkeeper." />;
 
   const { carrier = "", ids = "" } = await searchParams;
   let letter: Awaited<ReturnType<typeof getDisputeLetter>>;

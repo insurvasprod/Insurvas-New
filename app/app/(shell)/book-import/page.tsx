@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { BookImport } from "@/components/app/book-import";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -10,7 +10,6 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { BOOK_IMPORT_PENDING_MESSAGE, loadBookImport } from "@/lib/ingestion/bookImport";
 import { bookAdvanceAtRisk } from "@/lib/ingestion/commissionLedgerStore";
 import { moneyOrUnknown } from "@/lib/ingestion/policyCurrent";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * Book of Business › Import your book (LA-4.10, Notion sprint): the latest policy file from each
@@ -20,7 +19,7 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 export default async function BookImportPage() {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Import your book" description="Bring in your existing book from each carrier's latest policy file." />;
-  if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Import your book" detail="The book is imported by the account owner or a bookkeeper." />;
+  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Import your book" detail="The book is imported by the account owner or a bookkeeper." />;
   const [view, advance] = await Promise.all([loadBookImport(guard.context.tenantId), bookAdvanceAtRisk(guard.context.tenantId).catch(() => ({ cents: null, policies: 0, unknown: 0 }))]);
 
   return (

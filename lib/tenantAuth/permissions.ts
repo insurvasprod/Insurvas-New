@@ -1,4 +1,4 @@
-import { isAgencyTitle, type MemberRole, type TenantRole } from "./roles.ts";
+import { isAgencyTitle, TENANT_ROLES, type MemberRole, type TenantRole } from "./roles.ts";
 
 /**
  * Tenant-plane capabilities. These are product permissions, not plan permissions: the entitlement
@@ -89,6 +89,16 @@ const ROLE_PERMISSIONS: Record<MemberRole, readonly TenantPermission[]> = {
 
 export function hasTenantPermission(role: MemberRole, permission: TenantPermission): boolean {
   return (ROLE_PERMISSIONS[role] ?? []).includes(permission);
+}
+
+/** The base roles that carry a permission: what a permission gate admits (custom team access acts as one of them). */
+export function rolesWithPermission(permission: TenantPermission): TenantRole[] {
+  return TENANT_ROLES.filter((role) => hasTenantPermission(role, permission));
+}
+
+/** Custom team access: any role the member holds carries the permission (main role first, then extras). */
+export function anyRoleHasPermission(roles: readonly TenantRole[], permission: TenantPermission): boolean {
+  return roles.some((role) => hasTenantPermission(role, permission));
 }
 
 export function roleCanViewCommission(

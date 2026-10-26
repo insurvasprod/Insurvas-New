@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementFileButton, StatementManualEntry } from "@/components/app/statement-manual-entry";
@@ -11,7 +11,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, isRecordId, statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
 import { getStatementDetail } from "@/lib/ledger/statementService";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * One carrier statement, and the review that posts its lines. The header says where the file came
@@ -30,7 +29,7 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Statements" description="Import carrier commission statements, match each line to a policy, and post accepted lines to the commission ledger." />;
   }
-  if (!hasTenantPermission(guard.role, "statements.view")) {
+  if (!actAsPagePermission(guard, "statements.view")) {
     return <RoleGateNotice featureLabel="Statements" detail="Carrier statements are imported and reviewed by the account owner or a bookkeeper." />;
   }
 

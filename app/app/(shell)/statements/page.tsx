@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -17,7 +17,6 @@ import {
   type StatementMapping,
 } from "@/lib/ledger/statementConstants";
 import { getSavedStatementMappings, listStatementCarriers, listStatements, listUnmatchedLines } from "@/lib/ledger/statementService";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * Book of Business › Statements: every carrier statement imported, newest first, with the import.
@@ -44,7 +43,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
       />
     );
   }
-  if (!hasTenantPermission(guard.role, "statements.view")) {
+  if (!actAsPagePermission(guard, "statements.view")) {
     return <RoleGateNotice featureLabel="Statements" detail="Carrier statements are imported and reviewed by the account owner or a bookkeeper. Accepted lines for your policies appear on the commission ledger." />;
   }
 

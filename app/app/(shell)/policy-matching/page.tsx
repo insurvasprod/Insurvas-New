@@ -1,11 +1,10 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyMatchingWorkspace } from "@/components/app/policy-matching-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { AI_REVIEW_PENDING, loadMatching, MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * Book of Business › Policy matching (LA-4.8, Notion sprint): which client and which agent each
@@ -15,7 +14,7 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 export default async function PolicyMatchingPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Policy matching" description="Link every carrier policy to the right client and agent." />;
-  if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Policy matching" detail="Policy matching is done by the account owner or a bookkeeper." />;
+  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Policy matching" detail="Policy matching is done by the account owner or a bookkeeper." />;
 
   const view = await loadMatching(guard.context.tenantId);
   // ?tab=agents opens the agent codes (a policy whose agent code is not mapped links here).

@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { CarrierRulesWorkspace } from "@/components/app/carrier-rules-workspace";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -8,7 +8,6 @@ import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { CARRIER_RULES_PENDING_MESSAGE, loadCarrierRules } from "@/lib/ingestion/carrierRulesStore";
 import { payTimingGapText, payTimingGaps } from "@/lib/ingestion/carrierRules";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * Book of Business › Carrier rules (LA-4.17, Notion sprint): every per-carrier number the countdowns,
@@ -18,7 +17,7 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 export default async function CarrierRulesPage() {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Carrier rules" description="Each carrier's save windows, grace periods, commission triggers and payout rules." />;
-  if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Carrier rules" detail="Carrier rules are kept by the account owner or a bookkeeper." />;
+  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Carrier rules" detail="Carrier rules are kept by the account owner or a bookkeeper." />;
 
   const readOnly = guard.entitlement.access === "read_only";
   const view = await loadCarrierRules({ plane: "agency", tenantId: guard.context.tenantId, userId: guard.context.userId });
