@@ -1,49 +1,76 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Info } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
 
-import { AuthCard, authControl, authLabel } from "@/components/app/auth-card";
+import { authControl, authLabel } from "@/components/app/auth-card";
+import { FunnelHeading } from "@/components/app/funnel-frame";
+import { StatePicker } from "@/components/app/state-picker";
 import { Button } from "@/components/ui/button";
-import { deriveRecommendedSetupSteps, LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, US_STATES, VOLUME_OPTIONS } from "@/lib/signup/constants";
+import { LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, VOLUME_OPTIONS } from "@/lib/signup/constants";
 import { cn } from "@/lib/utils";
 
 const chip = (on: boolean) =>
   cn(
-    "rounded-lg px-3.5 py-2.5 text-sm font-semibold tracking-[-0.02em]",
-    on ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] bg-card text-[var(--body)]",
+    "min-h-10 rounded-full px-3.5 text-sm font-semibold tracking-[-0.02em] transition-colors duration-150",
+    on ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] bg-card text-[var(--body)] hover:border-[var(--accent-ink)]",
   );
 
-function Stepper() {
-  return (
-    <ol className="mt-6 flex items-center rounded-xl border border-border bg-card px-5 py-3.5" aria-label="Signup steps">
-      <li className="flex items-center gap-2.5">
-        <span className="inline-flex size-6 items-center justify-center rounded-full bg-[var(--success)] text-white" aria-hidden="true"><Check className="size-3.5 stroke-[3]" /></span>
-        <span className="text-sm font-semibold text-foreground">Account complete</span>
-      </li>
-      <li className="m-track mx-3 h-0.5 flex-grow bg-[var(--success)]" aria-hidden="true" />
-      <li className="flex items-center gap-2.5" aria-current="step">
-        <span className="inline-flex size-6 items-center justify-center rounded-full bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]">2</span>
-        <span className="text-sm font-semibold text-foreground">Business profile</span>
-      </li>
-      <li className="m-track mx-3 h-0.5 flex-grow bg-border" aria-hidden="true" />
-      <li className="flex items-center gap-2.5">
-        <span className="inline-flex size-6 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold text-muted-foreground">3</span>
-        <span className="text-sm font-semibold text-muted-foreground">Checkout</span>
-      </li>
-    </ol>
-  );
+/** Free mailboxes say nothing about the agency's name; a company domain usually does. */
+const PERSONAL_DOMAINS = new Set(["gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com", "live.com", "icloud.com", "me.com", "aol.com", "proton.me", "protonmail.com", "msn.com"]);
+
+/** "dana@northline-life.com" → "Northline Life". Empty for a personal mailbox. */
+export function nameFromEmail(email: string | null | undefined) {
+  const domain = (email ?? "").split("@")[1]?.toLowerCase() ?? "";
+  if (!domain || PERSONAL_DOMAINS.has(domain)) return "";
+  const label = domain.split(".")[0] ?? "";
+  return label.split(/[-_]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
 }
 
 /**
- * Step 2 of 3. The answers decide the setup checklist shown after checkout, and the preview on the
- * right is that checklist, computed by the same function the server saves it with — so what the
- * reader sees here is exactly what they will get, not an illustration of it.
+ * What each field needs, one short sentence (owner, 2026-10-26: "an informational icon that explains
+ * each field"; then: shown on hover, not as a card that pushes the form down).
  */
+const FIELD_INFO = {
+  name: "Your agency's legal name, or the DBA your clients know you by.",
+  state: "The main state your agency will operate in. Type its name or two-letter code.",
+  sell: "Every product line your agency writes. Pick as many as apply.",
+  volume: "Roughly how many applications the whole agency submits a month.",
+  sources: "Where your leads come from today. Pick all that apply.",
+} as const;
+type InfoKey = keyof typeof FIELD_INFO;
+
+/** A field's label with its (i). Hover or focus shows the hint floating above, so nothing below moves. */
+function FieldLabel({ id, label }: { id: InfoKey; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={authLabel}>{label}</span>
+      <span className="group relative inline-flex">
+        <button
+          type="button"
+          aria-label={`What ${label.toLowerCase()} needs`}
+          aria-describedby={`info-${id}`}
+          // A tap focuses it, which shows the hint on a touch screen where there is no hover.
+          onClick={(event) => event.currentTarget.focus()}
+          className="inline-flex size-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-[var(--accent-ink)] focus-visible:text-[var(--accent-ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
+        >
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+        <span
+          id={`info-${id}`}
+          role="tooltip"
+          className="pointer-events-none invisible absolute bottom-full -left-2 z-20 mb-1.5 w-64 rounded-lg border border-[var(--border-strong)] bg-[var(--color-card)] px-3 py-2 text-xs font-normal leading-normal text-[var(--body)] opacity-0 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))] transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+        >
+          {FIELD_INFO[id]}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 export type BusinessProfileInitial = {
   businessName: string;
-  npn: string;
   primaryState: string;
   productsSold: string[];
   monthlyVolumeRange: string;
@@ -51,23 +78,28 @@ export type BusinessProfileInitial = {
   leadSourceOther: string | null;
 };
 
-/** `initial`: the saved profile, when the owner comes back to correct it while checkout is pending. */
-export function BusinessProfileForm({ initial = null }: { initial?: BusinessProfileInitial | null }) {
+/**
+ * Step 3 of 5. The answers decide the setup checklist shown after checkout; the server derives it
+ * when it saves the profile.
+ *
+ * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
+ * `email`: the owner's address, to suggest the business name from its domain on a first visit.
+ */
+export function BusinessProfileForm({ initial = null, email = null }: { initial?: BusinessProfileInitial | null; email?: string | null }) {
   const router = useRouter();
-  const [businessName, setBusinessName] = useState(initial?.businessName ?? "");
-  const [npn, setNpn] = useState(initial?.npn ?? "");
+  const suggested = initial ? "" : nameFromEmail(email);
+  const [businessName, setBusinessName] = useState(initial?.businessName ?? suggested);
+  const label = (id: InfoKey, text: string): ReactNode => <FieldLabel id={id} label={text} />;
   const [primaryState, setPrimaryState] = useState(initial?.primaryState ?? "");
   const [products, setProducts] = useState<string[]>(initial?.productsSold ?? []);
   const [volume, setVolume] = useState(initial?.monthlyVolumeRange ?? "");
   const [leadSources, setLeadSources] = useState<string[]>(initial?.leadSources ?? []);
   const [leadSourceOther, setLeadSourceOther] = useState(initial?.leadSourceOther ?? "");
-  const [submitting, setSubmitting] = useState<"continue" | "exit" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const steps = useMemo(() => deriveRecommendedSetupSteps({ productsSold: products, monthlyVolumeRange: volume, leadSources }), [products, volume, leadSources]);
   const missing = [
     businessName.trim().length < 2 && "business name",
-    !/^\d{1,10}$/.test(npn.trim()) && "NPN",
     !primaryState && "primary state",
     products.length === 0 && "a product",
     !volume && "monthly applications",
@@ -79,105 +111,84 @@ export function BusinessProfileForm({ initial = null }: { initial?: BusinessProf
     set(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
   }
 
-  async function save(event: FormEvent<HTMLFormElement> | null, then: "continue" | "exit") {
-    event?.preventDefault();
+  // One way out of this step (2026-10-26, owner: "remove save and exit"): save, then the plan step.
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setError(null);
     if (missing.length) { setError(`Still needed: ${missing.join(", ")}.`); return; }
-    setSubmitting(then);
+    setSubmitting(true);
     try {
       const response = await fetch("/api/app/onboarding/business-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessName, npn, primaryState, productsSold: products, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
+        body: JSON.stringify({ businessName, primaryState, productsSold: products, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not save your business profile"); return; }
-      if (then === "exit") {
-        // Saved; the next sign-in lands on checkout, where this left off.
-        await fetch("/api/app/auth/logout", { method: "POST" }).catch(() => null);
-        router.push("/app/login");
-      } else {
-        router.push(body?.redirectTo ?? "/app/checkout");
-      }
+      router.push(body?.redirectTo ?? "/app/onboarding/plan");
       router.refresh();
     } catch {
       setError("Could not save your business profile. Check your connection and try again.");
     } finally {
-      setSubmitting(null);
+      setSubmitting(false);
     }
   }
 
   return (
-    <AuthCard width={1040} title="Tell us about your agency" description="Six questions to set up your workspace — you can change any of it later in Settings.">
-      <Stepper />
-      <form onSubmit={(event) => void save(event, "continue")} noValidate>
-        <div className="mt-7 flex flex-col gap-6 lg:flex-row">
-          <div className="flex min-w-0 flex-grow flex-col gap-4">
-            <label className="block">
-              <span className={authLabel}>Business name</span>
-              <input className={authControl} autoComplete="organization" maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
-            </label>
-            <label className="block">
-              <span className={authLabel}>NPN</span>
-              <input className={authControl} inputMode="numeric" maxLength={10} value={npn} onChange={(event) => setNpn(event.target.value.replace(/\D/g, ""))} />
-              <span className="mt-1.5 block text-xs text-muted-foreground">Your National Producer Number. Used for agency setup and verification. It is never shown to partners.</span>
-            </label>
-            <label className="block">
-              <span className={authLabel}>Primary state</span>
-              <select className={authControl} value={primaryState} onChange={(event) => setPrimaryState(event.target.value)}>
-                <option value="" disabled>Choose a state</option>
-                {US_STATES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-              </select>
-            </label>
-            <fieldset>
-              <legend className={authLabel}>Products sold</legend>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {PRODUCT_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={products.includes(option.value)} className={chip(products.includes(option.value))} onClick={() => toggle(option.value, products, setProducts)}>{option.label}</button>)}
-              </div>
-            </fieldset>
-            <label className="block">
-              <span className={authLabel}>Monthly applications</span>
-              <select className={authControl} value={volume} onChange={(event) => setVolume(event.target.value)}>
-                <option value="" disabled>Choose a range</option>
-                {VOLUME_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <fieldset>
-              <legend className={authLabel}>Where your leads come from</legend>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {LEAD_SOURCE_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={leadSources.includes(option.value)} className={chip(leadSources.includes(option.value))} onClick={() => toggle(option.value, leadSources, setLeadSources)}>{option.label}</button>)}
-              </div>
-            </fieldset>
-            {leadSources.includes("other") && (
-              <label className="block">
-                <span className={authLabel}>Other lead source</span>
-                <input className={authControl} maxLength={120} value={leadSourceOther} onChange={(event) => setLeadSourceOther(event.target.value)} />
-              </label>
-            )}
-          </div>
-
-          <aside className="w-full shrink-0 lg:w-[300px]">
-            <div className="rounded-xl border border-border bg-card p-5 lg:sticky lg:top-6">
-              <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">Your setup preview</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Recomputed as you answer. It is why the questions are being asked.</p>
-              <ol className="mt-2" aria-live="polite">
-                {steps.map((step, index) => (
-                  <li key={step} className="flex gap-2.5 border-t border-border py-2.5">
-                    <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" aria-hidden="true">{index + 1}</span>
-                    <span className="text-sm text-[var(--body)]">{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </aside>
+    <div>
+      {/* Owner pick A, 2026-10-26: no subtitle and no setup preview; the NPN is asked later in Settings. */}
+      <div className="mb-7"><FunnelHeading title="Tell us about your agency" /></div>
+      <form onSubmit={(event) => void save(event)} noValidate className="flex flex-col gap-5">
+        {/* Name and state side by side on a wide screen: the step fits without scrolling (2026-10-26). */}
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+        <div>
+          {label("name", "Business name")}
+          <input className={authControl} aria-label="Business name" autoComplete="organization" maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} aria-describedby={suggested ? "business-name-note" : undefined} />
+          {suggested && businessName === suggested && <span id="business-name-note" className="mt-1.5 block text-xs text-muted-foreground">Taken from your email address. Change it if it is not right.</span>}
         </div>
 
-        {error && <p role="alert" className="mt-6 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
-        <div className="mt-7 flex flex-wrap items-center justify-end gap-3">
-          <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" disabled={submitting !== null} onClick={() => void save(null, "exit")}>{submitting === "exit" ? "Saving…" : "Save and exit"}</Button>
-          <Button type="submit" className="h-11 px-4" disabled={submitting !== null}>{submitting === "continue" ? "Saving…" : "Save and continue"}</Button>
+        <div>
+          {label("state", "Primary state")}
+          <StatePicker value={primaryState} onChange={setPrimaryState} />
+        </div>
+        </div>
+
+        <fieldset>
+          <legend className="contents">{label("sell", "What you sell")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {PRODUCT_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={products.includes(option.value)} className={chip(products.includes(option.value))} onClick={() => toggle(option.value, products, setProducts)}>{option.label}</button>)}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="contents">{label("volume", "Applications a month")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Applications a month">
+            {VOLUME_OPTIONS.map((option) => (
+              <button key={option.value} type="button" role="radio" aria-checked={volume === option.value} className={chip(volume === option.value)} onClick={() => setVolume(option.value)}>
+                {option.label.replace(/\s*applications\s*\/\s*month$/, "")}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="contents">{label("sources", "Where your leads come from")}</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {LEAD_SOURCE_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={leadSources.includes(option.value)} className={chip(leadSources.includes(option.value))} onClick={() => toggle(option.value, leadSources, setLeadSources)}>{option.label}</button>)}
+          </div>
+        </fieldset>
+        {leadSources.includes("other") && (
+          <label className="block">
+            <span className={authLabel}>Other lead source</span>
+            <input className={authControl} maxLength={120} value={leadSourceOther} onChange={(event) => setLeadSourceOther(event.target.value)} />
+          </label>
+        )}
+
+        {error && <p role="alert" className="rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" className="h-12 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
         </div>
       </form>
-    </AuthCard>
+    </div>
   );
 }

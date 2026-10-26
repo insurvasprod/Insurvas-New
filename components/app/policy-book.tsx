@@ -7,6 +7,7 @@ import { Download } from "lucide-react";
 
 import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { Button } from "@/components/ui/button";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +51,43 @@ const COLUMNS: Array<{ key: SortKey; label: string; className?: string; title?: 
  * totalled for exactly what is shown, exported as shown, and saved as a named filter. The filter
  * lives in the address, so a filtered list can be bookmarked or sent to a colleague.
  */
+/** The policy beside the list (2026-10-26, Policies A): where it stands, what is late, and the way in. */
+function PolicyPreview({ row, onClose }: { row: BookRow; onClose: () => void }) {
+  const href = row.href ?? policyHref(row);
+  const atRisk = inForce(row.status) && !row.source && (row.riskBand === "at_risk" || row.riskBand === "critical");
+  const fact = (label: string, value: React.ReactNode) => <span className="min-w-0"><span className="block text-xs font-semibold text-muted-foreground">{label}</span><span className="mt-0.5 block truncate text-sm text-foreground">{value}</span></span>;
+  return (
+    <DetailPanel
+      mode="split"
+      title={row.clientName ?? "No client linked"}
+      subtitle={[row.carrierName, row.product, row.policyNumber].filter(Boolean).join(" · ")}
+      status={<span className="flex flex-wrap gap-1.5"><StatusChip tone={row.source === "issued" ? "info" : STATUS_TONE[row.status ?? ""] ?? "neutral"}>{rowStatusLabel(row)}</StatusChip>{inForce(row.status) && !row.source && <StatusChip tone={RISK_TONE[row.riskBand]}>{RISK_LABELS[row.riskBand]}</StatusChip>}</span>}
+      onClose={onClose}
+      className="m-glass lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:self-start"
+      footer={<div className="flex justify-end"><Button asChild><Link href={href}>Open the policy</Link></Button></div>}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        {fact("Premium", row.premiumCents === null ? "—" : `${money2(row.premiumCents)}${row.premiumMode ? MODE_SHORT[row.premiumMode] ?? "" : ""}`)}
+        {fact("Face", money(row.faceCents))}
+        {fact("Late", row.daysPastDue ? `${row.daysPastDue} days past the paid-to date` : "Not late")}
+        {fact("Carrier closes it", row.daysLeft !== null && inForce(row.status) && !row.source ? `in ${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}` : "—")}
+        {fact("Agent", row.agentName ?? (row.source === "hand" ? "—" : "Not mapped"))}
+        {fact("Lead source", row.leadSource ?? "Not known")}
+        {fact("Issued", fileDay(row.issueDate))}
+        {fact("Source", row.source === "hand" ? "Entered by hand" : row.source === "issued" ? "Recorded sale, awaiting the file" : "Carrier file")}
+      </div>
+      {row.statusRaw && <p className="m-0 text-xs text-muted-foreground">The carrier&rsquo;s word: {row.statusRaw}</p>}
+      {atRisk && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--warning-surface)] px-3 py-2.5 text-sm text-[var(--warning-ink)]">
+          <span>Behind on payment — {row.daysLeft !== null ? `the save window is open for ${row.daysLeft} more day${row.daysLeft === 1 ? "" : "s"}` : "the save window is open"}.</span>
+          <Button asChild size="sm" variant="outline"><Link href="/app/save-queue">Open in Save queue</Link></Button>
+        </div>
+      )}
+      {!row.clientName && !row.source && <p className="m-0 text-sm text-[var(--body)]">No client is linked to this policy. <Link href="/app/policy-matching" className="font-semibold underline">Link it in Policy matching</Link></p>}
+    </DetailPanel>
+  );
+}
+
 export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, readOnly }: { rows: BookRow[]; initialQuery: string; saved: Saved[]; savedAvailable: boolean; scoped: boolean; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -60,6 +98,8 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
   const [more, setMore] = useState(() => Boolean(initial.filters.product || initial.filters.agent || initial.filters.agency || initial.filters.lead || initial.filters.issuedFrom || initial.filters.issuedTo));
   const [busy, setBusy] = useState(false);
   const [naming, setNaming] = useState<string | null>(null);
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const rowKey = (row: BookRow) => `${row.source ?? "carrier"}|${row.carrierId}|${row.policyNumber}`;
 
   // The address follows the filter (replaceState: no reload, no history entry per keystroke).
   const query = writeQuery(filters, sort);
@@ -133,7 +173,9 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
         <StatTile label="At risk" value={sum.atRisk.toLocaleString("en-US")} valueTone={sum.atRisk ? "warning" : undefined} footnote="behind on payment, save window open" />
       </StatStrip>
 
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
       <TableCard
+        className="min-w-0 flex-1"
         toolbar={
           <DataToolbar actions={<>
             {filtered && <ClearFiltersButton onClick={clear} />}
@@ -223,7 +265,7 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
             </thead>
             <tbody>
               {pageRows.map((row) => (
-                <tr key={`${row.source ?? "carrier"}|${row.carrierId}|${row.policyNumber}`}>
+                <tr key={rowKey(row)} className={previewKey === rowKey(row) ? "cursor-pointer bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]" : "cursor-pointer"} onClick={(event) => { if ((event.target as HTMLElement).closest("a, button")) return; setPreviewKey(previewKey === rowKey(row) ? null : rowKey(row)); }}>
                   <td className="max-w-[180px]">
                     <Link href={row.href ?? policyHref(row)} className="font-semibold text-foreground hover:underline">{row.clientName ?? <span className="font-normal text-muted-foreground">No client linked</span>}</Link>
                     {row.provisional && <span className="mt-0.5 block"><ProvisionalBadge /></span>}
@@ -244,6 +286,8 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
           </table>
         )}
       </TableCard>
+      {(() => { const open = previewKey ? visible.find((row) => rowKey(row) === previewKey) : null; return open ? <PolicyPreview key={previewKey} row={open} onClose={() => setPreviewKey(null)} /> : null; })()}
+      </div>
 
       <Dialog open={naming !== null} onOpenChange={(open) => { if (!open) setNaming(null); }}>
         <DialogContent className="sm:max-w-sm">

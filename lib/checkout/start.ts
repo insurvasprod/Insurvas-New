@@ -28,6 +28,11 @@ export type StartedCheckout = {
   sessionId: string;
   planName: string;
   trialDays: number;
+  /**
+   * Whop's checkout configuration (`ch_…`), which the Payment step mounts in Whop's embedded Checkout
+   * element (owner pick A, 2026-10-26). Null when nothing is paid: a free coupon or no-payment mode.
+   */
+  configId: string | null;
 };
 
 export type CouponCheck =
@@ -100,6 +105,19 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
 export async function startCheckout(tenantId: string, couponCode?: string): Promise<StartedCheckout> {
   const supabase = getSupabaseServiceClient();
 
+  // A workspace whose plan has already started has nothing to buy here. Opening a checkout anyway
+  // used to put it back to awaiting_payment, and the shell then bounced the owner from the dashboard
+  // to Payment for good (2026-10-26: a free coupon started the plan, a later visit to /app/checkout
+  // undid the "completed" state). Send them to the product instead.
+  const { data: live } = await supabase
+    .from("subscriptions")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .neq("status", "cancelled")
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (live) return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: live.id, planName: "", trialDays: 0, configId: null };
+
   const { data: selection } = await supabase
     .from("signup_selections")
     .select("plan_id, billing_cycle")
@@ -139,7 +157,7 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     // page and no membership, so there is nothing that could be charged (lib/checkout/fullComp.ts).
     if (isFullComp(check.terms)) {
       const started = await redeemFullComp(tenantId, { id: plan.id, name: plan.name }, selection.billing_cycle, { id: check.couponId, code: check.code });
-      return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
+      return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: null };
     }
   }
 
@@ -147,7 +165,7 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
   // paid checkout ends, and the owner is sent straight into the workspace. The provider is never called.
   if (checkoutPaymentMode() === "none") {
     const started = await completeWithoutPayment(tenantId, { id: plan.id, name: plan.name }, selection.billing_cycle);
-    return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
+    return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: null };
   }
 
   // An open session is reused so returning to checkout does not strand the first one.
@@ -156,6 +174,10 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     .select("id, checkout_url, provider_config_id")
     .eq("tenant_id", tenantId)
     .eq("status", "open")
+    // Only a session for the plan and cycle chosen now: "Change plan" on Payment (Step 4 of 5) must
+    // not send the buyer back to a page for the plan they moved away from.
+    .eq("plan_id", plan.id)
+    .eq("billing_cycle", selection.billing_cycle)
     .order("created_at", { ascending: false })
     // Without it, two open sessions make maybeSingle() error, nothing is reused, and every visit
     // to checkout opens yet another session.
@@ -163,7 +185,7 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     .maybeSingle<{ id: string; checkout_url: string; provider_config_id: string }>();
 
   if (open && !couponId) {
-    return { checkoutUrl: open.checkout_url, sessionId: open.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
+    return { checkoutUrl: open.checkout_url, sessionId: open.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: open.provider_config_id };
   }
 
   // Creates the Whop plan on first sale of this (version, cycle) and reuses it forever after. The
@@ -223,7 +245,8 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
   if (error) throw new CheckoutError(`Could not record the checkout session: ${error.message}`);
 
   // Abandoning leaves the tenant here rather than in a broken half-state, and returning resumes.
-  await supabase.from("tenants").update({ onboarding_state: "awaiting_payment" }).eq("id", tenantId);
+  // Never over a finished sign-up: a completed workspace is not waiting for a payment.
+  await supabase.from("tenants").update({ onboarding_state: "awaiting_payment" }).eq("id", tenantId).neq("onboarding_state", "completed");
 
-  return { checkoutUrl: session.url, sessionId: row.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
+  return { checkoutUrl: session.url, sessionId: row.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: session.id };
 }

@@ -106,7 +106,7 @@ export function WelcomePackPanel({ attempt, sample, readOnly }: { attempt: Attem
       <div className="mt-3 flex flex-wrap gap-2">
         {hasPdf
           ? <Button type="button" variant="outline" onClick={openPdf} disabled={busy || sample} title={sample ? "Sample data has no PDF" : busy ? "Working…" : undefined}><FileText aria-hidden="true" />View PDF</Button>
-          : <Button type="button" variant="outline" onClick={() => void run("submit")} disabled={busy || readOnly} title={readOnly ? "This attempt is closed" : busy ? "Working…" : undefined}><FileText aria-hidden="true" />Make the welcome pack</Button>}
+          : <Button type="button" variant="outline" onClick={() => void run("submit")} disabled={busy || readOnly} title={readOnly ? "Read-only — nothing on this attempt can change" : busy ? "Working…" : undefined}><FileText aria-hidden="true" />Make the welcome pack</Button>}
         {canSend && <Button type="button" onClick={() => void run("send")} disabled={busy} title={busy ? "Working…" : undefined}><Send aria-hidden="true" />{status === "bounced" ? "Send again" : "Send now"}</Button>}
         {canReissue && <Button type="button" onClick={() => void run("reissue")} disabled={busy} title={busy ? "Working…" : undefined}><Send aria-hidden="true" />Send the updated pack</Button>}
       </div>

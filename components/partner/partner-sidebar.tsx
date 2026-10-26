@@ -5,12 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Building2,
   ChevronDown,
   Home,
   Menu,
   MessageSquare,
-  PanelLeftClose,
-  PanelLeftOpen,
   Send,
   Settings,
   Users,
@@ -20,6 +19,7 @@ import {
 
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { NavRail } from "@/components/portal/nav-rail";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
 type PartnerNavItem = { label: string; path: string; icon: typeof Home };
@@ -56,13 +56,20 @@ function PartnerNavLink({ item, onNavigate }: { item: PartnerNavItem; onNavigate
   );
 }
 
+/** The organisation's own pages: statements, team review and team access are the partner admin's (LA-7.4). */
+function organizationItems(role: PartnerRole): PartnerNavItem[] {
+  return role === "partner_admin"
+    ? [{ label: "Statements", path: "/partner/payouts", icon: WalletCards }, { label: "Team review", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }]
+    : [];
+}
+
 function PartnerNav({ role, onNavigate }: { role: PartnerRole; onNavigate?: () => void }) {
   const pathname = usePathname();
   const teamActive = isActivePath(pathname, "/partner/team");
   const settingsActive = isActivePath(pathname, "/partner/settings");
   const statusItems: PartnerNavItem[] = [
     // LA-7.4: payout statements are the organisation's, not every seat's.
-    ...(role === "partner_admin" ? [{ label: "Statements", path: "/partner/payouts", icon: WalletCards }, { label: "Team review", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }] : []),
+    ...organizationItems(role),
     { label: "Settings", path: "/partner/settings", icon: Settings },
   ];
   const orgActive = teamActive || settingsActive || isActivePath(pathname, "/partner/team-review") || isActivePath(pathname, "/partner/payouts");
@@ -113,7 +120,6 @@ function PartnerCard({ role, partnerStatus, partnerName }: { role: PartnerRole; 
 
 export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { role: PartnerRole; partnerStatus: PartnerStatus; partnerName: string; footer?: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   const navigation = <PartnerNav role={role} onNavigate={() => setOpen(false)} />;
 
   return (
@@ -139,14 +145,17 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
         </div>
       )}
 
-      <aside data-print-hide className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col md:flex ${collapsed ? "is-collapsed" : ""}`} data-collapsed={collapsed}>
-        <div className="portal-agent-sidebar-brand"><div className="insurvas-partner-brand-full"><InsurvasLogo size="sidebar" tone="dark" /></div><InsurvasLogo size="compact" variant="symbol" tone="dark" className="insurvas-partner-brand-compact" /><button type="button" className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}</button></div>
-        <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
-          {navigation}
-        </div>
-        <PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} />
-        {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
-      </aside>
+      {/* The desktop rail (redesign 2026-10-25, "sidebar as A"): the workspace links as icons, the
+          organisation's pages as one group opening beside the rail, the partner card at the foot. */}
+      <NavRail
+        label="Partner workspace navigation"
+        homeHref="/partner"
+        links={workspaceItems.map((item) => ({ key: item.path, label: item.label, href: item.path, icon: item.icon }))}
+        groups={organizationItems(role).length ? [{ key: "organization", label: "Organization", icon: Users, items: organizationItems(role).map((item) => ({ key: item.path, label: item.label, href: item.path, icon: item.icon })) }] : []}
+        foot={[{ key: "/partner/settings", label: "Settings", href: "/partner/settings", icon: Settings }]}
+        card={{ label: "Partner organisation", icon: Building2, body: <><PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} />{footer && <div className="portal-agent-sidebar-footer">{footer}</div>}</> }}
+        isActive={(href, pathname) => isActivePath(pathname, href)}
+      />
     </>
   );
 }

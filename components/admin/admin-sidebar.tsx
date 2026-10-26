@@ -26,8 +26,6 @@ import {
   Mail,
   Menu,
   Package,
-  PanelLeftClose,
-  PanelLeftOpen,
   PhoneOff,
   PlugZap,
   Puzzle,
@@ -38,6 +36,7 @@ import {
   ScrollText,
   ServerCog,
   Settings2,
+  ShieldUser,
   ShieldCheck,
   SlidersHorizontal,
   TableProperties,
@@ -51,7 +50,6 @@ import {
   X,
 } from "lucide-react";
 
-import { usePersistedState } from "./use-persisted-state";
 import {
   groupIdForPath,
   isLinkActive,
@@ -61,6 +59,7 @@ import {
   type SidebarNode,
 } from "@/lib/adminNav/types";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { NavRail } from "@/components/portal/nav-rail";
 
 // Icon components are functions with methods and cannot cross the server->client boundary as props,
 // so the server sends a key and it is resolved here.
@@ -113,7 +112,6 @@ const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
   legal: Scale,
 };
 
-const COLLAPSED_KEY = "insurvas.admin.sidebar.collapsed";
 
 type Props = { nodes: SidebarNode[]; adminName: string; roleLabel: string; footer?: ReactNode };
 
@@ -228,7 +226,6 @@ function NavList({
  */
 export function AdminSidebar({ nodes, adminName, roleLabel, footer }: Props) {
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = usePersistedState<boolean>(COLLAPSED_KEY, false);
 
   const brandMark = (tone?: "dark") => (
     <div className="flex items-center gap-2.5">
@@ -293,31 +290,17 @@ export function AdminSidebar({ nodes, adminName, roleLabel, footer }: Props) {
         </div>
       )}
 
-      <aside
-        data-print-hide
-        className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col md:flex ${collapsed ? "is-collapsed" : ""}`}
-        data-collapsed={collapsed}
-      >
-        <div className="portal-agent-sidebar-brand">
-          <div className="insurvas-agent-brand-full">{brandMark("dark")}</div>
-          <InsurvasLogo size="compact" variant="symbol" tone="dark" alt="Insurvas staff" className="insurvas-agent-brand-compact" />
-          <button
-            type="button"
-            className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-pressed={collapsed}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
-          </button>
-        </div>
-        <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
-          <NavList nodes={nodes} onGroupFromCollapsed={collapsed ? () => setCollapsed(false) : undefined} />
-        </div>
-        {staffCard}
-        {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
-      </aside>
+      {/* The desktop rail (redesign 2026-10-25, "sidebar as A"): the agent shell's icon rail with the
+          staff menu; a group's pages open beside it, and the staff card opens from the foot. */}
+      <NavRail
+        label="Admin navigation"
+        homeHref="/admin"
+        links={nodes.filter((node): node is SidebarLink => node.kind !== "group").map((node) => ({ key: node.href, label: node.label, href: node.href, icon: ICONS[node.icon] }))}
+        groups={nodes.filter((node): node is SidebarGroup => node.kind === "group").map((group) => ({ key: group.id, label: group.label, icon: ICONS[group.icon], items: group.links.map((entry) => ({ key: entry.href, label: entry.label, href: entry.href, icon: ICONS[entry.icon] })) }))}
+        foot={[]}
+        card={{ label: "Signed in as", icon: ShieldUser, body: <>{staffCard}{footer && <div className="portal-agent-sidebar-footer">{footer}</div>}</> }}
+        isActive={isLinkActive}
+      />
     </>
   );
 }

@@ -18,10 +18,12 @@ import type { ScorecardStage, VendorScorecardLeadResult, VendorScorecardReport, 
 import { CampaignComparisonWorkspace } from "./campaign-comparison-workspace";
 import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
 import { cn } from "@/lib/utils";
-import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
+import { NextStepLine } from "@/components/app/next-step-line";
 
-/** One view at a time (2026-10-06 redesign): the stacked tables below the scorecard became tabs. */
-type View = "scorecard" | "funnel" | "curves" | "speed" | "compare";
+/** One view at a time: Vendors, Where leads drop off (funnel, curves, speed and consent), Compare (2026-10-26). */
+type View = "scorecard" | "dropoff" | "compare";
+/** Vendor cards a page. */
+const CARD_PAGE = 8;
 /** The persistency toggle's window. User decision: 60 days. Mirrors SCORECARD_PERSIST_DAYS on the server. */
 const PERSIST_DAYS = 60;
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -163,8 +165,6 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
   const [sort, setSort] = useState<Sort>("cost");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState<View>("scorecard");
-  // Header, strip, view row, toolbar, column heads and pager around the scorecard's rows.
-  const pageSize = useFittingRows(480, 41);
   // The filter popover closes on a click outside it or Esc, like the inbox's.
   const filtersRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -277,9 +277,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     return sortLines(allLines.filter((line) => !needle || line.label.toLowerCase().includes(needle)), sort);
   }, [allLines, search, sort]);
   const tint = useMemo(() => extremes(allLines), [allLines]);
-  const pageCount = Math.max(1, Math.ceil(lines.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(lines.length / CARD_PAGE));
   const currentPage = Math.min(page, pageCount - 1);
-  const shown = lines.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
+  const shown = lines.slice(currentPage * CARD_PAGE, currentPage * CARD_PAGE + CARD_PAGE);
   const totals = report?.totals;
   const exportUrl = `/api/app/true-cpa?${query}&format=csv`;
   const persistOn = report?.persist_days != null;
@@ -307,28 +307,40 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     { key: "issued", label: "Issued", value: totals.issued_policies, note: "policies", cost: totals.effective_cost_per_issued_policy_cents, costLabel: "per issued policy", stage: "issued" as ScorecardStage },
   ] : [];
   const tabs: { key: View; label: string }[] = [
-    { key: "scorecard", label: "Scorecard" },
-    { key: "funnel", label: "Funnel" },
-    { key: "curves", label: "Contact curves" },
-    { key: "speed", label: "Speed & consent" },
-    { key: "compare", label: "Compare campaigns" },
+    { key: "scorecard", label: "Vendors" },
+    { key: "dropoff", label: "Where leads drop off" },
+    { key: "compare", label: "Compare" },
   ];
   const appliedFilters = filterCount + (applied.persist ? 1 : 0);
+  const unallocated = report && upgraded ? totals?.unallocated_spend_campaigns ?? 0 : 0;
+  const bestLine = tint.best ? allLines.find((line) => line.key === tint.best) ?? null : null;
+  const worstLine = tint.worst ? allLines.find((line) => line.key === tint.worst) ?? null : null;
+  const timesDearer = bestLine?.cpi && worstLine?.cpi ? worstLine.cpi / bestLine.cpi : null;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="True CPA" description="Cost per issued policy, by vendor and campaign." />
+    <PageHeader title="True CPA" description="What an issued policy really cost, by vendor and campaign." actions={<Button asChild variant="outline"><a href={exportUrl}><Download aria-hidden="true" />Export</a></Button>} />
 
-    {/* Four figures (2026-10-06 redesign): applications ride on Issued's footnote and open from the
-        funnel's Applied step. */}
+    {/* The one thing to do next: spend that can't be counted yet, then the dearest vendor against the cheapest. */}
+    {unallocated > 0 ? (
+      <NextStepLine action={<Button asChild size="sm" variant="outline"><Link href="/app/lead-sources?tab=campaigns">Enter records purchased</Link></Button>}>
+        <strong className="font-semibold text-[var(--ink)]">{plural(unallocated, "campaign has", "campaigns have")} no records purchased entered</strong>, so {unallocated === 1 ? "its" : "their"} spend is left out of Net spend and True CPA. <InfoTip label="About uncounted spend">Spend without a records-purchased figure cannot be split across leads, so it is left out of Net spend and True CPA.</InfoTip>
+      </NextStepLine>
+    ) : worstLine && bestLine && timesDearer && timesDearer >= 1.25 && !loading ? (
+      <NextStepLine action={worstLine.row ? <Button type="button" size="sm" variant="outline" onClick={() => openDrill(lineDrill(worstLine, "issued"))}>See the policies</Button> : <Button type="button" size="sm" variant="outline" onClick={() => openVendor(worstLine.vendorId)}>See {worstLine.vendorName}&rsquo;s campaigns</Button>}>
+        <strong className="font-semibold text-[var(--ink)]">{worstLine.label} costs {dollars(worstLine.cpi)} per issued policy</strong> — {timesDearer >= 1.95 ? `${Math.round(timesDearer * 10) / 10}×` : `${Math.round((timesDearer - 1) * 100)}% more than`} {bestLine.label}&rsquo;s {dollars(bestLine.cpi)}.
+      </NextStepLine>
+    ) : null}
+
+    {/* Five figures: applications have their own again (02-AGENT-APP §15), and each opens its rows. */}
     <StatStrip label="True CPA totals">
       <StatTile label="Net spend" value={loading ? "…" : dollars(totals?.net_spend_cents)} footnote={longRange(applied.from, applied.to)} action={<RowsLink label="the leads this spend bought" onClick={() => openDrill(totalDrill("received"))} />} />
       <StatTile label="Leads received" value={loading ? "…" : number(totals?.leads_received)} footnote={totals && totals.leads_received ? `${number(totals.dialable_leads)} dialable` : "after suppression"} action={<RowsLink label="the leads received" onClick={() => openDrill(totalDrill("received"))} />} />
-      <StatTile label="Issued policies" value={loading ? "…" : number(totals?.issued_policies)} valueTone={totals?.issued_policies ? "good" : undefined} footnote={persistOn ? `in force after ${report?.persist_days} days${totals?.policies_not_yet_measurable ? ` · ${number(totals.policies_not_yet_measurable)} too recent` : ""}` : [totals ? `${number(totals.applications)} applications` : null, share(totals?.issued_policies, totals?.applications, "of applications")].filter(Boolean).join(" · ") || undefined} reserveFootnote action={<RowsLink label="the leads with an issued policy" onClick={() => openDrill(totalDrill("issued"))} />} />
+      <StatTile label="Applications" value={loading ? "…" : number(totals?.applications)} footnote={share(totals?.applied_leads ?? totals?.applications, totals?.contacted_leads, "of contacted leads") ?? "applications in the period"} action={report?.funnel ? <RowsLink label="the leads with an application" onClick={() => openDrill(totalDrill("applied"))} /> : undefined} />
+      <StatTile label="Issued policies" value={loading ? "…" : number(totals?.issued_policies)} valueTone={totals?.issued_policies ? "good" : undefined} footnote={persistOn ? `in force after ${report?.persist_days} days${totals?.policies_not_yet_measurable ? ` · ${number(totals.policies_not_yet_measurable)} too recent` : ""}` : share(totals?.issued_policies, totals?.applications, "of applications")} reserveFootnote action={<RowsLink label="the leads with an issued policy" onClick={() => openDrill(totalDrill("issued"))} />} />
       <StatTile label="True CPA" value={loading ? "…" : dollars(totals?.effective_cost_per_issued_policy_cents)} valueTone={totals?.effective_cost_per_issued_policy_cents != null ? "primary" : undefined} footnote={persistOn ? "per persisting policy" : "per issued policy"} action={<RowsLink label="the policies behind it" onClick={() => openDrill(totalDrill("issued"))} />} />
     </StatStrip>
 
     {report && !upgraded && <p className={notice} role="status">Some views wait on a pending database update. <InfoTip label="About the pending update">Until it is applied, net spend is lifetime spend, and the vendor view, test batches, persistency filter, speed and consent are unavailable.</InfoTip></p>}
-    {report && upgraded && (totals?.unallocated_spend_campaigns ?? 0) > 0 && <p className={notice} role="status">Enter records purchased on {plural(totals?.unallocated_spend_campaigns ?? 0, "campaign")} to count {totals?.unallocated_spend_campaigns === 1 ? "its" : "their"} spend. <InfoTip label="About uncounted spend">Spend without a records-purchased figure cannot be split across leads, so it is left out of Net spend and True CPA.</InfoTip> <Link className="font-semibold underline" href="/app/campaigns">Open campaigns</Link></p>}
 
     {/* Views on the left; the report's scope (period and filters), which every view reads, on the
         right. The scope is a draft that Apply commits, so a change of vendor does not fire three reloads. */}
@@ -364,14 +376,13 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
 
     {/* The selected view, as the tab panel: it fades in when the tab changes (2026-10-09). */}
     <div key={view} role="tabpanel" id="true-cpa-view" aria-labelledby={`true-cpa-tab-${view}`} className="flex min-w-0 flex-col gap-6">
+    {/* Vendors (redesign 2026-10-26, owner pick B): one card per vendor — or per campaign — with its cost
+        per issued policy large, its flags, and its own funnel from bought to issued. Every count opens
+        the leads behind it. */}
     {view === "scorecard" && <TableCard
-      className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`}
       toolbar={
         <DataToolbar
-          actions={<>
-            <Button asChild variant="outline"><a href={exportUrl}><Download aria-hidden="true" />Export</a></Button>
-            <RefreshButton onClick={refresh} refreshing={loading} />
-          </>}
+          actions={<RefreshButton onClick={refresh} refreshing={loading} />}
         >
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search vendor, campaign" />
           <div role="radiogroup" aria-label="Rows" className="inline-flex h-9 gap-0.5 rounded-md border border-input bg-background p-0.5">
@@ -389,84 +400,87 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
         page={currentPage + 1}
         total={lines.length}
         noun={`${noun}s`}
-        pageSize={pageSize}
+        pageSize={CARD_PAGE}
         onPage={(next) => setPage(next - 1)}
         suffix={`${sort === "cost" ? "cheapest policy first, test batches last" : "highest spend first"}${report ? ` · computed ${new Date(report.generated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}`}
       />}
     >
       {error && !report ? <ErrorState title="The scorecard did not load" detail={error} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />
-        : loading ? <SectionLoading rows={6} columns={8} />
-        : lines.length === 0 ? (search || appliedFilters > 0 ? <NoMatches noun={`${noun}s`} onClear={clearAndApply} /> : <EmptyState title="No spend or leads in this period" hint="Widen the dates, or add a campaign with its spend." action={<Button asChild variant="outline"><Link href="/app/campaigns">Open campaigns</Link></Button>} />)
-        : <table className="w-full min-w-[1560px] border-collapse text-left">
-          <thead><tr>
-            <th scope="col" className={th}>{effectiveGrain === "vendor" ? "Vendor" : <>Vendor &amp; campaign</>}</th>
-            <th scope="col" className={th}><span className="sr-only">Flags</span></th>
-            <th scope="col" className={`${th} text-right`}>Per record</th>
-            <th scope="col" className={`${th} text-right`}>Bought</th>
-            <th scope="col" className={`${th} text-right`}>Leads</th>
-            <th scope="col" className={`${th} text-right`}>Dialable</th>
-            <th scope="col" className={`${th} text-right`}>Dialled</th>
-            <th scope="col" className={`${th} text-right`}>Contact</th>
-            <th scope="col" className={`${th} text-right`}>Cost / contact</th>
-            <th scope="col" className={`${th} text-right`}>Quoted</th>
-            <th scope="col" className={`${th} text-right`} title={METRICS_APART}>Undialable rate<span className="block text-xs font-normal normal-case tracking-normal">Low is good</span></th>
-            <th scope="col" className={`${th} text-right`}>Apps</th>
-            <th scope="col" className={`${th} text-right`}>Issued</th>
-            <th scope="col" className={`${th} text-right`}>Net spend</th>
-            <th scope="col" className={`${th} text-right`}><span className="inline-flex items-center gap-1">True CPA<InfoTip label="About True CPA" side="bottom">Net spend divided by issued policies. A dash means no issued policy is attributed yet. It is never $0.00.</InfoTip></span></th>
-            <th scope="col" className={`${th} text-right`} title={METRICS_APART}>Claim acceptance<span className="block text-xs font-normal normal-case tracking-normal">High is good</span></th>
-            <th scope="col" className={th}>Lineage</th>
-          </tr></thead>
-          <tbody>
+        : loading ? <SectionLoading rows={6} columns={4} />
+        : lines.length === 0 ? (search || appliedFilters > 0 ? <NoMatches noun={`${noun}s`} onClear={clearAndApply} /> : <EmptyState title="No spend or leads in this period" hint="Widen the dates, or add a campaign with its spend." action={<Button asChild variant="outline"><Link href="/app/lead-sources?tab=campaigns">Open campaigns</Link></Button>} />)
+        : <div className="flex flex-col gap-3 border-t border-border p-4">
+          <ul className="m-0 grid list-none gap-3.5 p-0 lg:grid-cols-2">
             {shown.map((line) => {
               const open = Boolean(drillSpec?.key.startsWith(`${line.row ? "campaign" : "vendor"}:${line.key}:`));
-              const tone = open ? "bg-[var(--primary-soft)]" : line.key === tint.best ? "bg-[var(--success-surface)]" : line.key === tint.worst ? "bg-[var(--error-surface)]" : "";
-              const activate = () => { if (line.row) drill(line.row); else openVendor(line.vendorId); };
-              // Every figure in the line opens its own rows. Before 20260925709800 only a
-              // campaign's leads can be listed, so the other figures stay plain text.
+              const best = line.key === tint.best;
+              const worst = line.key === tint.worst;
+              // Every count opens its own rows. Before 20260925709800 only a campaign's leads can be
+              // listed, so the other figures stay plain text.
               const figure = (value: number | null, stage: ScorecardStage, text = number(value)) => {
                 const can = value != null && value > 0 && (report?.funnel || (stage === "received" && Boolean(line.row)));
                 return can
-                  ? <button type="button" className="tabular-nums hover:underline" aria-label={`${text} ${STAGE_NOUN[stage]} in ${line.label}: show the leads`} onClick={(event) => { event.stopPropagation(); openDrill(lineDrill(line, stage)); }}>{text}</button>
+                  ? <button type="button" className="tabular-nums hover:underline" aria-label={`${text} ${STAGE_NOUN[stage]} in ${line.label}: show the leads`} onClick={() => openDrill(lineDrill(line, stage))}>{text}</button>
                   : text;
               };
-              return <tr key={line.key} className={`m-row cursor-pointer ${tone}`} onClick={activate}>
-                <td className={`${td} max-w-[300px]`}>
-                  <button type="button" aria-expanded={line.row ? open : undefined} title={line.label} className="block max-w-full truncate text-left text-sm tracking-[-0.02em] text-[var(--body)] hover:underline" onClick={(event) => { event.stopPropagation(); activate(); }}>{line.label}</button>
-                </td>
-                <td className={`${td} whitespace-nowrap`}>
-                  <span className="flex items-center gap-1.5">
-                    {line.isTest && <StatusChip tone="info">Test batch</StatusChip>}
-                    {!line.isTest && line.small && <StatusChip tone="warning">Small sample</StatusChip>}
-                    {line.key === tint.best && <StatusChip tone="good">Cheapest policy</StatusChip>}
-                    {line.key === tint.worst && <StatusChip tone="danger">Dearest policy</StatusChip>}
+              const steps: Array<{ label: string; value: number | null; stage: ScorecardStage | null }> = [
+                { label: "Bought", value: line.records, stage: null },
+                { label: "Dialable", value: line.dialable, stage: "dialable" },
+                { label: "Dialled", value: line.dialed, stage: "dialed" },
+                { label: "Contacted", value: line.contacted, stage: "contacted" },
+                { label: "Quoted", value: line.quoted, stage: "quoted" },
+                { label: "Applied", value: line.apps, stage: "applied" },
+                { label: "Issued", value: line.issued, stage: "issued" },
+              ];
+              const top = Math.max(1, ...steps.map((step) => step.value ?? 0));
+              return <li key={line.key} className={cn("m-glass flex min-w-0 flex-col gap-3 rounded-xl border p-4", open ? "border-[var(--primary)]" : best ? "border-[var(--success)]/50" : worst ? "border-[var(--error)]/50" : "border-border")}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0">
+                    <strong className="block truncate text-sm font-semibold text-foreground" title={line.label}>{line.label}</strong>
+                    <span className="block text-xs text-muted-foreground">{dollars(line.netSpend)} net spend{line.costPerRecord != null ? ` · ${dollars(line.costPerRecord)} a record` : ""}</span>
                   </span>
-                </td>
-                <td className={`${td} text-right tabular-nums`}>{line.costPerRecord != null ? dollars(line.costPerRecord) : "—"}</td>
-                <td className={`${td} text-right tabular-nums`} title={`${plural(line.records, "record")} bought`}>{number(line.records)}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.leads, "received")}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.dialable, "dialable")}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.dialed, "dialed")}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.contacted, "contacted", percent(line.contact))}</td>
-                <td className={`${td} text-right tabular-nums`}>{dollars(line.costPerContact)}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.quoted, "quoted")}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.undialableRate == null ? null : Math.max(0, line.leads - line.dialable), "undialable", percent(line.undialableRate))}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.apps, "applied")}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.issued, "issued")}</td>
-                <td className={`${td} text-right tabular-nums`}>{figure(line.netSpend == null ? null : line.leads, "received", dollars(line.netSpend))}</td>
-                <td className={`${td} text-right font-semibold tabular-nums ${line.key === tint.best ? "text-[var(--success-ink)]" : line.key === tint.worst ? "text-[var(--error-ink)]" : line.isTest ? "text-muted-foreground" : "text-foreground"}`}>{figure(line.cpi == null ? null : line.issued, "issued", dollars(line.cpi))}</td>
-                <td className={`${td} text-right tabular-nums`}>{percent(line.claimAcceptance)}</td>
-                <td className={`${td} whitespace-nowrap`}>{line.warnings ? <StatusChip tone="warning">{line.warnings} to review</StatusChip> : <StatusChip tone="good">Linked</StatusChip>}</td>
-              </tr>;
+                  <span className="shrink-0 text-right">
+                    <strong className={cn("block text-2xl font-semibold leading-tight tracking-[-0.02em] tabular-nums", best ? "text-[var(--success-ink)]" : worst ? "text-[var(--error-ink)]" : line.isTest ? "text-muted-foreground" : "text-foreground")}>{figure(line.cpi == null ? null : line.issued, "issued", dollars(line.cpi))}</strong>
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">per issued policy<InfoTip label="About True CPA" side="bottom">Net spend divided by issued policies. A dash means no issued policy is attributed yet. It is never $0.00.</InfoTip></span>
+                  </span>
+                </div>
+                {(line.isTest || line.small || best || worst) && <span className="flex flex-wrap items-center gap-1.5">
+                  {line.isTest && <StatusChip tone="info">Test batch</StatusChip>}
+                  {!line.isTest && line.small && <StatusChip tone="warning">Small sample</StatusChip>}
+                  {best && <StatusChip tone="good">Cheapest policy</StatusChip>}
+                  {worst && <StatusChip tone="danger">Dearest policy</StatusChip>}
+                </span>}
+                <div className="flex flex-col gap-1.5" aria-label={`${line.label}: from bought to issued`}>
+                  {steps.map((step) => <div key={step.label} className="grid grid-cols-[80px_minmax(0,1fr)_64px] items-center gap-2.5 text-xs">
+                    <span className="text-[var(--body)]">{step.label}</span>
+                    <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${step.value ? Math.max(2, (100 * step.value) / top) : 0}%` }} /></span>
+                    <span className="text-right tabular-nums text-foreground">{step.stage ? figure(step.value, step.stage) : <span title={`${plural(line.records, "record")} bought`}>{number(step.value)}</span>}</span>
+                  </div>)}
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-border pt-3 text-xs sm:grid-cols-4">
+                  <span><span className="block text-muted-foreground">Contact</span><span className="tabular-nums text-foreground">{percent(line.contact)} · {dollars(line.costPerContact)}</span></span>
+                  <span title={METRICS_APART}><span className="block text-muted-foreground">Undialable rate<span className="block text-[var(--muted)]">Low is good</span></span><span className="tabular-nums text-foreground">{figure(line.undialableRate == null ? null : Math.max(0, line.leads - line.dialable), "undialable", percent(line.undialableRate))}</span></span>
+                  <span title={METRICS_APART}><span className="block text-muted-foreground">Claim acceptance<span className="block text-[var(--muted)]">High is good</span></span><span className="tabular-nums text-foreground">{percent(line.claimAcceptance)}</span></span>
+                  <span><span className="block text-muted-foreground">Lineage</span>{line.warnings ? <span className="text-[var(--warning-ink)]">{line.warnings} to review</span> : <span className="text-[var(--success-ink)]">Linked</span>}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{figure(line.leads, "received")} leads received</span>
+                  {line.row
+                    ? <Button type="button" size="sm" variant="outline" aria-expanded={open} onClick={() => drill(line.row!)}>Rows</Button>
+                    : <Button type="button" size="sm" variant="outline" onClick={() => openVendor(line.vendorId)}>See campaigns</Button>}
+                </div>
+              </li>;
             })}
-          </tbody>
-        </table>}
+          </ul>
+          <p className="m-0 text-xs text-muted-foreground">Undialable rate and claim acceptance answer different questions and are never combined into one score. A dash for True CPA means no issued policy yet — not zero cost.</p>
+        </div>}
     </TableCard>}
 
+    {/* Where leads drop off (2026-10-26): the funnel, the contact curves, and speed and consent, on one tab. */}
+    {view === "dropoff" && (report ? <>
     {/* The funnel (LA-2.17-2): bought, dialable, dialled, contacted, quoted, applied, issued, each
         with its cost where the spec asks for one (a dash with none, never $0), and each opening
         its rows. Dialled and quoted need 20260925709800; until then they say so. */}
-    {view === "funnel" && (totals ? <TableCard title="Funnel" description="What became of this period's leads.">
+    {totals && <TableCard title="Funnel" description="What became of this period's leads, and what each step cost.">
       <table className="w-full min-w-[860px] border-collapse text-left">
         <thead><tr>{funnel.map((step) => <th key={step.key} scope="col" className={th}>{step.label}</th>)}</tr></thead>
         <tbody><tr>
@@ -483,9 +497,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           })}
         </tr></tbody>
       </table>
-    </TableCard> : <TableCard>{loading ? <SectionLoading rows={2} columns={7} /> : <ErrorState title="The scorecard did not load" detail={error ?? "No figures for this period."} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />}</TableCard>)}
+    </TableCard>}
 
-    {view === "curves" && report && <div className="grid items-start gap-6 xl:grid-cols-2">
+    <div className="grid items-start gap-6 xl:grid-cols-2">
       {[
         { title: "Contact rate by slot", items: report.contact_rate_by_slot.map((item) => ({ key: item.slot, label: item.slot.replaceAll("_", " "), rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: null as number | null, spec: { key: `slot:${item.slot}`, title: `leads dialled in the ${item.slot.replaceAll("_", " ")} slot`, params: { stage: "received", slot: item.slot } } as DrillSpec })) },
         { title: "Attempts-to-contact curve", items: report.attempts_to_contact.map((item) => ({ key: String(item.attempt_number), label: `Attempt ${item.attempt_number}`, rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: item.share_of_contacts_percent, spec: { key: `attempt:${item.attempt_number}`, title: `leads with an attempt ${item.attempt_number} outcome`, params: { stage: "received", attempt_number: String(item.attempt_number) } } as DrillSpec })) },
@@ -498,9 +512,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           <span className="w-[200px] shrink-0 text-right tabular-nums"><strong className="font-semibold text-foreground">{percent(item.rate)}</strong> <span className="text-xs text-muted-foreground">({item.contacts}/{item.attempts}){item.share != null ? ` · ${item.share}% of contacts` : ""}</span></span>
         </div>) : <div className="border-t border-border"><EmptyState title="No dispositions in this period" hint="Rates appear once calls are dispositioned." /></div>}
       </TableCard>)}
-    </div>}
+    </div>
 
-    {view === "speed" && report && <div className="grid items-start gap-6 xl:grid-cols-2">
+    <div className="grid items-start gap-6 xl:grid-cols-2">
       <TableCard title="Speed to lead" description="Median arrival to first dial · real-time leads · all time">
         {!upgraded ? <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">Needs a database update that has not been applied yet.</p>
           : speedRows.length ? speedRows.map((row) => <div key={row.vendor_id} className="border-t border-border px-4 py-2.5">
@@ -521,9 +535,8 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
             <span className="tabular-nums"><strong className={`font-semibold ${row.consent_claimed_pct != null && row.consent_claimed_pct < 50 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{percent(row.consent_claimed_pct)}</strong> <span className="text-xs text-muted-foreground">of {number(row.consent_leads)} · {percent(row.consent_any_pct)} arrived with one</span></span>
           </div>) : <div className="border-t border-border"><EmptyState title="No vendor leads yet" hint="Coverage shows once a vendor has sent leads." /></div>}
       </TableCard>
-    </div>}
-
-    {(view === "curves" || view === "speed") && !report && <TableCard>{loading ? <SectionLoading rows={4} columns={3} /> : <ErrorState title="The scorecard did not load" detail={error ?? "No figures for this period."} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />}</TableCard>}
+    </div>
+    </> : <TableCard>{loading ? <SectionLoading rows={4} columns={3} /> : <ErrorState title="The scorecard did not load" detail={error ?? "No figures for this period."} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />}</TableCard>)}
 
     {view === "compare" && <CampaignComparisonWorkspace rows={report?.rows ?? []} defaultFrom={applied.from} defaultTo={applied.to} />}
     </div>
@@ -549,7 +562,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           disabled={detailLoading}
           onPage={(next) => { if (!detailLoading) void loadDrill(drillSpec, (next - 1) * drillResult.limit); }}
         /> : null}</span>
-        <Button type="button" variant="outline" onClick={closeDrill}>Close</Button>
+        <span className="flex items-center gap-3"><span>Operational fields only — no phone, SSN or health details.</span><Button type="button" variant="outline" onClick={closeDrill}>Close</Button></span>
       </div>}
     >
       {drillResult && !drillResult.drillReady && <p className="border-b border-border bg-[var(--warning-surface)] px-5 py-2.5 text-xs leading-normal text-[var(--warning-ink)]">

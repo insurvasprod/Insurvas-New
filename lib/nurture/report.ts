@@ -47,6 +47,8 @@ export type NurtureReport = {
   /** False until 20260925706500 is applied: batches cannot be started. */
   batchesReady: boolean;
   contactRate: { recycled: number | null; fresh: number | null } | null;
+  /** This month, fresh against recycled: served, dialled, contacts (tenant_recycle_performance). Moved here from Activity, 2026-10-26. */
+  sources: Array<{ source: "fresh" | "recycled"; served: number; dialled: number; contacts: number; contactRate: number | null }>;
   /**
    * Conversion, recycled against fresh, all time (LA-2.20-6, W3.5): issued policies per 100 leads
    * worked on each side. Recycled: every cleared reactivation, and the policies issued after one
@@ -313,6 +315,7 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
       blockedThisMonth,
     },
     contactRate: performanceRows.length ? { recycled: rateOf("recycled"), fresh: rateOf("fresh") } : null,
+    sources: performanceRows.filter((row) => row.source_type === "fresh" || row.source_type === "recycled").map((row) => ({ source: row.source_type === "fresh" ? "fresh" as const : "recycled" as const, served: Number(row.served ?? 0), dialled: Number(row.clicked ?? 0), contacts: Number(row.contacts ?? 0), contactRate: row.contact_rate_percent == null ? null : Number(row.contact_rate_percent) })),
     conversion: conversionView,
     cadence: cadenceView,
     rotation,

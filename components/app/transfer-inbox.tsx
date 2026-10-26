@@ -1,7 +1,7 @@
 "use client";
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Download, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -9,12 +9,16 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { Callout, KeyValues, SettingsMeter, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { SamePersonPrompt, type SamePersonCheck } from "@/components/app/same-person-prompt";
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/components/ui/bulk-bar";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
+import { TransfersViews } from "@/components/app/inbound/transfers-views";
+import { WaitBar } from "@/components/app/inbound/stream-parts";
+import { LeadFlowMap } from "@/components/ui/lead-flow-map";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -48,7 +52,7 @@ type Item = {
   screeningWarning: string | null;
   duplicateWarning: boolean;
   preflightStatus: string;
-  preflight: { matches?: Array<{ leadId: string | null; partnerName: string | null; outcome: string | null }> } | null;
+  preflight: Omit<SamePersonCheck, "status"> | null;
   queuedAt: string;
   screening?: ScreeningSignal;
 };
@@ -165,7 +169,6 @@ function signalOf(item: Item) {
   return item.screening ?? screeningSignal({ screeningOutcome: item.screeningOutcome, preflightStatus: item.preflightStatus, duplicateWarning: item.duplicateWarning });
 }
 
-const PREFLIGHT_LABEL: Record<string, string> = { new_household: "New household", spoken_before: "Spoken to before", already_customer: "Already a customer", not_checked: "Not checked" };
 
 function screeningNote(item: Item) {
   const signal = signalOf(item);
@@ -194,6 +197,15 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
 }
 
 const PILL_TONE: Record<ScreeningSignal["tone"], PillTone> = { error: "error", warning: "warning", success: "success", neutral: "neutral" };
+
+/** Inbound A: the callers in three groups, in this order. */
+type Group = "waiting" | "with_agent" | "done";
+const GROUP_LABEL: Record<Group, string> = { waiting: "Waiting", with_agent: "With an agent", done: "Done" };
+function groupOf(item: Item): Group {
+  if (item.status === "unclaimed") return "waiting";
+  return isWithAgent(item.status) ? "with_agent" : "done";
+}
+function groupRank(item: Item) { return { waiting: 0, with_agent: 1, done: 2 }[groupOf(item)]; }
 
 export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: string }) {
   const [data, setData] = useState<Data | null>(null);
@@ -390,7 +402,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
 
   const currentUserId = data?.currentUserId;
   const shown = useMemo(() => {
-    const items = data?.items ?? [];
+    const items = [...(data?.items ?? [])].sort((a, b) => groupRank(a) - groupRank(b));
     const term = search.trim().toLowerCase();
     if (!term) return items;
     return items.filter((item) => [item.customer, item.partnerName, item.productLine, productLineLabel(item.productLine), item.state, item.ownerName ?? "", ageLabel(item.age), signalOf(item).label].some((value) => value.toLowerCase().includes(term)));
@@ -399,7 +411,15 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   // on a realtime refresh or a filter change drops out of the selection.
   const selection = useRowSelection(shown.map((item) => item.id));
 
-  const header = <PageHeader title="Inbound transfers" />;
+  // Inbound A · Stream (2026-10-25): one Inbound page with two views; this is its Queue view. Take
+  // next sits beside the switch, as on the Floor.
+  const header = (
+    <PageHeader
+      title="Inbound"
+      description="Live transfers from your partners: who is waiting, who has them, how it ended."
+      actions={<><TransfersViews current="queue" /><Button data-guide="inbound-claim" type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Take next"}</Button></>}
+    />
+  );
 
   if (!data) {
     if (!error) return <PageLoading />;
@@ -471,7 +491,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
       {/* Views on the left, the one action on the right — the same line as the Agent Floor's. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
       <div role="tablist" aria-label="Inbound views" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
-        {([["transfers", "Transfers", data.items.length], ["partners", "Today by partner", extras?.byPartner.length ?? 0]] as const).map(([key, label, count]) => (
+        {([["transfers", "Callers", data.items.length], ["partners", "Today by partner", extras?.byPartner.length ?? 0]] as const).map(([key, label, count]) => (
           <button
             key={key}
             id={`inbound-tab-${key}`}
@@ -487,7 +507,6 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
           </button>
         ))}
       </div>
-        <Button data-guide="inbound-claim" type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Claim next"}</Button>
       </div>
 
       <div key={tab} id="inbound-tabpanel" role="tabpanel" aria-labelledby={`inbound-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
@@ -506,6 +525,29 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
           return <StatTile label="Completed today" value={extras ? today.completed : "—"} valueTone={today.completed ? "good" : undefined} footnote={!extras ? "loading today" : today.sent ? `${Math.round((today.completed / today.sent) * 100)}% of ${today.sent} sent today` : "nothing sent today"} />;
         })()}
       </StatStrip>
+
+      {/* Today's inbound as the dashboard's stream: sent, waiting, with an agent, completed. Waiting
+          lights up amber while anyone is waiting. */}
+      {(() => {
+        const today = (extras?.byPartner ?? []).reduce((sum, partner) => ({ sent: sum.sent + partner.sent, completed: sum.completed + partner.completed, dropped: sum.dropped + partner.dropped }), { sent: 0, completed: 0, dropped: 0 });
+        const sending = (extras?.byPartner ?? []).filter((partner) => partner.sent > 0).length;
+        return (
+          <LeadFlowMap
+            mode="path"
+            label="Today's inbound"
+            hot={summary?.waiting ? 1 : null}
+            drops={[]}
+            worst={null}
+            aside={<span className="text-xs text-muted-foreground">{extras ? `${today.dropped} dropped today` : ""}</span>}
+            stages={[
+              { label: "Sent today", value: extras ? String(today.sent) : "—", count: today.sent, note: extras ? `from ${sending} ${sending === 1 ? "partner" : "partners"}` : undefined },
+              { label: "Waiting", value: summary ? String(summary.waiting) : "—", count: summary?.waiting ?? 0, note: summary?.waiting ? `longest ${duration(summary.longestWaitSeconds)}` : "nobody waiting" },
+              { label: "With an agent", value: summary ? String(summary.claimed) : "—", count: summary?.claimed ?? 0, note: summary?.claimedWithoutCall ? `${summary.claimedWithoutCall} with no call` : "on calls" },
+              { label: "Completed today", value: extras ? String(today.completed) : "—", count: today.completed, note: today.sent ? `${Math.round((today.completed / today.sent) * 100)}% of sent` : undefined },
+            ]}
+          />
+        );
+      })()}
 
       {extras && extras.lost.length > 0 && (
         <section aria-label="Lost transfers" className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[color-mix(in_srgb,var(--error)_30%,transparent)] bg-[var(--error-surface)] px-4 py-3 sm:flex-row sm:items-start">
@@ -553,9 +595,10 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
         </TableCard>
       )}
 
+      <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-stretch">
       {/* overflow-visible: the Filters popover must paint outside the card, over the rows below. */}
       <TableCard
-        className="relative z-20 overflow-visible [&>div:first-child]:rounded-t-lg [&>div:last-child]:rounded-b-lg"
+        className="relative z-20 min-w-0 flex-1 overflow-visible [&>div:first-child]:rounded-t-lg [&>div:last-child]:rounded-b-lg"
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search loaded transfers" />
@@ -621,17 +664,26 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
                 <th scope="col" className={cn(st.th, "w-[150px]")}>Partner</th>
                 <th scope="col" className={cn(st.th, "w-[150px]")}>Screening</th>
                 <th scope="col" className={cn(st.th, "w-[130px]")}>Owner</th>
-                <th scope="col" className={cn(st.th, "w-[90px]")}>Wait</th>
+                <th scope="col" className={cn(st.th, "w-[190px]")}>Wait</th>
+                <th scope="col" className={cn(st.th, "w-[92px]")}><span className="sr-only">Claim</span></th>
               </tr>
             </thead>
             <tbody className="m-seq">
-              {pageRows.map((item) => {
+              {pageRows.map((item, index) => {
+                const group = groupOf(item);
+                const groupStart = index === 0 || groupOf(pageRows[index - 1]) !== group;
                 const signal = signalOf(item);
                 const wait = waitOf(item);
                 const urgent = sla && item.status === "unclaimed" && item.waitSeconds >= sla.escalateSeconds;
                 const state = rowState(item, data.rowFacts?.[item.id], handoffIds, now);
                 return (
-                  <tr key={item.id} onClick={() => setSelectedId(item.id)} className={cn("m-row cursor-pointer", selectedId === item.id ? "bg-[var(--brand-50)]" : selection.isSelected(item.id) ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]")}>
+                  <Fragment key={item.id}>
+                  {groupStart && (
+                    <tr aria-hidden="true">
+                      <td colSpan={9} className="border-t border-[var(--border)] bg-[var(--surface-alt)]/40 px-4 py-1.5 text-xs leading-[1.5] font-semibold tracking-[0.06em] uppercase text-[var(--muted)]">{GROUP_LABEL[group]}</td>
+                    </tr>
+                  )}
+                  <tr onClick={() => setSelectedId(item.id)} className={cn("m-row cursor-pointer", selectedId === item.id ? "bg-[var(--brand-50)]" : selection.isSelected(item.id) ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]")}>
                     <td className={st.td}><RowCheckbox selection={selection} id={item.id} label={`Select ${item.customer}`} /></td>
                     <td className={st.td}>
                       <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedId(item.id); }} className="cursor-pointer border-0 bg-transparent p-0 text-left text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">{item.customer}</button>
@@ -645,17 +697,25 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
                       {ownerLabel(item, currentUserId)}
                       {state && <span className={cn("block text-xs leading-[1.5] font-semibold tabular-nums", ROW_STATE_INK[state.tone])}>{state.text}</span>}
                     </td>
-                    <td className={cn(st.td, "whitespace-nowrap tabular-nums", urgent && "font-semibold text-[var(--error-ink)]")}>{wait === null ? "—" : duration(wait)}</td>
+                    <td className={cn(st.td, "whitespace-nowrap tabular-nums", urgent && "font-semibold text-[var(--error-ink)]")}>
+                      {item.status === "unclaimed" && sla ? (
+                        <span className="flex items-center gap-3">
+                          <span className={cn("w-[64px] font-semibold", item.waitSeconds >= sla.escalateSeconds ? "text-[var(--error-ink)]" : item.waitSeconds >= sla.warnSeconds ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]")}>{duration(item.waitSeconds)}</span>
+                          <WaitBar seconds={item.waitSeconds} warnSeconds={sla.warnSeconds} escalateSeconds={sla.escalateSeconds} />
+                        </span>
+                      ) : wait === null ? "—" : duration(wait)}
+                    </td>
+                    <td className={cn(st.td, "text-right")}>
+                      {item.status === "unclaimed" && <Button type="button" onClick={(event) => { event.stopPropagation(); void claim(item.id); }} size="sm" variant={index === 0 && group === "waiting" ? "default" : "outline"} disabled={readOnly || claiming === item.id}>{claiming === item.id ? "Claiming…" : "Claim"}</Button>}
+                    </td>
                   </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
         )}
       </TableCard>
-
-      </>}
-      </div>
 
       <TransferDrawer
         item={selected}
@@ -668,6 +728,10 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
         onRelease={(item, action) => void release(item, action)}
         onClose={() => setSelectedId("")}
       />
+      </div>
+
+      </>}
+      </div>
     </div>
   );
 }
@@ -757,7 +821,6 @@ function TransferDrawer({ item, sla, currentUserId, isOwner, readOnly, claiming,
   const wait = item ? waitOf(item) : null;
   const mine = item ? Boolean(currentUserId && item.ownerUserId === currentUserId) : false;
   const meterTone = !sla || wait === null ? "primary" : wait >= sla.escalateSeconds ? "error" : wait >= sla.warnSeconds ? "warning" : "success";
-  const previous = item?.preflight?.matches?.find((match) => match.partnerName)?.partnerName;
   // The ordered checks, read when a transfer is opened (lib/transferInbox/screeningLadder.ts).
   const [ladder, setLadder] = useState<{ id: string; value: Ladder | null } | null>(null);
   const itemId = item?.id ?? null;
@@ -775,7 +838,8 @@ function TransferDrawer({ item, sla, currentUserId, isOwner, readOnly, claiming,
     // An overlay on the right edge (DetailPanel), so the inbox table keeps its width under it.
     item && signal ? (
       <DetailPanel
-        mode="overlay"
+        mode="split"
+        splitFrom="xl"
         title={item.customer}
         subtitle={<>{productLineLabel(item.productLine)} · {item.partnerName} · {item.status === "unclaimed" ? `waiting ${duration(item.waitSeconds)}` : isWithAgent(item.status) ? "with an agent" : item.status}</>}
         onClose={onClose}
@@ -835,11 +899,7 @@ function TransferDrawer({ item, sla, currentUserId, isOwner, readOnly, claiming,
           )}
         </section>
 
-        <section>
-          <h3 className={cn(label12, "m-0 mb-2")}>Existing-customer preflight</h3>
-          <p className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{PREFLIGHT_LABEL[item.preflightStatus] ?? item.preflightStatus.replaceAll("_", " ")}</p>
-          {previous && <p className="mt-1 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">Previous lead from {previous}</p>}
-        </section>
+        <SamePersonPrompt compact check={{ ...item.preflight, status: item.preflightStatus }} duplicateFlagged={item.duplicateWarning} />
 
         <section>
           <h3 className={cn(label12, "m-0 mb-3")}>Claim</h3>

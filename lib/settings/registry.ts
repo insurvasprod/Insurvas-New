@@ -58,9 +58,17 @@ export function itemHref(section: Pick<SettingsSection, "id" | "route">, item: P
   return section.route ? `${section.route}#${item.anchor}` : `/app/settings#${section.id}/${item.anchor}`;
 }
 
+/**
+ * Sections merged into another (2026-10-26: Carrier library and States & licences became Carriers).
+ * Old links, bookmarks and emails keep landing on the right place, on the right step.
+ */
+const MOVED_TABS: Record<string, string> = { "carrier-library": "carriers", "states-licences": "carriers/carriers-licences" };
+
 /** A settings hash split into the tab and the control inside it: "sales-preferences/qa-buffer". */
 export function parseSettingsHash(hash: string): { tab: string; anchor: string | null } {
-  const raw = hash.replace(/^#/, "");
+  const given = hash.replace(/^#/, "");
+  const [head, ...rest] = given.split("/");
+  const raw = MOVED_TABS[head] ? [MOVED_TABS[head], ...rest].join("/") : given;
   const slash = raw.indexOf("/");
   return slash < 0 ? { tab: raw, anchor: null } : { tab: raw.slice(0, slash), anchor: raw.slice(slash + 1) || null };
 }

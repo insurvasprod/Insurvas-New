@@ -34,8 +34,8 @@ export function LandingHero() {
       <ViewTransition name="brand-ribbon" share="ribbon-morph" default="none">
         <LandingObject kind="ribbon" className={`pointer-events-none absolute -right-[12%] top-[-6%] -z-10 h-[112%] w-[100%] [mask-image:linear-gradient(90deg,transparent_0%,black_35%,black_85%,transparent_100%)] lg:w-[78%] ${styles.ribbonIn}`} />
       </ViewTransition>
-      {/* Keeps the headline legible where the ribbon passes behind it. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 -z-10 w-full bg-[linear-gradient(90deg,var(--background)_30%,transparent_70%)] lg:w-2/3" />
+      {/* Keeps the headline legible where the ribbon passes behind it. On phones the text spans the whole width, so the veil never clears completely there (2026-10-22). */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 -z-10 w-full bg-[linear-gradient(90deg,var(--background)_30%,transparent_70%)] max-sm:bg-[linear-gradient(90deg,var(--background)_35%,color-mix(in_srgb,var(--background)_60%,transparent)_100%)] lg:w-2/3" />
 
       <div className="mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-center px-4 pb-20 pt-32 sm:px-6 lg:px-16">
         <p className={`text-sm font-semibold text-[var(--accent-ink)] ${styles.heroRise}`} style={at(700)}>For life &amp; health agencies and call centers that buy their leads</p>

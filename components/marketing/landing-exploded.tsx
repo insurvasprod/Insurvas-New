@@ -81,15 +81,17 @@ function LeadScene({ t }: { t: number }) {
   const facts: Array<[string, string]> = [["Campaign", "Cobalt Media · FE-Sep"], ["Vendor", "Cobalt Media"], ["State", "Illinois"], ["Product", "Final expense"]];
   const tag = smooth(0.55, 0.85, t);
   return (
-    <div className="relative flex h-full flex-col justify-center px-7">
-      <div className="flex items-center gap-3 pr-32">
-        <span className="inline-flex size-11 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--primary)_18%,var(--color-card))] text-sm font-semibold text-[var(--accent-ink)]">MV</span>
+    // Below 480px (the stacked phone cards) the price tag drops into the flow under the name instead of
+    // floating over it, and the facts follow it (2026-10-22).
+    <div className="relative flex h-full flex-col justify-center px-7 max-[479px]:px-5">
+      <div className="flex items-center gap-3 pr-32 max-[479px]:pr-0">
+        <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--primary)_18%,var(--color-card))] text-sm font-semibold text-[var(--accent-ink)]">MV</span>
         <div>
           <div className="text-title-sm font-semibold text-foreground">Marisol Vega</div>
           <div className="text-sm text-muted-foreground">(312) 555-0148</div>
         </div>
       </div>
-      <dl className="mt-5 grid grid-cols-2 gap-2">
+      <dl className="mt-5 grid grid-cols-2 gap-2 max-[479px]:order-2">
         {facts.map(([label, value], index) => {
           const shown = smooth(index * 0.12, index * 0.12 + 0.2, t);
           return (
@@ -102,7 +104,7 @@ function LeadScene({ t }: { t: number }) {
       </dl>
       {/* The price tag swings onto the lead. */}
       <div
-        className="absolute right-6 top-6 origin-top-right rounded-xl border border-[var(--primary)] bg-[var(--color-card)] px-3.5 py-2 shadow-[0_14px_30px_-14px_color-mix(in_srgb,var(--primary)_70%,transparent)]"
+        className="absolute right-6 top-6 origin-top-right rounded-xl max-[479px]:static max-[479px]:order-1 max-[479px]:mt-4 max-[479px]:self-start max-[479px]:origin-top-left border border-[var(--primary)] bg-[var(--color-card)] px-3.5 py-2 shadow-[0_14px_30px_-14px_color-mix(in_srgb,var(--primary)_70%,transparent)]"
         style={{ opacity: tag, transform: `rotate(${(1 - tag) * -14 + 4}deg) scale(${0.85 + tag * 0.15})` }}
       >
         <div className="text-xs text-muted-foreground">Paid for this lead</div>
@@ -164,9 +166,9 @@ function ApplicationScene({ t }: { t: number }) {
           );
         })}
       </div>
-      {/* The Issued stamp lands across the form. */}
+      {/* The Issued stamp lands across the form (below it on narrow phones, where it would cover a field). */}
       <div
-        className="pointer-events-none absolute bottom-5 right-6 rounded-xl border-2 border-[var(--success)] px-3 py-1.5 text-center text-[var(--success)]"
+        className="pointer-events-none absolute bottom-5 right-6 rounded-xl border-2 max-[479px]:static max-[479px]:mr-2 max-[479px]:mt-4 max-[479px]:self-end border-[var(--success)] px-3 py-1.5 text-center text-[var(--success)]"
         style={{ opacity: stamp, transform: `rotate(-8deg) scale(${1.6 - stamp * 0.6})` }}
       >
         <div className="text-sm font-semibold uppercase tracking-[0.12em]">Issued</div>
@@ -300,7 +302,7 @@ export function LandingExploded() {
 
   return (
     <section ref={ref} id="product" aria-labelledby="exploded-title" className="relative scroll-mt-16 bg-[var(--surface-alt)] antialiased lg:h-[520vh]">
-      <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 py-24 sm:px-6 lg:sticky lg:top-0 lg:h-screen lg:grid-cols-[minmax(0,.78fr)_minmax(0,1.22fr)] lg:gap-16 lg:px-16 lg:pb-10 lg:pt-24">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 py-24 sm:px-6 lg:sticky lg:top-0 lg:h-screen lg:grid-cols-[minmax(0,.78fr)_minmax(0,1.22fr)] lg:gap-16 lg:px-16 lg:pb-10 lg:pt-24">
         <div>
           <p className="text-sm font-semibold text-[var(--accent-ink)]">Inside one call</p>
           <h2 id="exploded-title" className="mt-3 text-title-lg font-semibold leading-[1.05] tracking-[-0.035em] text-[var(--ink)] sm:text-headline-lg">Everything a sale touches, in one place.</h2>
@@ -346,7 +348,7 @@ export function LandingExploded() {
                       <span className="text-base font-semibold text-foreground">{item.title}</span>
                     </div>
                     <p className="mt-1.5 text-sm leading-normal text-muted-foreground">{item.body}</p>
-                    <div aria-hidden="true" className={`${CONSOLE} mt-3 h-[300px] overflow-hidden rounded-2xl`}><Scene t={1} /></div>
+                    <div aria-hidden="true" className={`${CONSOLE} mt-3 grid min-h-[300px] overflow-hidden rounded-2xl py-5`}><Scene t={1} /></div>
                   </li>
                 );
               })}

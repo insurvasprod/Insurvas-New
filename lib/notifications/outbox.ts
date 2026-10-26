@@ -121,7 +121,7 @@ export async function sendDigests(now = new Date(), tenantId?: string): Promise<
   return out;
 }
 
-/** The daily E&O and licence check (also run by pg_cron); here so a deployment without pg_cron still gets it. */
+/** The daily licence check (also run by pg_cron); here so a deployment without pg_cron still gets it. */
 export async function emitCredentialExpiry(): Promise<number> {
   const { data, error } = await db().rpc("emit_credential_expiry_alerts");
   if (error) {

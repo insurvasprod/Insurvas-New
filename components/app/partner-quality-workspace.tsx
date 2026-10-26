@@ -8,7 +8,7 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarC
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { PARTNER_TYPES, PARTNER_TYPE_LABELS } from "@/lib/partners/constants";
 import { defaultPartnerQualityPeriod, percentChange, percentOf, pointChange, screeningFlags, screeningPassRate } from "@/lib/partnerQuality/metrics";
@@ -36,7 +36,23 @@ const SORT_LABEL: Record<SortKey, string> = { partner_name: "partner name", sent
 /** Rate shown only when the partner sent something; "—" otherwise. */
 function rate(value: number | null, sent: number) { return sent ? percent(value) : "—"; }
 
-export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Period | null }) {
+/** Partners A4: this period (green) over the prior one (grey), against the best rate on screen. */
+function ConversionBars({ now, prior, max }: { now: number | null; prior: number | null; max: number }) {
+  const width = (value: number | null) => `${value == null || max <= 0 ? 0 : Math.max(3, (value / max) * 100)}%`;
+  return (
+    <span aria-hidden className="flex w-20 flex-col gap-1">
+      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: width(now) }} /></span>
+      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--border-strong)]" style={{ width: width(prior) }} /></span>
+    </span>
+  );
+}
+
+/**
+ * `recordLinks`: the reader can open partner records (owner or bookkeeper with Partners on the plan),
+ * so a row opens the partner's own record on its Quality tab (2026-10-25). Anyone else — a producer —
+ * keeps the stand-alone quality page.
+ */
+export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false }: { initialPeriod?: Period | null; recordLinks?: boolean }) {
   const [period, setPeriod] = useState<Period>(() => initialPeriod ?? defaultPartnerQualityPeriod());
   const [data, setData] = useState<PartnerQualityReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,10 +120,11 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
 
   const needle = search.trim().toLowerCase();
   const shown = rows.filter((row) => (!hideEmpty || row.sent > 0) && (typeFilter === "all" || row.partner_type === typeFilter) && (!needle || row.partner_name.toLowerCase().includes(needle)));
+  const conversionMax = Math.max(0, ...shown.flatMap((row) => [row.sent ? row.conversion_rate ?? 0 : 0, row.previous.sent ? row.previous.conversion_rate ?? 0 : 0]));
   const { current, rows: pageRows } = paginate(shown, page, pageSize);
   const filtered = hideEmpty || typeFilter !== "all" || needle !== "";
   const clearFilters = () => { setSearch(""); setTypeFilter("all"); setHideEmpty(false); setPage(1); };
-  const detailHref = (row: PartnerQualityRow) => `/app/partner-quality/${row.partner_id}?${periodQuery(active)}`;
+  const detailHref = (row: PartnerQualityRow) => (recordLinks ? `/app/publishers/${row.partner_id}?tab=quality` : `/app/partner-quality/${row.partner_id}?${periodQuery(active)}`);
   const open = (row: PartnerQualityRow, metric: PartnerQualityMetric) => drilldown.open({ label: `${row.partner_name} · ${metricLabel(metric)}`, partnerId: row.partner_id, metric, period: active });
 
   function exportCsv() {
@@ -123,12 +140,13 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
 
     {/* Four figures an operator acts on (2026-10-06 redesign). Partners with leads rides on Leads
         sent and the duplicate rate on Screening pass; both stay columns and drill-downs below. */}
-    <StatStrip label="Partner quality totals">
-      <StatTile label="Leads sent" value={count(total.sent)} delta={sentChange == null ? undefined : { value: sentChange }} footnote={`prev ${count(previous.sent)} · ${count(withLeads)} of ${data.rows.length} partners sent (prev ${count(previousWithLeads)})`} />
-      <StatTile label="Screening pass" value={total.sent ? percent(pass) : "—"} valueTone={pass != null && pass < 90 ? "warning" : undefined} delta={total.sent ? ptsDelta(pass, previousPass, "up") : undefined} footnote={`${count(screeningFlags(total.screening))} flagged · ${total.sent ? percent(duplicateRate) : "—"} duplicates`} />
-      <StatTile label="Conversion" value={total.sent ? percent(conversion) : "—"} delta={total.sent ? ptsDelta(conversion, percentOf(previous.submitted, previous.sent), "up") : undefined} footnote={`${count(total.submitted)} submitted`} />
-      <StatTile label="DQ rate" value={total.sent ? percent(dqRate) : "—"} delta={total.sent ? ptsDelta(dqRate, percentOf(previous.disqualified, previous.sent), "down") : undefined} footnote={`${count(total.disqualified)} leads`} />
-    </StatStrip>
+    {/* Partners A4 (2026-10-25): four glass tiles, each with its change on the prior period. */}
+        <section aria-label="Partner quality totals" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <StatTile className="m-glass rounded-xl border border-border" label="Leads sent" value={count(total.sent)} delta={sentChange == null ? undefined : { value: sentChange }} footnote={`prev ${count(previous.sent)} · ${count(withLeads)} of ${data.rows.length} partners sent (prev ${count(previousWithLeads)})`} />
+      <StatTile className="m-glass rounded-xl border border-border" label="Screening pass" value={total.sent ? percent(pass) : "—"} valueTone={pass != null && pass < 90 ? "warning" : undefined} delta={total.sent ? ptsDelta(pass, previousPass, "up") : undefined} footnote={`${count(screeningFlags(total.screening))} flagged · ${total.sent ? percent(duplicateRate) : "—"} duplicates`} />
+      <StatTile className="m-glass rounded-xl border border-border" label="Conversion" value={total.sent ? percent(conversion) : "—"} delta={total.sent ? ptsDelta(conversion, percentOf(previous.submitted, previous.sent), "up") : undefined} footnote={`${count(total.submitted)} submitted`} />
+      <StatTile className="m-glass rounded-xl border border-border" label="DQ rate" value={total.sent ? percent(dqRate) : "—"} delta={total.sent ? ptsDelta(dqRate, percentOf(previous.disqualified, previous.sent), "down") : undefined} footnote={`${count(total.disqualified)} leads`} />
+    </section>
 
     <TableCard
       className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-260px)]`}
@@ -185,7 +203,12 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
                       <td className="text-right"><MetricCell label={`${row.partner_name}: submitted ${row.submitted}; open leads`} onClick={() => open(row, "submitted")}>{count(row.submitted)}</MetricCell><Prior label="Submitted" value={count(prior.submitted)} /></td>
                       <td className="text-right tabular-nums" title={`${count(screeningFlags(row.screening))} of ${count(row.sent)} flagged`}>{rate(rowPass, row.sent)}<Prior label="Screening pass" value={rate(screeningPassRate(prior), prior.sent)} /></td>
                       <td className="text-right"><MetricCell label={`${row.partner_name}: duplicates ${row.duplicates}; open leads`} onClick={() => open(row, "duplicate")}>{count(row.duplicates)}</MetricCell><Prior label="Duplicates" value={count(Math.round(((prior.duplicate_rate ?? 0) * prior.sent) / 100))} /></td>
-                      <td className="text-right"><MetricCell label={`${row.partner_name}: conversion ${rate(row.conversion_rate, row.sent)}, ${row.submitted} of ${row.sent}; open submitted leads`} onClick={() => open(row, "submitted")}>{rate(row.conversion_rate, row.sent)}</MetricCell><Prior label="Conversion" value={rate(prior.conversion_rate, prior.sent)} /></td>
+                      <td className="text-right">
+                        <span className="flex items-center justify-end gap-3">
+                          <ConversionBars now={row.sent ? row.conversion_rate : null} prior={prior.sent ? prior.conversion_rate : null} max={conversionMax} />
+                          <span><MetricCell label={`${row.partner_name}: conversion ${rate(row.conversion_rate, row.sent)}, ${row.submitted} of ${row.sent}; open submitted leads`} onClick={() => open(row, "submitted")}>{rate(row.conversion_rate, row.sent)}</MetricCell><Prior label="Conversion" value={rate(prior.conversion_rate, prior.sent)} /></span>
+                        </span>
+                      </td>
                       <td className="text-right"><MetricCell label={`${row.partner_name}: DQ rate ${rate(row.disqualification_rate, row.sent)}, ${row.disqualified} of ${row.sent}; open disqualified leads`} onClick={() => open(row, "disqualified")}>{rate(row.disqualification_rate, row.sent)}</MetricCell><Prior label="DQ %" value={rate(prior.disqualification_rate, prior.sent)} /></td>
                       <td className="text-right"><Button asChild variant="outline" size="sm"><Link href={detailHref(row)} aria-label={`View ${row.partner_name}`}>View</Link></Button></td>
                     </tr>

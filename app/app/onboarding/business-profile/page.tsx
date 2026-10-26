@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AuthPage } from "@/components/app/auth-card";
+import { FunnelFrame } from "@/components/app/funnel-frame";
 import { BusinessProfileForm, type BusinessProfileInitial } from "@/components/app/business-profile-form";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -18,13 +18,12 @@ export default async function BusinessProfilePage() {
   // Coming back from checkout to correct the profile: start from what was saved, not a blank form.
   const { data } = await getSupabaseServiceClient()
     .from("business_profiles")
-    .select("business_name, npn, primary_state, products_sold, monthly_volume_range, lead_sources, lead_source_other")
+    .select("business_name, primary_state, products_sold, monthly_volume_range, lead_sources, lead_source_other")
     .eq("tenant_id", context.tenantId)
     .maybeSingle();
   const initial: BusinessProfileInitial | null = data
     ? {
         businessName: data.business_name,
-        npn: data.npn,
         primaryState: data.primary_state,
         productsSold: data.products_sold,
         monthlyVolumeRange: data.monthly_volume_range,
@@ -33,5 +32,5 @@ export default async function BusinessProfilePage() {
       }
     : null;
 
-  return <AuthPage><BusinessProfileForm initial={initial} /></AuthPage>;
+  return <FunnelFrame step={3} wide><BusinessProfileForm initial={initial} email={context.email} /></FunnelFrame>;
 }

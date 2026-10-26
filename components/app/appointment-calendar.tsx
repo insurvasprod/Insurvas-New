@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronDown, Plus } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -11,11 +11,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { RebookButton } from "@/components/app/appointment-rebook";
 import { ViewTabs } from "@/components/app/view-tabs";
+import { MiniMonth, type YearMonth } from "@/components/app/calendar/mini-month";
 import { faceLabel } from "@/lib/appointments/appointmentFacts";
 import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type BlockRepeat, type PickerContext } from "@/lib/appointments/calendarMath";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -128,8 +128,126 @@ function Slot({ title, sub, tone, children }: { title: ReactNode; sub?: ReactNod
   );
 }
 
+/** A callback in the diary's day (Calendar B): read from /api/app/callbacks when this person may. */
+type DiaryCallback = { id: string; leadId: string; customerName: string; scheduledAtUtc: string; assignedTo: string; status: string; productName: string | null; isOverdue: boolean; isDemo?: boolean };
+const OPEN_CALLBACK = new Set(["scheduled", "due", "missed"]);
+
+type AgendaRow =
+  | { kind: "appointment"; minute: number; item: Appointment }
+  | { kind: "free"; minute: number; end: number; startIso: string }
+  | { kind: "blocked"; minute: number; label: string; sub: string }
+  | { kind: "callback"; minute: number; callback: DiaryCallback };
+
+/** The bar beside a row: amber until it is confirmed, green once it is, red for a no-show. */
+const BAR: Record<string, string> = { booked: "bg-[var(--warning)]", confirmed: "bg-[var(--success)]", showed: "bg-[var(--success)]", no_show: "bg-[var(--error)]" };
+const AGENDA_STEP_LABEL: Record<Step, string> = { confirm: "Confirm", showed: "Showed", no_show: "No-show" };
+
+/**
+ * One line of Calendar B's day: an appointment with what can be done to it, a stretch of free time
+ * to book, blocked time, or a callback owed. Time on the left in the diary's clock.
+ */
+function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFuture, onStep, onBook, onRebooked }: {
+  row: AgendaRow;
+  zone: string;
+  slotLength: number;
+  highlightId?: string;
+  steps: Step[];
+  stepping: string | null;
+  isFuture: (iso: string) => boolean;
+  onStep: (item: Appointment, step: Step) => void;
+  onBook: (startIso: string) => void;
+  onRebooked: () => void;
+}) {
+  const line = "grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-4 border-t border-border px-5 sm:grid-cols-[88px_minmax(0,1fr)_auto_auto]";
+  if (row.kind === "free") {
+    return (
+      <li className={`${line} py-2.5`}>
+        <span className="text-xs text-muted-foreground tabular-nums">{clockLabel(row.minute, false)} – {clockLabel(row.end, false)}</span>
+        <span className="flex h-9 items-center rounded-lg border border-dashed border-[var(--border-strong)] px-3 text-sm text-muted-foreground">Free time</span>
+        <span className="hidden sm:block" />
+        <Button type="button" size="sm" variant="outline" onClick={() => onBook(row.startIso)}><Plus aria-hidden="true" />Book</Button>
+      </li>
+    );
+  }
+  if (row.kind === "blocked") {
+    return (
+      <li className={`${line} py-2.5 text-sm text-muted-foreground`}>
+        <span className="text-xs tabular-nums">{clockLabel(row.minute, false)}</span>
+        <span className="truncate">{row.label} · {row.sub.toLowerCase()}</span>
+      </li>
+    );
+  }
+  if (row.kind === "callback") {
+    const callback = row.callback;
+    return (
+      <li className={`${line} py-3.5`}>
+        <span><strong className="block text-sm tabular-nums">{clockLabel(row.minute, false)}</strong></span>
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="w-[3px] self-stretch rounded-full bg-[var(--warning)]" aria-hidden="true" />
+          <span className="min-w-0">
+            {callback.isDemo ? <span className="block truncate text-sm font-semibold">{callback.customerName}</span> : <Link href={`/app/leads/${callback.leadId}`} className="block truncate text-sm font-semibold text-[var(--ink)] hover:underline">{callback.customerName}</Link>}
+            <span className="block truncate text-xs text-muted-foreground">Callback{callback.productName ? ` · ${callback.productName}` : ""}</span>
+          </span>
+        </span>
+        <span className="hidden sm:block"><StatusChip tone={callback.isOverdue ? "danger" : "warning"}>{callback.isOverdue ? "Late callback" : "Callback"}</StatusChip></span>
+        <span className="flex justify-end">{!callback.isDemo && <Button asChild size="sm" variant={callback.isOverdue ? "default" : "outline"}><Link href={`/app/dialer?lead=${callback.leadId}`}>Call now</Link></Button>}</span>
+      </li>
+    );
+  }
+  const item = row.item;
+  const clock = wallClock(item.startsAtUtc, zone);
+  const end = clock.minutes + (item.durationMinutes || slotLength);
+  const unconfirmed = item.status === "booked" && isFuture(item.startsAtUtc);
+  const label = unconfirmed ? "Not confirmed" : STATUS_LABEL[item.status] ?? item.status;
+  const tone: StatusTone = unconfirmed ? "warning" : STATUS_TONE[item.status] ?? "neutral";
+  const facts = item.redacted ? [STATUS_LABEL[item.status]] : [
+    [item.product, faceLabel(item.faceAmountCents ?? null)].filter(Boolean).join(" ") || null,
+    item.bookedByName ? `set by ${item.bookedByName}` : null,
+    theirTime(item.startsAtUtc, item.customerTimezone, zone),
+    item.reminderSentAt && (item.status === "booked" || item.status === "confirmed") ? "reminder sent" : null,
+    item.notes,
+  ].filter(Boolean);
+  const noShow = item.status === "no_show" && !item.redacted;
+  return (
+    <li className={`${line} py-3.5 ${item.appointmentId === highlightId ? "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]" : ""}`}>
+      <span className="tabular-nums"><strong className="block text-sm">{clockLabel(clock.minutes, false)}</strong><span className="text-xs text-muted-foreground">{clockLabel(end, false)}</span></span>
+      <span className="flex min-w-0 items-center gap-3">
+        <span className={`w-[3px] self-stretch rounded-full ${BAR[item.status] ?? "bg-[var(--border-strong)]"}`} aria-hidden="true" />
+        <span className="min-w-0">
+          {item.redacted
+            ? <span className="block truncate text-sm font-semibold text-muted-foreground">Booked by another setter</span>
+            : <Link href={`/app/leads/${item.leadId}`} className="block truncate text-sm font-semibold text-[var(--ink)] hover:underline">{item.customerName}</Link>}
+          <span className="block truncate text-xs text-muted-foreground" title={facts.join(" · ")}>{facts.join(" · ")}</span>
+        </span>
+      </span>
+      <span className="hidden sm:block"><StatusChip tone={tone}>{label}</StatusChip></span>
+      <span className="flex flex-wrap justify-end gap-2">
+        {steps.map((step) => (
+          <Button key={step} type="button" size="sm" variant={step === "no_show" ? "outline" : "default"} disabled={stepping === item.appointmentId} onClick={() => onStep(item, step)}>
+            {stepping === item.appointmentId ? "Saving…" : AGENDA_STEP_LABEL[step]}
+          </Button>
+        ))}
+        {noShow && (
+          <>
+            <Button asChild size="sm" variant="outline"><Link href={`/app/dialer?lead=${item.leadId}`}>Call now</Link></Button>
+            {item.rebookedAs
+              ? <span className="self-center text-xs text-muted-foreground">Rebooked</span>
+              : <RebookButton appointmentId={item.appointmentId} agentUserId={item.agentUserId} customerName={item.customerName} onRebooked={onRebooked} />}
+          </>
+        )}
+        {steps.length === 0 && !noShow && !item.redacted && <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${item.leadId}`}>Open</Link></Button>}
+      </span>
+    </li>
+  );
+}
+
 export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
-  const [view, setView] = useState<View>("week");
+  // Calendar B (owner pick 2026-10-25): the day agenda first; Week and List stay one click away.
+  const [view, setView] = useState<View>("day");
+  const [showCallbacks, setShowCallbacks] = useState(true);
+  const [showBlocked, setShowBlocked] = useState(true);
+  const [monthShown, setMonthShown] = useState<YearMonth | null>(null);
+  const [callbacks, setCallbacks] = useState<DiaryCallback[] | null>(null);
   const [anchor, setAnchor] = useState<number | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const [context, setContext] = useState<Context | null>(null);
@@ -171,6 +289,17 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadContext().catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load availability")); }, [loadContext]);
+
+  // Callbacks sit in the day too, when this person can read them (Callbacks is a feature of its own;
+  // without it the "Callbacks" filter is not offered).
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/app/callbacks", { cache: "no-store", signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => setCallbacks(Array.isArray(body?.callbacks) ? (body.callbacks as DiaryCallback[]) : null))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   const agents = useMemo(() => {
     const known = new Map((context?.agents ?? []).map((agent) => [agent.userId, agent.name]));
@@ -317,7 +446,6 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
 
   // Figures. "This week" is always the week around the anchor, whatever the view.
   const weekLive = mine.filter((item) => LIVE.has(item.status));
-  const slotTotal = grid.perDay.reduce((n, cells) => n + [...cells.values()].filter((cell) => cell.kind !== "blocked").length, 0);
   const today = now == null ? null : dayOf(now, zone);
   const todays = today ? weekLive.filter((item) => sameDay(wallClock(item.startsAtUtc, zone), today)) : [];
   const next = now == null ? null : todays.filter((item) => Date.parse(item.startsAtUtc) >= now).sort((a, b) => a.startsAtUtc.localeCompare(b.startsAtUtc))[0] ?? null;
@@ -374,16 +502,71 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   const clearFilters = () => { setSearch(""); setStatus(""); setAgentId(""); setListPage(1); };
   const { current: listCurrent, rows: listPageRows } = paginate(listRows, listPage, pageSize);
 
+  // ── Calendar B: the day as an agenda ─────────────────────────────────────────────────────────
+  const shownDay = range?.first ?? today;
+  const policy = context?.policy.find((row) => row.userId === selected);
+  const slotLength = policy?.appointmentMinutes ?? 30;
+  const agenda: AgendaRow[] = [];
+  if (view === "day" && shownDay) {
+    for (const [minute, cell] of [...cellsFor(shownDay).entries()].sort((a, b) => a[0] - b[0])) {
+      if (cell.kind === "appointment") {
+        for (const item of cell.items.filter(matches)) agenda.push({ kind: "appointment", minute: wallClock(item.startsAtUtc, zone).minutes, item });
+      } else if (cell.kind === "blocked") {
+        if (showBlocked) agenda.push({ kind: "blocked", minute, label: cell.label, sub: cell.sub });
+      } else if (!cell.past) {
+        // Back-to-back free slots read as one stretch of free time; "+ Book" offers its first slot.
+        const last = agenda[agenda.length - 1];
+        if (last && last.kind === "free" && last.end + (policy?.bufferMinutes ?? 0) >= minute) last.end = minute + slotLength;
+        else agenda.push({ kind: "free", minute, end: minute + slotLength, startIso: cell.startIso });
+      }
+    }
+    if (showCallbacks && callbacks) {
+      for (const callback of callbacks) {
+        if (callback.assignedTo !== selected || !OPEN_CALLBACK.has(callback.status)) continue;
+        const clock = wallClock(callback.scheduledAtUtc, zone);
+        if (!sameDay(clock, shownDay) || (needle && !callback.customerName.toLowerCase().includes(needle))) continue;
+        agenda.push({ kind: "callback", minute: clock.minutes, callback });
+      }
+    }
+    agenda.sort((a, b) => a.minute - b.minute);
+  }
+
+  // The one line on top: what to do next in this diary.
+  const toConfirm = weekLive.filter((item) => item.status === "booked" && !item.redacted && now != null && Date.parse(item.startsAtUtc) > now && stepsFor(item).includes("confirm")).sort((a, b) => a.startsAtUtc.localeCompare(b.startsAtUtc))[0] ?? null;
+  const toRebook = weekLive.find((item) => item.status === "no_show" && !item.redacted && !item.rebookedAs) ?? null;
+  const whenLabel = (item: Appointment) => {
+    const clock = wallClock(item.startsAtUtc, zone);
+    return today && sameDay(clock, today) ? clockLabel(clock.minutes) : `${WEEKDAY_LONG[clock.weekday]} ${clockLabel(clock.minutes)}`;
+  };
+  const needConfirming = weekLive.filter((item) => item.status === "booked" && now != null && Date.parse(item.startsAtUtc) > now).length;
+  const freeToday = today ? [...cellsFor(today).values()].filter((cell) => cell.kind === "free" && !cell.past).length : 0;
+  const busyDays = new Set(mine.filter((item) => LIVE.has(item.status)).map((item) => { const clock = wallClock(item.startsAtUtc, zone); return `${clock.year}-${clock.month}-${clock.day}`; }));
+  const step = (days: number) => { if (anchor != null) { setAnchor(anchor + days * DAY_MS); setListPage(1); } };
+
+  const SIDE = "m-glass rounded-xl border border-border p-4";
+  const sideLabel = "block text-xs font-semibold text-muted-foreground";
+  const nextStep = toConfirm ? (
+    <>
+      <span>Confirm <strong className="font-semibold text-[var(--ink)]">{toConfirm.customerName}</strong> before {whenLabel(toConfirm)}{toRebook ? <>, then rebook {toRebook.customerName}</> : null}.</span>
+      <Button type="button" size="sm" disabled={stepping === toConfirm.appointmentId} onClick={() => void takeStep(toConfirm, "confirm")}>{stepping === toConfirm.appointmentId ? "Saving…" : "Confirm"}</Button>
+    </>
+  ) : toRebook ? (
+    <>
+      <span><strong className="font-semibold text-[var(--ink)]">{toRebook.customerName}</strong> didn&rsquo;t show. Rebook them while the interest is warm.</span>
+      <RebookButton appointmentId={toRebook.appointmentId} agentUserId={toRebook.agentUserId} customerName={toRebook.customerName} onRebooked={() => { void load(); }} />
+    </>
+  ) : next ? (
+    <span>Nothing needs you. Next up: <strong className="font-semibold text-[var(--ink)]">{next.redacted ? "a booking" : next.customerName}</strong> at {whenLabel(next)}.</span>
+  ) : (
+    <span>Nothing booked ahead today. Pick a free stretch below to book one.</span>
+  );
+
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Calendar" />
-
-      <StatStrip label="Calendar figures">
-        <StatTile label="This week" value={weekLive.length} footnote={noHours ? "no working hours set" : context ? `of ${slotTotal} slots` : "—"} />
-        <StatTile label="Today" value={todays.length} footnote={next ? `next at ${clockLabel(wallClock(next.startsAtUtc, zone).minutes)}` : "nothing left today"} />
-        <StatTile label="Showed last week" value={showRate == null ? "—" : showRate} unit={showRate == null ? undefined : "%"} valueTone={showRate == null ? undefined : showRate >= 70 ? "good" : "warning"} footnote={settled.length ? `${showed} of ${settled.length}` : "nothing settled last week"} />
-        <StatTile label="No-shows" value={noShows} valueTone={noShows > 0 ? "warning" : undefined} footnote="last week" />
-      </StatStrip>
+      <PageHeader
+        title="Calendar"
+        actions={<Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>}
+      />
 
       {error && (
         <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
@@ -392,64 +575,126 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
         </div>
       )}
 
-      {/* The views on the left; booking — the page's one action — on the right. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ViewTabs
-          label="View"
-          value={view}
-          controls="calendar-panel"
-          onChange={(next) => { setView(next); setListPage(1); }}
-          tabs={[
-            { key: "week", label: "Week" },
-            { key: "day", label: "Day" },
-            { key: "list", label: "List", count: listRows.length },
-          ]}
-        />
-        <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}>
-          <Plus aria-hidden="true" />
-          Book an appointment
-        </Button>
-      </div>
-
-      <TableCard
-        className={FILL}
-        toolbar={
-          <DataToolbar
-            actions={<>
-              {filtered && <ClearFiltersButton onClick={clearFilters} />}
-              <RefreshButton onClick={refresh} refreshing={loading} />
-            </>}
-          >
-            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search by customer" />
-            <label className={`${toolbarControl} relative inline-flex cursor-pointer items-center gap-2 font-semibold`}>
-              {rangeLabel}<ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
-              {/* The native picker sits over the control, so the whole label opens it. */}
-              <input
-                type="date"
-                aria-label={view === "day" ? "Choose a day" : "Choose a week"}
-                className="absolute inset-0 cursor-pointer opacity-0"
-                onChange={(event) => { if (event.target.value) { setAnchor(new Date(`${event.target.value}T12:00:00`).getTime()); setListPage(1); } }}
-              />
+      {/* Calendar B (owner pick 2026-10-25): month and filters on the left, the day on the right. */}
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+        <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-[280px]" aria-label="Month and filters">
+          <section className={SIDE}>
+            <MiniMonth
+              shown={monthShown ?? (shownDay ? { year: shownDay.year, month: shownDay.month } : { year: 2026, month: 1 })}
+              onShown={setMonthShown}
+              picked={shownDay ?? null}
+              today={today}
+              busy={busyDays}
+              onPick={(day) => { setAnchor(zonedInstant(day.year, day.month, day.day, 720, zone)); setListPage(1); }}
+            />
+          </section>
+          <section className={`${SIDE} flex flex-col gap-3`}>
+            <label className="flex flex-col gap-1.5">
+              <span className={sideLabel}>Calendar of</span>
+              <select aria-label="Calendar of" value={agentId} onChange={(event) => { setAgentId(event.target.value); setListPage(1); }} className={toolbarControl}>
+                <option value="">{me && agents.some(([id]) => id === me) ? "My calendar" : "First with hours"}</option>
+                {agents.map(([id, name]) => <option key={id} value={id}>{name}{id === me ? " (you)" : ""}</option>)}
+              </select>
             </label>
-            {/* Back to today (the header's old "Day" button): today's day, or the week around it. */}
-            <Button type="button" variant="outline" onClick={() => { setAnchor(nowMs()); setListPage(1); }}>Today</Button>
-            <select aria-label="Calendar of" value={agentId} onChange={(event) => { setAgentId(event.target.value); setListPage(1); }} className={toolbarControl}>
-              <option value="">{me && agents.some(([id]) => id === me) ? "My calendar" : "First with hours"}</option>
-              {agents.map(([id, name]) => <option key={id} value={id}>{name}{id === me ? " (you)" : ""}</option>)}
-            </select>
-            <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value); setListPage(1); }} className={toolbarControl}>
-              <option value="">Every status</option>
-              {Object.entries(STATUS_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-            </select>
-          </DataToolbar>
-        }
-        footer={view === "list"
-          ? <Pager page={listCurrent} total={listRows.length} pageSize={pageSize} noun={listRows.length === 1 ? "appointment" : "appointments"} suffix={`this ${range ? "week" : "range"} · times in ${zone}`} onPage={setListPage} />
-          : <span>Times in {zone}{context && !noHours ? ` · ${agentName}` : ""}</span>}
-      >
+            <label className="flex flex-col gap-1.5">
+              <span className={sideLabel}>Status</span>
+              <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value); setListPage(1); }} className={toolbarControl}>
+                <option value="">Every status</option>
+                {Object.entries(STATUS_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+              </select>
+            </label>
+            <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+              <legend className={`${sideLabel} mb-1.5`}>Show</legend>
+              <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked disabled className="size-4 accent-[var(--primary)]" />Appointments</label>
+              {callbacks && <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={showCallbacks} onChange={(event) => setShowCallbacks(event.target.checked)} className="size-4 accent-[var(--primary)]" />Callbacks</label>}
+              <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={showBlocked} onChange={(event) => setShowBlocked(event.target.checked)} className="size-4 accent-[var(--primary)]" />Blocked time</label>
+            </fieldset>
+          </section>
+          <section className={`${SIDE} flex flex-col gap-2`} aria-label="Calendar figures">
+            <span className={sideLabel}>This week</span>
+            {([
+              ["Appointments", weekLive.length, ""],
+              ["Need confirming", needConfirming, needConfirming ? "text-[var(--warning-ink)]" : ""],
+              ["No-shows last week", noShows, noShows ? "text-[var(--error-ink)]" : ""],
+              ["Showed last week", showRate == null ? "—" : `${showRate}%`, ""],
+              ["Free slots today", noHours ? "—" : freeToday, freeToday ? "text-[var(--accent-ink)]" : ""],
+            ] as const).map(([label, value, tone]) => (
+              <div key={label} className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="text-[var(--body)]">{label}</span>
+                <strong className={`tabular-nums ${tone}`}>{value}</strong>
+              </div>
+            ))}
+            {holdsCalendar && <Link href="/app/settings#calendar" className="mt-1 text-sm font-semibold text-[var(--accent-ink)] hover:underline">Hours &amp; blocks</Link>}
+          </section>
+        </aside>
+
+        <TableCard
+          className={`min-w-0 flex-1 ${view === "day" ? "" : FILL}`}
+          toolbar={
+            <DataToolbar
+              actions={<>
+                {filtered && <ClearFiltersButton onClick={clearFilters} />}
+                <RefreshButton onClick={refresh} refreshing={loading} />
+                <ViewTabs
+                  label="View"
+                  value={view}
+                  controls="calendar-panel"
+                  onChange={(nextView) => { setView(nextView); setListPage(1); }}
+                  tabs={[
+                    { key: "day", label: "Day" },
+                    { key: "week", label: "Week" },
+                    { key: "list", label: "List", count: listRows.length },
+                  ]}
+                />
+              </>}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Button type="button" size="icon-sm" variant="outline" aria-label={view === "day" ? "Previous day" : "Previous week"} onClick={() => step(view === "day" ? -1 : -7)}><ChevronLeft aria-hidden="true" /></Button>
+                <label className={`${toolbarControl} relative inline-flex cursor-pointer items-center gap-2 font-semibold`}>
+                  {rangeLabel}<ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+                  {/* The native picker sits over the control, so the whole label opens it. */}
+                  <input
+                    type="date"
+                    aria-label={view === "day" ? "Choose a day" : "Choose a week"}
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    onChange={(event) => { if (event.target.value) { setAnchor(new Date(`${event.target.value}T12:00:00`).getTime()); setListPage(1); } }}
+                  />
+                </label>
+                <Button type="button" size="icon-sm" variant="outline" aria-label={view === "day" ? "Next day" : "Next week"} onClick={() => step(view === "day" ? 1 : 7)}><ChevronRight aria-hidden="true" /></Button>
+                {/* Back to today: today's day, or the week around it. */}
+                <Button type="button" size="sm" variant="ghost" onClick={() => { setAnchor(nowMs()); setListPage(1); }}>Today</Button>
+              </span>
+              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search by customer" />
+            </DataToolbar>
+          }
+          footer={view === "list"
+            ? <Pager page={listCurrent} total={listRows.length} pageSize={pageSize} noun={listRows.length === 1 ? "appointment" : "appointments"} suffix={`this ${range ? "week" : "range"} · times in ${zone}`} onPage={setListPage} />
+            : <span>Times in {zone}{context && !noHours ? ` · ${agentName}` : ""}</span>}
+        >
         {/* The views fade in on switch, like every tab panel (2026-10-09). */}
         <div key={view} id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-panel-tab-${view}`}>
-        {view !== "list" && (
+        {view === "day" && (
+          context == null ? (
+            <div className="p-4"><ErrorState title="Availability did not load" detail="Try again in a moment." action={<Button type="button" variant="outline" onClick={refresh}>Try again</Button>} /></div>
+          ) : noHours ? (
+            <div className="p-4"><EmptyState title={`No working hours for ${agentName}`} hint="Set hours to open bookable slots." action={<Button asChild variant="outline"><Link href="/app/settings#calendar">Set calendar &amp; availability</Link></Button>} /></div>
+          ) : (
+            <>
+              <div className="px-4 pt-4 pb-2">
+                <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-[var(--surface-alt)] px-4 py-3">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-[var(--accent-ink)]"><ArrowRight className="size-4" aria-hidden="true" /></span>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-sm text-[var(--body)]">
+                    <span className="flex flex-col"><span className="text-xs font-semibold text-[var(--accent-ink)]">Next step</span>{nextStep}</span>
+                  </div>
+                </div>
+              </div>
+              {agenda.length === 0
+                ? <p className="m-0 px-5 py-6 text-sm text-muted-foreground">Nothing on this day.</p>
+                : <ol className="m-0 list-none p-0">{agenda.map((row) => <AgendaLine key={`${row.kind}:${row.minute}:${row.kind === "appointment" ? row.item.appointmentId : row.kind === "callback" ? row.callback.id : ""}`} row={row} zone={zone} slotLength={slotLength} highlightId={highlightId} steps={row.kind === "appointment" ? stepsFor(row.item) : []} stepping={stepping} isFuture={(iso) => now != null && Date.parse(iso) > now} onStep={(item, chosen) => void takeStep(item, chosen)} onBook={(startIso) => setBooking({ agentUserId: selected, startIso })} onRebooked={() => { void load(); }} />)}</ol>}
+            </>
+          )
+        )}
+        {view === "week" && (
           <div className="p-4">
             {context == null ? (
               <ErrorState title="Availability did not load" detail="Try again in a moment." action={<Button type="button" variant="outline" onClick={refresh}>Try again</Button>} />
@@ -480,6 +725,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                       const time = clockLabel(minute, false);
                       if (!cell) return <div key={index} className="min-h-[52px]" aria-hidden="true" />;
                       // Blocked time is a slot too (the board draws it dashed on the alternate surface).
+                      if (cell.kind === "blocked" && !showBlocked) return <div key={index} className="min-h-[52px]" aria-hidden="true" />;
                       if (cell.kind === "blocked") return <Slot key={index} title={<span className="text-muted-foreground">{cell.label}</span>} sub={cell.sub} tone="border border-dashed border-[var(--border-strong)] border-l-[1px] bg-[var(--surface-alt)]" />;
                       if (cell.kind === "free") {
                         // A slot that has gone by holds nothing: it stays as a faint cell so the week keeps its
@@ -584,7 +830,8 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
           )
         )}
         </div>
-      </TableCard>
+        </TableCard>
+      </div>
 
       {booking && context && (
         <BookingDialog

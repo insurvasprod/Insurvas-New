@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { AuthBrand, PortalAuthSplitShell } from "@/components/portal/portal-auth-split-shell";
+import { OtpInput } from "@/components/app/otp-input";
 
 /**
  * The staff sign-in (2026-10-13: brought into the same split frame as the agent and partner doors —
@@ -43,22 +44,6 @@ const SIGN_IN_FACTS = [
   "Sessions last 12 hours.",
 ];
 
-function StepDot({ number, label, state }: { number: number; label: string; state: "done" | "current" | "next" }) {
-  return (
-    <span className="flex items-center gap-2">
-      <span
-        aria-hidden="true"
-        className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-          state === "next" ? "bg-[var(--surface-alt)] text-muted-foreground" : "bg-[var(--primary)] text-[var(--on-primary)]"
-        }`}
-      >
-        {number}
-      </span>
-      <span className={`text-sm font-semibold ${state === "next" ? "text-muted-foreground" : "text-foreground"}`}>{label}</span>
-    </span>
-  );
-}
-
 export default function AdminLoginPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("credentials");
@@ -69,14 +54,10 @@ export default function AdminLoginPage() {
   const [enrolment, setEnrolment] = useState<Enrolment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const codeRef = useRef<HTMLInputElement>(null);
+  const [showForgot, setShowForgot] = useState(false);
 
+  // Step two opens in place of step one; the code boxes take the keyboard (autoFocus) when it does.
   const onTotp = step === "totp";
-
-  // Step two opens in place of step one; move the keyboard there when it does.
-  useEffect(() => {
-    if (onTotp) codeRef.current?.focus();
-  }, [onTotp]);
 
   async function handleCredentials(event: FormEvent) {
     event.preventDefault();
@@ -118,19 +99,22 @@ export default function AdminLoginPage() {
     }
   }
 
-  async function handleTotp(event: FormEvent) {
-    event.preventDefault();
+  async function handleTotp(event: FormEvent | null, typed?: string) {
+    event?.preventDefault();
+    const entered = typed ?? code;
+    if (loading || entered.length !== 6) return;
     setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/admin/auth/verify-2fa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code: entered }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         setError(body?.error ?? "Something went wrong");
+        setCode("");
         return;
       }
       router.replace("/admin");
@@ -173,23 +157,22 @@ export default function AdminLoginPage() {
             <InsurvasLogo size="auth" />
           </AuthBrand>
 
-          <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-            Staff access
+          {/* The same two-bar step line as the sign-up journey (redesign, 2026-10-24). */}
+          <div className="mb-8">
+            <p className="text-sm font-semibold leading-normal tracking-[-0.02em] text-muted-foreground">
+              <span className="text-foreground">Step {onTotp ? 2 : 1} of 2</span> · {onTotp ? "Your code" : "Your account"}
+            </p>
+            <ol className="mt-3 grid grid-cols-2 gap-1.5" aria-label="Sign-in steps">
+              <li className="h-1 rounded-full bg-[var(--primary)]" aria-current={onTotp ? undefined : "step"}><span className="sr-only">Your account{onTotp ? ", done" : ", current step"}</span></li>
+              <li className={`h-1 rounded-full transition-colors duration-300 ${onTotp ? "bg-[var(--primary)]" : "bg-border"}`} aria-current={onTotp ? "step" : undefined}><span className="sr-only">Your code{onTotp ? ", current step" : ""}</span></li>
+            </ol>
           </div>
-          <h1 className="mt-2 text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-            Platform administration
+          <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
+            {onTotp ? (enrolment ? "Set up your authenticator" : "Enter your 6-digit code") : "Staff sign in"}
           </h1>
-          <p className="mb-6 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            Insurvas staff only. Two steps: your credentials, then a code from your authenticator app.
+          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+            {onTotp ? "From your authenticator app. You are signed in as soon as the sixth digit is in." : "Insurvas staff only. Your password, then a code from your authenticator app."}
           </p>
-
-          <div className="mb-6 flex items-center gap-3" aria-label={`Step ${onTotp ? 2 : 1} of 2`}>
-            <StepDot number={1} label="Credentials" state={onTotp ? "done" : "current"} />
-            <span aria-hidden="true" className="h-px flex-1 bg-border">
-              <span className="block h-full bg-[var(--primary)] transition-[width] duration-500" style={{ width: onTotp ? "100%" : "0%" }} />
-            </span>
-            <StepDot number={2} label="Second factor" state={onTotp ? "current" : "next"} />
-          </div>
 
           {!onTotp ? (
             <form key="credentials" className="flex flex-col gap-4" onSubmit={handleCredentials}>
@@ -206,7 +189,19 @@ export default function AdminLoginPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-baseline justify-between gap-3">
+                  <Label htmlFor="password">Password</Label>
+                  <button type="button" aria-expanded={showForgot} aria-controls="admin-forgot" onClick={() => setShowForgot((value) => !value)} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+                    Forgot password?
+                  </button>
+                </div>
+                {/* Staff passwords are reset by another super admin, never by email: a staff account opens
+                    every agency, so its reset stays a person-to-person step. */}
+                {showForgot && (
+                  <p id="admin-forgot" className="rounded-lg bg-[var(--surface-alt)] px-3 py-2.5 text-sm leading-normal text-[var(--body)]">
+                    Ask another super admin to reset it in Admin › Admin users. Locked out entirely? Write to <a href="mailto:support@insurvas.com" className="font-semibold text-foreground">support@insurvas.com</a>.
+                  </p>
+                )}
                 <div className="relative">
                   <Input
                     id="password"
@@ -235,7 +230,7 @@ export default function AdminLoginPage() {
               </Button>
             </form>
           ) : (
-            <form key="totp" className="flex flex-col gap-4" onSubmit={handleTotp}>
+            <form key="totp" className="flex flex-col gap-4" onSubmit={(event) => void handleTotp(event)}>
               {/* The board says the code "goes to" the email. It does not: it is a TOTP code from an
                   authenticator app (lib/adminAuth/totp.ts), and nothing is ever emailed. */}
               {enrolment ? (
@@ -266,21 +261,14 @@ export default function AdminLoginPage() {
                   <strong className="font-semibold text-foreground">{accountEmail}</strong>.
                 </p>
               )}
-              <div className="space-y-1.5">
-                <Label htmlFor="code">Six-digit code</Label>
-                <Input
-                  ref={codeRef}
-                  id="code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  required
-                  aria-describedby={error ? "admin-login-error" : undefined}
-                  value={code}
-                  onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); setError(null); }}
-                  className="text-center text-lg font-semibold tracking-[0.5em] tabular-nums"
-                />
-              </div>
+              <OtpInput
+                idPrefix="code"
+                value={code}
+                autoFocus
+                disabled={loading}
+                onChange={(next) => { setCode(next); setError(null); }}
+                onComplete={(typed) => void handleTotp(null, typed)}
+              />
               {errorBox}
               <Button type="submit" className="mt-2 h-12 w-full" disabled={loading || code.length !== 6}>
                 {loading ? "Verifying…" : "Verify and enter"}

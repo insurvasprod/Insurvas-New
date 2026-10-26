@@ -108,7 +108,7 @@ function SubmitBody() {
   const fillBlocked = submitted ? "Already submitted — the capture is below"
     : !ready ? "Mark the application ready on the Review step first"
     : !extension ? "Install the Insurvas extension to fill the carrier's form — or use copy-assist"
-    : readOnly ? "This attempt is closed"
+    : readOnly ? "Read-only — nothing on this attempt can change"
     : fill.busy ? "Opening the carrier's site…" : undefined;
   const fillTip = fillBlocked ?? `Opens ${host ?? "the carrier's site"} with a 60-minute token that covers this application only`;
   const subs = [...attempt.submissions].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
@@ -180,11 +180,11 @@ function SubmitBody() {
                   {shot.value ? (
                     <div className="flex flex-col gap-3">
                       <AttachedFile value={shot.value} onReplace={picker.open} onRemove={() => shot.set(null)} />
-                      <Button type="button" className="self-start" onClick={capture} disabled={!ready || readOnly} title={readOnly ? "This attempt is closed" : !ready ? "Mark the application ready on the Review step first" : undefined}>Capture submission</Button>
+                      <Button type="button" className="self-start" onClick={capture} disabled={!ready || readOnly} title={readOnly ? "Read-only — nothing on this attempt can change" : !ready ? "Mark the application ready on the Review step first" : undefined}>Capture submission</Button>
                     </div>
                   ) : (
-                    <PasteBox id="capture-confirmation" onFile={(f, how) => shot.set(f, how)} disabled={!ready || readOnly} disabledReason={readOnly ? "This attempt is closed" : "Mark the application ready on the Review step first"}>
-                      <span title={readOnly ? "This attempt is closed" : ready ? undefined : "Mark the application ready on the Review step first"}>
+                    <PasteBox id="capture-confirmation" onFile={(f, how) => shot.set(f, how)} disabled={!ready || readOnly} disabledReason={readOnly ? "Read-only — nothing on this attempt can change" : "Mark the application ready on the Review step first"}>
+                      <span title={readOnly ? "Read-only — nothing on this attempt can change" : ready ? undefined : "Mark the application ready on the Review step first"}>
                         <Button type="button" onClick={capture} disabled={!ready || readOnly}>Capture submission</Button>
                       </span>
                     </PasteBox>

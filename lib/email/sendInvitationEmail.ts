@@ -18,6 +18,7 @@ import {
   invitationEmail,
   partnerInvitationEmail,
   passwordResetEmail,
+  signInLinkEmail,
   teamInvitationEmail,
 } from "./templates.ts";
 import { getSupabaseServiceClient } from "../supabase/service.ts";
@@ -176,6 +177,23 @@ export async function sendPasswordResetEmail(params: {
     templateKey: "user.password_reset",
     userId: params.userId,
     tenantId: params.tenantId,
+  });
+  return { delivered: result.delivered };
+}
+
+/** "Email me a sign-in link" from the agent sign-in page (2026-10-24). */
+export async function sendSignInLinkEmail(params: {
+  to: string;
+  name: string;
+  signInUrl: string;
+  minutes: number;
+  userId?: string | null;
+}): Promise<{ delivered: boolean }> {
+  const result = await sendEmail({
+    to: params.to,
+    ...signInLinkEmail(params),
+    templateKey: "user.sign_in_link",
+    userId: params.userId,
   });
   return { delivered: result.delivered };
 }

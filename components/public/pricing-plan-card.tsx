@@ -57,40 +57,39 @@ function ModuleBlock({ group }: { group: ModuleGroup }) {
  * One plan (2026-10-13 pricing): no tilt, no glare. The default plan carries a slow rotating
  * gradient border and a breathing glow; the picker's answer gets a ring that settles in.
  */
-export function PricingPlanCard({ plan, increment, cycle, price, recommended, pickTurn, seats = null }: { plan: PublicPlan; increment: PlanIncrement; cycle: BillingCycle; price: CardPrice; recommended: boolean; pickTurn: number; /** An agency band's seat range ("Up to 50 seats"), shown under the price. */ seats?: string | null }) {
+export function PricingPlanCard({ plan, increment, cycle, price, recommended, pickTurn, seats = null, recommendedLabel = "Fits what you picked" }: { plan: PublicPlan; increment: PlanIncrement; cycle: BillingCycle; price: CardPrice; recommended: boolean; pickTurn: number; /** An agency band's seat range ("Up to 50 seats"), shown under the price. */ seats?: string | null; /** What the ring means: the picker's answer, or the band the team-size slider lands on. */ recommendedLabel?: string }) {
   const featured = plan.is_default;
   const signupHref = `/signup?plan=${encodeURIComponent(plan.code)}&cycle=${cycle}`;
   const moduleCount = increment.modules.length;
 
   return (
     <div id={`plan-${plan.code}`} className="relative h-full scroll-mt-28">
-      {featured && <div aria-hidden="true" className="pz-glow" />}
       {recommended && (
         <div key={`pick-${pickTurn}`} aria-hidden="true" className="pz-pick pointer-events-none absolute -inset-[7px] rounded-[24px] border-2 border-[var(--primary)] shadow-[var(--shadow-brand)]" />
       )}
 
-      <div className={`relative h-full overflow-hidden rounded-[18px] ${featured ? "p-[1.5px]" : "p-px"} ${featured ? "bg-[color-mix(in_srgb,var(--primary)_30%,var(--border))]" : "bg-[var(--border)]"}`}>
-        {featured && <span aria-hidden="true" className="pz-ring" />}
-        <div className="relative flex h-full flex-col rounded-[17px] bg-card p-6 sm:p-7">
+      {/* A still, emphasised border for the plan we lead with (redesign A, 2026-10-24): the rotating
+          ring and breathing glow drew the eye away from the price. */}
+      <div className={`relative h-full overflow-hidden rounded-[18px] shadow-[0_18px_40px_color-mix(in_srgb,var(--ink)_8%,transparent)] ${featured ? "bg-[var(--primary)] p-[2px]" : "bg-[var(--border)] p-px"}`}>
+        <div className="relative flex h-full flex-col rounded-[16px] bg-card p-6 sm:p-7">
           <div className="flex min-h-7 flex-wrap items-center gap-2">
             <h3 className="text-title-sm font-semibold tracking-[-0.015em] text-foreground">{plan.name}</h3>
             {featured && (
               <span className="rounded-full bg-[var(--primary)] px-2.5 py-0.5 text-xs font-semibold text-[var(--on-primary)]">Recommended</span>
             )}
             {recommended && (
-              <span key={`fit-${pickTurn}`} className="pz-swap rounded-full bg-[var(--primary-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-ink)]">Fits what you picked</span>
+              <span key={`fit-${pickTurn}`} className="pz-swap rounded-full bg-[var(--primary-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-ink)]">{recommendedLabel}</span>
             )}
           </div>
-          <p className="mt-2 min-h-[42px] text-sm leading-normal tracking-[-0.01em] text-muted-foreground">
-            {plan.blurb ?? "Everything you need to run your insurance business."}
-          </p>
+          <p className="mt-2 min-h-[42px] text-sm leading-normal tracking-[-0.01em] text-muted-foreground">{plan.blurb ?? ""}</p>
 
           {price == null ? (
             <div className="mt-5 rounded-lg bg-[var(--surface-alt)] px-4 py-5 text-sm text-muted-foreground">Not available on the {cycle} cycle</div>
           ) : (
             <>
-              <div className="mt-5 flex items-baseline gap-1.5">
-                <RollingValue value={formatCentsAsCurrency(price.monthlyCents)} rank={price.monthlyCents} className="text-headline-lg font-semibold tracking-[-0.03em] tabular-nums text-foreground" />
+              <div className="mt-5 flex flex-wrap items-baseline gap-x-1.5">
+                {/* "$99", not "$99.00": the cents only when there are some, so three prices fit side by side. */}
+                <RollingValue value={price.monthlyCents % 100 === 0 ? `$${(price.monthlyCents / 100).toLocaleString("en-US")}` : formatCentsAsCurrency(price.monthlyCents)} rank={price.monthlyCents} className="shrink-0 whitespace-nowrap text-headline-lg font-semibold tracking-[-0.03em] tabular-nums text-foreground" />
                 <span className="text-sm text-muted-foreground">/month</span>
               </div>
               <div key={cycle} className="pz-fade mt-1 min-h-[18px] text-xs font-semibold tracking-[-0.01em] text-[var(--accent-ink)]">
@@ -110,9 +109,15 @@ export function PricingPlanCard({ plan, increment, cycle, price, recommended, pi
 
           <div className="mt-5">
             {price != null ? (
-              <Button asChild variant={featured ? "default" : "secondary"} className={`h-11 w-full rounded-full ${featured ? "shadow-[var(--shadow-brand)]" : "border-[var(--border-strong)]"}`}>
-                <Link href={signupHref}>{plan.trial_days > 0 ? `Start ${plan.trial_days}-day trial` : "Get started"}</Link>
-              </Button>
+              <>
+                <Button asChild variant={featured ? "default" : "secondary"} className={`h-12 w-full rounded-full ${featured ? "shadow-[var(--shadow-brand)]" : "border-[var(--border-strong)]"}`}>
+                  <Link href={signupHref}>{plan.trial_days > 0 ? `Start ${plan.trial_days}-day trial` : "Get started"}</Link>
+                </Button>
+                {/* The trial terms where the decision is made, not in a footnote. */}
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  {plan.trial_days > 0 ? "$0 today · cancel any time in Settings" : "Cancel any time in Settings"}
+                </p>
+              </>
             ) : (
               <Button disabled variant="secondary" className="h-11 w-full rounded-full border-[var(--border-strong)]">Cycle unavailable</Button>
             )}
@@ -123,7 +128,7 @@ export function PricingPlanCard({ plan, increment, cycle, price, recommended, pi
               {increment.buildsOn ? `Everything in ${increment.buildsOn.name}${moduleCount ? ", plus" : ""}` : "What's included"}
             </div>
             {moduleCount === 0 ? (
-              increment.buildsOn ? null : <p className="mt-3 text-sm text-muted-foreground">No features are listed for this plan yet.</p>
+              <p className="mt-3 text-sm text-muted-foreground">{increment.buildsOn ? (seats ? "The same features, for a bigger team." : "Nothing more on this plan.") : "No features are listed for this plan yet."}</p>
             ) : (
               <div className="mt-4 space-y-4">
                 {increment.modules.map((group) => (

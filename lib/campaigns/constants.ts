@@ -70,6 +70,17 @@ export type ScrubRun = {
   error: string | null;
 };
 
+/**
+ * LA-2.3 · "if the scrub vendor is down, the screen says why". A run that stopped because a
+ * screening vendor answered nothing ends `failed` with this sentence in its error (scrubRun.ts);
+ * the page recognises it by the same constant and says, once, what is going on.
+ */
+export const SCRUB_OUTAGE_NOTE = "A scrub vendor is unavailable";
+
+export function scrubStoppedByOutage(run: Pick<ScrubRun, "status" | "error"> | null | undefined): boolean {
+  return Boolean(run && run.status === "failed" && run.error?.includes(SCRUB_OUTAGE_NOTE));
+}
+
 /** Minutes since a run last moved, for "stopped making progress N minutes ago". */
 export function minutesSince(iso: string, now: number = Date.now()) {
   const at = Date.parse(iso);

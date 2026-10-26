@@ -63,7 +63,14 @@ export function when(at: Date, timeZone?: string) {
  * that dial attempt by the dialer's function — closing the attempt, advancing the cadence, running
  * the verification gate — with the walked path stored with the attempt.
  */
-export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRecorded, attemptId }: { workItemId: string; readOnly: boolean; enabled?: boolean; onRecorded?: (result: { leadId: string | null }) => void; attemptId?: string }) {
+/**
+ * What a recorded outcome did, for a caller that shows it (the inbound call screen, 2026-10-25):
+ * the server's own result — the outcome, the stage it moved the lead to, whether the partner's card
+ * was posted and whether the number went on the do-not-call list.
+ */
+export type RecordedOutcome = { leadId: string | null; label: string | null; stage: { name: string; pipelineName: string } | null; partnerCardPosted: boolean | null; dncAdded: boolean };
+
+export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRecorded, attemptId }: { workItemId: string; readOnly: boolean; enabled?: boolean; onRecorded?: (result: RecordedOutcome) => void; attemptId?: string }) {
   const router = useRouter();
   const [wizard, setWizard] = useState<WizardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,7 +127,18 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
     if (body.wizard) { setWizard(body.wizard); setEditingSequence(null); setAnswer(""); if (body.wizard.walk.final_disposition_key) setDispositionKey(body.wizard.walk.final_disposition_key); }
     if (kind === "complete") {
       const leadId = typeof body.result?.lead_id === "string" ? body.result.lead_id : attemptId ? wizard?.lead.id ?? null : null;
-      if (onRecorded) onRecorded({ leadId });
+      if (onRecorded) {
+        const result = (body.result ?? {}) as { label?: unknown; disposition_key?: unknown; partner_card_posted?: unknown; dnc_added?: unknown };
+        const key = typeof result.disposition_key === "string" ? result.disposition_key : dispositionKey;
+        const option = wizard?.outcomeOptions?.find((item) => item.disposition_key === key) ?? null;
+        onRecorded({
+          leadId,
+          label: typeof result.label === "string" ? result.label : option?.label ?? null,
+          stage: option?.stage ? { name: option.stage.name, pipelineName: option.stage.pipeline_name } : null,
+          partnerCardPosted: typeof result.partner_card_posted === "boolean" ? result.partner_card_posted : null,
+          dncAdded: result.dnc_added === true,
+        });
+      }
       else {
         notify.done("Call outcome recorded — opening Daily deal flow");
         if (leadId) router.push(`/app/deal-flow?focus_lead_id=${encodeURIComponent(leadId)}`);

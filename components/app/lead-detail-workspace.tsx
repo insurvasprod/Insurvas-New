@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ChevronDown, ChevronLeft, Hand, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Hand, Loader2 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { claimedMessage, releaseConfirmation } from "@/lib/transferInbox/constants";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { SamePersonPrompt } from "@/components/app/same-person-prompt";
+import { Ring } from "@/components/app/inbound/stream-parts";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -27,12 +28,6 @@ type Template = { product_name: string; definition_version?: number; fields: Arr
 type Event = { id: string; label: string; at: string; actor: string; detail: string | null; immutable: boolean };
 type Note = { id: string; leadId: string; body: string | null; visibility: "internal" | "shared"; author: { id: string; name: string }; createdAt: string; editedAt: string | null; deletedAt: string | null; mentions: string[]; history: Array<{ id: string; action: string; old_body: string; old_visibility: string; new_body: string | null; new_visibility: string | null; created_at: string; actor: { id: string; name: string } }> };
 type Workspace = { lead: { id: string; values: Record<string, unknown>; product_line: string; definition_version: number; created_at: string; updated_at: string }; template: Template; queue: { id: string; status: string; owner_user_id: string | null; claimed_at: string | null; disposition: string | null } | null; partner: { name: string; partner_type: string } | null; stage: { id: string; name: string; stage_type: string; color: string } | null; stages: Array<{ id: string; name: string; stage_type: string; color: string }>; submitter: { name: string } | null; owner: { name: string } | null; screening: { outcome: string | null; warning: string | null; checkedAt: string | null }; attemptHistory: Array<{ id: string; attempt_number: number; slot: string; attempted_at: string; disposition: string | null; dial_clicked_at: string | null }>; preflight: { status: string; checkedAt: string | null; policyMatchingIncluded?: false; policyMatchingNote?: string; matches?: Array<{ leadId: string | null; contactId: string | null; submittedAt: string; partnerName: string | null; productLine: string | null; outcome: string | null; matchedOn: string[]; sourceType: "lead" | "contact" }>; soldByPartners?: Array<{ partnerId: string; partnerName: string }>; soldByMultiplePartners?: boolean }; disposition: { label: string } | null; verification: { session: { status: string; progress_percentage: number; started_at: string; completed_at: string | null }; fields: Array<{ field_key: string; state: string; old_value: unknown; new_value: unknown; confirmed_at: string | null }> } | null; corrections: Array<{ id: string; field_key: string; old_value: unknown; new_value: unknown; actor_id: string | null; created_at: string }>; notes: Note[]; teammates: Array<{ id: string; name: string; role?: string }>; timeline: Event[]; role: string; currentUserId: string; licensedAgents: Array<{ id: string; name: string; role: string }>; pendingHandoff: { id: string; workItemId: string } | null; actions: { canClaim: boolean; canHandoff: boolean; canAcceptHandoff: boolean; canDisposition: boolean; canChangeStage: boolean; canUnassign?: boolean; canRequeue?: boolean; canEndBufferInvolvement?: boolean }; transfer?: { phase: string; phaseLabel: string; buffer: { id: string; name: string; onCall: boolean } | null; requeueCount: number } | null; lineage?: LeadLineage | null; nextAction?: LeadNextAction; readOnly: boolean; activeCall?: { startedAt: string; agentName: string | null } | null; quotedMonthlyCents?: number | null };
-
-function ExistingCustomerPreflight({ data, onRecheck, busy }: { data: Workspace; onRecheck: () => void; busy: boolean }) {
-  const matches = data.preflight.matches ?? [];
-  const label = data.preflight.status === "already_customer" ? "Already a customer" : data.preflight.status === "spoken_before" ? "Spoken before" : data.preflight.status === "not_checked" ? "Pre-flight unavailable" : "New household";
-  return <Card className={data.preflight.status === "already_customer" ? "border-[var(--error)]/50 bg-[var(--error)]/5" : data.preflight.status === "spoken_before" ? "border-[var(--warning)]/50 bg-[var(--warning)]/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p>{data.preflight.soldByMultiplePartners && <p className="mt-1 text-sm font-semibold text-[var(--error-ink)]">Sold by {data.preflight.soldByPartners?.length ?? 2} partners: {(data.preflight.soldByPartners ?? []).map((partner) => partner.partnerName).join(", ")}</p>}</div><div className="flex items-center gap-2">{data.preflight.soldByMultiplePartners && <StatusChip tone="danger">Sold by two partners</StatusChip>}<StatusChip tone={data.preflight.status === "already_customer" ? "danger" : data.preflight.status === "spoken_before" ? "warning" : "neutral"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</StatusChip><Button type="button" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
-}
 
 // A currency field holds cents and a yes/no field a boolean: shown as the form showed them, not
 // "25000000" and "false" (QA pass 2026-10-22).
@@ -55,7 +50,30 @@ function VerificationTab({ data }: { data: Workspace }) {
 // "18 Sep 4:19 pm", as the board stamps a note.
 function noteTime(value: string) { const d = new Date(value); if (Number.isNaN(d.getTime())) return "—"; const h = d.getHours(); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${h % 12 === 0 ? 12 : h % 12}:${String(d.getMinutes()).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`; }
 const FIELD = "rounded-lg border border-[var(--border-strong)] bg-card text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+type PartnerLine = { id: string; body: string; title: string | null; system: boolean; author: string | null; fromPartner: boolean; createdAt: string };
+type ConversationView = "all" | "internal" | "shared";
+type Entry = { kind: "note"; at: string; note: Note } | { kind: "partner"; at: string; line: PartnerLine };
+
+/**
+ * The lead's Conversation (Module 1 simplified, 2026-10-25): notes and the partner's channel about
+ * this lead, in one place. A note is Internal (the team) or Shared (posted to the partner's channel,
+ * LA-1.21); the partner's replies and the automatic cards for this lead come back in the same list.
+ * The view switch narrows it to the team's own notes or to what the partner can see.
+ */
 function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<void> }) {
+  const [view, setView] = useState<ConversationView>("all");
+  const [partnerLines, setPartnerLines] = useState<PartnerLine[] | null>(null);
+  const hasPartner = Boolean(data.partner);
+  const readsPartner = hasPartner && (data.role === "owner" || data.role === "producer");
+  const loadPartner = useCallback(async () => {
+    if (!readsPartner) return;
+    const response = await fetch(`/api/app/leads/${encodeURIComponent(data.lead.id)}/conversation`, { cache: "no-store" }).catch(() => null);
+    const result = response?.ok ? await response.json().catch(() => null) as { messages?: PartnerLine[] } | null : null;
+    setPartnerLines(result?.messages ?? []);
+  }, [data.lead.id, readsPartner]);
+  // The partner's side is read once the tab opens, and again after a note is saved.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the first read of the partner's channel
+  useEffect(() => { void loadPartner(); }, [loadPartner]);
   const [body, setBody] = useState("");
   const [noteVisibility, setNoteVisibility] = useState<"internal" | "shared">("internal");
   const [mentions, setMentions] = useState<string[]>([]);
@@ -74,7 +92,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
     const result = await response.json().catch(() => null);
     setBusy(false);
     if (!response.ok) { notify.block(result?.error ?? "Could not save note"); return; }
-    notify.done(editing ? "Note updated" : "Note saved"); reset(); await refresh();
+    notify.done(editing ? "Note updated" : noteVisibility === "shared" ? "Shared with the partner" : "Note saved"); reset(); await refresh(); void loadPartner();
   }
   async function remove(note: Note) {
     if (!window.confirm("Delete this note? It will remain as a tombstone in the timeline.")) return;
@@ -91,7 +109,14 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
     const response = await fetch(`/api/app/notes/search?q=${encodeURIComponent(search)}`, { cache: "no-store" }); const result = await response.json().catch(() => null); if (!response.ok) { notify.block(result?.error ?? "Could not search notes"); return; } setSearchResults(result.notes ?? []);
   }
   function toggleMention(id: string) { setMentions((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }
-  const shown = searchResults ?? data.notes;
+  // Searching notes across leads shows notes only; otherwise the lead's notes and partner lines, newest first.
+  const entries: Entry[] = searchResults
+    ? searchResults.map((note) => ({ kind: "note" as const, at: note.createdAt, note }))
+    : [
+        ...data.notes.filter((note) => view === "all" || (view === "internal" ? note.visibility === "internal" : note.visibility === "shared")).map((note) => ({ kind: "note" as const, at: note.createdAt, note })),
+        ...(view === "internal" ? [] : (partnerLines ?? []).map((line) => ({ kind: "partner" as const, at: line.createdAt, line }))),
+      ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const shown = entries;
   const paged = paginate(shown, page);
   // The board draws the tab flat: the composer, then one ruled row per note, no card inside the card.
   // Mentions, cross-lead search and edit history are not on the board but people use them, so they
@@ -104,8 +129,12 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
           <textarea aria-label="Note text" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canWrite || busy} maxLength={10000} rows={3} placeholder="What happened? Keep it plain text." className={`${FIELD} mt-1.5 box-border block w-full resize-y px-3 py-2.5 text-base leading-normal tracking-[-0.02em]`} />
         </label>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <label className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" htmlFor="note-visibility">Visibility</label>
-          <select id="note-visibility" aria-label="Note visibility" value={noteVisibility} onChange={(event) => setNoteVisibility(event.target.value as "internal" | "shared")} disabled={!canWrite || busy} className={`${FIELD} h-9 px-2.5 text-sm`}><option value="internal">Internal — team only</option><option value="shared">Shared — partner can see</option></select>
+          <div role="radiogroup" aria-label="Note visibility" className="inline-flex h-9 items-center gap-0.5 rounded-full border border-border p-0.5">
+            {([["internal", "Internal", "Your team only"], ["shared", "Shared", hasPartner ? `${data.partner?.name ?? "The partner"} can see it` : "This lead has no partner to share with"]] as const).map(([value, text, hint]) => (
+              <button key={value} type="button" role="radio" aria-checked={noteVisibility === value} title={hint} onClick={() => setNoteVisibility(value)} disabled={!canWrite || busy || (value === "shared" && !hasPartner && noteVisibility !== "shared")} className={`inline-flex h-8 items-center rounded-full px-3.5 text-sm font-semibold tracking-[-0.01em] transition-colors disabled:opacity-50 ${noteVisibility === value ? "bg-[var(--primary)] text-[var(--on-primary)]" : "text-muted-foreground hover:text-foreground"}`}>{text}</button>
+            ))}
+          </div>
+          <span className="text-xs leading-normal text-muted-foreground">{noteVisibility === "shared" ? (hasPartner ? `Posted to ${data.partner?.name ?? "the partner"}’s channel` : "No partner on this lead") : "Only your team sees it"}</span>
           <span className="flex-grow" />
           {editing && <Button type="button" variant="ghost" onClick={reset}>Cancel</Button>}
           <Button type="button" disabled={!canWrite || busy || !body.trim()} onClick={() => void save()}>{busy ? <Loader2 className="size-4 animate-spin" /> : null}{editing ? "Save changes" : "Save note"}</Button>
@@ -117,13 +146,37 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
           </div>
         )}
       </div>
+      {!searchResults && (
+        <div role="tablist" aria-label="Show" className="flex flex-wrap items-center gap-1.5 border-t border-border px-5 py-3">
+          {([["all", "All"], ["internal", "Internal"], ["shared", hasPartner ? "Shared with partner" : "Shared"]] as const).map(([value, text]) => (
+            <button key={value} type="button" role="tab" aria-selected={view === value} onClick={() => { setView(value); setPage(1); }} className={`h-7 rounded-full px-3 text-xs font-semibold leading-normal transition-colors ${view === value ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-muted-foreground hover:text-foreground"}`}>{text}</button>
+          ))}
+          {readsPartner && partnerLines === null && <span className="text-xs text-muted-foreground">Reading the partner’s messages…</span>}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
         <label className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" htmlFor="note-search">Search notes across leads</label>
         <input id="note-search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void runSearch(); }} placeholder="Search note text" className={`${FIELD} h-9 w-full max-w-xs px-3 text-sm`} />
         <Button type="button" variant="outline" onClick={() => void runSearch()}>Search</Button>
         {searchResults && <Button type="button" variant="ghost" onClick={() => { setSearchResults(null); setSearch(""); setPage(1); }}>Clear</Button>}
       </div>
-      {paged.rows.map((note) => {
+      {paged.rows.map((entry) => {
+        if (entry.kind === "partner") {
+          const line = entry.line;
+          return (
+            <div key={`partner-${line.id}`} className="border-t border-border bg-[color-mix(in_srgb,var(--primary-soft)_45%,transparent)] px-5 py-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{line.system ? line.title ?? "Update" : line.author ?? "Someone"}</span>
+                  <Chip tone={line.fromPartner ? "accent" : "neutral"}>{line.system ? "Automatic update" : line.fromPartner ? `From ${data.partner?.name ?? "the partner"}` : "Partner channel"}</Chip>
+                </span>
+                <span className="shrink-0 text-xs leading-normal tabular-nums text-muted-foreground">{noteTime(line.createdAt)}</span>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-[1.6] tracking-[-0.02em] text-[var(--body)]">{line.body}</p>
+            </div>
+          );
+        }
+        const note = entry.note;
         const related = [note.visibility === "shared" && !note.deletedAt ? `Posted to ${data.partner?.name ? `the ${data.partner.name}` : "the partner's"} channel` : null, note.mentions.length ? `${note.mentions.length} mention${note.mentions.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ");
         const mine = !note.deletedAt && note.author.id === data.currentUserId;
         const canShare = !note.deletedAt && data.role === "owner" && note.author.id !== data.currentUserId;
@@ -150,8 +203,8 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
           </div>
         );
       })}
-      {shown.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-muted-foreground"><Pager page={paged.current} total={shown.length} noun="notes" onPage={setPage} /></div>}
-      {shown.length === 0 && <p className="border-t border-border px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">{searchResults ? "No note matches that search." : "No notes yet."}</p>}
+      {shown.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-muted-foreground"><Pager page={paged.current} total={shown.length} noun="messages" onPage={setPage} /></div>}
+      {shown.length === 0 && <p className="border-t border-border px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">{searchResults ? "No note matches that search." : view === "internal" ? "No internal notes yet." : view === "shared" ? "Nothing shared with the partner yet." : "No conversation yet."}</p>}
     </div>
   );
 }
@@ -281,7 +334,6 @@ type TabKey = "application" | "attempts" | "verification" | "notes" | "callbacks
 export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   const [data, setData] = useState<Workspace | null>(null);
   const [tab, setTab] = useState<TabKey>("application");
-  const [moreOpen, setMoreOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [handoffTarget, setHandoffTarget] = useState("");
@@ -343,19 +395,16 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   // Attempts and Callbacks are tabs rather than a cramped rail card and a line buried in the
   // timeline. Both read data this workspace already loads — the attempt history RPC and the
   // callback events — so neither adds a request; they were simply not given anywhere to be read.
-  // The board's strip ends in "More"; Verification and the Timeline live behind it.
+  // Leads A3 (2026-10-25): every section is a tab in one row; nothing hides behind "More".
   const tabs = [
     { key: "application", label: "Lead detail" },
     { key: "attempts", label: "Attempts" },
-    { key: "notes", label: "Notes" },
+    { key: "notes", label: "Conversation" },
     { key: "callbacks", label: "Callbacks" },
     { key: "nurture", label: "Nurture" },
-  ] as const;
-  const more = [
     { key: "verification", label: "Verification" },
     { key: "timeline", label: "Timeline" },
   ] as const;
-  const inMore = more.find((item) => item.key === tab);
 
   const leadName = display(data.lead.values.full_name ?? data.lead.values.name ?? ([data.lead.values.first_name, data.lead.values.last_name].filter(Boolean).join(" ") || "Unnamed lead"));
   const screeningTone = data.screening.outcome === "blocked" ? "danger" : data.screening.warning ? "warning" : "good";
@@ -377,48 +426,48 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
         <ChevronLeft className="size-4" aria-hidden="true" />
         Leads
       </Link>
-      <PageHeader title={leadName} description={identityLine(data) || undefined} />
-
-      <div className="flex flex-wrap gap-2">
-        <Chip tone={screeningTone} dot>Screening: {screeningLabel}</Chip>
-        {data.stage && <Chip tone={stageTone} dot>{data.stage.name}</Chip>}
-        <Chip tone="neutral">{sourceName ?? "Direct lead"}</Chip>
-        <Chip tone="neutral">{data.template.product_name}</Chip>
-        {data.activeCall && <LiveCallChip startedAt={data.activeCall.startedAt} agentName={data.activeCall.agentName} />}
-      </div>
-
-      <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4 xl:grid-cols-7">
-          <Fact label="Lead"><span title={data.lead.id}>{shortId(data.lead.id)}</span></Fact>
-          <Fact label="Submitted">{stamp(data.lead.created_at)}</Fact>
-          <Fact label="Owner">{data.owner?.name ?? "Unclaimed"}</Fact>
-          <Fact label="Verification">{data.verification ? `${data.verification.session.progress_percentage}%` : "Not started"}</Fact>
-          <Fact label="Quoted">{data.quotedMonthlyCents != null ? `$${(data.quotedMonthlyCents / 100).toFixed(2)}/mo` : "No quote yet"}</Fact>
-          <Fact label="Attempts">{data.attemptHistory.length}</Fact>
-          <Fact label="Next action">{nextActionLabel(data.nextAction ?? null)}</Fact>
+      <section className="m-glass rounded-xl border border-border flex flex-wrap items-center gap-5 p-5">
+        <Ring value={(data.verification?.session.progress_percentage ?? 0) / 100} tone={(data.verification?.session.progress_percentage ?? 0) >= 100 ? "success" : "brand"} size={84} thickness={7} label={data.verification ? `Verification ${data.verification.session.progress_percentage}%` : "Verification not started"}>
+          <span className="block text-center">
+            <span className="block text-lg leading-tight font-semibold">{data.verification ? `${data.verification.session.progress_percentage}%` : "—"}</span>
+            <span className="block text-xs font-medium text-muted-foreground">verified</span>
+          </span>
+        </Ring>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <PageHeader title={leadName} description={identityLine(data) || undefined} />
+          <div className="flex flex-wrap gap-2">
+            <Chip tone={screeningTone} dot>Screening: {screeningLabel}</Chip>
+            {data.stage && <Chip tone={stageTone} dot>{data.stage.name}</Chip>}
+            <Chip tone="neutral">{sourceName ?? "Direct lead"}</Chip>
+            <Chip tone="neutral">{data.template.product_name}</Chip>
+            {data.activeCall && <LiveCallChip startedAt={data.activeCall.startedAt} agentName={data.activeCall.agentName} />}
+          </div>
         </div>
       </section>
 
+      {/* The seven facts as glass tiles (Leads A3). */}
+      <section aria-label="Lead facts" className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        {([
+          ["Lead", <span key="id" title={data.lead.id}>{shortId(data.lead.id)}</span>],
+          ["Submitted", stamp(data.lead.created_at)],
+          ["Owner", data.owner?.name ?? "Unclaimed"],
+          ["Verification", data.verification ? `${data.verification.session.progress_percentage}%` : "Not started"],
+          ["Quoted", data.quotedMonthlyCents != null ? `$${(data.quotedMonthlyCents / 100).toFixed(2)}/mo` : "No quote yet"],
+          ["Attempts", data.attemptHistory.length],
+          ["Next action", nextActionLabel(data.nextAction ?? null)],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="m-glass rounded-xl border border-border min-w-0 px-3.5 py-3"><Fact label={label}>{value}</Fact></div>
+        ))}
+      </section>
+
       <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-        <section className="flex min-w-0 flex-grow flex-col rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-          <div className="flex flex-wrap gap-6 border-b border-border px-5" role="tablist" aria-label="Lead detail sections">
+        <section className="m-glass rounded-xl border border-border flex min-w-0 flex-grow flex-col">
+          <div className="flex flex-wrap gap-x-6 border-b border-border px-5" role="tablist" aria-label="Lead detail sections">
             {tabs.map((item) => (
-              <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} onClick={() => { setTab(item.key); setMoreOpen(false); }} className={tabClass(tab === item.key)}>
+              <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} onClick={() => setTab(item.key)} className={tabClass(tab === item.key)}>
                 {item.label}
               </button>
             ))}
-            <span className="relative">
-              <button type="button" role="tab" aria-selected={Boolean(inMore)} aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)} className={tabClass(Boolean(inMore))}>
-                {inMore ? inMore.label : "More"}<ChevronDown className="size-3.5" aria-hidden="true" />
-              </button>
-              {moreOpen && (
-                <span role="menu" className="absolute left-0 top-11 z-20 flex min-w-40 flex-col rounded-lg border border-[var(--border-strong)] bg-card p-1 shadow-[0_12px_32px_rgba(0,0,0,.16)]">
-                  {more.map((item) => (
-                    <button key={item.key} type="button" role="menuitem" onClick={() => { setTab(item.key); setMoreOpen(false); }} className="rounded-md px-3 py-2 text-left text-sm font-semibold hover:bg-[var(--surface-alt)]">{item.label}</button>
-                  ))}
-                </span>
-              )}
-            </span>
           </div>
 
           {tab === "application" ? (
@@ -455,7 +504,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
         </section>
 
         <div className="flex w-full shrink-0 flex-col gap-4 xl:w-[360px]">
-          <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+          <section className="m-glass rounded-xl border border-border p-5">
             <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Actions</h2>
             <div className="mt-3.5 flex flex-col gap-2">
               {data.actions.canClaim && (
@@ -464,6 +513,9 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
                 </Button>
               )}
               {data.actions.canAcceptHandoff && <Button type="button" className="w-full" disabled={readOnly || saving === "accept"} onClick={acceptHandoff}>Accept handoff</Button>}
+              {/* Opens the call-outcome dialog in place; /app/inbound/[id]/disposition stays for deep links. */}
+              {canDisposition && data.queue && <Button type="button" className="w-full" onClick={() => setOutcomeOpen(true)}>Record call outcome</Button>}
+              {canDisposition && data.queue && <DispositionWizardDialog workItemId={data.queue.id} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} />}
               {data.queue && data.actions.canHandoff && (
                 <div className="flex flex-col gap-2">
                   <select aria-label="Licensed agent for handoff" disabled={readOnly || saving === "handoff"} value={handoffTarget || data.licensedAgents[0]?.id || ""} onChange={(event) => setHandoffTarget(event.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
@@ -478,9 +530,6 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {data.queue && data.actions.canUnassign && <Button variant="outline" className={outline} disabled={readOnly || saving === "unassign"} onClick={() => void release("unassign")}>{saving === "unassign" && <Loader2 className="size-4 animate-spin" />}Unassign</Button>}
               {data.queue && <Button variant="outline" className={outline} disabled={readOnly || saving === "nudge"} onClick={nudge}>Nudge team</Button>}
               {expired && <Button variant="outline" className={outline} disabled={readOnly || saving === "reopen"} onClick={reopen}>{saving === "reopen" && <Loader2 className="size-4 animate-spin" />}Reopen in queue</Button>}
-              {/* Opens the call-outcome dialog in place; /app/inbound/[id]/disposition stays for deep links. */}
-              {canDisposition && data.queue && <Button variant="outline" className={outline} onClick={() => setOutcomeOpen(true)}>Disposition</Button>}
-              {canDisposition && data.queue && <DispositionWizardDialog workItemId={data.queue.id} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} />}
               {canVerify && data.queue && <Button asChild variant="outline" className={outline}><Link href={`/app/inbound/${data.queue.id}/verification`}>Verification</Link></Button>}
               <LeadApplicationEntry leadId={data.lead.id} workItemId={data.queue?.id ?? null} canStart={!readOnly && (data.role === "owner" || data.role === "producer")} className={outline} />
               {data.stage && data.actions.canChangeStage && (
@@ -498,7 +547,9 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
             {data.transfer?.buffer?.onCall && <p className="mt-1 text-xs text-muted-foreground">Buffer {data.transfer.buffer.name} is still on the call.</p>}
           </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+          <SamePersonPrompt check={data.preflight} duplicateFlagged={data.lead.values?.duplicate_warning === true} busy={saving === "preflight"} onRecheck={data.readOnly ? undefined : recheckPreflight} />
+
+          <section className="m-glass rounded-xl border border-border p-5">
             <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Source &amp; cost lineage</h2>
             <div className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4">
               <Fact label="Vendor">{lineage?.vendorName ?? (data.partner ? "—" : "Direct")}</Fact>
@@ -528,8 +579,6 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {lineage.money && lineage.totalCostCents != null && <p className="mt-2 text-xs text-muted-foreground tabular-nums">All sources together: ${(lineage.totalCostCents / 100).toFixed(2)}</p>}
             </div>}
           </section>
-
-          <ExistingCustomerPreflight data={data} busy={saving === "preflight"} onRecheck={recheckPreflight} />
         </div>
       </div>
     </div>

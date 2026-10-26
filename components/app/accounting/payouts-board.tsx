@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 
@@ -9,7 +10,7 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
@@ -85,7 +86,7 @@ function NewRun({ partners, onClose, onSaved }: { partners: Partner[]; onClose: 
   );
 }
 
-function RunPanel({ id, readOnly, onClose, onChanged }: { id: string; readOnly: boolean; onClose: () => void; onChanged: () => void }) {
+function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: string; readOnly: boolean; docked?: boolean; onClose: () => void; onChanged: () => void }) {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +127,8 @@ function RunPanel({ id, readOnly, onClose, onChanged }: { id: string; readOnly: 
   const disputedItem = (itemId: string) => run?.disputes.find((d) => d.itemId === itemId);
   return (
     <DetailPanel
-      mode="overlay"
+      mode={docked ? "split" : "overlay"}
+      splitFrom="xl"
       title={run ? `${run.partnerName} · ${run.periodStart} to ${run.periodEnd}` : "Payout run"}
       subtitle={run ? `Net payable ${money(run.netCents)}` : undefined}
       status={run ? <StatusChip tone={TONE[run.status]}>{RUN_STATUS_LABELS[run.status]}{run.paidOn ? ` ${run.paidOn}` : ""}</StatusChip> : undefined}
@@ -237,9 +239,11 @@ function RunPanel({ id, readOnly, onClose, onChanged }: { id: string; readOnly: 
   );
 }
 
-export function PayoutsBoard({ runs, partners, readOnly, openId }: { runs: RunRow[]; partners: Partner[]; readOnly: boolean; openId: string | null }) {
+/** `partnerFixed`: the Payouts tab of one partner's record (2026-10-25) — its runs only, no partner picker. */
+/** `recordLinks`: the partner's name opens its record on the Payouts tab (2026-10-25). */
+export function PayoutsBoard({ runs, partners, readOnly, openId, partnerFixed = false, recordLinks = false }: { runs: RunRow[]; partners: Partner[]; readOnly: boolean; openId: string | null; partnerFixed?: boolean; recordLinks?: boolean }) {
   const router = useRouter();
-  const [partner, setPartner] = useState("");
+  const [partner, setPartner] = useState(partnerFixed ? partners[0]?.id ?? "" : "");
   const [status, setStatus] = useState<"" | RunStatus>("");
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
@@ -254,15 +258,18 @@ export function PayoutsBoard({ runs, partners, readOnly, openId }: { runs: RunRo
   const paid = runs.filter((r) => r.status === "paid" && (r.paidOn ?? "").startsWith(month));
   return (
     <>
-      <StatStrip label="Payout totals">
-        <StatTile label="Drafts to review" value={String(drafts.length)} valueTone={drafts.length ? "warning" : undefined} footnote="the partner cannot see these" />
-        <StatTile label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} run${owed.length === 1 ? "" : "s"} owed`} />
-        <StatTile label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} run${paid.length === 1 ? "" : "s"}`} />
-      </StatStrip>
+      {/* Payout runs A5 (2026-10-25): three glass tiles, the run docked beside the table. */}
+      <section aria-label="Payout totals" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatTile className="m-glass rounded-xl border border-border" label="Drafts to review" value={String(drafts.length)} valueTone={drafts.length ? "warning" : undefined} footnote="the partner cannot see these" />
+        <StatTile className="m-glass rounded-xl border border-border" label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} run${owed.length === 1 ? "" : "s"} owed`} />
+        <StatTile className="m-glass rounded-xl border border-border" label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} run${paid.length === 1 ? "" : "s"}`} />
+      </section>
+      <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start">
       <TableCard
+        className="min-w-0 flex-1"
         toolbar={
           <DataToolbar actions={<>{!readOnly && partners.length ? <Button onClick={() => setCreating(true)}>Draft a run</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>}>
-            <select aria-label="Partner" className={toolbarControl} value={partner} onChange={(e) => { setPartner(e.target.value); setPage(1); }}><option value="">All partners</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            {!partnerFixed && <select aria-label="Partner" className={toolbarControl} value={partner} onChange={(e) => { setPartner(e.target.value); setPage(1); }}><option value="">All partners</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
             <select aria-label="Status" className={toolbarControl} value={status} onChange={(e) => { setStatus(e.target.value as "" | RunStatus); setPage(1); }}><option value="">Any status</option>{(["draft", "published", "paid", "void"] as RunStatus[]).map((s) => <option key={s} value={s}>{RUN_STATUS_LABELS[s]}</option>)}</select>
           </DataToolbar>
         }
@@ -277,8 +284,8 @@ export function PayoutsBoard({ runs, partners, readOnly, openId }: { runs: RunRo
             <thead><tr><th>Partner</th><th className="w-[220px]">Period</th><th className="w-[140px] text-right">Net payable</th><th className="w-[170px]">Status</th><th className="w-[90px] text-right" /></tr></thead>
             <tbody>
               {shown.rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="font-medium">{r.partnerName}</td>
+                <tr key={r.id} className={open === r.id ? "bg-[var(--primary-soft)]" : undefined}>
+                  <td className="font-medium">{recordLinks && !partnerFixed ? <Link href={`/app/publishers/${r.partnerId}?tab=payouts`} className="text-foreground underline-offset-4 hover:underline">{r.partnerName}</Link> : r.partnerName}</td>
                   <td>{r.periodStart} to {r.periodEnd}</td>
                   <td className="text-right tabular-nums">{money(r.netCents)}</td>
                   <td><StatusChip tone={TONE[r.status]}>{RUN_STATUS_LABELS[r.status]}{r.paidOn ? ` ${r.paidOn}` : ""}</StatusChip></td>
@@ -289,8 +296,9 @@ export function PayoutsBoard({ runs, partners, readOnly, openId }: { runs: RunRo
           </table>
         )}
       </TableCard>
+      {open ? <RunPanel key={open} id={open} readOnly={readOnly} docked={!partnerFixed} onClose={() => setOpen(null)} onChanged={refresh} /> : null}
+      </div>
       {creating ? <NewRun partners={partners.filter((p) => p.status !== "offboarded")} onClose={() => setCreating(false)} onSaved={(id) => { setCreating(false); setOpen(id); refresh(); }} /> : null}
-      {open ? <RunPanel key={open} id={open} readOnly={readOnly} onClose={() => setOpen(null)} onChanged={refresh} /> : null}
     </>
   );
 }

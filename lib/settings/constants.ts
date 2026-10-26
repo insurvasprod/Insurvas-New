@@ -225,19 +225,6 @@ export const SETTING_DEFS = [
     unit: "requests",
   },
   {
-    // Sixteen Open Questions #4. Read by lib/appointments (canWrite) and by the SQL eo_grace_days()
-    // (migration 20261015580000), which applies the same default and the same 0..14 bounds.
-    key: "compliance.eo_grace_days",
-    type: "number",
-    group: "Compliance",
-    label: "E&O grace period",
-    help: "Days after an agency's E&O policy expires during which new business can still be written, with a red banner on its appointments page. The platform cap: a tenant can shorten it, never extend it.",
-    default: 7,
-    min: 0,
-    max: 14,
-    unit: "days",
-  },
-  {
     key: "platform.default_currency",
     type: "select",
     group: "Platform",

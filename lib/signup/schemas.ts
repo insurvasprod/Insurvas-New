@@ -2,6 +2,7 @@ import { isDisposableEmail } from "disposable-email-domains-js";
 import { z } from "zod";
 
 import { BILLING_CYCLES } from "../money.ts";
+import { checkInternationalPhone } from "./phone.ts";
 import { LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, US_STATES, VOLUME_OPTIONS } from "./constants.ts";
 
 const workEmail = z
@@ -15,13 +16,28 @@ export const publicSignupSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your full name").max(120),
   email: workEmail,
   password: z.string().min(12, "Password must be at least 12 characters").max(200),
-  phone: z.string().trim().min(7, "Enter a valid mobile phone").max(40),
-  planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a valid plan"),
-  billingCycle: z.enum(BILLING_CYCLES),
+  // 2026-10-26: checked against the country's rules (lib/signup/phone.ts) and kept in E.164.
+  phone: z.string().trim().min(7, "Enter a valid phone number").max(40).transform((value, ctx) => {
+    const checked = checkInternationalPhone(value);
+    if (!checked.ok) { ctx.addIssue({ code: "custom", message: checked.error }); return z.NEVER; }
+    return checked.e164;
+  }),
+  // Optional since the plan has its own step (owner, 2026-10-26: Step 4 of 5). A plan picked on the
+  // pricing page still arrives here; without one the server starts from the default plan.
+  planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a valid plan").optional(),
+  billingCycle: z.enum(BILLING_CYCLES).optional(),
   // SA-5.4: the ids of the document versions the box was ticked for. Ids, not a boolean — a
   // boolean records that someone agreed to *something*, which is worth nothing in a dispute.
   // The server checks these against what is published right now rather than trusting them.
   acceptedDocumentIds: z.array(z.string().uuid()).max(5).default([]),
+});
+
+/** Step 4 of 5, Your plan. The rules (seat bands, add-ons on the plan) are checked in lib/signup/planChoice.ts. */
+export const planChoiceSchema = z.object({
+  planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a plan"),
+  billingCycle: z.enum(BILLING_CYCLES),
+  seats: z.number().int().min(1, "Choose at least one seat").max(100000),
+  addonCodes: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
 });
 
 export const verificationActionSchema = z.discriminatedUnion("action", [
@@ -37,7 +53,9 @@ const stateValues = new Set<string>(US_STATES.map(([code]) => code));
 export const businessProfileSchema = z
   .object({
     businessName: z.string().trim().min(2, "Enter your business name").max(160),
-    npn: z.string().trim().regex(/^\d{1,10}$/, "NPN must contain up to 10 digits"),
+    // Sign-up no longer asks for it (owner, 2026-10-26); it is set later in Settings › Agency profile.
+    // One that is sent is still checked.
+    npn: z.string().trim().regex(/^\d{1,10}$/, "NPN must contain up to 10 digits").nullish(),
     primaryState: z.string().trim().toUpperCase().refine((value) => stateValues.has(value), "Choose a state"),
     productsSold: z.array(z.string()).min(1, "Select at least one product"),
     monthlyVolumeRange: z.string(),

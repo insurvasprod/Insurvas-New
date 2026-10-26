@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Download, Plus } from "lucide-react";
 
@@ -9,6 +9,8 @@ import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/comp
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { DetailPanel } from "@/components/ui/detail-panel";
+import { NextStepLine } from "@/components/app/next-step-line";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -131,7 +133,64 @@ function QaCell({ row }: { row: ApplicationRow }) {
   return <span className="text-muted-foreground" title="Not checked yet — the check runs on the Review step">—</span>;
 }
 
-export function ApplicationsList({ rows: initialRows, sample = false, timeZone }: { rows: ApplicationRow[]; sample?: boolean; timeZone?: string }) {
+/** Where an attempt is, as the five marks of the preview's bar: qualified, applied, submitted, decision, issued. */
+function stageOf(row: ApplicationRow): number {
+  if (row.status === "closed") return row.outcome === "issued" ? (orphanRule(row) ? 4 : 5) : 3;
+  return { draft: 1, ready: 2, submitted: 3, pending_carrier: 3, counteroffer_pending: 3 }[row.status] ?? 1;
+}
+
+/** The one thing the case needs next, in words. */
+function nextFor(row: ApplicationRow): string {
+  if (row.status === "draft") return row.qaVerdict === "fail" ? "Fix what the checks found, then mark it ready" : "Finish the application";
+  if (row.status === "ready") return "Submit it on the carrier’s site, then capture the reference";
+  if (row.status === "counteroffer_pending") return "The carrier offered something different — decide with the client";
+  if (row.status === "pending_carrier") return "Waiting on the carrier’s decision — work any requirement on the case";
+  if (row.status === "submitted") return orphanRule(row) === "reference" ? "Add the carrier reference so it can be matched" : "Waiting on the carrier";
+  if (row.outcome === "issued") return orphanRule(row) === "policy_number" ? "Add the policy number" : "Issued — nothing to do";
+  return "Closed — start another attempt from the case if it makes sense";
+}
+
+const STAGE_MARKS = ["Qualified", "Applied", "Submitted", "Carrier decision", "Issued"];
+
+/** The case beside the list (2026-10-26, Applications A): where it is, what it needs, and the way in. */
+function CasePreview({ row, timeZone, onClose }: { row: ApplicationRow; timeZone?: string; onClose: () => void }) {
+  const s = statusView(row);
+  const reached = stageOf(row);
+  const fact = (label: string, value: React.ReactNode) => <span className="min-w-0"><span className="block text-xs font-semibold text-muted-foreground">{label}</span><span className="mt-0.5 block truncate text-sm text-foreground">{value}</span></span>;
+  return (
+    <DetailPanel
+      mode="split"
+      title={row.clientName}
+      subtitle={[row.insuredRole === "spouse" ? "Spouse" : null, row.carrierName ?? "No carrier yet", row.productLabel, `attempt ${row.attemptNo}`].filter(Boolean).join(" · ")}
+      status={<StatusChip tone={s.tone} dot>{s.label}</StatusChip>}
+      onClose={onClose}
+      className="m-glass lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:self-start"
+      footer={<div className="flex justify-end"><Button asChild><Link href={caseHref(row.caseId, { insured: row.insuredRole, attempt: row.attemptNo, from: "/app/applications" })}>Open the case</Link></Button></div>}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        {fact("Premium", money(row.monthlyPremiumCents))}
+        {fact("Checks", <QaCell row={row} />)}
+        {fact("Carrier reference", row.reference ? <code className="font-mono text-xs">{row.reference}</code> : "—")}
+        {fact("Policy number", row.policyNumber ? <code className="font-mono text-xs">{row.policyNumber}</code> : "—")}
+        {fact("Updated", dayMonthTime(row.updatedAt, timeZone))}
+        {fact("Submitted", row.submittedAt ? dayMonthTime(row.submittedAt, timeZone) : "Not yet")}
+      </div>
+      <div className="flex flex-col gap-2 border-t border-border pt-4">
+        <span className="text-xs font-semibold text-muted-foreground">Where it is</span>
+        <div className="flex gap-1.5" aria-hidden>
+          {STAGE_MARKS.map((mark, index) => <span key={mark} className={cn("h-1.5 flex-1 rounded-full", index < reached - 1 || reached === STAGE_MARKS.length ? "bg-[var(--primary)]" : index === reached - 1 ? "bg-[var(--warning)]" : "bg-[var(--surface-alt)]")} />)}
+        </div>
+        <span className="text-xs text-[var(--body)]">{STAGE_MARKS.map((mark, index) => <span key={mark} className={index === reached - 1 ? cn("font-semibold", reached === STAGE_MARKS.length ? "text-[var(--success-ink)]" : "text-[var(--warning-ink)]") : undefined}>{index ? " · " : ""}{mark}</span>)}</span>
+      </div>
+      <div className="flex flex-col gap-1 border-t border-border pt-4">
+        <span className="text-xs font-semibold text-muted-foreground">What it needs</span>
+        <span className="text-sm text-foreground">{nextFor(row)}</span>
+      </div>
+    </DetailPanel>
+  );
+}
+
+export function ApplicationsList({ rows: initialRows, sample = false, timeZone, embedded = false }: { rows: ApplicationRow[]; sample?: boolean; timeZone?: string; /** The Cases tab of Applications (2026-10-26): no header of its own, a Next step line, and a case preview. */ embedded?: boolean }) {
   const [rows, setRows] = useState(initialRows);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -143,6 +202,14 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
   const pageSize = useFittingPageSize(500, 45);
   const pick = useCallback((body: unknown) => (body as { applications?: ApplicationRow[] } | null)?.applications ?? null, []);
   const { refresh, refreshing, error: loadError } = useLiveRefresh({ sample, url: "/api/app/applications", pick, apply: setRows });
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  // On a wide screen the case to act on first opens beside the list, so the preview is never empty on arrival.
+  useEffect(() => {
+    if (!embedded || !window.matchMedia("(min-width: 1024px)").matches) return;
+    const first = initialRows.find((row) => row.status === "counteroffer_pending") ?? initialRows.find((row) => row.status === "ready") ?? initialRows.find((row) => orphanRule(row) !== null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- open the first case once, on arrival
+    if (first) setPreviewId((current) => current ?? rowId(first));
+  }, [embedded, initialRows]);
 
   const carriers = useMemo(() => [...new Set(rows.map((row) => row.carrierName).filter((name): name is string => Boolean(name)))].sort(), [rows]);
   const sorted = useMemo(() => [...rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.clientName.localeCompare(b.clientName)), [rows]);
@@ -196,16 +263,35 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
     setPage(1);
   }
 
+  const preview = previewId ? rows.find((row) => rowId(row) === previewId) ?? null : null;
+  // The one thing to do next: an offer to decide, then a case ready to submit, then a number to add.
+  const offers = rows.filter((row) => row.status === "counteroffer_pending");
+  const ready = rows.filter((row) => row.status === "ready").sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  const nextStep = offers.length ? (
+    <NextStepLine action={<Button asChild size="sm"><Link href="/app/pending?tab=counteroffers">See {offers.length === 1 ? "the offer" : "the offers"}</Link></Button>}>
+      <strong className="font-semibold text-[var(--ink)]">{offers.length === 1 ? `${offers[0].clientName}’s carrier came back with a different offer` : `${offers.length} carriers came back with a different offer`}</strong> — decide with the client before it expires.
+    </NextStepLine>
+  ) : ready.length ? (
+    <NextStepLine action={<Button asChild size="sm"><Link href={caseHref(ready[0].caseId, { insured: ready[0].insuredRole, attempt: ready[0].attemptNo, step: "submit", from: "/app/applications" })}>Submit {ready[0].clientName.split(" ")[0]}&rsquo;s</Link></Button>}>
+      <strong className="font-semibold text-[var(--ink)]">{ready.length === 1 ? `${ready[0].clientName}’s application is ready` : `${ready.length} applications are ready`}</strong> — the checks passed; submit on the carrier’s site and capture the reference.
+    </NextStepLine>
+  ) : awaiting.length ? (
+    <NextStepLine action={<Button asChild size="sm" variant="outline"><Link href="/app/pending?tab=awaiting">Add the numbers</Link></Button>}>
+      <strong className="font-semibold text-[var(--ink)]">{awaiting.length === 1 ? "One application is" : `${awaiting.length} applications are`} waiting for a number</strong> — {[noReference ? `${noReference} with no carrier reference` : null, issuedNoNumber ? `${issuedNoNumber} issued with no policy number` : null].filter(Boolean).join(", ")}.
+    </NextStepLine>
+  ) : null;
+
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
+    <div className={embedded ? "flex flex-col gap-6" : "m-stagger flex flex-col gap-6"}>
+      {!embedded && <PageHeader
         title="Applications"
         actions={<>
           <Button type="button" variant="outline" onClick={() => exportCsv()} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>
           <Button asChild title="An application starts from the lead: open it and choose Start application"><Link href="/app/leads"><Plus aria-hidden="true" />New application</Link></Button>
         </>}
-      />
+      />}
       {sample && <SampleDataNotice />}
+      {embedded && nextStep}
 
       {/* Four figures an operator acts on (2026-10-06 redesign): drafts ride on Ready's footnote. */}
       <StatStrip label="Application totals">
@@ -215,12 +301,14 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
         <StatTile label="Awaiting policy number" value={awaiting.length} valueTone={awaiting.length > 0 ? "danger" : undefined} footnote={noReference ? `${issuedNoNumber} issued · ${noReference} no reference` : "issued, number not back"} />
       </StatStrip>
 
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
       <TableCard
-        className="flex min-h-[calc(100dvh-var(--top-bar-h)-300px)] flex-col [&>*:nth-child(2)]:flex-1"
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-300px)] min-w-0 flex-1 flex-col [&>*:nth-child(2)]:flex-1"
         toolbar={<>
           <DataToolbar actions={<>
             {filtered && <ClearFiltersButton onClick={clearFilters} />}
             <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+            {embedded && <Button type="button" variant="outline" onClick={() => exportCsv()} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>}
           </>}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search client, reference, policy #" />
             <select aria-label="Status" className={toolbarControl} value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
@@ -275,7 +363,7 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
                     const href = caseHref(row.caseId, { insured: row.insuredRole, attempt: row.attemptNo });
                     const s = statusView(row);
                     return (
-                      <tr key={rowId(row)} className={cn("m-row", selection.isSelected(rowId(row)) && "bg-[var(--primary-soft)]")}>
+                      <tr key={rowId(row)} className={cn("m-row", embedded && "cursor-pointer", (selection.isSelected(rowId(row)) || previewId === rowId(row)) && "bg-[var(--primary-soft)]", previewId === rowId(row) && "shadow-[inset_3px_0_0_var(--primary)]")} onClick={embedded ? (event) => { if ((event.target as HTMLElement).closest("a, button, input, label")) return; setPreviewId(previewId === rowId(row) ? null : rowId(row)); } : undefined}>
                         <td><RowCheckbox selection={selection} id={rowId(row)} label={`Select ${row.clientName}${row.insuredRole === "spouse" ? " (spouse)" : ""}`} /></td>
                         <td className="max-w-[220px] truncate" title={row.clientName}><Link href={href} className={clientLinkClass}>{row.clientName}</Link></td>
                         <td>{row.insuredRole === "spouse" ? "Spouse" : "Primary"}</td>
@@ -300,6 +388,8 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
               </table>
             </>}
       </TableCard>
+      {embedded && preview && <CasePreview key={rowId(preview)} row={preview} timeZone={timeZone} onClose={() => setPreviewId(null)} />}
+      </div>
     </div>
   );
 }

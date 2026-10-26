@@ -12,7 +12,7 @@
 import { US_STATES, compareByRegion } from "./constants.ts";
 import { appointmentCountsForRouting } from "./eligibility.ts";
 import { daysUntilExpiry } from "./warnings.ts";
-import type { AppointmentRow, CarrierTrainingRow, CeRecordRow, EoPolicyRow, LicenseRow } from "./service-types";
+import type { AppointmentRow, CarrierTrainingRow, LicenseRow } from "./service-types";
 
 export const READINESS_WINDOW_DAYS = 60;
 
@@ -109,32 +109,8 @@ export function appointmentFootprint(appointments: readonly { state: string }[],
   return [...new Set([...appointments, ...licenses].map((row) => row.state))].sort(compareByRegion);
 }
 
-/** The E&O policy the page describes: the in-force one that runs longest, else the latest lapsed one. */
-export function currentEoPolicy<T extends Pick<EoPolicyRow, "expires_at">>(policies: readonly T[], today: string): T | null {
-  const byExpiry = policies.slice().sort((a, b) => b.expires_at.localeCompare(a.expires_at));
-  return byExpiry.find((row) => row.expires_at >= today) ?? byExpiry[0] ?? null;
-}
-
-/** The CE cycle the page describes: the next deadline still ahead, else the latest one recorded. */
-export function currentCeRecord<T extends Pick<CeRecordRow, "deadline">>(records: readonly T[], today: string): T | null {
-  return (
-    records.filter((row) => row.deadline >= today).sort((a, b) => a.deadline.localeCompare(b.deadline))[0] ??
-    records.slice().sort((a, b) => b.deadline.localeCompare(a.deadline))[0] ??
-    null
-  );
-}
-
 export const outstandingTrainings = <T extends Pick<CarrierTrainingRow, "completed_on">>(trainings: readonly T[]) =>
   trainings.filter((row) => !row.completed_on);
-
-/** "$1M", "$250K", "$1.5M". */
-export function compactMoney(cents: number): string {
-  const dollars = cents / 100;
-  const trim = (value: number) => (Math.round(value * 10) / 10).toString();
-  if (dollars >= 1_000_000) return `$${trim(dollars / 1_000_000)}M`;
-  if (dollars >= 1_000) return `$${trim(dollars / 1_000)}K`;
-  return `$${trim(dollars)}`;
-}
 
 const listNames = (names: string[]) =>
   names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
@@ -163,11 +139,9 @@ export type ReadinessInput = {
   tenantCarriers: ReadonlyArray<{ carrier_id: string; is_active: boolean }>;
   appointments: readonly AppointmentRow[];
   licenses: readonly LicenseRow[];
-  eoPolicies: readonly EoPolicyRow[];
-  ceRecords: readonly CeRecordRow[];
   carrierTrainings?: readonly CarrierTrainingRow[] | null;
   /** `contracted: false` = the agency switched the carrier off (LA-0.4); absent reads as on. */
-  carrierRequirements?: ReadonlyArray<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }> | null;
+  carrierRequirements?: ReadonlyArray<{ carrier_id: string; contracted?: boolean }> | null;
 };
 
 /** The carrier × state cells that route a lead today, as the SQL gate decides it (any in-date active row, carrier switched on). */
@@ -185,9 +159,8 @@ export function routingCells(input: Pick<ReadinessInput, "tenantCarriers" | "app
 /**
  * Everything expired or expiring inside the window, blockers first.
  *
- * Blockers: an appointment that expired, a licence that expired or was never recorded in a state the
- * agency is appointed in, and no E&O in force. Warnings, soonest first: licences, appointments, the
- * E&O policy, carrier trainings and CE deadlines with credits still owed.
+ * Blockers: an appointment that expired, and a licence that expired or was never recorded in a state
+ * the agency is appointed in. Warnings, soonest first: licences, appointments and carrier trainings.
  */
 export function readinessItems(input: ReadinessInput, today: string, windowDays = READINESS_WINDOW_DAYS): ReadinessItem[] {
   const carrierName = new Map(input.carriers.map((row) => [row.id, row.name]));
@@ -263,30 +236,6 @@ export function readinessItems(input: ReadinessInput, today: string, windowDays 
     });
   }
 
-  const eo = currentEoPolicy(input.eoPolicies, today);
-  const eoDays = eo ? daysUntilExpiry(eo.expires_at, today) : -Infinity;
-  if (!eo || eoDays < 0) {
-    const requiring = input.carrierRequirements
-      ? new Set(input.carrierRequirements.filter((row) => row.requires_eo).map((row) => row.carrier_id))
-      : null;
-    const atRisk = requiring ? [...routes].filter((key) => requiring.has(key.split(":")[0])).length : 0;
-    items.push({
-      key: "eo-none",
-      tone: "error",
-      title: "No E&O in force",
-      body:
-        (eo ? `${eo.carrier} policy ${eo.policy_number} expired ${recentDate(eo.expires_at, today)}.` : "No errors & omissions policy is on file.") +
-        (atRisk > 0 ? ` ${atRisk} carrier appointment${atRisk === 1 ? " requires" : "s require"} it.` : ""),
-      days: eo ? eoDays : 0,
-    });
-  } else if (inWindow(eoDays)) {
-    const limits =
-      eo.per_claim_cents != null && eo.aggregate_cents != null
-        ? `${compactMoney(eo.per_claim_cents)} / ${compactMoney(eo.aggregate_cents)}`
-        : compactMoney(eo.coverage_amount_cents);
-    items.push({ key: `eo-expiring-${eo.id}`, tone: "warning", title: expiresIn(eoDays, "E&O expires"), body: `${limits}, ${eo.carrier}, ${dayMonth(eo.expires_at)}.`, days: eoDays });
-  }
-
   for (const row of outstandingTrainings(input.carrierTrainings ?? [])) {
     const days = daysUntilExpiry(row.due_on, today);
     if (days < 0) {
@@ -294,18 +243,6 @@ export function readinessItems(input: ReadinessInput, today: string, windowDays 
     } else if (inWindow(days)) {
       items.push({ key: `training-${row.id}`, tone: "warning", title: expiresIn(days, "Training due"), body: `${nameOf(row.carrier_id)}: ${row.title}, ${dayMonth(row.due_on)}.`, days });
     }
-  }
-
-  for (const row of input.ceRecords) {
-    const days = daysUntilExpiry(row.deadline, today);
-    if (row.credits_completed >= row.credits_required || !inWindow(days)) continue;
-    items.push({
-      key: `ce-${row.id}`,
-      tone: "warning",
-      title: days === 0 ? "CE deadline today" : `CE deadline in ${days} ${days === 1 ? "day" : "days"}`,
-      body: `${stateName(row.state)}: ${row.credits_completed} of ${row.credits_required} credits, ${dayMonth(row.deadline)}.`,
-      days,
-    });
   }
 
   const rank = (item: ReadinessItem) => (item.tone === "error" ? 0 : 1);

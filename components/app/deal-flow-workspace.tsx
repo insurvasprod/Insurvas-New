@@ -28,7 +28,6 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
-import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -42,6 +41,7 @@ import {
   DEAL_FLOW_STATUSES,
   STAGE_TYPE_LABEL,
   shortLeadId,
+  type DealFlowKpis,
   type DealFlowReport,
   type DealFlowRow,
   type DealFlowStageType,
@@ -51,6 +51,8 @@ import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Pager } from "@/components/ui/pager";
+import { TrendTile } from "@/components/ui/trend-tile";
+import { LeadFlowMap } from "@/components/ui/lead-flow-map";
 
 type Data = DealFlowReport & { readOnly: boolean };
 type Filters = { from: string; to: string; partner_id: string; product_line: string; agent_id: string; stage_type: string; status: string };
@@ -207,6 +209,26 @@ function CopyId({ leadId }: { leadId: string }) {
   );
 }
 
+/** "2026-10-25" moved by whole days, on the calendar (no timezone involved). */
+function shiftDay(day: string, delta: number) {
+  const at = new Date(`${day}T12:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + delta);
+  return at.toISOString().slice(0, 10);
+}
+const TREND_DAYS = 7;
+
+/** Leads A2: one premium bar per row, against the largest premium on the page. */
+function PremiumBar({ monthlyCents, max }: { monthlyCents: number | null; max: number }) {
+  return (
+    <span className="flex items-center gap-2.5">
+      <span aria-hidden className="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-[var(--surface-alt)]">
+        {monthlyCents != null && max > 0 && <span className="block h-full rounded-full bg-[linear-gradient(90deg,var(--success),var(--primary))]" style={{ width: `${Math.max(4, ((monthlyCents * 12) / max) * 100)}%` }} />}
+      </span>
+      <span className="w-[72px] text-right font-semibold tabular-nums">{annualised(monthlyCents)}</span>
+    </span>
+  );
+}
+
 function queryFor(active: Filters, search: string, page: number | null, focusLeadId: string | null) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(active)) if (value) params.set(key, value);
@@ -279,6 +301,32 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     const timer = window.setTimeout(() => row.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     return () => window.clearTimeout(timer);
   }, [data, focus]);
+
+  // Leads A2 (2026-10-25): each tile carries its last seven days. One light read per day (a page of
+  // one row; the KPIs cover the whole day), with the same filters, ending on the range's last day.
+  const trendKey = useMemo(() => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(active)) if (value && key !== "from" && key !== "to") params.set(key, value);
+    return `${active.to}|${params.toString()}`;
+  }, [active]);
+  const [trend, setTrend] = useState<{ key: string; days: DealFlowKpis[] } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const [to, rest] = trendKey.split("|");
+    if (!to) return;
+    const days = Array.from({ length: TREND_DAYS }, (_, index) => shiftDay(to, index - (TREND_DAYS - 1)));
+    void Promise.all(days.map(async (day) => {
+      const params = new URLSearchParams(rest);
+      params.set("from", day);
+      params.set("to", day);
+      params.set("page_size", "1");
+      const response = await fetch(`/api/app/deal-flow?${params}`, { cache: "no-store" }).catch(() => null);
+      const body = response?.ok ? await response.json().catch(() => null) : null;
+      return (body?.kpis ?? null) as DealFlowKpis | null;
+    })).then((list) => { if (!cancelled) setTrend(list.every(Boolean) ? { key: trendKey, days: list as DealFlowKpis[] } : null); });
+    return () => { cancelled = true; };
+  }, [trendKey]);
+  const series = (pick: (kpis: DealFlowKpis) => number) => (trend && trend.key === trendKey ? trend.days.map(pick) : null);
 
   const csvHref = useMemo(() => { const params = new URLSearchParams(queryFor(active, search, 1, null)); params.delete("page"); params.delete("page_size"); params.set("format", "csv"); return `/api/app/deal-flow?${params.toString()}`; }, [active, search]);
   const pinned = data?.focus && !data.focus.inFilter ? data.focus.row : null;
@@ -365,7 +413,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [showFilters]);
 
-  const header = <PageHeader title="Daily deal flow" />;
+  const header = <PageHeader title="Daily deal flow" description="Every deal worked today, with what it is worth." />;
   const pageActions = (
     <>
       <Button asChild variant="outline"><a href={csvHref} aria-label="Export the deals in this range as CSV"><Download aria-hidden="true" />Export</a></Button>
@@ -402,13 +450,14 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
   const showPanel = panelOpen && tab === "deals" && selectedRow !== null;
   const editingRow = editing && draft ? tableRows.find((row) => row.id === editing) ?? null : null;
   const columns = showPanel ? 6 : 8;
+  const premiumMax = Math.max(0, ...tableRows.map((row) => (row.monthly_premium_cents ?? 0) * 12));
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {header}
-
-      {/* The views on the left, the page's actions on the right: one row under the title. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Leads A2: the title on the left; the views and the page's actions on the right. */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <PageHeader title="Daily deal flow" description="Every deal worked today, with what it is worth." />
+        <div className="flex flex-wrap items-center gap-2">
         <ViewTabs
           label="Deal flow views"
           active={tab}
@@ -420,7 +469,8 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
             { key: "partners", label: "By partner", count: data.summary.length },
           ]}
         />
-        <div className="flex flex-wrap items-center gap-2">{pageActions}</div>
+        {pageActions}
+        </div>
       </div>
 
       {data.readOnly && <Alert tone="warning">Read-only: you can review and export, not add or edit deals.</Alert>}
@@ -434,12 +484,27 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
         </Alert>
       )}
 
-      <StatStrip label="Deal flow summary">
-        <StatTile label="Deals worked" value={kpis.deals_worked} footnote={isToday ? "today" : active.from === active.to ? formatDay(active.from) : rangeText(active.from, active.to)} />
-        <StatTile label="Won" value={kpis.won} valueTone={kpis.won ? "good" : undefined} footnote={wonFoot} />
-        <StatTile label="In progress" value={kpis.in_progress} valueTone={kpis.in_progress ? "warning" : undefined} footnote={inProgressFoot} />
-        <StatTile label="Lost" value={kpis.lost} valueTone={kpis.lost ? "danger" : undefined} footnote="no longer active" />
-      </StatStrip>
+      <section aria-label="Deal flow summary" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <TrendTile label="Deals worked" value={kpis.deals_worked} footnote={isToday ? "today" : active.from === active.to ? formatDay(active.from) : rangeText(active.from, active.to)} trend={series((k) => k.deals_worked)} trendLabel="Deals worked, last 7 days" />
+        <TrendTile label="Won" value={kpis.won} tone={kpis.won ? "good" : "neutral"} footnote={wonFoot} trend={series((k) => k.won)} trendLabel="Won, last 7 days" />
+        <TrendTile label="In progress" value={kpis.in_progress} tone={kpis.in_progress ? "warning" : "neutral"} footnote={inProgressFoot} trend={series((k) => k.in_progress)} trendLabel="In progress, last 7 days" />
+        <TrendTile label="Lost" value={kpis.lost} tone={kpis.lost ? "danger" : "neutral"} footnote="no longer active" trend={series((k) => k.lost)} trendLabel="Lost, last 7 days" />
+      </section>
+
+      {/* The range as the dashboard's stream: worked, still in progress, won, lost. */}
+      <LeadFlowMap
+        mode="path"
+        label={isToday ? "Today's deals" : "These deals"}
+        hot={kpis.in_progress ? 1 : null}
+        drops={[]}
+        worst={null}
+        stages={[
+          { label: "Worked", value: String(kpis.deals_worked), count: kpis.deals_worked, note: isToday ? "today" : "in range" },
+          { label: "In progress", value: String(kpis.in_progress), count: kpis.in_progress, note: inProgressFoot },
+          { label: "Won", value: String(kpis.won), count: kpis.won, note: formatCentsAsCurrency(kpis.won_annualised_cents) },
+          { label: "Lost", value: String(kpis.lost), count: kpis.lost, note: "no longer active" },
+        ]}
+      />
 
       {/* One tab panel for the three views, so a switch fades like every other tab (2026-10-09). */}
       <div key={tab} id="deal-flow-panel" role="tabpanel" aria-labelledby={`deal-flow-panel-tab-${tab}`}>
@@ -530,7 +595,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                           </span>
                         </td>
                         <td className={cn(st.td, "whitespace-nowrap")}>{shortPerson(row.agent_name)}</td>
-                        <td className={cn(st.td, "tabular-nums")}>{annualised(row.monthly_premium_cents)}</td>
+                        <td className={st.td}><PremiumBar monthlyCents={row.monthly_premium_cents} max={premiumMax} /></td>
                         <td className={cn(st.td, "text-right")}>
                           <Button asChild variant="outline" size="sm">
                             <Link href={`/app/leads/${row.lead_id}`} onClick={(event) => event.stopPropagation()}>Open lead</Link>

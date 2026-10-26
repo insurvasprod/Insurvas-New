@@ -22,7 +22,9 @@ const db = () => getSupabaseServiceClient() as any;
 
 export type SecurityEventType =
   | "password_changed" | "email_change_requested" | "email_changed" | "two_factor_enabled" | "two_factor_disabled"
-  | "recovery_code_used" | "recovery_codes_regenerated" | "session_ended" | "other_sessions_ended";
+  | "recovery_code_used" | "recovery_codes_regenerated" | "session_ended" | "other_sessions_ended"
+  // 2026-10-24 (migration 20261024100000).
+  | "device_trusted" | "signed_in_with_link";
 
 export const SECURITY_EVENT_LABELS: Record<SecurityEventType | "failed_logins", string> = {
   password_changed: "Password changed",
@@ -34,6 +36,8 @@ export const SECURITY_EVENT_LABELS: Record<SecurityEventType | "failed_logins", 
   recovery_codes_regenerated: "New recovery codes made",
   session_ended: "A session was ended",
   other_sessions_ended: "Every other session was ended",
+  device_trusted: "This device trusted for 30 days",
+  signed_in_with_link: "Signed in with an emailed link",
   failed_logins: "Failed sign-in attempts",
 };
 

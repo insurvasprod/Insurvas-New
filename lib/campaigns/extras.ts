@@ -38,6 +38,8 @@ export type CampaignExtras = {
    * because that figure is True CPA's to show.
    */
   outcomes: Record<string, CampaignOutcome> | null;
+  /** tenant_campaigns.target_states (LA-2.1): the states a campaign is bought for. Null when unreadable. */
+  targetStates: Record<string, string[]> | null;
   faults: string[];
 };
 
@@ -64,6 +66,16 @@ async function progress(tenantId: string, faults: string[]) {
       },
     ]),
   );
+}
+
+/** LA-2.1's target states. The cost view does not carry them, so they are read beside it. */
+async function targetStates(tenantId: string, faults: string[]) {
+  const result = (await db().from("tenant_campaigns").select("id, target_states").eq("tenant_id", tenantId)) as Result<Array<{ id: string; target_states: string[] | null }>>;
+  if (result.error) {
+    if (!isSchemaGap(result.error)) faults.push(`Target states could not be loaded: ${result.error.message}`);
+    return null;
+  }
+  return Object.fromEntries((result.data ?? []).map((row) => [row.id, Array.isArray(row.target_states) ? row.target_states : []]));
 }
 
 async function testBatches(tenantId: string, faults: string[]) {
@@ -99,7 +111,7 @@ async function outcomes(tenantId: string, entitlement: Entitlement, faults: stri
 
 export async function campaignExtras(tenantId: string, entitlement: Entitlement): Promise<CampaignExtras> {
   const faults: string[] = [];
-  const [progressMap, runs, tests, outcomeMap] = await Promise.all([
+  const [progressMap, runs, tests, outcomeMap, states] = await Promise.all([
     progress(tenantId, faults),
     latestScrubRuns(tenantId).catch((error: unknown) => {
       faults.push(error instanceof Error ? error.message : "Scrub runs could not be loaded");
@@ -107,12 +119,14 @@ export async function campaignExtras(tenantId: string, entitlement: Entitlement)
     }),
     testBatches(tenantId, faults),
     outcomes(tenantId, entitlement, faults),
+    targetStates(tenantId, faults),
   ]);
   return {
     progress: progressMap,
     scrubRuns: runs ? Object.fromEntries(runs) : null,
     testBatches: tests,
     outcomes: outcomeMap,
+    targetStates: states,
     faults,
   };
 }

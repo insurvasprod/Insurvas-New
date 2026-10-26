@@ -11,12 +11,23 @@ import {
 } from "@/lib/tenants/suspension";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsPartnerMembership, PARTNER_ACCOUNT_AT_AGENT_SIGN_IN, WRONG_PORTAL_CODE } from "@/lib/auth/planeSeparation";
-import { signTenantPending2faToken, tenantPending2faCookieOptions, tenantSessionCookieOptions, TENANT_PENDING_2FA_COOKIE, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
+import {
+  signTenantPending2faToken,
+  tenantPending2faCookieOptions,
+  tenantSessionCookie,
+  TENANT_PENDING_2FA_COOKIE,
+  TENANT_SESSION_COOKIE,
+  TENANT_TRUSTED_DEVICE_COOKIE,
+  verifyTenantSignInLinkToken,
+  verifyTenantTrustedDeviceToken,
+  type TenantTrustedDevice,
+} from "@/lib/tenantAuth/session";
 import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
-import { hasTwoFactor } from "@/lib/tenantAuth/twoFactor";
+import { twoFactorEnabledAt } from "@/lib/tenantAuth/twoFactor";
 import { requiresTwoFactor } from "@/lib/tenantAuth/securityRules";
 import { partnerSessionCookieOptions, PARTNER_SESSION_COOKIE } from "@/lib/partnerAuth/session";
 import { recordLastLogin, recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
+import { recordSecurityEvent } from "@/lib/users/securityEvents";
 import { signupDestination } from "@/lib/signup/context";
 import { firstLoginLanding } from "@/lib/dashboard/setupViewer";
 import { getMaintenanceStatus } from "@/lib/system/service";
@@ -32,6 +43,30 @@ import {
 // exists. Credential verification belongs to Supabase Auth; the public profile table only carries
 // tenant membership, status, and the session version used by the application cookie.
 const GENERIC_ERROR = { error: "Invalid email or password" };
+
+// One answer for a link that has expired, was used, or was never ours.
+const LINK_ERROR = { error: "That sign-in link has expired or was already used. Ask for a new one." };
+
+/**
+ * Claims a sign-in link's id once. Unlike the rate limiter's own `claim`, this fails CLOSED: a link
+ * that cannot be checked is refused, and the password is still there.
+ */
+async function claimLinkOnce(jti: string): Promise<boolean> {
+  const { data, error } = await getSupabaseServiceClient().rpc("claim_rate_limit", { p_key: `sign_in_link:${jti}`, p_max: 1, p_window_seconds: 3600 });
+  if (error) {
+    console.error("[sign-in link] could not claim the link, refusing it:", error.message);
+    return false;
+  }
+  return data === true;
+}
+
+/** This browser's "trust this device" cookie, when it is still good for this person and authenticator. */
+async function trustedDeviceFor(request: NextRequest, userId: string, sessionVersion: number, enabledAt: string): Promise<TenantTrustedDevice | null> {
+  const token = request.cookies.get(TENANT_TRUSTED_DEVICE_COOKIE)?.value;
+  const trusted = token ? await verifyTenantTrustedDeviceToken(token) : null;
+  if (!trusted || trusted.sub !== userId || trusted.sessionVersion !== sessionVersion || trusted.enabledAt !== enabledAt) return null;
+  return trusted;
+}
 
 function getAuthClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -58,7 +93,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(GENERIC_ERROR, { status: 401 });
   }
 
-  const { email, password } = parsed.data;
+  // An emailed sign-in link stands in for the password (2026-10-24). Its token names the person, so
+  // the same per-address lockout applies to it before anything is looked up.
+  const link = "link" in parsed.data ? await verifyTenantSignInLinkToken(parsed.data.link) : null;
+  if ("link" in parsed.data && !link) return NextResponse.json(LINK_ERROR, { status: 401 });
+  const email = link ? link.email : "email" in parsed.data ? parsed.data.email : "";
+  const remember = link ? (parsed.data.remember ?? link.remember) : parsed.data.remember !== false;
   const protection = await checkLoginAllowed("user", email, request);
   if (!protection.allowed) {
     // Scheduled after the response and capped; never delays or changes the refusal.
@@ -77,21 +117,34 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  const { data: authData, error: authError } = await getAuthClient().auth.signInWithPassword({ email, password });
-  if (authError || !authData.user) {
-    return fail("invalid_credentials", null, NextResponse.json(GENERIC_ERROR, { status: 401 }));
+  let authUserId: string;
+  if (link) {
+    authUserId = link.sub;
+  } else {
+    const password = "password" in parsed.data ? parsed.data.password : "";
+    const { data: authData, error: authError } = await getAuthClient().auth.signInWithPassword({ email, password });
+    if (authError || !authData.user) {
+      return fail("invalid_credentials", null, NextResponse.json(GENERIC_ERROR, { status: 401 }));
+    }
+    authUserId = authData.user.id;
   }
 
   // No tenant is known yet at this point, so the profile lookup must run unscoped through the
   // service-role client. The auth user id is the only identity accepted from Supabase Auth.
   const { data: user } = await supabase
     .from("users")
-    .select("id, status, session_version")
-    .eq("id", authData.user.id)
-    .maybeSingle<{ id: string; status: string; session_version: number }>();
+    .select("id, status, session_version, last_login_at")
+    .eq("id", authUserId)
+    .maybeSingle<{ id: string; status: string; session_version: number; last_login_at: string | null }>();
 
   if (!user) {
-    return fail("no_membership", authData.user.id, NextResponse.json(GENERIC_ERROR, { status: 401 }));
+    return fail("no_membership", authUserId, NextResponse.json(GENERIC_ERROR, { status: 401 }));
+  }
+
+  // A link works once: the first sign-in moves last_login_at, "sign out everywhere" moves the session
+  // version, and its id is claimed once here for two clicks landing at the same moment.
+  if (link && (user.session_version !== link.sessionVersion || (user.last_login_at ?? null) !== link.lastLoginAt || !(await claimLinkOnce(link.jti)))) {
+    return fail("invalid_credentials", user.id, NextResponse.json(LINK_ERROR, { status: 401 }));
   }
 
   // Past this point the caller has proven the password, so naming the account state tells them
@@ -174,16 +227,20 @@ export async function POST(request: NextRequest) {
   // LA-8.2: with two-factor on, the password is only the first step. Nothing is recorded as a
   // successful sign-in until the code is (POST /api/app/auth/verify-2fa); a short-lived cookie,
   // which can never act as a session, carries the person there.
-  const enrolled = await hasTwoFactor(user.id).catch(() => false);
+  const enabledAt = await twoFactorEnabledAt(user.id).catch(() => null);
+  const enrolled = Boolean(enabledAt);
+  // "Trust this device for 30 days": a cookie from an earlier code step on this browser, for this
+  // person, at this session version and this authenticator, stands in for the code.
+  const trusted = enabledAt ? await trustedDeviceFor(request, user.id, user.session_version, enabledAt) : null;
   // A role that can reveal an SSN or bank details, without two-factor, is sent to set it up — prompted,
   // not locked out: everything but those reveals keeps working (lib/tenantAuth/twoFactor.ts).
   // An invited member's first sign-in opens their walkthrough (Get set up, 2026-10-21); null for the owner.
   const landing = (await firstLoginLanding(membership.tenant_id, user.id, membership.role)) ?? "/app/dashboard";
   const redirectTo = signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state })
     ?? (!enrolled && requiresTwoFactor(membership.role) ? "/app/profile?two_factor=required#security" : landing);
-  if (enrolled) {
+  if (enrolled && !trusted) {
     await clearLoginFailures("user", email, request);
-    const pending = await signTenantPending2faToken({ sub: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, redirectTo });
+    const pending = await signTenantPending2faToken({ sub: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, redirectTo, remember, viaLink: Boolean(link) });
     const response = NextResponse.json({ ok: true, twoFactor: true });
     response.cookies.set(TENANT_PENDING_2FA_COOKIE, pending, tenantPending2faCookieOptions);
     response.cookies.set(PARTNER_SESSION_COOKIE, "", { ...partnerSessionCookieOptions, maxAge: 0 });
@@ -196,13 +253,16 @@ export async function POST(request: NextRequest) {
     clearLoginFailures("user", email, request),
     recordLastLogin("user", user.id),
     recordLoginEvent({ request, email, success: true, userId: user.id, actorType: "user" }),
+    link ? recordSecurityEvent({ userId: user.id, tenantId: membership.tenant_id, type: "signed_in_with_link", request }) : Promise.resolve(),
   ]);
 
   // Role is intentionally not baked into the token — it's resolved per request (SA-1.3). The token
   // names its session row, which every request checks (LA-8.2).
-  const { token: sessionToken } = await issueTenantSession({ userId: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, request });
+  // A trusted device carries the time its code was last typed, so the session counts as having passed
+  // the second factor exactly as a fresh code would.
+  const { token: sessionToken } = await issueTenantSession({ userId: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, request, remember, twoFactorAt: trusted?.verifiedAt ?? null });
   const response = NextResponse.json({ ok: true, redirectTo });
-  response.cookies.set(TENANT_SESSION_COOKIE, sessionToken, tenantSessionCookieOptions);
+  response.cookies.set(TENANT_SESSION_COOKIE, sessionToken, tenantSessionCookie(remember));
   // A successful agent login switches the browser to the agent identity plane. Clear any stale
   // partner session so a previous partner user cannot remain authenticated in another portal tab.
   response.cookies.set(PARTNER_SESSION_COOKIE, "", { ...partnerSessionCookieOptions, maxAge: 0 });

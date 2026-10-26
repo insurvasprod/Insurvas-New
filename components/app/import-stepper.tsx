@@ -21,7 +21,7 @@ export type ImportStep = 1 | 2 | 3 | 4 | 5;
 
 export function ImportStepper({ current }: { current: ImportStep }) {
   return (
-    <nav aria-label="Import progress" className="flex min-w-0 items-center overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-5 py-3.5">
+    <nav aria-label="Import progress" className="m-glass flex min-w-0 items-center overflow-x-auto rounded-[12px] border border-[var(--border)] px-5 py-3.5">
       <ol className="m-0 flex w-full min-w-[520px] list-none items-center p-0">
         {IMPORT_STEPS.map((label, index) => {
           const step = index + 1;

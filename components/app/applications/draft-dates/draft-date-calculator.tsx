@@ -43,7 +43,7 @@ function firstOfNextMonth() {
   return next.toISOString().slice(0, 10);
 }
 
-export function DraftDateCalculator() {
+export function DraftDateCalculator({ sheet = false }: { /** Inside the Applications side panel (2026-10-26): no page header, one column. */ sheet?: boolean } = {}) {
   const [dob, setDob] = useState("");
   const [anchor, setAnchor] = useState(firstOfNextMonth);
   const buffer = useDraftBuffer();
@@ -61,12 +61,12 @@ export function DraftDateCalculator() {
   const schedule = scheduleShort(m.input);
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Draft-date calculator" description="The safest day to draft the premium." />
+    <div className={sheet ? "flex flex-col gap-4" : "m-stagger flex flex-col gap-6"}>
+      {!sheet && <PageHeader title="Draft-date calculator" description="The safest day to draft the premium." />}
 
-      <div className="flex flex-col items-start gap-6 xl:flex-row">
+      <div className={sheet ? "flex flex-col gap-4" : "flex flex-col items-start gap-6 xl:flex-row"}>
         <StepCard title="Income and draft day" className="w-full min-w-0 flex-1" bodyClassName="gap-0 p-0">
-          <div className="grid gap-4 px-5 py-[18px] md:grid-cols-[minmax(0,1fr)_minmax(0,1.9fr)_minmax(0,1.05fr)]">
+          <div className={sheet ? "grid gap-4 px-5 py-[18px]" : "grid gap-4 px-5 py-[18px] md:grid-cols-[minmax(0,1fr)_minmax(0,1.9fr)_minmax(0,1.05fr)]"}>
             <Field label="Date of birth" htmlFor="dd.dob" hint="Its day sets the pay cycle">
               <input id="dd.dob" type="date" className={control} value={dob} onChange={(e) => setDob(e.target.value)} />
             </Field>
@@ -131,7 +131,7 @@ export function DraftDateCalculator() {
           noun="months"
           title="Twelve months ahead"
           action={schedule && rec?.kind === "recommended" ? <StatusChip tone="info" dot={false}>{schedule}</StatusChip> : undefined}
-          className="w-full shrink-0 xl:w-[462px]"
+          className={sheet ? "w-full" : "w-full shrink-0 xl:w-[462px]"}
         >
           {rec?.kind === "recommended" ? (
             <ArrivalTable m={m} day={shown} />

@@ -5,9 +5,9 @@ import { agencyRpc, AgencyRefusal } from "./rpc";
 
 /**
  * AG-1.10 · the producer onboarding checklist. The items are DERIVED by the database (producer_checklist) from the
- * records each later module reads; this store only records the three things a person attests — contracting
- * (owner), E&O (with its certificate and expiry), W-9 (owner uploads) — and then asks the database to re-derive
- * can_submit. Nothing here writes can_submit.
+ * records each later module reads; this store only records the two things the owner attests — contracting and
+ * the W-9 (owner uploads) — and then asks the database to re-derive can_submit. Nothing here writes can_submit.
+ * (E&O was removed from the checklist 2026-10-26; migration 20261026400000.)
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,7 +21,6 @@ export const CHECKLIST_FEEDS: Record<string, string> = {
   contracting: "The owner approves",
   numbers: "Feeds statement attribution",
   levels: "Feeds the override",
-  eo: "Feeds the licence gate",
   w9: "The owner uploads it; stored encrypted, shown masked",
 };
 
@@ -52,8 +51,7 @@ export async function refreshCanSubmit(tenantId: string, producerId: string): Pr
 }
 
 /** Records an attested item and re-derives can_submit. documentPath is a storage path, never the document. */
-export async function completeItem(input: { tenantId: string; producerId: string; item: "contracting" | "eo" | "w9"; actorId: string; expiresOn?: string | null; documentPath?: string | null }) {
-  if (input.item === "eo" && (!input.expiresOn || !input.documentPath)) throw new AgencyRefusal("Upload the E&O certificate and enter its expiry date.", "eo_incomplete", 400);
+export async function completeItem(input: { tenantId: string; producerId: string; item: "contracting" | "w9"; actorId: string; expiresOn?: string | null; documentPath?: string | null }) {
   if (input.item === "w9" && !input.documentPath) throw new AgencyRefusal("Upload the W-9.", "w9_incomplete", 400);
   const { error } = await db().from("producer_onboarding_item").upsert({
     tenant_id: input.tenantId,

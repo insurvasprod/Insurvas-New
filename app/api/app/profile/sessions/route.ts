@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
-import { tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
+import { TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
 import { endTenantSessions, listTenantSessions } from "@/lib/tenantAuth/sessionStore";
 import { AccountSecurityError, endOtherSessions } from "@/lib/users/accountSecurity";
 import { recordSecurityEvent } from "@/lib/users/securityEvents";
@@ -42,13 +42,13 @@ export async function POST(request: NextRequest) {
       ]);
       return NextResponse.json({ ok: true, ended });
     }
-    const { token, ended } = await endOtherSessions(auth.context, "ended_by_user", request);
+    const { token, ended, cookie } = await endOtherSessions(auth.context, "ended_by_user", request);
     await Promise.all([
       recordSecurityEvent({ userId, tenantId, type: "other_sessions_ended", detail: { ended }, request }),
       audit({ actorType: "tenant", actorId: userId, action: "user.own_sessions_ended", targetType: "user", targetId: userId, metadata: { tenantId, scope: "other_sessions", ended }, request }),
     ]);
     const response = NextResponse.json({ ok: true, ended });
-    response.cookies.set(TENANT_SESSION_COOKIE, token, tenantSessionCookieOptions);
+    response.cookies.set(TENANT_SESSION_COOKIE, token, cookie);
     return response;
   } catch (error) {
     if (error instanceof AccountSecurityError) return NextResponse.json({ error: error.message }, { status: error.status });

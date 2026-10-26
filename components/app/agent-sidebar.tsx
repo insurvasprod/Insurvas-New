@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useState, type ReactNode } from "react";
+import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -31,8 +31,6 @@ import {
   Menu,
   MessageSquare,
   Package,
-  PanelLeftClose,
-  PanelLeftOpen,
   PhoneIncoming,
   PhoneOutgoing,
   Radar,
@@ -323,7 +321,6 @@ const ICONS = {
   route: Route,
   "list-checks": ListChecks,
   package: Package,
-  "panel-left-close": PanelLeftClose,
   // Both LA-2 destinations. `iconFor()` falls back to a featureless Circle for an unknown name, so
   // a missing entry here is invisible in review and looks deliberate on screen.
   // `lib/design/contract.test.mjs` now fails when the menu names an icon this map lacks.
@@ -371,7 +368,6 @@ export function AgentSidebar({
   plan?: AgentPlanSummary;
 }) {
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
 
   // One mark everywhere the product names itself — the phone bar and drawer used a building icon.
   // The rail and drawer are always ink, so they take the on-dark mark; the white phone bar follows
@@ -433,38 +429,174 @@ export function AgentSidebar({
         </div>
       )}
 
-      <aside
-        data-print-hide
-        className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col md:flex ${collapsed ? "is-collapsed" : ""}`}
-        data-collapsed={collapsed}
-      >
-        {/* The brand block sits OUTSIDE the scroll container: its hairline is the top edge of the
-            rail, and an edge that scrolls away is not an edge. */}
-        <div className="portal-agent-sidebar-brand">
-            <div className="insurvas-agent-brand-full">{brandMark("dark")}</div>
-            <InsurvasLogo size="compact" variant="symbol" tone="dark" className="insurvas-agent-brand-compact" />
-            <button
-              type="button"
-              className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-              onClick={() => setCollapsed((value) => !value)}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-pressed={collapsed}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {collapsed ? (
-                <PanelLeftOpen className="size-4" aria-hidden="true" />
-              ) : (
-                <PanelLeftClose className="size-4" aria-hidden="true" />
-              )}
-            </button>
-        </div>
-        <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
-          <NavList menu={menu} moduleAccess={moduleAccess} />
-        </div>
-        {/* Outside the scroll, as drawn: the list grows, the plan stays at the foot of the rail. */}
-        {plan && <PlanCard plan={plan} />}
-        {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
-      </aside>
+      <NavRail menu={menu} moduleAccess={moduleAccess} />
     </>
+  );
+}
+
+type RailFlyout =
+  | { kind: "group"; key: string; label: string; items: MenuItem[]; top: number }
+  | { kind: "tip"; key: string; label: string; top: number };
+
+/**
+ * The desktop rail (redesign 2026-10-25, owner's pick "Dashboard A"): one icon per job group, Home
+ * at the top and Settings and your account at the foot (the plan is a line in the account menu). Pointing at a group, focusing it or clicking it
+ * opens its pages beside the rail — every page in one move, no groups to expand and collapse.
+ * The phone keeps the full drawer above. The menu is the same server-filtered `buildSidebarTree()`.
+ *
+ * The panel is position: fixed so the rail's own scroll (short screens) never clips it.
+ */
+function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: AgentModuleAccess }) {
+  const pathname = usePathname();
+  const tree = buildSidebarTree(menu, moduleAccess);
+  const [fly, setFly] = useState<RailFlyout | null>(null);
+  const [seenPath, setSeenPath] = useState(pathname);
+  const closeTimer = useRef<number | null>(null);
+  const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
+
+  // A navigation closes the panel (set during render, not in an effect: it is derived from the path).
+  if (seenPath !== pathname) {
+    setSeenPath(pathname);
+    setFly(null);
+  }
+
+  useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); }, []);
+
+  const cancelClose = () => {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  // A short grace, so the pointer can cross the gap between the rail and the panel.
+  const closeSoon = () => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setFly(null), 160);
+  };
+  const place = (element: HTMLElement, rows: number) => {
+    const rect = element.getBoundingClientRect();
+    const height = 56 + rows * 40;
+    return Math.max(8, Math.min(rect.top - 8, window.innerHeight - height - 12));
+  };
+  const openGroup = (group: { label: string; items: MenuItem[] }, element: HTMLElement) => {
+    cancelClose();
+    setFly({ kind: "group", key: group.label, label: group.label, items: group.items, top: place(element, group.items.length) });
+  };
+  const openTip = (key: string, label: string, element: HTMLElement) => {
+    cancelClose();
+    const rect = element.getBoundingClientRect();
+    setFly((current) => (current?.kind === "group" && current.key === key ? current : { kind: "tip", key, label, top: rect.top + rect.height / 2 - 16 }));
+  };
+
+  function onKeyDown(event: React.KeyboardEvent) {
+    // Into the open panel from its group's button.
+    if ((event.key === "ArrowRight" || event.key === "ArrowDown") && fly?.kind === "group" && (event.target as HTMLElement).dataset.railKey === fly.key) {
+      const first = document.querySelector<HTMLElement>("#agent-rail-panel a");
+      if (first) { event.preventDefault(); first.focus(); }
+      return;
+    }
+    if (event.key !== "Escape" || !fly) return;
+    const key = fly.key;
+    setFly(null);
+    document.querySelector<HTMLElement>(`[data-rail-key="${CSS.escape(key)}"]`)?.focus();
+  }
+
+  const link = (item: MenuItem) => {
+    const Icon = iconFor(item.icon);
+    const active = isActive(item);
+    const label = item.navLabel ?? item.label;
+    return (
+      <li key={item.key}>
+        <Link
+          href={item.path}
+          data-rail-key={item.key}
+          aria-label={label}
+          aria-current={active ? "page" : undefined}
+          className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
+          onPointerEnter={(event) => openTip(item.key, label, event.currentTarget)}
+          onPointerLeave={closeSoon}
+          onFocus={(event) => openTip(item.key, label, event.currentTarget)}
+          onBlur={closeSoon}
+        >
+          {createElement(Icon, { className: "size-5", "aria-hidden": true })}
+        </Link>
+      </li>
+    );
+  };
+
+  return (
+    <aside data-print-hide className="portal-agent-rail hidden md:flex" onKeyDown={onKeyDown}>
+      <div className="portal-agent-rail-brand">
+        <Link href={tree.home[0]?.path ?? "/app/dashboard"} aria-label="Insurvas home">
+          <InsurvasLogo size="compact" variant="symbol" tone="dark" />
+        </Link>
+      </div>
+      <nav className="portal-agent-rail-scroll" aria-label="Agent workspace navigation">
+        <ul className="portal-agent-rail-list">
+          {tree.home.map(link)}
+          {tree.groups.map((group) => {
+            const Icon = iconFor(group.icon);
+            const open = fly?.kind === "group" && fly.key === group.label;
+            const active = group.items.some(isActive);
+            return (
+              <li key={group.label}>
+                <button
+                  type="button"
+                  onClick={(event) => (open ? setFly(null) : openGroup(group, event.currentTarget))}
+                  data-rail-key={group.label}
+                  aria-label={group.label}
+                  aria-expanded={open}
+                  aria-controls={open ? "agent-rail-panel" : undefined}
+                  className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
+                  onPointerEnter={(event) => openGroup(group, event.currentTarget)}
+                  onPointerLeave={closeSoon}
+                  onFocus={(event) => openGroup(group, event.currentTarget)}
+                >
+                  <Icon className="size-5" aria-hidden="true" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+      <ul className="portal-agent-rail-foot">
+        {tree.settings.map(link)}
+        {/* The account (owner ask 2026-10-26): the top bar portals its account button and menu into
+            this slot (AppTopBar accountHostId). The plan is a line in that menu, not an icon here. */}
+        <li id="agent-rail-account" className="portal-agent-rail-account" />
+      </ul>
+
+      {fly && (
+        <div
+          id="agent-rail-panel"
+          className="portal-agent-rail-fly m-swap"
+          data-kind={fly.kind}
+          style={{ top: fly.top }}
+          role={fly.kind === "tip" ? "tooltip" : "group"}
+          aria-label={fly.kind === "tip" ? undefined : fly.label}
+          onPointerEnter={cancelClose}
+          onPointerLeave={closeSoon}
+        >
+          {fly.kind === "tip" && fly.label}
+          {fly.kind === "group" && (
+            <>
+              <p className="portal-agent-rail-fly-head">{fly.label}</p>
+              <ul>
+                {fly.items.map((item) => {
+                  const Icon = iconFor(item.icon);
+                  const active = isActive(item);
+                  return (
+                    <li key={item.key}>
+                      <Link href={item.path} aria-current={active ? "page" : undefined} onClick={() => setFly(null)} onBlur={closeSoon} onFocus={cancelClose}>
+                        {createElement(Icon, { className: "size-4 shrink-0", "aria-hidden": true })}
+                        <span>{item.navLabel ?? item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+    </aside>
   );
 }

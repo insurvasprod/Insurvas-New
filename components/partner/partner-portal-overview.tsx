@@ -1,23 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Send } from "lucide-react";
+import { BarChart3, BellRing, CheckCircle2, Hand, Inbox, MessageSquare, Send, ShieldX, Users, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
-import { LinkArrow } from "@/components/ui/link-arrow";
+import { DashTile, DashTileLoading } from "@/components/ui/dash-tile";
+import { Launchpad, type LaunchCell } from "@/components/ui/launchpad";
+import { LeadFlowMap, type FlowDrop, type FlowStage } from "@/components/ui/lead-flow-map";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatStrip, StatTile } from "@/components/ui/stat";
-import { EmptyState, SectionLoading } from "@/components/ui/page-states";
-import { StatusChip } from "@/components/ui/status-chip";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TableCard } from "@/components/ui/table-card";
-import { productLineLabel } from "@/lib/format/productLine";
 import { oldestOpenLabel } from "@/lib/format/age";
-import { dayMonth, viewerTimeZone } from "@/lib/format/dates";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import type { PartnerLaneCounts } from "@/lib/partnerLeads/lanes";
+import { partnerFunnel } from "@/lib/partnerLeads/funnel";
 import type { PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import { durationLabel } from "@/lib/partnerTeamReview/pulse";
 
@@ -37,35 +33,42 @@ type OverviewExtras = {
   pulse?: { averageResponseMinutes: number | null; responses: number; pendingFollowUps: number } | null;
 };
 
-const RECENT_ROWS = 8;
 const PIPELINE = "/partner/pipeline";
-
-function formatDate(value: string) {
-  return dayMonth(value, viewerTimeZone()); // leads load in an effect, after mount
-}
 
 /** Today as YYYY-MM-DD in the viewer's calendar, for the pipeline's "From" filter. */
 function todayIso() {
   return new Date().toLocaleDateString("en-CA");
 }
 
+/**
+ * The partner home (redesign 2026-10-25, owner: "the map on top, not split; Dashboard C's tiles,
+ * exactly; recent submissions, pipeline by stage, team pulse — remove them"):
+ *
+ *   map         where this partner's leads have got to (lib/partnerLeads/funnel.ts), full width — the
+ *               organisation's for a partner admin, the person's own for a partner user (the pipeline
+ *               route scopes it); the stage holding the most leads is lit
+ *   launchpad   the leak tile first, then every figure as a tile: submitted today, claimed, converted,
+ *               still open, rejected at screening, submit, messages; team, statements and team review
+ *               for a partner admin (LA-7.4: statements are the organisation's)
+ *
+ * The figures poll every 15 seconds while the tab is visible, as before; a failed poll keeps the last
+ * good figures and turns the LiveStamp amber.
+ */
 export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { role: PartnerRole; partnerStatus: "draft" | "active" | "paused" | "offboarded"; partnerName?: string | null }) {
   const isAdmin = role === "partner_admin";
   const canSubmit = partnerStatus === "active";
   const [pipeline, setPipeline] = useState<PipelineSummary | null>(null);
   const [extras, setExtras] = useState<OverviewExtras | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // The LiveStamp is fed by the last good poll; a failed one turns it amber at once.
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [stale, setStale] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     try {
-      // One round of parallel reads per poll: the pipeline read model, and the counts beside it.
+      // The stage counts and the counters come with the first page of the pipeline; one row is enough.
       const [pipelineResponse, extrasResponse] = await Promise.all([
-        fetch(`/api/partner/leads/pipeline?limit=${RECENT_ROWS}&offset=0`, { cache: "no-store" }),
+        fetch("/api/partner/leads/pipeline?limit=1&offset=0", { cache: "no-store" }),
         fetch("/api/partner/overview", { cache: "no-store" }),
       ]);
       const nextPipeline = await pipelineResponse.json().catch(() => null);
@@ -78,14 +81,11 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
       setUpdatedAt(Date.now());
       setNow(Date.now());
     } catch {
-      // The first failure is an error. A later one keeps the last good figures and marks them stale.
       setStale(true);
       setPipeline((current) => {
         if (!current) setError("Some workspace details could not be loaded. Try refreshing the page.");
         return current;
       });
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -109,88 +109,107 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
   }, [load]);
 
   const counters = pipeline?.counters;
-  const figure = (value: number | null | undefined) => (loading || value == null ? "—" : value);
-  const recentRows = pipeline?.rows ?? [];
-  // LA-1.17: the partner's own pipeline stages, the board's columns (lib/partnerLeads/board.ts), each
-  // opening the rows on it. Another pipeline's stages appear only while they hold this partner's leads.
-  const pipelineStages = pipeline?.stages ?? [];
-  const manyPipelines = new Set(pipelineStages.map((stage) => stage.pipelineId)).size > 1;
-  const stages = pipelineStages.map((stage) => ({ key: stage.id, label: stage.name, footnote: manyPipelines ? stage.pipelineName : "", count: stage.leadCount, href: `${PIPELINE}?stage_id=${encodeURIComponent(stage.id)}&view=table` }));
+  const ready = pipeline !== null;
+  const figure = (value: number | null | undefined) => (!ready || value == null ? "—" : String(value));
   const pulse = extras?.pulse;
   const team = extras?.team;
-  const nextAction = canSubmit
-    ? <Button asChild variant="outline"><a href="/partner/submit-lead">Submit your first lead</a></Button>
-    : <Button asChild variant="outline"><a href="/partner/messages">Message your agent</a></Button>;
 
-  return <DashboardStage>
-    <div className="m-stagger space-y-6">
-      <PageHeader
-        title="Overview"
-        actions={<>
-          {updatedAt !== null && <LiveStamp updatedAt={updatedAt} staleAfterSeconds={stale ? 0 : 45} />}
-          {canSubmit && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button>}
-        </>}
+  // The map: how far this partner's leads have got, and where most are waiting.
+  const funnel = partnerFunnel(pipeline?.stages ?? []);
+  const stageHref = (stageId: string | null) => {
+    const stage = stageId ? { id: stageId } : null;
+    return stage ? `${PIPELINE}?stage_id=${encodeURIComponent(stage.id)}&view=table` : PIPELINE;
+  };
+  const sent = funnel.steps[0]?.count ?? 0;
+  const flowStages: FlowStage[] = funnel.steps.map((step, index) => ({
+    label: step.label,
+    value: step.count.toLocaleString(),
+    count: step.count,
+    note: index === 0 ? (isAdmin ? "your organisation" : "your leads") : sent ? `${Math.round((step.count / sent) * 100)}% got here` : undefined,
+    href: stageHref(step.stageId),
+  }));
+  const flowDrops: FlowDrop[] = funnel.steps.slice(1).map((step, index) => {
+    const waiting = funnel.steps[index].count - step.count;
+    return index === 0
+      ? { text: funnel.lost ? `−${funnel.lost.toLocaleString()} lost` : "none lost", lost: funnel.lost }
+      : { text: waiting ? `${waiting.toLocaleString()} waiting` : "none waiting", lost: waiting, href: stageHref(funnel.steps[index].stageId) };
+  });
+  const stuckIndex = funnel.stuck ? funnel.steps.findIndex((step) => step.stageId === funnel.stuck?.stageId) : -1;
+  // The drop right after the stuck stage is where those leads sit; the first drop is closed-lost.
+  const worst = stuckIndex > 0 && stuckIndex < funnel.steps.length - 1 ? stuckIndex : null;
+  const stuckFrom = worst !== null ? funnel.steps[worst] : null;
+  const stuckTo = worst !== null ? funnel.steps[worst + 1] : null;
+  const converted = funnel.steps.at(-1)?.won ? funnel.steps.at(-1)!.count : 0;
+
+  const cells: LaunchCell[] = [];
+  cells.push({
+    id: "lead",
+    title: "Biggest leak",
+    w: 1,
+    h: 1,
+    href: stuckFrom ? stageHref(stuckFrom.stageId) : PIPELINE,
+    node: !ready ? <DashTileLoading title="Biggest leak" /> : funnel.stuck && stuckFrom && stuckTo ? (
+      <DashTile
+        title="Biggest leak"
+        href={stageHref(stuckFrom.stageId)}
+        leak
+        big={`${Math.round((stuckTo.count / Math.max(1, stuckFrom.count)) * 100)}%`}
+        unit={`${stuckFrom.label} → ${stuckTo.label}`}
+        rows={[
+          { label: `Waiting at ${funnel.stuck.label}`, value: funnel.stuck.count.toLocaleString(), tone: "warning", href: stageHref(funnel.stuck.stageId) },
+          { label: "Closed lost", value: funnel.lost.toLocaleString(), href: PIPELINE },
+          { label: "Converted", value: converted.toLocaleString(), tone: "good", href: PIPELINE },
+        ]}
+        cta={{ label: `See the ${funnel.stuck.count.toLocaleString()} leads`, href: stageHref(funnel.stuck.stageId) }}
       />
-      {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
-      {(extras?.alerts ?? []).map((alert) => <p key={alert.id} role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
-        <span><strong className="font-semibold">{alert.title}.</strong> {alert.body}</span>
-        <LinkArrow href={alert.link} className="shrink-0">{alert.actionLabel}</LinkArrow>
-      </p>)}
-      <StatStrip label={`${partnerName ?? "Your organization"} at a glance`}>
-        <StatTile label="Submitted today" value={figure(counters?.submittedToday)} footnote="since 00:00 your time" action={pipeline ? <LinkArrow href={`${PIPELINE}?date_from=${todayIso()}&view=table`} className="text-xs">View</LinkArrow> : undefined} />
-        <StatTile label="Claimed" value={figure(counters?.claimed)} footnote="with a closer or on a call" action={<LinkArrow href={PIPELINE} className="text-xs">Board</LinkArrow>} />
-        <StatTile label="Converted" value={figure(counters?.converted)} footnote="last 30 days" action={<LinkArrow href={PIPELINE} className="text-xs">Board</LinkArrow>} />
-        <StatTile label="Still open" value={figure(counters?.stillOpen)} footnote={oldestOpenLabel(counters?.stillOpen ?? 0, pipeline?.oldestOpenAt, now)} action={<LinkArrow href={PIPELINE} className="text-xs">Board</LinkArrow>} />
-        {/* Sixteen Open Questions #9: a coded reason and a running total, never which numbers. */}
-        <StatTile label="Rejected · compliance" labelTitle="Rejected: compliance screening. Submissions stopped before they reached the agency. Only the count is shown." value={figure(extras?.rejectedCompliance)} footnote={isAdmin ? "all time, your organization" : "all time, your submissions"} />
-        {isAdmin && <StatTile label="Team" value={figure(team?.active)} footnote={team ? `${team.pending} pending invitation${team.pending === 1 ? "" : "s"}` : undefined} reserveFootnote action={<LinkArrow href="/partner/team" className="text-xs">Team</LinkArrow>} />}
-      </StatStrip>
-      <div className={isAdmin ? "grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : undefined}>
-        <TableCard title="Your pipeline by stage" action={<LinkArrow href={PIPELINE}>Open pipeline</LinkArrow>}>
-          {loading ? <SectionLoading rows={5} columns={3} /> : !pipeline?.total ? <EmptyState title="No submissions yet" hint={canSubmit ? "Your leads are counted here by stage as the agency works them." : "Leads your organization sent are counted here by stage."} action={nextAction} /> : <Table>
-            <TableHeader><TableRow><TableHead>Stage</TableHead><TableHead className="text-right">Leads</TableHead><TableHead className="text-right"><span className="sr-only">Action</span></TableHead></TableRow></TableHeader>
-            <TableBody>
-              {stages.map((stage) => <TableRow key={stage.key}>
-                <TableCell><span className="font-medium">{stage.label}</span> <span className="text-xs text-muted-foreground">{stage.footnote}</span></TableCell>
-                <TableCell className="text-right tabular-nums">{stage.count == null ? "—" : stage.count.toLocaleString()}</TableCell>
-                <TableCell className="text-right">{Boolean(stage.count) && <Button asChild variant="outline" size="sm"><a href={stage.href} aria-label={`View ${stage.label} leads`}>View</a></Button>}</TableCell>
-              </TableRow>)}
-            </TableBody>
-          </Table>}
-        </TableCard>
-        {isAdmin && <TableCard title="Team pulse" action={<LinkArrow href="/partner/team-review">Team review</LinkArrow>}>
-          {loading ? <SectionLoading rows={2} columns={2} /> : <Table>
-            <TableBody>
-              <TableRow>
-                <TableCell className="text-muted-foreground">Average reply to your agent</TableCell>
-                <TableCell className="text-right font-medium tabular-nums">{pulse ? (pulse.averageResponseMinutes != null ? durationLabel(pulse.averageResponseMinutes) : "No replies yet") : "—"}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="text-muted-foreground">Conversations waiting on your team</TableCell>
-                <TableCell className="text-right font-medium tabular-nums">{pulse ? <a className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/partner/messages">{pulse.pendingFollowUps}</a> : "—"}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>}
-        </TableCard>}
+    ) : (
+      <DashTile title="Start here" icon={<Send />} href={canSubmit ? "/partner/submit-lead" : "/partner/messages"} big={canSubmit ? "Send" : "Talk"} unit={canSubmit ? "your first lead" : "to your agent"} rows={[{ label: canSubmit ? "Your leads are counted on the map as the agency works them." : "Leads your organization sent are counted on the map." }]} cta={canSubmit ? { label: "Submit a lead", href: "/partner/submit-lead" } : { label: "Message your agent", href: "/partner/messages" }} />
+    ),
+  });
+  // Must-act notices (an expiring document, a paused organisation) lead the tiles, never above the map.
+  for (const alert of extras?.alerts ?? []) {
+    cells.push({ id: `alert-${alert.id}`, title: alert.title, w: 1, h: 1, href: alert.link, node: <DashTile title={alert.title} icon={<BellRing />} href={alert.link} tone="warning" rows={[{ label: alert.body, tone: "warning", href: alert.link }]} cta={{ label: alert.actionLabel, href: alert.link }} ctaAtFoot /> });
+  }
+  cells.push(
+    { id: "today", title: "Submitted today", w: 1, h: 1, href: `${PIPELINE}?date_from=${todayIso()}&view=table`, node: <DashTile title="Submitted today" icon={<Send />} href={`${PIPELINE}?date_from=${todayIso()}&view=table`} big={figure(counters?.submittedToday)} unit="since 00:00 your time" rows={[{ label: "See today's leads", href: `${PIPELINE}?date_from=${todayIso()}&view=table` }]} /> },
+    { id: "claimed", title: "Claimed", w: 1, h: 1, href: PIPELINE, node: <DashTile title="Claimed" icon={<Hand />} href={PIPELINE} big={figure(counters?.claimed)} unit="with a closer or on a call" tone="good" rows={[{ label: "On the board", href: PIPELINE }]} /> },
+    { id: "converted", title: "Converted", w: 1, h: 1, href: PIPELINE, node: <DashTile title="Converted" icon={<CheckCircle2 />} href={PIPELINE} big={figure(counters?.converted)} unit="last 30 days" tone="good" rows={[{ label: "Won on the board", href: PIPELINE }]} /> },
+    { id: "open", title: "Still open", w: 1, h: 1, href: PIPELINE, node: <DashTile title="Still open" icon={<Inbox />} href={PIPELINE} big={figure(counters?.stillOpen)} unit="being worked" rows={[{ label: oldestOpenLabel(counters?.stillOpen ?? 0, pipeline?.oldestOpenAt, now), href: PIPELINE }]} /> },
+    // Sixteen Open Questions #9: a coded reason and a running total, never which numbers.
+    { id: "rejected", title: "Rejected · compliance", w: 1, h: 1, href: PIPELINE, node: <DashTile title="Rejected · compliance" icon={<ShieldX />} href={PIPELINE} big={figure(extras?.rejectedCompliance)} unit="stopped by screening" tone={extras?.rejectedCompliance ? "warning" : "default"} rows={[{ label: isAdmin ? "All time, your organization · only the count is shown" : "All time, your submissions · only the count is shown" }]} /> },
+  );
+  if (canSubmit) cells.push({ id: "submit", title: "Submit a lead", w: 1, h: 1, href: "/partner/submit-lead", node: <DashTile title="Submit a lead" icon={<Send />} href="/partner/submit-lead" rows={[{ label: "The agency sees it at once" }]} cta={{ label: "Submit a lead", href: "/partner/submit-lead" }} ctaAtFoot /> });
+  cells.push({ id: "messages", title: "Messages", w: 1, h: 1, href: "/partner/messages", node: <DashTile title="Messages" icon={<MessageSquare />} href="/partner/messages" big={isAdmin && pulse ? String(pulse.pendingFollowUps) : undefined} unit={isAdmin ? "waiting on your team" : undefined} tone={isAdmin && pulse?.pendingFollowUps ? "warning" : "default"} rows={[{ label: "Your agent and your team", href: "/partner/messages" }]} /> });
+  if (isAdmin) {
+    cells.push(
+      { id: "team", title: "Team", w: 1, h: 1, href: "/partner/team", node: <DashTile title="Team" icon={<Users />} href="/partner/team" big={figure(team?.active)} unit="active members" rows={[{ label: team ? `${team.pending} pending invitation${team.pending === 1 ? "" : "s"}` : "Invite your closers", tone: team?.pending ? "warning" : "default", href: "/partner/team" }]} /> },
+      { id: "statements", title: "Statements", w: 1, h: 1, href: "/partner/payouts", node: <DashTile title="Statements" icon={<WalletCards />} href="/partner/payouts" rows={[{ label: "What the agency paid your organization", href: "/partner/payouts" }]} cta={{ label: "Open statements", href: "/partner/payouts" }} ctaAtFoot /> },
+      { id: "review", title: "Team review", w: 1, h: 1, href: "/partner/team-review", node: <DashTile title="Team review" icon={<BarChart3 />} href="/partner/team-review" big={pulse ? (pulse.averageResponseMinutes != null ? durationLabel(pulse.averageResponseMinutes) : "—") : "—"} unit="average reply to your agent" rows={[{ label: "Conversations waiting on your team", value: pulse ? String(pulse.pendingFollowUps) : "—", href: "/partner/messages" }]} /> },
+    );
+  }
+
+  return (
+    <DashboardStage ribbon>
+      <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+        <PageHeader
+          title="Overview"
+          actions={<>
+            {updatedAt !== null && <LiveStamp updatedAt={updatedAt} staleAfterSeconds={stale ? 0 : 45} />}
+            {canSubmit && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button>}
+          </>}
+        />
+        {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
+        {funnel.steps.length > 1 && (
+          <LeadFlowMap
+            label={isAdmin ? `Where ${partnerName ?? "your organisation"}'s leads are` : "Where your leads are"}
+            stages={flowStages}
+            drops={flowDrops}
+            worst={worst}
+            aside={funnel.pipelineName ? <span className="text-xs text-muted-foreground">{funnel.pipelineName}{funnel.partial ? " · your busiest pipeline" : ""}</span> : undefined}
+          />
+        )}
+        <Launchpad storageKey={`insurvas:partner-home:${role}`} spaces={[{ key: "today", label: `${partnerName ?? "Your organization"} at a glance`, cells }]} />
       </div>
-      <TableCard
-        title="Recent submissions"
-        action={<LinkArrow href={PIPELINE}>View all</LinkArrow>}
-      >
-        {loading ? <SectionLoading rows={RECENT_ROWS} columns={5} /> : recentRows.length === 0 ? <EmptyState title="No submissions yet" hint={canSubmit ? "Submit a lead and its progress appears here." : "Leads your organization sent appear here."} action={nextAction} /> : <Table>
-          <TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Product</TableHead><TableHead>Stage</TableHead>{isAdmin && <TableHead>Submitted by</TableHead>}<TableHead>When</TableHead><TableHead className="text-right"><span className="sr-only">Action</span></TableHead></TableRow></TableHeader>
-          <TableBody>
-            {recentRows.map((row) => <TableRow key={row.id}>
-              <TableCell className="font-medium">{row.customer}</TableCell>
-              <TableCell className="text-muted-foreground">{productLineLabel(row.product)}</TableCell>
-              <TableCell><StatusChip tone={row.stageType === "won" ? "good" : row.stageType === "lost" ? "danger" : "neutral"}>{row.stageName}</StatusChip>{row.outcome && row.outcome !== row.stageName && <span className="ml-2 text-xs text-muted-foreground">{row.outcome}</span>}</TableCell>
-              {isAdmin && <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>}
-              <TableCell className="text-muted-foreground tabular-nums">{formatDate(row.submittedAt)}</TableCell>
-              <TableCell className="text-right"><Button asChild variant="outline" size="sm"><a href={`${PIPELINE}?lead=${encodeURIComponent(row.id)}&view=table`} aria-label={`View ${row.customer}`}>View</a></Button></TableCell>
-            </TableRow>)}
-          </TableBody>
-        </Table>}
-      </TableCard>
-    </div>
-  </DashboardStage>;
+    </DashboardStage>
+  );
 }

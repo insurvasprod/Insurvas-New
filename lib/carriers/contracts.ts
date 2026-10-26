@@ -24,7 +24,7 @@ export type LibraryLike = {
   commissionSchedules: CommissionScheduleRow[];
   advanceRules: AdvanceRuleLike[];
   /** Migration 20260924220100; absent or empty before it. `contracted: false` = switched off (LA-0.4, 20261013100000); absent reads as on. */
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }>;
+  carrierRequirements?: Array<{ carrier_id: string; contracted?: boolean }>;
   requirementsAvailable?: boolean;
 };
 
@@ -154,14 +154,4 @@ export function parseBps(value: string): number | null {
 export function formatDay(iso: string | null | undefined, zone = viewerTimeZone()) {
   if (!iso) return "—";
   return zonedParts(iso, zone) ? dayMonthYear(iso, zone) : iso;
-}
-
-/**
- * Contracted carriers whose contract requires E&O cover in force, by name. Null when the requirement
- * cannot be recorded yet (migration 20260924220100), so a count of zero is never shown for "unknown".
- */
-export function carriersRequiringEo(library: LibraryLike): string[] | null {
-  if (library.requirementsAvailable === false || !library.carrierRequirements) return null;
-  const required = new Set(library.carrierRequirements.filter((row) => row.requires_eo).map((row) => row.carrier_id));
-  return library.carriers.filter((carrier) => required.has(carrier.id) && activeContract(library.tenantCarriers, carrier.id) && carrierSwitchedOn(library, carrier.id)).map((carrier) => carrier.name);
 }

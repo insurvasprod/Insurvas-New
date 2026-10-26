@@ -12,6 +12,9 @@ import { useEffect, useRef, useState } from "react";
  * hydrates, and resetting a painted figure to 0 to count it back up would be a flash, not an
  * animation. So it counts on a client-side navigation (where this mounts fresh), and whenever the
  * value changes under a live poll — from the old number to the new one. Reduced motion: never.
+ *
+ * `fromZero` (the role homes, redesign 2026-10-25, owner: "a bit more animation to the numbers"):
+ * count up from zero on every first paint, a hard load included. The homes ask for that motion.
  */
 
 let hydrated = false;
@@ -37,13 +40,13 @@ function format(n: number, decimals: number, grouped: boolean) {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: grouped });
 }
 
-export function CountUp({ text }: { text: string }) {
+export function CountUp({ text, fromZero = false }: { text: string; fromZero?: boolean }) {
   const [shown, setShown] = useState(text);
   const previous = useRef<string | null>(null);
 
   useEffect(() => {
     const target = parse(text);
-    const from = previous.current === null ? (hydrated ? 0 : null) : parse(previous.current)?.value ?? null;
+    const from = previous.current === null ? (hydrated || fromZero ? 0 : null) : parse(previous.current)?.value ?? null;
     previous.current = text;
     hydrated = true;
 
@@ -56,7 +59,7 @@ export function CountUp({ text }: { text: string }) {
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / DURATION);
+      const t = Math.min(1, (now - start) / (fromZero ? 1100 : DURATION));
       const eased = 1 - Math.pow(1 - t, 3);
       if (t >= 1) {
         setShown(text);
@@ -67,7 +70,7 @@ export function CountUp({ text }: { text: string }) {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [text]);
+  }, [text, fromZero]);
 
   // The final text is what a screen reader hears; the counting frames are visual only.
   return (

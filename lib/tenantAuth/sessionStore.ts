@@ -29,6 +29,9 @@ export async function issueTenantSession(input: {
   request: Request;
   /** The sign-in passed the second factor (or carries it over, on a workspace switch). */
   twoFactorAt?: string | null;
+  /** "Keep me signed in on this device", and the expiry to keep when a session is carried over. */
+  remember?: boolean;
+  expiresAt?: number;
 }): Promise<{ token: string; sessionId: string | null }> {
   const userAgent = getUserAgent(input.request);
   const { data, error } = await db().from("tenant_user_session").insert({
@@ -42,7 +45,7 @@ export async function issueTenantSession(input: {
   }).select("id").single();
   if (error && !isPendingSchema(error)) throw new Error(`Could not start the session: ${error.message}`);
   const sessionId = (data?.id as string | undefined) ?? null;
-  return { token: await signTenantSessionToken(input.userId, input.tenantId, input.sessionVersion, sessionId ?? undefined), sessionId };
+  return { token: await signTenantSessionToken(input.userId, input.tenantId, input.sessionVersion, sessionId ?? undefined, { remember: input.remember, expiresAt: input.expiresAt }), sessionId };
 }
 
 export type SessionCheck = { live: boolean; twoFactorAt: string | null };

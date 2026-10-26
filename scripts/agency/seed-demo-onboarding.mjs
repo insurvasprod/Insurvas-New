@@ -7,7 +7,7 @@
 // The owner: a level and a writing number for every carrier the agency is appointed with, from the agency's own
 // carrier settings (tenant_carriers). Each other active producer: appointments with up to three carriers the
 // agency is appointed with in his licensed states, his level (85% of the agency's), a DEMO- writing number,
-// contracting, E&O (with expiry) and W-9 — the two documents are small sample PDFs saying so.
+// contracting and W-9 — the document is a small sample PDF saying so. (E&O was removed from the checklist 2026-10-26.)
 import { createClient } from "@supabase/supabase-js";
 
 const arg = (name) => { const i = process.argv.indexOf(`--${name}`); return i === -1 ? null : process.argv[i + 1]; };
@@ -18,7 +18,6 @@ if (!TENANT) { console.error("Pass --tenant <id>."); process.exit(2); }
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const must = async (q, what) => { const { data, error } = await q; if (error) throw new Error(`${what}: ${error.message}`); return data; };
 const today = new Date().toISOString().slice(0, 10);
-const inAYear = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
 
 const { data: audience } = await sb.rpc("tenant_plan_audience", { p_tenant_id: TENANT });
 if (audience !== "agency") { console.error(`Tenant ${TENANT} is not on an agency plan (${audience}); nothing to do.`); process.exit(2); }
@@ -58,12 +57,12 @@ function samplePdf(title) {
 
 async function completeItem(producer, item, expiresOn) {
   const existing = await must(sb.from("producer_onboarding_item").select("item, document_path, expires_on").eq("producer_id", producer.id).eq("item", item).maybeSingle(), "item");
-  if (existing && (item === "contracting" || (existing.document_path && (item !== "eo" || existing.expires_on >= today)))) return "kept";
+  if (existing && (item === "contracting" || existing.document_path)) return "kept";
   if (DRY) return "would record";
   let documentPath = null;
   if (item !== "contracting") {
     documentPath = `${TENANT}/${producer.id}/${item}-${crypto.randomUUID()}.pdf`;
-    const { error } = await sb.storage.from("agency-documents").upload(documentPath, samplePdf(item === "eo" ? "E&O certificate" : "W-9"), { contentType: "application/pdf", upsert: false });
+    const { error } = await sb.storage.from("agency-documents").upload(documentPath, samplePdf("W-9"), { contentType: "application/pdf", upsert: false });
     if (error) throw new Error(`upload ${item}: ${error.message}`);
   }
   await must(sb.from("producer_onboarding_item").upsert({ tenant_id: TENANT, producer_id: producer.id, item, completed_at: new Date().toISOString(), completed_by: ownerUser, expires_on: expiresOn, document_path: documentPath }, { onConflict: "producer_id,item" }), `item ${item}`);
@@ -96,7 +95,6 @@ for (const producer of producers.filter((p) => ["active", "onboarding"].includes
       console.log(`  ${agency.carriers?.name} in ${offered.filter((x) => x.carrier_id === carrierId).map((x) => x.state).join(", ")}: level ${level / 100}% · ${await setCarrier(producer, carrierId, level, number, "2026-10-01")}`);
     }
     console.log(`  contracting: ${await completeItem(producer, "contracting", null)}`);
-    console.log(`  E&O: ${await completeItem(producer, "eo", inAYear)}`);
     console.log(`  W-9: ${await completeItem(producer, "w9", null)}`);
   }
   if (!DRY) {

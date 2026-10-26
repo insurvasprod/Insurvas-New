@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, ViewTransition } from "react";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/page-states";
 import { Reveal, usePrefersReducedMotion } from "@/components/marketing/motion";
+import { LandingObject } from "@/components/marketing/three/landing-object";
+import landingStyles from "@/components/marketing/landing.module.css";
+import { PricingCompareTable } from "@/components/public/pricing-compare-table";
 import { PricingExplorer } from "@/components/public/pricing-explorer";
 import { Collapse, PRICING_CSS, SegmentedControl } from "@/components/public/pricing-motion";
 import { PricingPicker } from "@/components/public/pricing-picker";
@@ -137,10 +141,22 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
     () => recommendPlan(plans.map((plan) => ({ ...plan, monthlyCents: plan.price_monthly ? parseDollarsToCents(plan.price_monthly) : null })), needs),
     [plans, needs],
   );
-  const recommendedCode = fit.status === "match" ? fit.code : null;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [compareView, setCompareView] = useState<"table" | "explain">("table");
+
+  // Agency bands by seat limit; the slider's team size picks the first band it fits in (the last
+  // band, with no limit, takes everyone above). Its card gets the same ring the picker gives.
+  const seatBands = useMemo(() => (audience === "agency" ? plans.filter((plan) => plan.price_monthly) : []), [audience, plans]);
+  const limited = seatBands.map((plan) => plan.max_seats).filter((value): value is number => value != null && value > 0);
+  const seatMax = Math.max(50, ...limited.map((value) => Math.ceil((value * 1.5) / 10) * 10));
+  const [teamSize, setTeamSize] = useState(10);
+  const seatBand = seatBands.find((plan) => plan.max_seats != null && plan.max_seats > 0 && teamSize <= plan.max_seats)
+    ?? seatBands.find((plan) => plan.max_seats == null || plan.max_seats <= 0)
+    ?? null;
+
+  const recommendedCode = audience === "agency" ? (seatBands.length > 1 ? seatBand?.code ?? null : null) : fit.status === "match" ? fit.code : null;
 
   const yearlySaving = bestSaving(plans, "yearly");
-  const allTrials = plans.length > 0 && plans.every((plan) => plan.trial_days > 0);
   const defaultPlan = plans.find((plan) => plan.is_default) ?? null;
   // "Move down" only makes sense when there is something cheaper than the plan we lead with.
   const monthlyCents = (plan: PublicPlan) => (plan.price_monthly ? parseDollarsToCents(plan.price_monthly) : null) ?? Number.POSITIVE_INFINITY;
@@ -164,6 +180,7 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
     // for the trial, then the plan renews automatically until cancelled.
     { q: "What happens when the trial ends?", a: "You enter a card at checkout, and nothing is charged during the trial. When it ends, the plan’s price is charged to that card and the subscription renews automatically each billing period until you cancel. Cancel before the trial ends, in Settings › Plan & billing, and you are not charged. Taxes may apply. If a later payment fails, the workspace stays readable and writing is paused until it is settled." },
     { q: "Is there a per-lead charge?", a: "No. A plan is priced per workspace, not per lead: you already pay your vendors for every lead, and we do not charge you for it again. Add-ons you choose, and metered usage above your plan’s allowance, are billed at the rates shown." },
+    { q: "Can I bring my existing book?", a: "Yes. Upload your carriers’ policy and commission files, or forward the emails they arrive in, and every policy is matched to its client and agent. You can also import a book you keep in a spreadsheet." },
     { q: "Can I change plan mid-cycle?", a: "Yes. You choose whether it applies now with proration or at renewal, and the confirmation names the effective date before anything moves." },
     { q: "What happens to existing subscribers when you change a plan?", a: "They keep the version they bought. Plans are versioned, so publishing a new version leaves every current subscriber on theirs until they renew." },
     ...(audience === "agency"
@@ -192,31 +209,33 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
     <main className="overflow-x-clip">
       <style>{PRICING_CSS}</style>
 
-      <section className="relative isolate px-4 pt-16 text-center sm:px-6 sm:pt-20 lg:px-16">
-        <div aria-hidden="true" className="pz-aurora left-1/2 -top-[460px] -z-10 -translate-x-1/2" />
+      {/* The landing hero's living ribbon (owner, 2026-10-24: "like the hero section on the landing
+          page"), the same named object, so going from the landing page to pricing reads as one scene. */}
+      <section className="relative isolate overflow-hidden bg-background px-4 pb-[132px] pt-20 text-center sm:px-6 sm:pt-24 lg:px-16">
+        <ViewTransition name="brand-ribbon" share="ribbon-morph" default="none">
+          <LandingObject kind="ribbon" className={`pointer-events-none absolute -right-[12%] top-[-6%] -z-10 h-[112%] w-[100%] [mask-image:linear-gradient(90deg,transparent_0%,black_35%,black_85%,transparent_100%)] lg:w-[78%] ${landingStyles.ribbonIn}`} />
+        </ViewTransition>
+        {/* Keeps the centred headline legible where the ribbon passes behind it. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_62%_at_50%_42%,var(--background)_40%,color-mix(in_srgb,var(--background)_60%,transparent)_72%,transparent_100%)]" />
         <Reveal>
-          <div className={EYEBROW}>Pricing</div>
-          <h1 key={audience} className="pz-fade mx-auto mt-4 max-w-[780px] text-headline-lg font-semibold leading-[1.02] tracking-[-0.035em] text-foreground sm:text-hero">
+          <h1 key={audience} className="pz-fade mx-auto max-w-[860px] text-balance text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--ink)] sm:text-hero lg:text-[clamp(3.25rem,5.4vw,4.5rem)]">
             {AUDIENCE_COPY[audience].title}
           </h1>
-          <p key={`${audience}-lede`} className="pz-fade mx-auto mt-5 max-w-[600px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+          <p key={`${audience}-lede`} className="pz-fade mx-auto mt-5 max-w-[600px] text-base leading-[1.65] tracking-[-0.02em] text-muted-foreground sm:text-lg">
             {AUDIENCE_COPY[audience].lede}
           </p>
         </Reveal>
 
-        {audiences.length > 1 && (
-          <div className="mt-10 flex justify-center">
+        <div className="mt-9 flex flex-wrap justify-center gap-3">
+          {audiences.length > 1 && (
             <SegmentedControl
               label="Who it is for"
               value={audience}
               onChange={setAudience}
               options={audiences.map((item) => ({ value: item, label: item === "agency" ? "Agencies" : "Individual agents" }))}
             />
-          </div>
-        )}
-
-        {ready && offeredCycles.length > 1 && (
-          <div className={`${audiences.length > 1 ? "mt-4" : "mt-10"} flex justify-center`}>
+          )}
+          {ready && offeredCycles.length > 1 && (
             <SegmentedControl
               label="Billing cycle"
               value={cycle}
@@ -226,21 +245,38 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
                 return { value: item, label: BILLING_CYCLE_LABELS[item], note: saving ? savingLabel(saving, item) : null };
               })}
             />
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
-      <section className={`${SECTION} pt-12`}>
+      <section className={`${SECTION} relative -mt-[96px]`}>
         {loadError ? (
-          <div className="rounded-xl border border-[var(--error)]/30 bg-card p-10 text-center text-[var(--error-ink)]">{loadError}</div>
+          <div className="mx-auto max-w-[720px] rounded-2xl border border-border bg-card">
+          <ErrorState
+            title="Pricing could not be loaded"
+            detail="Nothing is wrong with your account. Try again in a moment, or ask us for prices directly."
+            action={(
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button type="button" onClick={() => window.location.reload()}>Try again</Button>
+                <Button asChild variant="outline"><a href="mailto:support@insurvas.com?subject=Pricing">Contact us</a></Button>
+              </div>
+            )}
+          />
+          </div>
         ) : plans.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card p-10 text-center text-muted-foreground">No public plans are available right now.</div>
+          <div className="rounded-xl border border-border bg-card p-10 text-center text-muted-foreground">No plan is open for sign-up right now. <a href="mailto:support@insurvas.com?subject=Pricing" className="font-semibold text-foreground">Contact us</a>.</div>
         ) : (
           <>
-            {audience === "individual" && plans.length > 1 && questions.length > 0 && (
-              <Reveal className="mx-auto mb-10 max-w-[960px]">
-                <PricingPicker needs={questions} selected={needs} onToggle={toggleNeed} result={fit} onShow={showPlan} />
-              </Reveal>
+            {/* Agencies: how many people, and the band that fits lights up (redesign A, 2026-10-24). */}
+            {audience === "agency" && seatBands.length > 1 && (
+              <div className="mx-auto mb-6 max-w-[880px] rounded-2xl border border-border bg-card p-5 text-left sm:p-6">
+                <label htmlFor="pricing-seats" className="flex flex-wrap items-baseline justify-between gap-2 text-sm font-semibold text-foreground">
+                  How many people will use Insurvas?
+                  <span className="text-title-sm font-semibold tabular-nums text-[var(--accent-ink)]">{teamSize.toLocaleString("en-US")} {teamSize === 1 ? "person" : "people"}</span>
+                </label>
+                <input id="pricing-seats" type="range" min={1} max={seatMax} value={teamSize} onChange={(event) => setTeamSize(Number(event.target.value))} className="mt-3 w-full accent-[var(--accent-ink)]" />
+                <p className="mt-2 text-xs text-muted-foreground">Everyone who signs in is one seat: owner, producers, managers and assistants. An IMO or FMO with downlines? <a href="mailto:support@insurvas.com?subject=IMO%20pricing" className="font-semibold text-foreground">Talk to us</a>.</p>
+              </div>
             )}
 
             <div className={`grid items-stretch gap-6 ${plans.length >= 3 ? "lg:grid-cols-3" : plans.length === 2 ? "md:grid-cols-2 lg:mx-auto lg:max-w-[880px]" : "mx-auto max-w-[440px]"}`}>
@@ -254,30 +290,61 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
                     recommended={plan.code === recommendedCode}
                     pickTurn={pickTurn}
                     seats={seats[index]}
+                    recommendedLabel={audience === "agency" ? "Fits your team" : "Fits what you picked"}
                   />
                 </Reveal>
               ))}
             </div>
+
+            {/* What a buyer checks before trusting a card form; each line is one the product backs. */}
+            <ul className="mx-auto mt-8 flex max-w-[1000px] flex-wrap justify-center gap-x-7 gap-y-2 p-0 text-sm text-muted-foreground">
+              {["Card entered on the provider’s page, never ours", "Export your book any time", "Cancel in Settings, no call needed", "No per-lead fees"].map((item) => (
+                <li key={item} className="flex list-none items-center gap-2"><Check className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />{item}</li>
+              ))}
+            </ul>
+
+            {audience === "individual" && plans.length > 1 && questions.length > 0 && (
+              <div className="mx-auto mt-10 max-w-[960px]">
+                <button
+                  type="button"
+                  aria-expanded={pickerOpen}
+                  aria-controls="pricing-picker"
+                  onClick={() => setPickerOpen((open) => !open)}
+                  className="mx-auto flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-color)]"
+                >
+                  <ChevronDown aria-hidden="true" className={`size-4 transition-transform duration-300 ease-[var(--e-out)] ${pickerOpen ? "" : "-rotate-90"}`} />
+                  Not sure which plan? Tick what you do
+                </button>
+                <Collapse open={pickerOpen} id="pricing-picker">
+                  <div className="pt-4">
+                    <PricingPicker needs={questions} selected={needs} onToggle={toggleNeed} result={fit} onShow={showPlan} />
+                    {needs.length > 0 && (
+                      <button type="button" onClick={() => setNeeds([])} className="mt-2 text-sm font-semibold text-[var(--accent-ink)] hover:underline">Clear</button>
+                    )}
+                  </div>
+                </Collapse>
+              </div>
+            )}
           </>
         )}
-
-        <p className="mx-auto mt-8 max-w-[720px] text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          {allTrials ? "Every plan starts with a free trial: you enter a card at checkout, and nothing is charged until the trial ends. " : ""}
-          Prices and plan contents come from the live catalog; the one-line feature descriptions below are ours, written to explain each one.
-        </p>
       </section>
 
       {ready && (
         <section className={`${SECTION} pt-[88px]`}>
           <Reveal className="mx-auto max-w-[680px] text-center">
-            <div className={EYEBROW}>Modules</div>
-            <h2 className={H2}>What&apos;s included, module by module</h2>
-            <p className="mt-3.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-              Pick a module to see each feature in plain words, and which plans include it.
-            </p>
+            <div className={EYEBROW}>Compare</div>
+            <h2 className={H2}>Every feature, plan by plan</h2>
           </Reveal>
-          <Reveal className="mt-10">
-            <PricingExplorer plans={plans} />
+          <div className="mt-8 flex justify-center">
+            <SegmentedControl
+              label="How to compare"
+              value={compareView}
+              onChange={setCompareView}
+              options={[{ value: "table", label: "Compare table" }, { value: "explain", label: "Explain each feature" }]}
+            />
+          </div>
+          <Reveal className="mt-8">
+            {compareView === "table" ? <PricingCompareTable plans={plans} /> : <PricingExplorer plans={plans} />}
           </Reveal>
         </section>
       )}
@@ -288,11 +355,11 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
             <div className={EYEBROW}>Add-ons</div>
             <h2 className={H2}>Buy the bit you actually ran out of</h2>
             <p className="mt-3.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-              An add-on grants features and credits through exactly the same entitlement path as a plan, so an operator can always see both sources.
+              Add one to any plan that offers it, without changing plan. It shows on your invoice next to the plan.
             </p>
           </Reveal>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
+          <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
             {addons.map((addon, index) => (
               <Reveal key={addon.code} delay={index * 90}>
                 <div className="h-full rounded-2xl border border-border bg-card p-6 transition-[transform,box-shadow] duration-200 ease-[var(--e-out)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-hover)]">

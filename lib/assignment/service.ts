@@ -34,6 +34,8 @@ type Query = PromiseLike<Result> & {
   select(columns: string, options?: unknown): Query;
   eq(column: string, value: unknown): Query;
   in(column: string, values: readonly unknown[]): Query;
+  or(filters: string): Query;
+  limit(count: number): Query;
   order(column: string, options?: unknown): Query;
   insert(values: unknown): Query;
   update(values: unknown): Query;
@@ -509,6 +511,40 @@ export async function assignLeadList(tenantId: string, actorId: string, input: L
   if (result.error || !result.data) throw new Error(result.error ? explainAssignmentError(result.error) : "Could not assign the list");
   const data = result.data as Record<string, unknown>;
   return { ...toListPreview(data), batch_id: typeof data.batch_id === "string" ? data.batch_id : null };
+}
+
+export type ReassignCandidate = { workItemId: string; leadId: string; name: string; state: string | null; phone: string | null; ownerUserId: string | null; status: string };
+
+/**
+ * The reassign panel's lead search (2026-10-26 redesign: find the lead by name or phone, not by pasting a
+ * work-item ID). The first word narrows the read on the tenant's leads; every word must then appear in
+ * the name or phone. Only leads with a queue row can be reassigned, so only those come back.
+ */
+export async function findReassignable(tenantId: string, query: string): Promise<ReassignCandidate[]> {
+  const words = query.toLowerCase().replace(/[^\p{L}\p{N}@.+' -]/gu, " ").split(/\s+/).filter(Boolean);
+  if (!words.length || words.join("").length < 2) return [];
+  const first = words[0];
+  const leads = await db().from("agent_leads").select("id, values").eq("tenant_id", tenantId)
+    .or(["first_name", "last_name", "full_name", "phone"].map((key) => `values->>${key}.ilike.*${first}*`).join(","))
+    .limit(40);
+  if (leads.error) throw new Error("Could not search leads");
+  const named = ((leads.data ?? []) as Array<{ id: string; values: Record<string, unknown> | null }>)
+    .map((lead) => {
+      const values = lead.values ?? {};
+      const full = typeof values.full_name === "string" && values.full_name.trim() ? values.full_name.trim() : [values.first_name, values.last_name].filter((part) => typeof part === "string" && part.trim()).join(" ").trim();
+      const phone = typeof values.phone === "string" ? values.phone : null;
+      return { id: lead.id, name: full || "Unnamed lead", phone, state: typeof values.state === "string" ? values.state.toUpperCase() : null };
+    })
+    .filter((lead) => words.every((word) => `${lead.name} ${lead.phone ?? ""}`.toLowerCase().includes(word)))
+    .slice(0, 8);
+  if (!named.length) return [];
+  const queue = await db().from("lead_queue").select("id, lead_id, owner_user_id, status").eq("tenant_id", tenantId).in("lead_id", named.map((lead) => lead.id));
+  if (queue.error) throw new Error("Could not search leads");
+  const byLead = new Map(((queue.data ?? []) as Array<{ id: string; lead_id: string; owner_user_id: string | null; status: string }>).map((row) => [row.lead_id, row]));
+  return named.flatMap((lead) => {
+    const item = byLead.get(lead.id);
+    return item ? [{ workItemId: item.id, leadId: lead.id, name: lead.name, state: lead.state, phone: lead.phone, ownerUserId: item.owner_user_id, status: item.status }] : [];
+  });
 }
 
 export async function returnLeadToPool(tenantId: string, actorId: string, workItemId: string, reason: string) {

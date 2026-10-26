@@ -10,20 +10,17 @@ import { agoLabel } from "@/lib/format/ago";
 import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { attemptOfCeiling, consentLabel, dncExemptionLine, localClock, minuteLabel, shortDate, slotLabel, sourceLabel, SUPPRESSION_LISTS, windowClosedLabel, zoneShort } from "@/lib/dialerScripts/display";
-import { Kbd, barHead, barTitle, body14, card, h2, label, small, value } from "@/components/app/dialer/model";
+import { barHead, barTitle, body14, card, h2, label, small, value } from "@/components/app/dialer/model";
 import type { useDialer } from "@/components/app/dialer/use-dialer";
 import { useNow } from "@/components/app/applications/outcome/use-now";
 import { useState } from "react";
-import { CalendarPlus, ChevronDown } from "lucide-react";
-import { BookAppointmentDialog } from "@/components/app/dialer/book-appointment-dialog";
+import { ChevronDown } from "lucide-react";
 
 /** Lifted from dialer-workspace.tsx (UX-6) unchanged; state comes from useDialer. */
 export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDialer>; readOnly: boolean }) {
   const now = useNow();
   const [complianceOpen, setComplianceOpen] = useState(false);
-  const [bookOpen, setBookOpen] = useState(false);
-  const { searchMode, panel, panelError, attempt, loading, working, confirmed, dialled, served, serving, serveNext, emptyReason, outcomeLabel, prepareAttempt, confirmRead, dial, loadingPanel, eligibility, blockers, callReady, customerZone, slotFacts, reasonParts, stateName, stackHits, campaignLine, phoneLabel, cityState, disclosureUnapproved, calendar } = d;
-  const canBook = !readOnly && Boolean(calendar && calendar.agents.length > 0);
+  const { searchMode, panel, panelError, attempt, loading, confirmed, dialled, served, serving, serveNext, emptyReason, outcomeLabel, loadingPanel, eligibility, blockers, callReady, customerZone, slotFacts, reasonParts, stateName, stackHits, campaignLine, phoneLabel, cityState, disclosureUnapproved } = d;
   return (
     <>
     {/* ── centre: the lead ────────────────────────────────────────────── */}
@@ -46,10 +43,18 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
 
       {panel && <>
         <section className={cn(card, "p-5 max-lg:order-1")} aria-label="Lead">
-          <div className="flex flex-wrap items-start justify-between gap-5">
-            <div className="min-w-0">
-              <h2 className="m-0 text-title-md leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{panel.lead.fullName ?? panel.lead.firstName}</h2>
-              <p className="mt-1.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)] tabular-nums">
+          {/* The lead, as Dialer A draws it (2026-10-25): who, where, their clock and the attempt, with
+              the tier it was served from. The call's buttons moved to the call dock on the right. */}
+          <div className="flex items-center gap-4">
+            <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">
+              {(panel.lead.fullName ?? panel.lead.firstName ?? "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="m-0 text-title-md leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{panel.lead.fullName ?? panel.lead.firstName}</h2>
+                {served?.tierName && served.leadId === panel.lead.id && <StatusChip tone="neutral" dot>{served.tierName.replaceAll("_", " ")}</StatusChip>}
+              </div>
+              <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)] tabular-nums">
                 {[
                   phoneLabel ?? "No phone number",
                   panel.lead.age ? `age ${panel.lead.age}` : null,
@@ -59,25 +64,8 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
                 ].filter(Boolean).join(" · ")}
               </p>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {/* Book an appointment opens once the call is being prepared, beside Start call (2026-10-06). */}
-            {attempt && canBook && (
-              <Button type="button" variant="outline" onClick={() => setBookOpen(true)}><CalendarPlus aria-hidden="true" />Book appointment</Button>
-            )}
-            {!attempt ? (
-              <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={readOnly || working || !callReady} title={!callReady ? blockers[0] : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
-                {readOnly ? "Read-only account" : searchMode ? "Log inbound return call" : "Click to call"}{!readOnly && <Kbd>C</Kbd>}
-              </Button>
-            ) : dialled ? (
-              <Button type="button" disabled title="The call has started; record what happened.">Call started</Button>
-            ) : (
-              <Button type="button" disabled={!confirmed || !eligibility?.allowed || !panel.lead.phone || working} aria-describedby="dial-status" aria-keyshortcuts="D" onClick={() => void dial()}>
-                {working ? "Checking…" : eligibility?.allowed ? "Start call" : "Dialing blocked"}<Kbd>D</Kbd>
-              </Button>
-            )}
-            </div>
           </div>
-          <BookAppointmentDialog d={d} open={bookOpen} onOpenChange={setBookOpen} />
+          {!searchMode && <CallSteps step={!attempt ? 0 : !confirmed ? 1 : !dialled ? 2 : 3} />}
           <dl className="m-0 mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
             {[
               ["Campaign", panel.campaign?.name ?? "—"],
@@ -119,9 +107,6 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
               <p className={label}>{panel.disclosure.configured ? `${stateName ?? panel.disclosure.state} requires this wording · cannot be hidden` : `Required disclosure · ${panel.disclosure.state || "unknown state"}`}</p>
               <p className="mt-1.5 text-base leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--body)]">{panel.disclosure.requiredText}</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <Button type="button" variant="outline" onClick={() => void confirmRead()} disabled={readOnly || working || confirmed || panel.disclosure.blocking} aria-keyshortcuts={confirmed ? undefined : "R"}>
-                  {confirmed ? "Read and recorded" : "I read this disclosure"}{!confirmed && <Kbd>R</Kbd>}
-                </Button>
                 <p id="dial-status" className={small} role="status">
                   {!confirmed ? "Read the disclosure aloud and record it before dialing." : dialled ? "The call has started. Record what happened on the right." : eligibility?.allowed ? "The server will repeat compliance checks immediately before dialing." : eligibility?.message || "Dialing is blocked until the server eligibility check passes."}
                 </p>
@@ -289,5 +274,28 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
       </>}
     </div>
     </>
+  );
+}
+
+const STEPS = ["Call", "Disclosure", "Dial", "Talk and record"];
+
+/** Where the call is: four steps, the done ones in green, the current one lit (Dialer A, 2026-10-25). */
+function CallSteps({ step }: { step: number }) {
+  return (
+    <ol aria-label="Call steps" className="m-0 mt-4 grid list-none grid-cols-4 gap-1.5 p-0">
+      {STEPS.map((name, index) => (
+        <li
+          key={name}
+          aria-current={index === step ? "step" : undefined}
+          className={cn(
+            "flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs leading-[1.5] font-semibold",
+            index < step ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : index === step ? "bg-[var(--surface-alt)] text-[var(--ink)] ring-1 ring-[var(--border-strong)]" : "text-[var(--muted)]",
+          )}
+        >
+          <span className={cn("inline-flex size-[18px] shrink-0 items-center justify-center rounded-full border text-xs", index <= step ? "border-current" : "border-[var(--border-strong)]")} aria-hidden="true">{index + 1}</span>
+          <span className="truncate">{name}</span>
+        </li>
+      ))}
+    </ol>
   );
 }

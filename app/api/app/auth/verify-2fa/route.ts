@@ -5,9 +5,18 @@ import { checkLoginAllowed, clearLoginFailures, logBlockedLoginAttempt, loginRat
 import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { partnerSessionCookieOptions, PARTNER_SESSION_COOKIE } from "@/lib/partnerAuth/session";
-import { tenantSessionCookieOptions, TENANT_PENDING_2FA_COOKIE, TENANT_SESSION_COOKIE, verifyTenantPending2faToken } from "@/lib/tenantAuth/session";
+import {
+  signTenantTrustedDeviceToken,
+  tenantSessionCookie,
+  tenantSessionCookieOptions,
+  tenantTrustedDeviceCookieOptions,
+  TENANT_PENDING_2FA_COOKIE,
+  TENANT_SESSION_COOKIE,
+  TENANT_TRUSTED_DEVICE_COOKIE,
+  verifyTenantPending2faToken,
+} from "@/lib/tenantAuth/session";
 import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
-import { verifySecondFactor } from "@/lib/tenantAuth/twoFactor";
+import { twoFactorEnabledAt, verifySecondFactor } from "@/lib/tenantAuth/twoFactor";
 import { recordSecurityEvent } from "@/lib/users/securityEvents";
 
 /**
@@ -19,9 +28,10 @@ import { recordSecurityEvent } from "@/lib/users/securityEvents";
  * answer for wrong, replayed and locked out.
  */
 const GENERIC_ERROR = { error: "That code is not right, or has been used." };
+// `trust`: "Trust this device for 30 days" (2026-10-24) — the next sign-ins here skip the code.
 const bodySchema = z.union([
-  z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict(),
-  z.object({ recoveryCode: z.string().trim().min(10).max(20) }).strict(),
+  z.object({ code: z.string().trim().regex(/^\d{6}$/), trust: z.boolean().optional() }).strict(),
+  z.object({ recoveryCode: z.string().trim().min(10).max(20), trust: z.boolean().optional() }).strict(),
 ]);
 
 export async function POST(request: NextRequest) {
@@ -59,10 +69,20 @@ export async function POST(request: NextRequest) {
     recordLastLogin("user", user.id),
     recordLoginEvent({ request, email: user.email, success: true, userId: user.id, actorType: "user" }),
     kind === "recovery" ? recordSecurityEvent({ userId: user.id, tenantId: pending.tenantId, type: "recovery_code_used", request }) : Promise.resolve(),
+    pending.viaLink ? recordSecurityEvent({ userId: user.id, tenantId: pending.tenantId, type: "signed_in_with_link", request }) : Promise.resolve(),
   ]);
-  const { token: session } = await issueTenantSession({ userId: user.id, tenantId: pending.tenantId, sessionVersion: user.session_version, request, twoFactorAt: new Date().toISOString() });
+  const verifiedAt = new Date().toISOString();
+  const { token: session } = await issueTenantSession({ userId: user.id, tenantId: pending.tenantId, sessionVersion: user.session_version, request, twoFactorAt: verifiedAt, remember: pending.remember });
   const response = NextResponse.json({ ok: true, redirectTo: pending.redirectTo, usedRecoveryCode: kind === "recovery" });
-  response.cookies.set(TENANT_SESSION_COOKIE, session, tenantSessionCookieOptions);
+  response.cookies.set(TENANT_SESSION_COOKIE, session, tenantSessionCookie(pending.remember));
+  if (parsed.data.trust) {
+    const enabledAt = await twoFactorEnabledAt(user.id).catch(() => null);
+    if (enabledAt) {
+      const trusted = await signTenantTrustedDeviceToken({ sub: user.id, sessionVersion: user.session_version, enabledAt, verifiedAt });
+      response.cookies.set(TENANT_TRUSTED_DEVICE_COOKIE, trusted, tenantTrustedDeviceCookieOptions);
+      await recordSecurityEvent({ userId: user.id, tenantId: pending.tenantId, type: "device_trusted", request });
+    }
+  }
   response.cookies.set(TENANT_PENDING_2FA_COOKIE, "", { ...tenantSessionCookieOptions, maxAge: 0 });
   response.cookies.set(PARTNER_SESSION_COOKIE, "", { ...partnerSessionCookieOptions, maxAge: 0 });
   return response;

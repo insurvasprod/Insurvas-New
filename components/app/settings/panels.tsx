@@ -1,8 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AppointmentVaultSettings } from "@/components/app/appointment-vault-settings";
-import { CarrierLibrarySettings } from "@/components/app/carrier-library-settings";
+import { CarriersSettings } from "@/components/app/settings/carriers-settings";
 import { DispositionSettings } from "@/components/app/disposition-settings";
 import { PipelineSettings } from "@/components/app/pipeline-settings";
 import { QueueSlaSettings } from "@/components/app/queue-sla-settings";
@@ -41,8 +40,7 @@ export type SettingsPanelContext = { team: TeamSnapshot | null; workspace: Works
 
 export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => ReactNode> = {
   "business-identity": ({ team, workspace }) => <BusinessIdentitySettings team={team} workspace={workspace} />,
-  "carrier-library": () => <CarrierLibrarySettings />,
-  "states-licences": () => <AppointmentVaultSettings inSettings />,
+  carriers: () => <CarriersSettings />,
   "team-access": ({ team, workspace }) => (team && workspace ? <TeamSettings initial={team} workspace={workspace} /> : null),
   calendar: () => <CalendarAvailabilitySettings />,
   cadence: () => <CadenceSettings />,

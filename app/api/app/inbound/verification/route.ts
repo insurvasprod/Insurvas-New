@@ -6,6 +6,8 @@ import { scopeFor } from "@/lib/agency/visibility";
 import { guardWorkItem } from "@/lib/transferInbox/scope";
 import { getVerificationContext } from "@/lib/verification/context";
 import { maskSensitivePanel } from "@/lib/verification/sensitive";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { loadStoredPreflight } from "@/lib/existingCustomerPreflight/service";
 import { getVerificationPanel, updateVerificationField, VerificationError } from "@/lib/verification/service";
 
 const workItemSchema = z.string().uuid();
@@ -32,8 +34,21 @@ type Panel = Awaited<ReturnType<typeof getVerificationPanel>>;
  * around it. The context is best-effort: if it cannot be read the form still loads.
  */
 async function screenPanel(panel: Panel, tenantId: string, userId: string, workItemId: string) {
-  const context = await getVerificationContext({ tenantId, userId, workItemId, leadId: panel.lead.id, sessionId: panel.session.id }).catch(() => null);
-  return { ...maskSensitivePanel(panel), context };
+  const [context, preflight] = await Promise.all([
+    getVerificationContext({ tenantId, userId, workItemId, leadId: panel.lead.id, sessionId: panel.session.id }).catch(() => null),
+    storedPreflight(tenantId, panel.lead.id),
+  ]);
+  return { ...maskSensitivePanel(panel), context, preflight };
+}
+
+/**
+ * The existing-customer pre-flight already stored on the lead at arrival (LA-1.24), for the call
+ * screen's "Same person?" prompt (2026-10-25). Read, never recomputed here; null when unreadable.
+ */
+async function storedPreflight(tenantId: string, leadId: string) {
+  const { data, error } = await getSupabaseServiceClient().from("agent_leads").select("preflight_result").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle();
+  if (error || !data) return null;
+  return loadStoredPreflight(data.preflight_result).catch(() => null);
 }
 
 export async function GET(request: Request) {

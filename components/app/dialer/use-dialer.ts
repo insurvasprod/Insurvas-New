@@ -14,6 +14,9 @@ import { searchRebuttals } from "@/lib/dialerScripts/rebuttals";
 import { type Attempt, CALLBACK_OUTCOME, DNC_OUTCOME, type Lead, type Panel, type Queue, type QueueFilter, type QueueRow, RETURNABLE, type Served, announceDisposition, errorText, instantInZone, keyWords, scriptSections } from "@/components/app/dialer/model";
 
 /** The state and handlers of DialerWorkspace (UX-6), moved verbatim; the component renders. */
+
+/** Where the auto-next switch is remembered in this browser. */
+const AUTO_NEXT_KEY = "insurvas:dialer-auto-next";
 export function useDialer({ readOnly = false, role = "producer", requestedLeadId = null }: { readOnly?: boolean; role?: string; canCheckNumber?: boolean; requestedLeadId?: string | null }) {
   // LA-2.12. A setter works this queue but may not sell, quote or submit an application, and may
   // not "see other setters' leads" — so identity search is not theirs either. Both controls are
@@ -43,6 +46,22 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   const [served, setServed] = useState<Served | null>(null);
   const [emptyReason, setEmptyReason] = useState<string | null>(null);
   const [serving, setServing] = useState(false);
+  // Auto-next (redesign 2026-10-25, audit "faster"): after an outcome the next lead is served at once —
+  // the LA-2.9 behaviour, and the default. An agent can switch it off to stop between calls. This
+  // browser only: a per-person convenience, read after mount because storage is a browser thing.
+  const [autoNext, setAutoNextState] = useState(true);
+  useEffect(() => {
+    let stored: string | null = null;
+    try { stored = window.localStorage.getItem(AUTO_NEXT_KEY); } catch { /* storage blocked */ }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
+    if (stored === "off") setAutoNextState(false);
+  }, []);
+  /** Auto-next off: the finished lead leaves the screen and nothing is served until the agent asks. */
+  const clearLead = useCallback(() => { setPanel(null); setSelectedId(""); setServed(null); }, []);
+  const setAutoNext = useCallback((on: boolean) => {
+    setAutoNextState(on);
+    try { window.localStorage.setItem(AUTO_NEXT_KEY, on ? "on" : "off"); } catch { /* storage blocked */ }
+  }, []);
   // The Priority queue list (user decision 2026-09-24): a bounded, read-only preview of what is
   // servable to this agent now. Picking a row is a serve of that lead, refused with a reason when
   // any gate says no.
@@ -439,7 +458,8 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
       // serveNextNow, not serveNext: resetCall's state has not landed in this closure yet, so
       // serveNext would still see the call it just closed and quietly serve nothing.
       if (searchMode) setPanelReload((n) => n + 1);
-      else await serveNextNow();
+      else if (autoNext) await serveNextNow();
+      else clearLead();
     } catch (error) { setDispositionError(error instanceof Error ? error.message : "Could not record the disposition"); notify.fail("Could not record the disposition", { detail: error instanceof Error ? error.message : undefined }); }
     finally { setWorking(false); }
   }
@@ -618,5 +638,8 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
     cityState,
     disclosureUnapproved,
     nextStep,
+    autoNext,
+    setAutoNext,
+    clearLead,
   };
 }

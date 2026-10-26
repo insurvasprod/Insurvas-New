@@ -4,7 +4,7 @@
  * Two cards that used to make up Settings › Agency profile, now at the foot of Business identity
  * (owner decision 2026-10-15: the two sections overlapped, and "Agency profile" read like a second
  * place to edit the same record). The contract counts it also showed live on Carrier library, and its
- * licence and E&O reminders on States & licences.
+ * licence reminders on States & licences.
  *
  *   PartnerSupportCard — the support email and phone partners see (partner portal › Messages). Its own
  *                        API and its own Save, so it never mixes with the identity draft above it.

@@ -11,7 +11,7 @@ import { scopeFor } from "./visibility";
  *   1. league       submitted, issued, placement this month            (scorecardStore ← LA-4.18)
  *   2. exposure     month-4 survival, advance at risk                   (scorecardStore ← LA-4.18 / policy_current)
  *   3. payable      owed to each producer now, who is negative, override (AG-1.5 ledger, reported basis)
- *   4. health       seats against the band; licences, appointments, E&O expiring inside 60 days
+ *   4. health       seats against the band; licences and appointments expiring inside 60 days
  * Owner, admin and bookkeeper see the agency; a manager the same screen scoped to his reports; a producer never.
  */
 
@@ -81,21 +81,16 @@ export async function readDashboard(context: { tenantId: string; userId: string;
     overrideCents = agencySide - producerSide;
   }
 
-  // Panel 4 — licences, appointments and E&O expiring inside 60 days (the gate's own records).
+  // Panel 4 — licences and appointments expiring inside 60 days (the gate's own records).
   const alerts: HealthAlert[] = [];
   if (producerIds.length) {
-    const [appts, eo, lic] = await Promise.all([
+    const [appts, lic] = await Promise.all([
       db().from("producer_appointment").select("producer_id, state, expires_on, carriers(name)").eq("tenant_id", context.tenantId).in("producer_id", producerIds).eq("status", "appointed").gte("expires_on", today).lte("expires_on", horizon),
-      db().from("producer_onboarding_item").select("producer_id, expires_on").eq("tenant_id", context.tenantId).in("producer_id", producerIds).eq("item", "eo").gte("expires_on", today).lte("expires_on", horizon),
       db().from("tenant_user_licensed_states").select("user_id, state, expires_on").eq("tenant_id", context.tenantId).in("user_id", visible.map((p) => p.user_id)).gte("expires_on", today).lte("expires_on", horizon),
     ]);
     for (const a of (appts.data ?? []) as Array<{ producer_id: string; state: string; expires_on: string; carriers: { name?: string } | null }>) {
       const who = nameOfProducerId.get(a.producer_id);
       if (who) alerts.push({ producerUserId: who.user, name: who.name, item: "Appointment", detail: `${a.carriers?.name ?? "Carrier"} · ${a.state}`, expiresOn: a.expires_on, daysLeft: days(today, a.expires_on) });
-    }
-    for (const e of (eo.data ?? []) as Array<{ producer_id: string; expires_on: string }>) {
-      const who = nameOfProducerId.get(e.producer_id);
-      if (who) alerts.push({ producerUserId: who.user, name: who.name, item: "E&O", detail: "Errors and omissions cover", expiresOn: e.expires_on, daysLeft: days(today, e.expires_on) });
     }
     const byUser = new Map(visible.map((p) => [p.user_id, p.display_name]));
     for (const l of (lic.data ?? []) as Array<{ user_id: string; state: string; expires_on: string }>) {

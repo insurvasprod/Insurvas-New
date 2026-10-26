@@ -10,6 +10,10 @@ import { ApplicationError } from "@/lib/applications/db";
 import { FIXTURE_QUOTE_LIST } from "@/lib/applications/listFixtures";
 import { listQuoteRows } from "@/lib/applications/lists";
 import type { QuoteRow } from "@/lib/applications/listRules";
+import { ApplicationsHub } from "@/components/app/applications/applications-hub";
+import { applicationsTabs, hasCalculator } from "@/components/app/applications/applications-tabs";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
+import { canWrite } from "@/lib/entitlements/types";
 
 /** The design fixtures in the list's shape (?preview=sample, outside production). */
 function sampleRows(): QuoteRow[] {
@@ -36,8 +40,10 @@ export default async function QuotingPage({ searchParams }: { searchParams: Prom
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Quoting" description="Compare carrier premiums side by side." />;
   if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Quoting" detail="Owners and producers quote clients." />;
   const query = await searchParams;
-  if (query.preview === "sample" && process.env.NODE_ENV !== "production") return <QuotesList rows={sampleRows()} sample />;
+  // The Quotes tab of Applications (2026-10-26).
+  const hub = (body: React.ReactNode) => <DashboardStage ribbon><ApplicationsHub view="quotes" tabs={applicationsTabs(guard.entitlement)} calculator={hasCalculator(guard.entitlement)} readOnly={!canWrite(guard.entitlement)}>{body}</ApplicationsHub></DashboardStage>;
+  if (query.preview === "sample" && process.env.NODE_ENV !== "production") return hub(<QuotesList rows={sampleRows()} sample embedded />);
   const [rows, timeZone] = await Promise.all([orPending(scopeFor(guard.context).then((scope) => listQuoteRows(guard.context.tenantId, scope))), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
   if (!rows) return <SetupPending title="Quotes" />;
-  return <QuotesList rows={rows} timeZone={timeZone ?? undefined} />;
+  return hub(<QuotesList rows={rows} timeZone={timeZone ?? undefined} embedded />);
 }

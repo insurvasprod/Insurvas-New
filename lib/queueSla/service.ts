@@ -12,6 +12,7 @@ import { isSchemaGap } from "@/lib/appointments/schemaGap";
 import { isOlderThanADay } from "./digestView";
 import { shouldEmail } from "@/lib/notifications/preferences";
 import { slaKey } from "./keys";
+import { inboundSettingsOrDefaults } from "@/lib/inboundSettings/service";
 
 export type QueueSlaSettings = {
   tenant_id: string;
@@ -137,6 +138,8 @@ async function sendOwedEscalationEmails(): Promise<{ sent: number; settled: numb
       const queue = await supabase.from("lead_queue").select("status").eq("tenant_id", row.tenant_id).eq("id", row.work_item_id).maybeSingle();
       if (queue.error) throw new Error(`Could not re-read the transfer: ${queue.error.message}`);
       if (queue.data?.status !== "unclaimed") { await settle("no_longer_unclaimed"); continue; }
+      // Settings › Inbound: the workspace turned the escalation email off (the in-app alert still fires).
+      if (!(await inboundSettingsOrDefaults(row.tenant_id)).emailOwnersOnEscalation) { await settle("not_sent: workspace_setting"); continue; }
       const owners = (await activeOwners(row.tenant_id)).filter((owner) => owner.email?.trim());
       if (!owners.length) { await settle("no_owner_email"); continue; }
       const [lead, partner] = await Promise.all([

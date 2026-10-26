@@ -218,7 +218,7 @@ export function ExpensesBoard({ expenses, defaults, readOnly, openId = null }: {
         footer={rows.length > 20 ? <Pager page={shown.current} pageSize={20} total={rows.length} noun="expenses" onPage={setPage} /> : undefined}
       >
         {expenses.length === 0 ? (
-          <EmptyState title="No expenses yet" hint="Add the dialer, the CRM, the E&O premium: without them cost per policy is too low." action={!readOnly ? <Button onClick={() => setCreating(true)}>Add an expense</Button> : undefined} />
+          <EmptyState title="No expenses yet" hint="Add the dialer, the CRM, the lead spend: without them cost per policy is too low." action={!readOnly ? <Button onClick={() => setCreating(true)}>Add an expense</Button> : undefined} />
         ) : rows.length === 0 ? (
           view === "confirm" && !q ? <EmptyState title="Nothing to confirm" hint="This period's recurring expenses are all confirmed." /> : <NoMatches noun="expenses" onClear={() => setQ("")} />
         ) : (

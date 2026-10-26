@@ -46,7 +46,7 @@ export type BellKind = "action_needed" | "handoff" | "mention" | "partner_messag
 /**
  * The filter chips, in the order they are drawn. A kind chip appears only when that kind is present.
  * "Action needed" leads: the protected events (a reinstatement window, a DOI deadline, an expiring
- * E&O or licence, a failed plan payment) — the ones nobody can switch off.
+ * licence, a failed plan payment) — the ones nobody can switch off.
  */
 export const BELL_KINDS: readonly BellKind[] = ["action_needed", "handoff", "mention", "partner_message", "callback", "servicing", "other"];
 
@@ -83,6 +83,8 @@ export function bellToneOf(event: AgentAlertEvent): BellTone {
     case "servicing_failed": return "warning";
     case "webhook_disabled": return "warning";
     case "allowance_near_cap": return "warning";
+    // Money still owed back, with the clock running out.
+    case "return_window_closing": return "warning";
     case "partner_message": return "muted";
     default: return "accent";
   }

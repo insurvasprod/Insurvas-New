@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { scopeFor } from "@/lib/agency/visibility";
 import { PartnerQualityDetailWorkspace } from "@/components/app/partner-quality-detail";
 import { validPartnerQualityPeriod } from "@/lib/partnerQuality/metrics";
@@ -18,5 +19,6 @@ export default async function PartnerQualityDetailPage({ params, searchParams }:
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Partner quality" detail="In an agency, the owner and admins review partner quality." />;
   const [{ partnerId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(partnerId)) notFound();
-  return <PartnerQualityDetailWorkspace partnerId={partnerId} initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} />;
+  // Partners A (2026-10-25): on the dashboard's moving ribbon.
+  return <DashboardStage ribbon><PartnerQualityDetailWorkspace partnerId={partnerId} initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} /></DashboardStage>;
 }

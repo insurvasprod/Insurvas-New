@@ -4,9 +4,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { switchedOffCarrierIds, type TenantCarrierRow } from "@/lib/carriers/service";
-import type { AppointmentRow, AppointmentStatus, CarrierTrainingRow, CeRecordRow, EoPolicyRow, LicenseRow } from "./service-types";
-import { getSetting } from "@/lib/settings/queries";
-import { canWriteReasonFromVault, effectiveEoGraceDays, type CanWriteResult } from "./eligibility";
+import type { AppointmentRow, AppointmentStatus, CarrierTrainingRow, LicenseRow } from "./service-types";
+import { canWriteReasonFromVault, type CanWriteResult } from "./eligibility";
 import { isPendingSchema, SchemaPendingError } from "./pendingSchema";
 
 export type AppointmentVault = {
@@ -14,15 +13,13 @@ export type AppointmentVault = {
   tenantCarriers: TenantCarrierRow[];
   appointments: AppointmentRow[];
   licenses: LicenseRow[];
-  eoPolicies: EoPolicyRow[];
-  ceRecords: CeRecordRow[];
-  /** False until migration 20260924110000 is applied: licence type/lines, E&O limits and ethics credits cannot be stored yet. */
+  /** False until migration 20260924110000 is applied: licence type and lines cannot be stored yet. */
   extendedFields: boolean;
   /**
-   * Carriers whose contract requires E&O in force (migration 20260924220100); null before it.
+   * The agency's per-carrier switch (tenant_carrier_requirements, migration 20260924220100); null before it.
    * `contracted: false` = the agency switched the carrier off (LA-0.4); every row reads as on before 20261013100000.
    */
-  carrierRequirements: Array<{ carrier_id: string; requires_eo: boolean; contracted: boolean }> | null;
+  carrierRequirements: Array<{ carrier_id: string; contracted: boolean }> | null;
   /** False until migration 20260924310000: an appointment cannot be pending or carry an expiry yet. */
   appointmentDetails: boolean;
   /** Carrier-specific trainings (migration 20260924310100); null before it. */
@@ -30,24 +27,16 @@ export type AppointmentVault = {
 };
 
 const LICENCE_BASE = "id, tenant_id, state, license_number, expires_at, created_at, updated_at";
-const EO_BASE = "id, tenant_id, carrier, policy_number, expires_at, coverage_amount_cents, created_at, updated_at";
-const CE_BASE = "id, tenant_id, state, credits_required, credits_completed, deadline, created_at, updated_at";
 const LICENCE_EXTENDED = `${LICENCE_BASE}, licence_type, lines_of_authority`;
-const EO_EXTENDED = `${EO_BASE}, per_claim_cents, aggregate_cents`;
-const CE_EXTENDED = `${CE_BASE}, ethics_required, ethics_completed`;
 const APPOINTMENT_BASE = "id, tenant_id, carrier_id, state, status, effective_from, terminated_at, created_at, updated_at";
 const APPOINTMENT_DETAILED = `${APPOINTMENT_BASE}, expires_at`;
 const TRAINING_COLUMNS = "id, tenant_id, carrier_id, title, due_on, completed_on, updated_at, updated_by";
 
 export async function getAppointmentVault(tenantId: string): Promise<AppointmentVault> {
   const supabase = getSupabaseServiceClient();
-  // The three record tables are asked for their new columns first; if migration 20260924110000 is
-  // not applied yet that is a schema gap, not a fault, and they are asked again for what they had.
-  const records = async (extended: boolean) => Promise.all([
-    supabase.from("licenses").select(extended ? LICENCE_EXTENDED : LICENCE_BASE).eq("tenant_id", tenantId).order("state"),
-    supabase.from("eo_policies").select(extended ? EO_EXTENDED : EO_BASE).eq("tenant_id", tenantId).order("expires_at"),
-    supabase.from("ce_records").select(extended ? CE_EXTENDED : CE_BASE).eq("tenant_id", tenantId).order("state"),
-  ]);
+  // Licences are asked for their new columns first; if migration 20260924110000 is not applied yet
+  // that is a schema gap, not a fault, and they are asked again for what they had.
+  const records = async (extended: boolean) => supabase.from("licenses").select(extended ? LICENCE_EXTENDED : LICENCE_BASE).eq("tenant_id", tenantId).order("state");
   // expires_at and 'pending' arrive with 20260924310000; before it the appointments are read as they were.
   const appointmentRows = (detailed: boolean) =>
     supabase.from("appointments").select(detailed ? APPOINTMENT_DETAILED : APPOINTMENT_BASE).eq("tenant_id", tenantId).order("effective_from", { ascending: false }).order("created_at", { ascending: false });
@@ -56,8 +45,8 @@ export async function getAppointmentVault(tenantId: string): Promise<Appointment
     supabase.from("tenant_carriers").select("id, tenant_id, carrier_id, contract_level_bp, writing_number, effective_from, is_active, created_at").eq("tenant_id", tenantId).order("effective_from", { ascending: false }),
     appointmentRows(true),
     records(true),
-    // Garnish for the E&O callout: a missing table or a failed read counts nothing rather than guessing.
-    supabase.from("tenant_carrier_requirements" as never).select("carrier_id, requires_eo").eq("tenant_id" as never, tenantId as never),
+    // Only to know a requirements table exists (null before 20260924220100); the switch itself comes from switchedOff.
+    supabase.from("tenant_carrier_requirements" as never).select("carrier_id").eq("tenant_id" as never, tenantId as never),
     supabase.from("tenant_carrier_training" as never).select(TRAINING_COLUMNS).eq("tenant_id" as never, tenantId as never).order("due_on" as never),
     switchedOffCarrierIds(tenantId),
   ]);
@@ -66,11 +55,11 @@ export async function getAppointmentVault(tenantId: string): Promise<Appointment
   // A missing training table means "not recordable yet"; any other failure is a fault like the rest.
   const carrierTrainingsMissing = isPendingSchema(trainings.error);
   if (trainings.error && !carrierTrainingsMissing) throw new Error(`Could not load appointment vault: ${trainings.error.message}`);
-  const extendedFields = !firstRecords.some((result) => isPendingSchema(result.error));
-  const [licenses, eoPolicies, ceRecords] = extendedFields ? firstRecords : await records(false);
-  const error = [carriers, tenantCarriers, appointments, licenses, eoPolicies, ceRecords].find((result) => result.error)?.error;
+  const extendedFields = !isPendingSchema(firstRecords.error);
+  const licenses = extendedFields ? firstRecords : await records(false);
+  const error = [carriers, tenantCarriers, appointments, licenses].find((result) => result.error)?.error;
   if (error) throw new Error(`Could not load appointment vault: ${error.message}`);
-  return { carriers: (carriers.data ?? []) as CarrierRow[], tenantCarriers: (tenantCarriers.data ?? []) as TenantCarrierRow[], appointments: (appointments.data ?? []) as unknown as AppointmentRow[], licenses: (licenses.data ?? []) as unknown as LicenseRow[], eoPolicies: (eoPolicies.data ?? []) as unknown as EoPolicyRow[], ceRecords: (ceRecords.data ?? []) as unknown as CeRecordRow[], extendedFields, carrierRequirements: requirements.error ? null : ((requirements.data ?? []) as unknown as Array<{ carrier_id: string; requires_eo: boolean }>).map((row) => ({ ...row, contracted: !switchedOff.has(row.carrier_id) })), appointmentDetails, carrierTrainings: carrierTrainingsMissing ? null : ((trainings.data ?? []) as unknown as CarrierTrainingRow[]) };
+  return { carriers: (carriers.data ?? []) as CarrierRow[], tenantCarriers: (tenantCarriers.data ?? []) as TenantCarrierRow[], appointments: (appointments.data ?? []) as unknown as AppointmentRow[], licenses: (licenses.data ?? []) as unknown as LicenseRow[], extendedFields, carrierRequirements: requirements.error ? null : ((requirements.data ?? []) as unknown as Array<{ carrier_id: string }>).map((row) => ({ carrier_id: row.carrier_id, contracted: !switchedOff.has(row.carrier_id) })), appointmentDetails, carrierTrainings: carrierTrainingsMissing ? null : ((trainings.data ?? []) as unknown as CarrierTrainingRow[]) };
 }
 
 export type AppointmentInput = {
@@ -183,7 +172,7 @@ const carriesValue = (extras: Extras) => Object.values(extras).some((value) => v
  * Probed before the RPC runs, so a request that needs the new columns is refused whole (503) rather
  * than half-saved. A request whose new fields are all empty is saved normally on either schema.
  */
-async function probeExtras(table: "licenses" | "eo_policies" | "ce_records", extras: Extras): Promise<boolean> {
+async function probeExtras(table: "licenses", extras: Extras): Promise<boolean> {
   const keys = Object.keys(extras);
   if (keys.length === 0) return false;
   const probe = await getSupabaseServiceClient().from(table).select(keys.join(", ")).limit(0);
@@ -194,7 +183,7 @@ async function probeExtras(table: "licenses" | "eo_policies" | "ce_records", ext
   if (probe.error) throw new Error(probe.error.message);
   return true;
 }
-async function writeExtras<T extends { id: string }>(table: "licenses" | "eo_policies" | "ce_records", row: T, extras: Extras): Promise<T> {
+async function writeExtras<T extends { id: string }>(table: "licenses", row: T, extras: Extras): Promise<T> {
   const { data, error } = await getSupabaseServiceClient().from(table).update(extras as never).eq("id", row.id).select("*").single();
   if (isPendingSchema(error)) throw new SchemaPendingError();
   if (error || !data) throw new Error(error?.message ?? "Could not save the record");
@@ -223,38 +212,13 @@ export async function saveLicense(tenantId: string, input: { state: string; lice
   if (error || !data) throw new Error(error?.message ?? "Could not save licence");
   return writeNew ? writeExtras("licenses", data as LicenseRow, extras) : (data as LicenseRow);
 }
-export async function saveEoPolicy(tenantId: string, input: { carrier: string; policy_number: string; expires_at: string; coverage_amount_cents: number; per_claim_cents?: number | null; aggregate_cents?: number | null }) {
-  const extras = definedExtras({ per_claim_cents: input.per_claim_cents, aggregate_cents: input.aggregate_cents });
-  const atomic = await saveAtomically<EoPolicyRow>("save_eo_policy_with_limits", { p_tenant_id: tenantId, p_carrier: input.carrier, p_policy_number: input.policy_number, p_expires_at: input.expires_at, p_coverage_amount_cents: input.coverage_amount_cents }, extras);
-  if (atomic) return atomic;
-  const writeNew = await probeExtras("eo_policies", extras);
-  const { data, error } = await getSupabaseServiceClient().rpc("save_eo_policy", { p_tenant_id: tenantId, p_carrier: input.carrier, p_policy_number: input.policy_number, p_expires_at: input.expires_at, p_coverage_amount_cents: input.coverage_amount_cents }).single();
-  if (error || !data) throw new Error(error?.message ?? "Could not save E&O policy");
-  return writeNew ? writeExtras("eo_policies", data as EoPolicyRow, extras) : (data as EoPolicyRow);
-}
-export async function saveCeRecord(tenantId: string, input: { state: string; credits_required: number; credits_completed: number; deadline: string; ethics_required?: number | null; ethics_completed?: number | null }) {
-  const extras = definedExtras({ ethics_required: input.ethics_required, ethics_completed: input.ethics_completed });
-  const atomic = await saveAtomically<CeRecordRow>("save_ce_record_with_ethics", { p_tenant_id: tenantId, p_state: input.state, p_credits_required: input.credits_required, p_credits_completed: input.credits_completed, p_deadline: input.deadline }, extras);
-  if (atomic) return atomic;
-  const writeNew = await probeExtras("ce_records", extras);
-  const { data, error } = await getSupabaseServiceClient().rpc("save_ce_record", { p_tenant_id: tenantId, p_state: input.state, p_credits_required: input.credits_required, p_credits_completed: input.credits_completed, p_deadline: input.deadline }).single();
-  if (error || !data) throw new Error(error?.message ?? "Could not save CE record");
-  return writeNew ? writeExtras("ce_records", data as CeRecordRow, extras) : (data as CeRecordRow);
-}
-
-/** The platform's E&O grace (compliance.eo_grace_days); an unreadable store is the coded default. */
-export async function eoGraceDays(): Promise<number> {
-  return effectiveEoGraceDays({ graceDays: await getSetting<number>("compliance.eo_grace_days").catch(() => null) });
-}
-
 export async function canWrite(tenantId: string, carrierId: string, state: string, asOf: string): Promise<boolean> {
   return (await canWriteReason(tenantId, carrierId, state, asOf)).allowed;
 }
 
-/** canWrite with its reason (Sixteen #4): ok, grace, no_contract, no_appointment, no_licence, eo_expired, no_eo. */
+/** canWrite with its reason: ok, no_contract, no_appointment, no_licence. */
 export async function canWriteReason(tenantId: string, carrierId: string, state: string, asOf: string): Promise<CanWriteResult> {
-  const [vault, graceDays] = await Promise.all([getAppointmentVault(tenantId), eoGraceDays()]);
-  return canWriteReasonFromVault(vault, carrierId, state, asOf, { graceDays });
+  return canWriteReasonFromVault(await getAppointmentVault(tenantId), carrierId, state, asOf);
 }
 
 export { canWriteFromVault } from "./eligibility";

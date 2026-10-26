@@ -10,7 +10,7 @@ export default async function AppointmentsPage() {
       <FeatureGateNotice
         guard={guard}
         featureLabel="Appointment vault"
-        description="Manage carrier appointments, licences, E&O insurance and continuing education."
+        description="Manage carrier appointments and licences."
       />
     );
   }

@@ -17,6 +17,7 @@ import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { trialDaysForPlan } from "./trialDays";
 import { applyAutoOffer } from "@/lib/offers/service";
 import { audit } from "@/lib/audit/log";
+import { readSignupAddonIds } from "@/lib/signup/planChoiceQueries";
 import type { BillingCycle } from "@/lib/money";
 
 /** "no_payment": a checkout with CHECKOUT_PAYMENT_MODE=none (lib/checkout/noPayment.ts). */
@@ -75,6 +76,17 @@ export async function completeCheckout(
 
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
+
+  // The add-ons ticked on Step 4 of 5, attached the way an admin attaches one, before the entitlement
+  // is rebuilt so their features are there on the first screen. Only by the caller that created the
+  // subscription. A refused add-on (retired, or no longer offered) is logged and skipped: the plan
+  // the owner paid for must start either way.
+  if (row.created) {
+    for (const addonId of await readSignupAddonIds(tenantId)) {
+      const attached = await supabase.rpc("admin_attach_addon", { p_subscription_id: row.subscription_id, p_addon_id: addonId, p_override_availability: false, p_attached_by: null });
+      if (attached.error) console.error(`[checkout] sign-up add-on ${addonId} not attached to ${row.subscription_id}`, attached.error.message);
+    }
+  }
 
   // Immediately, not on a schedule: the acceptance criterion is that completing checkout lands the
   // user in the product with their plan's menu already correct, and the entitlement blob is what

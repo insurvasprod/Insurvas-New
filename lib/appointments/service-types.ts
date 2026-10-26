@@ -21,20 +21,5 @@ export type LicenseRow = {
   licence_type?: LicenceType | null;
   lines_of_authority?: string[] | null;
 };
-export type EoPolicyRow = {
-  id: string; tenant_id: string; carrier: string; policy_number: string; expires_at: string;
-  coverage_amount_cents: number; created_at: string; updated_at: string;
-  /** Migration 20260924110000. */
-  per_claim_cents?: number | null;
-  aggregate_cents?: number | null;
-};
-export type CeRecordRow = {
-  id: string; tenant_id: string; state: string; credits_required: number; credits_completed: number;
-  deadline: string; created_at: string; updated_at: string;
-  /** Migration 20260924110000. */
-  ethics_required?: number | null;
-  ethics_completed?: number | null;
-};
-
 /** Lines of authority a licence can carry, in the order the form offers them. */
 export const LINES_OF_AUTHORITY = ["Life", "Health", "Accident & Health", "Annuities", "Variable", "Property", "Casualty"] as const;

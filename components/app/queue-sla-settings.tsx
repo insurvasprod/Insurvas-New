@@ -9,6 +9,7 @@ import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
+import { InboundSettingsCards, WaitingBar, useInboundSettings } from "@/components/app/inbound-settings-cards";
 import { formatDuration, ladderStepStates, parseDuration, type LadderValues } from "@/lib/queueSla/ladder";
 import { slaJobNotice, type SlaJobState } from "@/lib/queueSla/digestView";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,10 @@ import { cn } from "@/lib/utils";
  * Each rung is typed the way the board writes it — "45 seconds", "2 minutes", "4 hours" — and
  * parsed on the way in. The stepper under it is live: it shows how far up the ladder the
  * longest-waiting transfer is right now.
+ *
+ * Settings › Inbound transfers (Inbound A, 2026-10-25): the same page also carries the coloured
+ * waiting-time bar (redrawn as a rung is typed) and the workspace's alerts, buffer handoff and
+ * routing (InboundSettingsCards). One Save changes saves whichever of the two changed.
  */
 
 type Values = LadderValues;
@@ -89,6 +94,7 @@ export function QueueSlaSettings() {
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
+  const inbound = useInboundSettings();
 
   const load = useCallback(
     () =>
@@ -125,7 +131,8 @@ export function QueueSlaSettings() {
   const values: Values | null = complete && parsed ? (parsed as Values) : null;
   const tooLong = Boolean(values && Object.values(values).some((value) => value > MAX_SECONDS));
   const increasing = values ? values.warn < values.escalate && values.escalate < values.partner && values.partner < values.expire : true;
-  const dirty = Boolean(saved && (!values || JSON.stringify(values) !== JSON.stringify(saved)));
+  const ladderDirty = Boolean(saved && (!values || JSON.stringify(values) !== JSON.stringify(saved)));
+  const dirty = ladderDirty || inbound.dirty;
   const problem = !complete
     ? "Write each rung as a number and a unit, for example “45 seconds”, “2 minutes” or “4 hours”."
     : tooLong
@@ -135,10 +142,12 @@ export function QueueSlaSettings() {
         : null;
 
   async function save() {
-    if (!values || problem) { setError(problem ?? ""); return; }
+    if (ladderDirty && (!values || problem)) { setError(problem ?? ""); return; }
     setError("");
     setSaving(true);
     try {
+      if (inbound.dirty && !(await inbound.save())) return;
+      if (!ladderDirty) { notify.done("Inbound settings saved"); return; }
       const response = await fetch("/api/app/queue-sla-settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not save queue SLA settings"); return; }
@@ -239,6 +248,10 @@ export function QueueSlaSettings() {
           <p role="alert" className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--error-ink)]">{problem}</p>
         )}
 
+        <div className="mt-5">
+          <WaitingBar values={values && !problem ? values : saved} />
+        </div>
+
         <div className="mt-5 border-t border-[var(--border)] pt-4">
           <ol
             aria-label={oldestWaiting === null ? "The ladder, in order. Nothing is waiting right now." : `The ladder, in order. The longest-waiting transfer has waited ${short(oldestWaiting)}.`}
@@ -276,9 +289,11 @@ export function QueueSlaSettings() {
         </div>
       </SettingsCard>
 
-      <SettingsSaveBar visible={dirty} note="Unsaved changes to the ladder">
-        <Button type="button" variant="outline" onClick={() => { setTexts(textsFor(saved)); setError(""); }} disabled={saving}>Discard</Button>
-        <Button data-guide="queue-sla-save" type="button" onClick={() => void save()} disabled={saving || Boolean(problem)}>{saving ? "Saving…" : "Save changes"}</Button>
+      <InboundSettingsCards inbound={inbound} disabled={saving} />
+
+      <SettingsSaveBar visible={dirty} note={ladderDirty ? "Unsaved changes to the ladder" : "Unsaved inbound settings"}>
+        <Button type="button" variant="outline" onClick={() => { setTexts(textsFor(saved)); inbound.reset(); setError(""); }} disabled={saving}>Discard</Button>
+        <Button data-guide="queue-sla-save" type="button" onClick={() => void save()} disabled={saving || (ladderDirty && Boolean(problem)) || Boolean(inbound.dirty && inbound.timeoutProblem)}>{saving ? "Saving…" : "Save changes"}</Button>
       </SettingsSaveBar>
     </SettingsStack>
   );

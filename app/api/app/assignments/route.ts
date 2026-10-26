@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { assignLead, assignLeadList, getAssignmentPreview, getAssignmentWorkspace, ListChangedError, previewLeadListAssignment, publishAssignmentRules, returnLeadToPool, saveAgentCapacity, saveAssignmentRule, saveAssignmentSettings, SchemaPendingError } from "@/lib/assignment/service";
+import { assignLead, assignLeadList, findReassignable, getAssignmentPreview, getAssignmentWorkspace, ListChangedError, previewLeadListAssignment, publishAssignmentRules, returnLeadToPool, saveAgentCapacity, saveAssignmentRule, saveAssignmentSettings, SchemaPendingError } from "@/lib/assignment/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { audit } from "@/lib/audit/log";
 import { refuseRoutingInAgency } from "@/lib/agency/routingGuard";
@@ -126,6 +126,19 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       if (error instanceof SchemaPendingError) return pending();
       return NextResponse.json({ error: error instanceof Error ? error.message : "Could not preview the assignment" }, { status: 400 });
+    }
+  }
+  if (view === "find") {
+    // The reassign panel's lead search; managers only, like the reassignment it feeds.
+    const auth = await requireFeatureRole("outbound_dialing", managers);
+    if (auth instanceof NextResponse) return auth;
+    const agencyRefusal = await refuseRouting(auth.context);
+    if (agencyRefusal) return agencyRefusal;
+    const query = (request.nextUrl.searchParams.get("q") ?? "").slice(0, 80);
+    try {
+      return NextResponse.json({ leads: await findReassignable(auth.context.tenantId, query) }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not search leads" }, { status: 500 });
     }
   }
   if (view === "preview") {

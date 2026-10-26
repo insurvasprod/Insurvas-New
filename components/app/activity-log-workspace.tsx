@@ -6,6 +6,7 @@ import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -14,6 +15,7 @@ import { StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Segmented, ViewTabs } from "@/components/app/view-tabs";
+import { NextStepLine } from "@/components/app/next-step-line";
 import {
   formatSpan,
   mayReviewZeroClick,
@@ -23,17 +25,21 @@ import {
   type ActivityReport,
   type ActivityRow,
   type BlockedDialRow,
+  type ScorecardRow,
 } from "@/lib/activityLog/types";
 import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
 import { Pager, paginate } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { cn } from "@/lib/utils";
+import { csvCellMinimal } from "@/lib/csv/cell";
 
 /**
- * Activity & scorecard, laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): one
- * strip of four figures against the window before, then the views as tabs (2026-10-06 redesign:
- * Activity, Scorecard, Setters, Close-out, Fresh vs recycled and Data integrity, one at a time,
- * where the scorecard view used to stack four tables), each one table whose toolbar holds the
- * search, the window and the filters on one line.
+ * Team activity (was Activity & scorecard; redesign 2026-10-26, owner pick A, canvas M2 · Outbound
+ * results). Six tabs became four: Agents (the scorecard, the home), Call log, Setters, and To review —
+ * the appointments waiting for an outcome and the flagged calls in one queue. Fresh against recycled
+ * moved to Lead recycling. An agent opens beside the table with how their calls ended (the
+ * disposition mix, LA-2.21) and the way into their calls and flags. "Export this table" downloads the
+ * grid on screen (LA-2.21 AC3: every grid exports).
  *
  * Every figure names its comparison window, and nothing here is talk time: click-to-call hands the
  * call to the handset, so the platform never sees how long it lasted.
@@ -45,8 +51,8 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
  */
 
 type View = "activity" | "scorecard" | "integrity";
-/** The tabs: the three the page can open on (?view=), plus the parts of the old scorecard view. */
-type Tab = View | "setters" | "closeout" | "recycle";
+/** The four tabs. ?view= opens one: scorecard → Agents, integrity → To review, log → Call log. */
+type Tab = "agents" | "log" | "setters" | "review";
 type IntegrityFilter = "any" | "zero_click_disposition";
 type Range = "7" | "30" | "90" | "custom";
 type SetterReport = {
@@ -64,10 +70,22 @@ const FLAG_LABEL: Record<string, string> = {
   served_never_dispositioned: "Never logged",
   impossibly_fast_disposition: "Logged in under 5 seconds",
 };
+const MIX_COLOURS = ["var(--primary)", "var(--info)", "var(--warning)", "var(--error)", "var(--muted)"];
 
 /** Read outside render so the window is fixed when it is chosen, not on every paint. */
 function now() {
   return Date.now();
+}
+
+/** A table on screen as a CSV file, with values that could run as a formula neutralised. */
+function downloadCsv(name: string, header: string[], rows: Array<Array<string | number | null>>) {
+  const body = [header, ...rows].map((row) => row.map(csvCellMinimal).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([body], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function humanize(value: string) {
@@ -175,7 +193,72 @@ function BlockedRow({ row }: { row: BlockedDialRow }) {
 /** One served card, or one refused dial, in the log's newest-first order. */
 type LogEntry = { kind: "served"; at: number; row: ActivityRow } | { kind: "blocked"; at: number; row: BlockedDialRow };
 
-export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { initialView?: View; role?: string } = {}) {
+/** One agent beside the table: their figures, how their calls ended, and the way into their calls and flags. */
+function AgentPanel({ row, recent, reviews, onClose, onCalls, onFlags }: { row: ScorecardRow; recent: ActivityRow[]; reviews: boolean; onClose: () => void; onCalls: () => void; onFlags: () => void }) {
+  const name = row.agent_name ?? "Unknown agent";
+  const zeroClick = Number(row.zero_click ?? 0);
+  const mix = Object.entries(row.disposition_breakdown ?? {}).filter(([, value]) => value > 0).sort((a, b) => b[1] - a[1]);
+  const mixTotal = mix.reduce((sum, [, value]) => sum + value, 0);
+  const parts = mix.length > 5 ? [...mix.slice(0, 4), ["other", mix.slice(4).reduce((sum, [, value]) => sum + value, 0)] as [string, number]] : mix;
+  const fact = (label: string, value: React.ReactNode, tone?: string) => (
+    <span className="min-w-0"><span className="block text-xs font-semibold text-muted-foreground">{label}</span><span className={cn("mt-0.5 block text-sm font-semibold tabular-nums", tone)}>{value}</span></span>
+  );
+  return (
+    <DetailPanel
+      mode="split"
+      title={name}
+      subtitle="In the window you picked"
+      onClose={onClose}
+      className="m-glass lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h)-32px)] lg:self-start"
+      footer={(
+        <div className="flex items-center justify-between gap-2">
+          <Button type="button" variant="outline" onClick={onCalls}>See {name.split(" ")[0]}&rsquo;s calls</Button>
+          {reviews && zeroClick > 0 && <Button type="button" onClick={onFlags}>Review {zeroClick.toLocaleString()} flag{zeroClick === 1 ? "" : "s"}</Button>}
+        </div>
+      )}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        {fact("Served", row.served.toLocaleString())}
+        {fact("Dialled", row.clicked.toLocaleString())}
+        {fact("Contact rate", row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`)}
+        {reviews ? fact("Logged without a dial", row.zero_click == null ? "—" : zeroClick.toLocaleString(), zeroClick > 0 ? "text-[var(--error-ink)]" : undefined) : fact("Logged", row.logged.toLocaleString())}
+        {fact("Callbacks booked / kept", `${row.callbacks_booked} / ${row.callbacks_kept}`)}
+        {fact("Appointments booked / showed", `${row.appointments_booked} / ${row.appointments_showed}`)}
+      </div>
+      <div className="flex flex-col gap-2 border-t border-border pt-4">
+        <span className="text-xs font-semibold text-muted-foreground">How the calls ended</span>
+        {mixTotal > 0 ? (
+          <>
+            <div className="flex h-2.5 overflow-hidden rounded-full" role="img" aria-label={parts.map(([key, value]) => `${humanize(key)} ${Math.round((value / mixTotal) * 100)}%`).join(", ")}>
+              {parts.map(([key, value], index) => <span key={key} style={{ width: `${(value / mixTotal) * 100}%`, background: MIX_COLOURS[index] }} />)}
+            </div>
+            <div className="flex flex-wrap gap-x-3.5 gap-y-1.5">
+              {parts.map(([key, value], index) => (
+                <span key={key} className="inline-flex items-center gap-1.5 text-xs text-[var(--body)]"><span aria-hidden className="size-2 rounded-full" style={{ background: MIX_COLOURS[index] }} />{humanize(key)} {Math.round((value / mixTotal) * 100)}%</span>
+              ))}
+            </div>
+          </>
+        ) : <span className="text-sm text-muted-foreground">No outcomes logged in this window.</span>}
+      </div>
+      {recent.length > 0 && (
+        <div className="flex flex-col border-t border-border pt-4">
+          <span className="mb-1 text-xs font-semibold text-muted-foreground">Latest calls</span>
+          {recent.map((call) => {
+            const flagged = call.integrity_flags.includes("zero_click_disposition");
+            return (
+              <span key={call.id} className="flex gap-3 border-t border-border py-1.5 text-sm first-of-type:border-t-0">
+                <span className="w-[86px] shrink-0 tabular-nums text-muted-foreground">{served(call.served_at)}</span>
+                <span className={cn("min-w-0 truncate", flagged ? "text-[var(--error-ink)]" : "text-[var(--body)]")}>{call.lead_name ?? "Unnamed lead"} · {call.disposition ? humanize(call.disposition) : "not logged"}{flagged ? " · never dialled" : ""}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </DetailPanel>
+  );
+}
+
+export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { initialView?: Tab; role?: string } = {}) {
   const reviewsZeroClick = mayReviewZeroClick(role);
   const [range, setRange] = useState<Range>("30");
   // Set once mounted, not during render: the server and the browser would each read their own
@@ -189,13 +272,16 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
   const [campaignId, setCampaignId] = useState("");
   const [disposition, setDisposition] = useState("");
   const [tab, setTab] = useState<Tab>(initialView);
-  // The report the page reads: the integrity review for its tab, the activity log for every other.
-  const view: View = tab === "integrity" ? "integrity" : tab === "activity" ? "activity" : "scorecard";
+  // The report the page reads: the integrity review for its tab, the activity log for the call log,
+  // the scorecard for the rest.
+  const view: View = tab === "review" ? "integrity" : tab === "log" ? "activity" : "scorecard";
   const [integrityFilter, setIntegrityFilter] = useState<IntegrityFilter>("any");
   const zeroClickOnly = view === "integrity" && reviewsZeroClick && integrityFilter === "zero_click_disposition";
   const [page, setPage] = useState(1);
   const [setterPage, setSetterPage] = useState(1);
   const [setterList, setSetterList] = useState<"outcomes" | "roster">("outcomes");
+  const [openAgent, setOpenAgent] = useState<string | null>(null);
+  const [closeOuts, setCloseOuts] = useState<number | null>(null);
   const pageSize = useFittingPageSize(480, 41);
 
   const [report, setReport] = useState<ActivityReport | null>(null);
@@ -215,6 +301,17 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
     const timer = window.setTimeout(() => { setDebounced(search.trim()); setPage(1); }, 250);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  // The appointments waiting for an outcome, for the Next step line (owners and producers only, like the list).
+  useEffect(() => {
+    if (!reviewsZeroClick) return;
+    const controller = new AbortController();
+    void fetch("/api/app/appointments/close-out", { cache: "no-store", signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => { if (body && Array.isArray(body.appointments)) setCloseOuts(body.appointments.length); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [reviewsZeroClick]);
 
   // The chosen window and the one of the same length immediately before it.
   const windows = useMemo(() => {
@@ -292,7 +389,9 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
 
-  const setterDays = windows?.days ?? 30;
+  // The setter report counts days back from today, so a custom range asks for enough days to reach its
+  // start and keeps only the days inside it (2026-10-26: the dates you picked, not "N days back").
+  const setterDays = range === "custom" && windows && anchor != null ? Math.min(180, Math.max(1, Math.ceil((anchor - windows.from) / DAY))) : windows?.days ?? 30;
   const loadSetters = useCallback(async () => {
     setSettersLoading(true);
     setSettersError("");
@@ -317,6 +416,9 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
   const windowWords = windows ? (range === "custom" ? `${windows.days} days before` : `prior ${windows.days} days`) : "";
   const vs = (value: number | null | undefined, unit = "") =>
     value == null ? "no earlier data" : `vs ${value.toLocaleString()}${unit} ${windowWords}`;
+  const applications = report ? report.scorecard.reduce((n, row) => n + row.applications_started, 0) : null;
+  const submitted = report ? report.scorecard.reduce((n, row) => n + row.applications_submitted, 0) : null;
+  const applicationsBefore = prior ? prior.scorecard.reduce((n, row) => n + row.applications_started, 0) : null;
 
   const agents = useMemo(
     () => [...new Map((report?.scorecard ?? []).filter((row) => row.agent_user_id).map((row) => [row.agent_user_id!, row.agent_name ?? "Unknown agent"])).entries()],
@@ -359,86 +461,119 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
   const concentration = useMemo(() => zeroClickConcentration(report?.scorecard ?? []), [report]);
 
   const refresh = () => { void load(); if (tab === "setters") void loadSetters(); };
-  const choose = (next: Tab) => { setTab(next); setIntegrityFilter("any"); setPage(1); setSetterPage(1); };
-  const setterRows = setters?.rows ?? [];
+  const choose = (next: Tab) => { setTab(next); setIntegrityFilter("any"); setPage(1); setSetterPage(1); if (next !== "agents") setOpenAgent(null); };
+  const inCustomRange = (day: string) => range !== "custom" || ((!customFrom || day >= customFrom) && (!customTo || day <= customTo));
+  const setterRows = (setters?.rows ?? []).filter((row) => inCustomRange(row.day));
   const roster = setters?.scope === "team" ? setters.roster : [];
   const outcomeSlice = paginate(setterRows, setterPage, pageSize);
   const rosterSlice = paginate(roster, setterPage, pageSize);
   const setterSlice = setterList === "roster" ? rosterSlice : outcomeSlice;
   const windowLabel = range === "custom" && !windows ? "Choose a from and to date" : windows?.label;
+  const openRow = openAgent ? report?.scorecard.find((row) => row.agent_user_id === openAgent) ?? null : null;
+
+  /** "Export this table": the grid on screen. The log and the flags come from the server, with every column. */
+  function exportTable() {
+    if (tab === "agents" && report) {
+      downloadCsv("agents.csv", ["Agent", "Served", "Dialled", "Logged", "Worked", "Contact rate %", "Callbacks booked", "Callbacks kept", "Appointments booked", "Appointments showed", "Applications started", "Applications submitted"],
+        report.scorecard.map((row) => [row.agent_name ?? "Unknown agent", row.served, row.clicked, row.logged, row.worked ?? 0, row.contact_rate_percent, row.callbacks_booked, row.callbacks_kept, row.appointments_booked, row.appointments_showed, row.applications_started, row.applications_submitted]));
+    } else if (tab === "setters" && setterList === "roster") {
+      downloadCsv("setter-roster.csv", ["Setter", "Role", "Local time", "Timezone", "Shift"], roster.map((member) => [member.name, member.role, member.localLabel, member.timezone, member.hasHours === false ? "No hours set" : member.onShiftNow ? "On shift" : "Off shift"]));
+    } else if (tab === "setters") {
+      downloadCsv("setter-outcomes.csv", ["Setter", "Day", "Dials", "Contacts", "Booked", "Showed", "Show rate %", "Coverage %", "Closed out", "Closeable", "Sold", "Overdue", "Pending"],
+        setterRows.map((row) => [row.name, row.day, row.dials, row.contacts, row.booked, row.showed, row.showRatePct, row.coveragePct, row.closedOut, row.closeable, row.sold, row.neverClosedOut, row.pending]));
+    }
+  }
+  const serverExport = tab === "log" || tab === "review";
 
   // First read of the page: the one loading look, header and all.
   if (loading && !report && !error) return <PageLoading />;
 
+  const toReview = (reviewsZeroClick ? now_?.zeroClick ?? 0 : 0) + (closeOuts ?? 0);
+
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Activity & scorecard" description="What each agent did, and how it turned out." />
+      <PageHeader
+        title="Team activity"
+        description="What each agent did, and how it turned out."
+        actions={serverExport
+          ? <Button asChild variant="outline"><a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export this table</a></Button>
+          : <Button type="button" variant="outline" onClick={exportTable} disabled={tab === "agents" ? !report?.scorecard.length : !(setterList === "roster" ? roster : setterRows).length}><Download aria-hidden="true" />Export this table</Button>}
+      />
 
-      <StatStrip label="Activity totals">
-        <StatTile
-          label="Leads served"
-          value={loading || !now_ ? "…" : now_.served.toLocaleString()}
-          valueTone={tone(now_?.served ?? null, then?.served ?? null)}
-          footnote={
-            <>
-              {vs(then?.served)}
-              {!loading && now_ && now_.served > 0 && (
-                <span className="block font-semibold text-[var(--warning-ink)]">{now_.neverDialed.toLocaleString()} never dialled</span>
-              )}
-            </>
-          }
-        />
-        <StatTile
-          label="Dials"
-          value={loading || !now_ ? "…" : now_.dials.toLocaleString()}
-          valueTone={tone(now_?.dials ?? null, then?.dials ?? null)}
-          footnote={
-            <>
-              {vs(then?.dials)}
-              {!loading && now_ && reviewsZeroClick && now_.zeroClick != null && (
-                <span className={`block font-semibold ${now_.zeroClick > 0 ? "text-[var(--error-ink)]" : "text-muted-foreground"}`}>{now_.zeroClick.toLocaleString()} logged with no dial</span>
-              )}
-              {!loading && now_ && (now_.blocked ?? 0) > 0 && (
-                <span className="block">{(now_.blocked ?? 0).toLocaleString()} blocked, not counted</span>
-              )}
-            </>
-          }
-        />
-        <StatTile label="Contact rate" value={loading || now_?.contactRate == null ? "—" : now_.contactRate} unit={loading || now_?.contactRate == null ? undefined : "%"} valueTone={tone(now_?.contactRate ?? null, then?.contactRate ?? null)} footnote={vs(then?.contactRate, "%")} />
-        <StatTile label="Appointments" value={loading || !now_ ? "…" : now_.appointments.toLocaleString()} valueTone={tone(now_?.appointments ?? null, then?.appointments ?? null)} footnote={vs(then?.appointments)} />
-      </StatStrip>
+      {reviewsZeroClick && toReview > 0 && tab !== "review" && (
+        <NextStepLine action={<Button type="button" size="sm" onClick={() => choose("review")}>Review them</Button>}>
+          <strong className="font-semibold text-[var(--ink)]">{toReview.toLocaleString()} {toReview === 1 ? "thing" : "things"} to review:</strong>{" "}
+          {[
+            (now_?.zeroClick ?? 0) > 0 ? `${(now_?.zeroClick ?? 0).toLocaleString()} ${(now_?.zeroClick ?? 0) === 1 ? "outcome" : "outcomes"} logged without a Dial press${concentration.top && concentration.top.count === concentration.total ? ` (all ${concentration.top.name}’s)` : ""}` : null,
+            closeOuts ? `${closeOuts.toLocaleString()} ${closeOuts === 1 ? "appointment" : "appointments"} that ended without an outcome` : null,
+          ].filter(Boolean).join(" and ")}.
+        </NextStepLine>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <StatStrip label="Activity totals">
+          <StatTile
+            label="Leads served"
+            value={loading || !now_ ? "…" : now_.served.toLocaleString()}
+            valueTone={tone(now_?.served ?? null, then?.served ?? null)}
+            footnote={
+              <>
+                {vs(then?.served)}
+                {!loading && now_ && now_.served > 0 && (
+                  <span className="block font-semibold text-[var(--warning-ink)]">{now_.neverDialed.toLocaleString()} never dialled</span>
+                )}
+              </>
+            }
+          />
+          <StatTile
+            label="Dials"
+            value={loading || !now_ ? "…" : now_.dials.toLocaleString()}
+            valueTone={tone(now_?.dials ?? null, then?.dials ?? null)}
+            footnote={
+              <>
+                {vs(then?.dials)}
+                {!loading && now_ && reviewsZeroClick && now_.zeroClick != null && (
+                  <span className={`block font-semibold ${now_.zeroClick > 0 ? "text-[var(--error-ink)]" : "text-muted-foreground"}`}>{now_.zeroClick.toLocaleString()} logged with no dial</span>
+                )}
+                {!loading && now_ && (now_.blocked ?? 0) > 0 && (
+                  <span className="block">{(now_.blocked ?? 0).toLocaleString()} blocked, not counted</span>
+                )}
+              </>
+            }
+          />
+          <StatTile label="Contact rate" value={loading || now_?.contactRate == null ? "—" : now_.contactRate} unit={loading || now_?.contactRate == null ? undefined : "%"} valueTone={tone(now_?.contactRate ?? null, then?.contactRate ?? null)} footnote={vs(then?.contactRate, "%")} />
+          <StatTile label="Appointments" value={loading || !now_ ? "…" : now_.appointments.toLocaleString()} valueTone={tone(now_?.appointments ?? null, then?.appointments ?? null)} footnote={vs(then?.appointments)} />
+          <StatTile label="Applications" value={loading || applications == null ? "…" : applications.toLocaleString()} valueTone={tone(applications, applicationsBefore)} footnote={<>{vs(applicationsBefore)}{!loading && submitted != null && <span className="block">{submitted.toLocaleString()} submitted</span>}</>} />
+        </StatStrip>
+        <p className="m-0 text-xs text-muted-foreground">Counts what was dialled and logged — not talk time. Calls go through each agent&rsquo;s own phone, so call length is never seen.</p>
+      </div>
 
       {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      {view === "integrity" && reviewsZeroClick && !loading && concentration.total > 0 && (
+      <ViewTabs
+        label="Activity views"
+        idPrefix="activity-view"
+        value={tab}
+        onChange={choose}
+        tabs={[
+          { key: "agents", label: "Agents" },
+          { key: "log", label: "Call log" },
+          { key: "setters", label: "Setters" },
+          { key: "review", label: "To review" },
+        ]}
+      />
+
+      <div role="tabpanel" aria-labelledby={`activity-view-${tab}`} className="flex min-w-0 flex-col gap-6">
+      {tab === "review" && reviewsZeroClick && <AppointmentCloseOutStrip />}
+      {tab === "review" && reviewsZeroClick && !loading && concentration.total > 0 && (
         <p role="note" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--error-ink)]">
           {`${concentration.total.toLocaleString()} ${concentration.total === 1 ? "outcome was" : "outcomes were"} logged without a Dial press${concentration.top ? (concentration.top.count === concentration.total ? `, all by ${concentration.top.name}` : `, ${concentration.top.count.toLocaleString()} of them by ${concentration.top.name}`) : ""}.`}
         </p>
       )}
-
-      {/* The views on the left; the export of what the log shows on the right. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ViewTabs
-          label="Activity views"
-          idPrefix="activity-view"
-          value={tab}
-          onChange={choose}
-          tabs={[
-            { key: "activity", label: "Activity" },
-            { key: "scorecard", label: "Scorecard" },
-            { key: "setters", label: "Setters" },
-            { key: "closeout", label: "Close-out" },
-            { key: "recycle", label: "Fresh vs recycled" },
-            { key: "integrity", label: "Data integrity" },
-          ]}
-        />
-        <Button asChild variant="outline"><a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export</a></Button>
-      </div>
-
-      <div role="tabpanel" aria-labelledby={`activity-view-${tab}`} className="flex min-w-0 flex-col">
-      {tab === "closeout" ? <AppointmentCloseOutStrip /> : (
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
       <TableCard
-        className={FILL}
+        className={cn(FILL, "min-w-0 flex-1")}
+        title={tab === "review" ? "Calls flagged" : undefined}
         toolbar={
           <DataToolbar
             actions={<>
@@ -446,7 +581,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
               <RefreshButton onClick={refresh} refreshing={loading || (tab === "setters" && settersLoading)} />
             </>}
           >
-            {(tab === "activity" || tab === "integrity") && <ToolbarSearch value={search} onChange={setSearch} placeholder="Search leads" />}
+            {(tab === "log" || tab === "review") && <ToolbarSearch value={search} onChange={setSearch} placeholder="Search leads" />}
             <select
               aria-label="Date range"
               className={toolbarControl}
@@ -475,12 +610,12 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
                   {campaigns.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
                 </select>
                 <select aria-label="Disposition" className={toolbarControl} value={disposition} onChange={(event) => { setDisposition(event.target.value); setPage(1); }}>
-                  <option value="">All dispositions</option>
+                  <option value="">All outcomes</option>
                   {dispositions.map((key) => <option key={key} value={key}>{humanize(key)}</option>)}
                 </select>
               </>
             )}
-            {tab === "integrity" && reviewsZeroClick && (
+            {tab === "review" && reviewsZeroClick && (
               <select aria-label="Flag" className={toolbarControl} value={integrityFilter} onChange={(event) => { setIntegrityFilter(event.target.value as IntegrityFilter); setPage(1); }}>
                 <option value="any">All flags</option>
                 <option value="zero_click_disposition">{`Logged without a dial${now_?.zeroClick != null ? ` · ${now_.zeroClick.toLocaleString()}` : ""}`}</option>
@@ -496,7 +631,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
             )}
           </DataToolbar>
         }
-        footer={tab === "activity" || tab === "integrity" ? (
+        footer={tab === "log" || tab === "review" ? (
           range === "custom" && !windows ? (
             <span>Choose a from and to date</span>
           ) : (
@@ -524,7 +659,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
             suffix={setterList === "roster" ? undefined : [windowLabel, setters?.scope === "own" ? "your own setter metrics" : null].filter(Boolean).join(" · ")}
           />
         ) : (
-          <span>{windowLabel}</span>
+          <span>{windowLabel}{tab === "agents" && report?.scorecard.length ? " · pick an agent to see how their calls ended" : ""}</span>
         )}
       >
         {tab === "setters" ? (
@@ -573,44 +708,31 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
             )}
           </>
         ) : loading ? <SectionLoading rows={6} columns={6} />
-          : tab === "scorecard" ? (
+          : tab === "agents" ? (
             report?.scorecard.length ? (
               <table className="portal-activity-table w-full min-w-[1050px] text-left text-sm">
                 <thead><tr><th>Agent</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Logged</th><th className="text-right"><span className="inline-flex items-center gap-1">Worked<InfoTip label="About worked">Logged outcomes that count as work, set in Settings → Dispositions.</InfoTip></span></th><th className="text-right">Contact rate</th><th className="text-right">Callbacks booked / kept</th><th className="text-right">Appointments booked / showed</th><th className="text-right">Applications started / submitted</th></tr></thead>
                 <tbody>
-                  {report.scorecard.map((row) => (
-                    <tr key={row.agent_user_id ?? "unknown"}>
-                      <td className="font-medium">{row.agent_name ?? "Unknown agent"}</td>
-                      <td className="text-right tabular-nums">{row.served}</td>
-                      <td className="text-right tabular-nums">{row.clicked}</td>
-                      <td className="text-right tabular-nums">{row.logged}</td>
-                      <td className="text-right tabular-nums" title="Logged outcomes that count as work, per Settings → Dispositions">{row.worked ?? 0}</td>
-                      <td className="text-right tabular-nums">{row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`}</td>
-                      <td className="text-right tabular-nums">{row.callbacks_booked} / {row.callbacks_kept}</td>
-                      <td className="text-right tabular-nums">{row.appointments_booked} / {row.appointments_showed}</td>
-                      <td className="text-right tabular-nums">{row.applications_started} / {row.applications_submitted}</td>
-                    </tr>
-                  ))}
+                  {report.scorecard.map((row) => {
+                    const key = row.agent_user_id ?? "unknown";
+                    const isOpen = Boolean(row.agent_user_id) && openAgent === row.agent_user_id;
+                    return (
+                      <tr key={key} className={cn("m-row", row.agent_user_id && "cursor-pointer", isOpen && "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]")} onClick={() => { if (row.agent_user_id) setOpenAgent(isOpen ? null : row.agent_user_id); }}>
+                        <td className="font-medium">{row.agent_user_id ? <button type="button" className="text-left font-medium hover:underline" aria-expanded={isOpen} onClick={(event) => { event.stopPropagation(); setOpenAgent(isOpen ? null : row.agent_user_id); }}>{row.agent_name ?? "Unknown agent"}</button> : row.agent_name ?? "Unknown agent"}</td>
+                        <td className="text-right tabular-nums">{row.served}</td>
+                        <td className="text-right tabular-nums">{row.clicked}</td>
+                        <td className="text-right tabular-nums">{row.logged}</td>
+                        <td className="text-right tabular-nums" title="Logged outcomes that count as work, per Settings → Dispositions">{row.worked ?? 0}</td>
+                        <td className="text-right tabular-nums">{row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`}</td>
+                        <td className="text-right tabular-nums">{row.callbacks_booked} / {row.callbacks_kept}</td>
+                        <td className="text-right tabular-nums">{row.appointments_booked} / {row.appointments_showed}</td>
+                        <td className="text-right tabular-nums">{row.applications_started} / {row.applications_submitted}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             ) : filtered ? <NoMatches noun="agents" onClear={clearAll} /> : <EmptyState title="No activity in this window" hint="Each agent's dials and outcomes show up here." action={<Button variant="outline" asChild><Link href="/app/dialer">Open the dialer</Link></Button>} />
-          ) : tab === "recycle" ? (
-            report?.recycle_performance.length ? (
-              <table className="portal-activity-table w-full min-w-[640px] text-left text-sm">
-                <thead><tr><th>Source</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Contacts</th><th className="text-right">Contact rate</th></tr></thead>
-                <tbody>
-                  {report.recycle_performance.map((row) => (
-                    <tr key={row.source_type}>
-                      <td className="font-medium capitalize">{row.source_type}</td>
-                      <td className="text-right tabular-nums">{row.served}</td>
-                      <td className="text-right tabular-nums">{row.clicked}</td>
-                      <td className="text-right tabular-nums">{row.contacts}</td>
-                      <td className="text-right tabular-nums">{row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : filtered ? <NoMatches noun="sources" onClear={clearAll} /> : <EmptyState title="No fresh or recycled activity in this window" hint="Fresh and recycled dials are compared here." />
           ) : entries.length === 0 ? (
             filtered
               ? <NoMatches noun={view === "integrity" ? "flagged events" : "served leads"} onClear={clearAll} />
@@ -644,7 +766,18 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
             </table>
           )}
       </TableCard>
+      {tab === "agents" && openRow && (
+        <AgentPanel
+          key={openRow.agent_user_id ?? "unknown"}
+          row={openRow}
+          recent={(report?.rows ?? []).filter((row) => row.agent_user_id === openRow.agent_user_id).slice(0, 3)}
+          reviews={reviewsZeroClick}
+          onClose={() => setOpenAgent(null)}
+          onCalls={() => { setAgentId(openRow.agent_user_id ?? ""); choose("log"); }}
+          onFlags={() => { setAgentId(openRow.agent_user_id ?? ""); choose("review"); setIntegrityFilter("zero_click_disposition"); }}
+        />
       )}
+      </div>
       </div>
     </div>
   );

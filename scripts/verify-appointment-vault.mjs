@@ -70,16 +70,14 @@ async function main() {
     const terminated = await api("/api/app/appointment-vault/appointments", owner, { method: "POST", ...json({ appointments: [{ ...rows[0], status: "terminated", terminated_at: "2026-01-01" }] }) });
     check("an appointment can be terminated without deleting its history", terminated.status === 201);
     const license = await api("/api/app/appointment-vault/licenses", owner, { method: "POST", ...json({ state: "AZ", license_number: "AZ-LA05", expires_at: "2027-01-01" }) });
-    const eo = await api("/api/app/appointment-vault/eo-policies", owner, { method: "POST", ...json({ carrier: "QA E&O", policy_number: "EO-LA05", expires_at: "2027-01-01", coverage_amount_cents: 1000000 }) });
-    const ce = await api("/api/app/appointment-vault/ce-records", owner, { method: "POST", ...json({ state: "AZ", credits_required: 24, credits_completed: 24, deadline: "2027-01-01" }) });
-    check("licence, E&O and CE records save through protected APIs", license.status === 201 && eo.status === 201 && ce.status === 201);
+    check("licence records save through the protected API", license.status === 201);
 
     const vaultResponse = await api("/api/app/appointment-vault", owner);
     const vault = await vaultResponse.json();
     check("historical eligibility remains true before termination and false after it", canWriteFromVault(vault, carrierId, "AZ", "2025-12-31") && !canWriteFromVault(vault, carrierId, "AZ", "2026-01-01"));
     check("missing and future appointments are refused", !canWriteFromVault(vault, carrierId, "WY", "2025-01-01") && !canWriteFromVault({ ...vault, appointments: [...vault.appointments, { ...rows[1], state: "WY", effective_from: "2027-01-01" }] }, carrierId, "WY", "2026-01-01"));
-    check("expired licence or E&O refuses writing", !canWriteFromVault({ ...vault, appointments: rows.slice(1, 2), licenses: [{ ...vault.licenses[0], state: "AL", expires_at: "2024-12-31" }] }, carrierId, "AL", "2025-12-31") && !canWriteFromVault({ ...vault, appointments: rows.slice(1, 2), eoPolicies: [{ ...vault.eoPolicies[0], expires_at: "2024-12-31" }] }, carrierId, "AL", "2025-12-31"));
-    const warnings = dueExpiryWarnings({ licenses: [{ ...vault.licenses[0], expires_at: "2026-04-01" }], eoPolicies: [{ ...vault.eoPolicies[0], expires_at: "2026-03-02" }], ceRecords: [{ ...vault.ceRecords[0], deadline: "2026-01-31" }] }, "2026-01-01");
+    check("an expired licence refuses writing", !canWriteFromVault({ ...vault, appointments: rows.slice(1, 2), licenses: [{ ...vault.licenses[0], state: "AL", expires_at: "2024-12-31" }] }, carrierId, "AL", "2025-12-31"));
+    const warnings = dueExpiryWarnings({ licenses: [{ ...vault.licenses[0], expires_at: "2026-04-01" }, { ...vault.licenses[0], id: "sixty", expires_at: "2026-03-02" }, { ...vault.licenses[0], id: "thirty", expires_at: "2026-01-31" }] }, "2026-01-01");
     check("expiry warnings are emitted at the configured 90/60/30-day thresholds", warnings.some((warning) => warning.days === 90) && warnings.some((warning) => warning.days === 60) && warnings.some((warning) => warning.days === 30), JSON.stringify(warnings));
 
     const malformed = await api("/api/app/appointment-vault/licenses", owner, { method: "POST", ...json({ state: "<script>", license_number: "x", expires_at: "nope" }) });
@@ -92,8 +90,8 @@ async function main() {
     const producerRead = await api("/api/app/appointment-vault", producer);
     const producerWrite = await api("/api/app/appointment-vault/appointments", producer, { method: "POST", ...json({ rows: [] }) });
     check("a producer can read the vault but cannot change owner-only settings", producerRead.status === 200 && producerWrite.status === 403, `read ${producerRead.status}, write ${producerWrite.status}`);
-    const { count: auditCount } = await supabase.from("audit_log").select("id", { count: "exact", head: true }).eq("actor_id", ownerId).in("action", ["tenant.appointment_saved", "tenant.license_saved", "tenant.eo_policy_saved", "tenant.ce_record_saved"]);
-    check("every successful write has an audit row", (auditCount ?? 0) >= 46, `count ${auditCount}`);
+    const { count: auditCount } = await supabase.from("audit_log").select("id", { count: "exact", head: true }).eq("actor_id", ownerId).in("action", ["tenant.appointment_saved", "tenant.license_saved"]);
+    check("every successful write has an audit row", (auditCount ?? 0) >= 44, `count ${auditCount}`);
   } finally { await cleanup(); }
   if (failures) return 1;
   console.log("\nAll live appointment-vault checks passed.");

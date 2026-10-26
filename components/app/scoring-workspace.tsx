@@ -12,8 +12,7 @@ import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-sta
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { TableCard } from "@/components/ui/table-card";
-import { Segmented, ViewTabs } from "@/components/app/view-tabs";
+import { Segmented } from "@/components/app/view-tabs";
 import { cn } from "@/lib/utils";
 import { compareHoldout, pts, VERDICT_CHIP } from "@/lib/scoring/holdout";
 import { breakdownLine, heldBackSentence, leadLine, scoreShare, shareLabel, type QueuePreview } from "@/lib/scoring/preview";
@@ -48,8 +47,6 @@ function range(since: string | null, until = new Date()) {
 const pct = (value: number | null) => (value === null ? "—" : `${value.toFixed(1)}%`);
 const same = (value: string, target: number | null) => target !== null && Number(value) === target;
 
-/** The tab's one card reaches the bottom of the window. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(2)]:flex-1";
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground first:pl-4 last:pr-4";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] first:pl-4 last:pr-4";
 
@@ -65,7 +62,7 @@ const sentence = (value: string) => (value ? value.charAt(0).toUpperCase() + val
  * 2026-10-06 redesign: the page's second tab; one even row per lead, and the held-back leads are
  * the toolbar's second view rather than a block under the list.
  */
-function QueuePreviewCard({ onClose }: { onClose: () => void }) {
+function QueuePreviewCard({ onClose }: { onClose?: () => void }) {
   const [agentId, setAgentId] = useState<string>("");
   const [data, setData] = useState<PreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,17 +94,16 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
   const footerText = preview && data?.available ? <>{preview.servableCount.toLocaleString()} {preview.servableCount === 1 ? "lead" : "leads"} servable to {agentName} now · looking claims nothing{list === "held" && preview.heldBackCount > preview.heldBack.length ? ` · the ${preview.heldBack.length} soonest to open are shown` : ""}</> : undefined;
 
   return (
-    <div id="queue-preview">
+    <section id="queue-preview" aria-label="Preview the queue">
       <PagedTableCard
         total={preview && data?.available ? (list === "held" ? preview.heldBack.length : preview.rows.length) : 0}
         noun="leads"
         suffix={footerText}
         title="Next up, and why"
-        className="flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(3)]:flex-1"
         toolbar={
           <DataToolbar
             actions={<>
-              <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+              {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
               <RefreshButton onClick={() => { setLoading(true); void load(agentId); }} refreshing={loading} />
             </>}
           >
@@ -237,9 +233,20 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
           </>
         )}
       </PagedTableCard>
-    </div>
+    </section>
   );
 }
+
+/** One colour per signal, in the order the scorer lists them; the bar and the list share it. */
+const SIGNAL_COLOURS = [
+  "var(--primary)",
+  "var(--info)",
+  "var(--warning)",
+  "color-mix(in srgb, var(--info) 50%, var(--error))",
+  "color-mix(in srgb, var(--error) 65%, white)",
+  "color-mix(in srgb, var(--primary) 50%, var(--warning))",
+  "var(--muted)",
+];
 
 /**
  * Queue scoring (p-app-scoring): whether the queue is ranked, by what, and whether the ranking is
@@ -248,9 +255,11 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
  * a gate, not a weight: an out-of-window lead is never served at all), so they are not drawn as if
  * they were.
  *
- * 2026-10-06 redesign: the weights and the queue preview are two tabs; each signal is one even row.
+ * Redesign 2026-10-26 (owner pick B, canvas M2 · Outbound results): one page, no tabs. The result
+ * comes first — scored against the holdout, with the verdict — then the score drawn as one bar you
+ * divide among the seven signals, then who is next for an agent and why.
  */
-export function ScoringWorkspace() {
+export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = {}) {
   const [data, setData] = useState<Overview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
@@ -258,7 +267,6 @@ export function ScoringWorkspace() {
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [holdoutWindow, setHoldoutWindow] = useState<Period>("14d");
-  const [tab, setTab] = useState<"weights" | "preview">("weights");
 
   const load = useCallback((span: Period = "14d", resetForm = true) => fetch(`/api/app/scoring?period=${span}`, { cache: "no-store" })
     .then(async (response) => {
@@ -324,6 +332,7 @@ export function ScoringWorkspace() {
   // Share of the score each signal carries, from the numbers as typed — so an edit shows its effect
   // on the split before it is saved.
   const typedTotal = weightList.reduce((sum, weight) => { const value = Number(weights[weight.signal]); return sum + (Number.isFinite(value) && value > 0 ? value : 0); }, 0);
+  const shareOf = (signal: string) => { const typed = Number(weights[signal]); return typedTotal > 0 && Number.isFinite(typed) && typed > 0 ? (100 * typed) / typedTotal : 0; };
 
   function choosePeriod(next: Period) {
     if (next === holdoutWindow) return;
@@ -335,120 +344,105 @@ export function ScoringWorkspace() {
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Queue scoring"
+        description="How the dialer picks the next lead"
         actions={<>
           {dirty && <StatusChip tone="warning">Not saved yet</StatusChip>}
-          <Button type="button" disabled={saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</Button>
+          <label className="inline-flex h-9 items-center gap-3 text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">
+            <span className="portal-toggle shrink-0">
+              <input type="checkbox" checked={enabled} disabled={readOnly} onChange={(event) => setEnabled(event.target.checked)} aria-label="Enable queue scoring" />
+              <span />
+            </span>
+            {enabled ? "Scoring is on" : "Scoring is off"}
+          </label>
+          <Button type="button" disabled={readOnly || saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</Button>
         </>}
       />
 
-      {/* Scored order against the unscored holdout, as a difference over a named sample — never a verdict on its own. */}
-      <StatStrip label="Scored order against the unscored holdout">
-        <StatTile label="Scored contact rate" value={pct(scored?.contactRatePct ?? comparison.scoredPct)} footnote={noDials ? "no dials yet" : `${(scored?.served ?? 0).toLocaleString()} dials · ${(scored?.contacted ?? 0).toLocaleString()} contacts`} />
-        <StatTile label="Unscored holdout" value={pct(control?.contactRatePct ?? comparison.holdoutPct)} footnote={noDials ? "no dials yet" : `${(control?.served ?? 0).toLocaleString()} dials · ${(control?.contacted ?? 0).toLocaleString()} contacts`} />
-        <StatTile label="Difference" value={lift === null ? "—" : pts(lift)} footnote={<StatusChip tone={verdict.tone}>{verdict.label}</StatusChip>} />
-        <StatTile label="95% interval" value={comparison.interval ? `${pts(comparison.interval.low).replace(" pts", "")} to ${pts(comparison.interval.high)}` : "—"} footnote={periodLabel} />
-      </StatStrip>
+      {readOnly && <p role="status" className="m-0 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]">Your plan is read-only: you can see how the queue is ordered, not change it.</p>}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* "Preview the queue" is the second tab: the leads Serve next would hand an agent, and why. */}
-        <ViewTabs
-          label="Queue scoring views"
-          idPrefix="scoring-view"
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { key: "weights", label: "Weights", count: weightList.length },
-            { key: "preview", label: "Preview the queue" },
-          ]}
-        />
-        {/* The holdout comparison's window; it re-reads the figures above and leaves unsaved edits alone. */}
-        <select
-          aria-label="Holdout comparison period"
-          className={toolbarControl}
-          value={shownPeriod}
-          title={!periodSupported ? "The 14-day view needs a database update that has not been applied yet." : undefined}
-          onChange={(event) => choosePeriod(event.target.value as Period)}
-        >
-          <option value="14d" disabled={!periodSupported}>Last 14 days</option>
-          <option value="all">All time</option>
-        </select>
-      </div>
-
-      <div role="tabpanel" aria-labelledby={`scoring-view-${tab}`} className="flex min-w-0 flex-col">
-      {tab === "preview" ? <QueuePreviewCard onClose={() => setTab("weights")} /> : (
-      <TableCard
-        className={FILL}
-        toolbar={
-          <DataToolbar
-            actions={<>
-              {/* User decision: learned mode is a label only. The weights are the rules below; nothing
-                  refits them from observed contacts. */}
-              <span className="inline-flex items-center gap-1">
-                <StatusChip tone="neutral" dot={false}>Rules mode · not learned yet</StatusChip>
-                <InfoTip label="About rules mode">The score is the weighted sum of the signals below, with the weights you set. Nothing refits them from observed contacts.</InfoTip>
-              </span>
-              <StatusChip tone="neutral">{atDefault} of {weightList.length} at default</StatusChip>
-            </>}
+      {/* Is it working? Scored order against the unscored holdout, as a difference over a named sample — never a verdict on its own. */}
+      <div className="flex flex-col gap-2">
+        <StatStrip label="Scored order against the unscored holdout">
+          <StatTile label="Scored leads · contact rate" value={pct(scored?.contactRatePct ?? comparison.scoredPct)} footnote={noDials ? "no dials yet" : `${(scored?.served ?? 0).toLocaleString()} dials · ${(scored?.contacted ?? 0).toLocaleString()} contacts`} />
+          <StatTile label="Holdout · plain order" value={pct(control?.contactRatePct ?? comparison.holdoutPct)} footnote={noDials ? "no dials yet" : `${(control?.served ?? 0).toLocaleString()} dials · ${(control?.contacted ?? 0).toLocaleString()} contacts`} />
+          <StatTile label="Difference" value={lift === null ? "—" : pts(lift)} footnote={<StatusChip tone={verdict.tone}>{verdict.label}</StatusChip>} />
+          <StatTile label="95% interval" value={comparison.interval ? `${pts(comparison.interval.low).replace(" pts", "")} to ${pts(comparison.interval.high)}` : "—"} footnote={periodLabel} />
+        </StatStrip>
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-xs text-muted-foreground">Compare over</span>
+          {/* The holdout comparison's window; it re-reads the figures above and leaves unsaved edits alone. */}
+          <select
+            aria-label="Holdout comparison period"
+            className={toolbarControl}
+            value={shownPeriod}
+            title={!periodSupported ? "The 14-day view needs a database update that has not been applied yet." : undefined}
+            onChange={(event) => choosePeriod(event.target.value as Period)}
           >
-            <label className="inline-flex h-9 items-center gap-3 text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">
-              <span className="portal-toggle shrink-0">
-                <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} aria-label="Enable queue scoring" />
-                <span />
-              </span>
-              {enabled ? "Scoring is on" : "Scoring is off"}
-            </label>
-            <span className="inline-flex items-center gap-2">
-              <label htmlFor="holdout" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">Holdout</label>
-              <input id="holdout" inputMode="numeric" value={holdout} onChange={(event) => setHoldout(event.target.value)} className={cn(toolbarControl, "w-[88px] text-right tabular-nums")} />
-              <span className="text-sm text-muted-foreground">% of serves, up to 50</span>
-            </span>
-          </DataToolbar>
-        }
-        footer={<span>{typedTotal > 0 ? "Save applies the weights to the next lead served." : "No weight set on any signal"}</span>}
-      >
-        <table className="w-full min-w-[1000px] border-collapse text-left">
-          <thead><tr>
-            <th className={th}>Signal</th>
-            <th className={th}>What it measures</th>
-            <th className={`${th} text-right`}><span className="inline-flex items-center gap-1">Share<InfoTip label="About share">Each signal&rsquo;s share of the score follows the weights as typed, before you save.</InfoTip></span></th>
-            <th className={`${th} text-right`}>Weight</th>
-            <th className={th}>State</th>
-            <th className={`${th} text-right`}><span className="sr-only">Reset</span></th>
-          </tr></thead>
-          <tbody>
-            {weightList.map((weight) => {
-              const value = weights[weight.signal] ?? "";
-              const atItsDefault = weight.defaultWeight === null ? weight.isDefault : same(value, weight.defaultWeight);
-              const typed = Number(value);
-              const share = typedTotal > 0 && Number.isFinite(typed) && typed > 0 ? (100 * typed) / typedTotal : 0;
-              const vendorLine = weight.signal === "vendor_contact_rate"
-                ? (vendorRates.length === 0
-                  ? "No vendor has 30 dispositioned dials yet, so every vendor scores neutral."
-                  : `${vendorRates.slice(0, 4).map((vendor) => `${vendor.name} contacts at ${Math.round(vendor.ratePct)}%`).join(", ")}${vendorRates.length > 4 ? `, and ${vendorRates.length - 4} more` : ""}. Vendors under 30 dials score neutral.`)
-                : null;
-              const measures = [weight.blurb, vendorLine].filter(Boolean).join(" ");
-              return (
-                <tr key={weight.signal} className="m-row">
-                  <td className={`${td} whitespace-nowrap font-semibold text-foreground`}>{weight.label}</td>
-                  <td className={`${td} max-w-[520px] truncate text-muted-foreground`} title={measures}>{measures}</td>
-                  <td className={`${td} whitespace-nowrap text-right font-semibold tabular-nums`}>{typedTotal > 0 ? `${Math.round(share)}% of the score` : "—"}</td>
-                  <td className={`${td} text-right`}>
-                    <input aria-label={`${weight.label} weight`} inputMode="decimal" value={value} onChange={(event) => setWeights((current) => ({ ...current, [weight.signal]: event.target.value }))} className={cn(toolbarControl, "w-[88px] text-right tabular-nums")} />
-                  </td>
-                  <td className={td}><StatusChip tone={atItsDefault ? "neutral" : "action"} dot={false}>{atItsDefault ? "Default" : "Overridden"}</StatusChip></td>
-                  <td className={`${td} text-right`}>
-                    {!atItsDefault && weight.defaultWeight !== null && (
-                      <Button type="button" variant="outline" size="sm" title={`Back to the default, ${weight.defaultWeight.toFixed(2)}. Save to apply.`} onClick={() => setWeights((current) => ({ ...current, [weight.signal]: weight.defaultWeight!.toFixed(2) }))}>Reset</Button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </TableCard>
-      )}
+            <option value="14d" disabled={!periodSupported}>Last 14 days</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
       </div>
+
+      {/* How the score is divided: one bar, then each signal with its share and its weight. */}
+      <section aria-label="How the score is divided" className="m-glass flex min-w-0 flex-col gap-4 rounded-xl border border-border p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="m-0 text-base font-semibold tracking-[-0.015em] text-[var(--ink)]">How the score is divided</h2>
+          <span className="flex flex-wrap items-center gap-2">
+            {/* User decision: learned mode is a label only. The weights are the rules below; nothing
+                refits them from observed contacts. */}
+            <span className="inline-flex items-center gap-1">
+              <StatusChip tone="neutral" dot={false}>Rules mode · not learned yet</StatusChip>
+              <InfoTip label="About rules mode">The score is the weighted sum of the signals below, with the weights you set. Nothing refits them from observed contacts.</InfoTip>
+            </span>
+            <StatusChip tone="neutral">{atDefault} of {weightList.length} at default</StatusChip>
+          </span>
+        </div>
+        {typedTotal > 0 ? (
+          <div className="flex h-7 overflow-hidden rounded-lg" role="img" aria-label={weightList.map((weight) => `${weight.label} ${Math.round(shareOf(weight.signal))}%`).join(", ")}>
+            {weightList.map((weight, index) => shareOf(weight.signal) > 0 && (
+              <span key={weight.signal} title={`${weight.label}: ${Math.round(shareOf(weight.signal))}% of the score`} style={{ width: `${shareOf(weight.signal)}%`, background: SIGNAL_COLOURS[index % SIGNAL_COLOURS.length] }} />
+            ))}
+          </div>
+        ) : <p className="m-0 rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm text-muted-foreground">No weight set on any signal.</p>}
+        <ul className="m-0 grid list-none gap-x-6 gap-y-1 p-0 lg:grid-cols-2">
+          {weightList.map((weight, index) => {
+            const value = weights[weight.signal] ?? "";
+            const atItsDefault = weight.defaultWeight === null ? weight.isDefault : same(value, weight.defaultWeight);
+            const vendorLine = weight.signal === "vendor_contact_rate"
+              ? (vendorRates.length === 0
+                ? "No vendor has 30 dispositioned dials yet, so every vendor scores neutral."
+                : `${vendorRates.slice(0, 4).map((vendor) => `${vendor.name} contacts at ${Math.round(vendor.ratePct)}%`).join(", ")}${vendorRates.length > 4 ? `, and ${vendorRates.length - 4} more` : ""}. Vendors under 30 dials score neutral.`)
+              : null;
+            const measures = [weight.blurb, vendorLine].filter(Boolean).join(" ");
+            return (
+              <li key={weight.signal} className="flex items-center gap-3 border-t border-border py-2.5">
+                <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: SIGNAL_COLOURS[index % SIGNAL_COLOURS.length] }} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">{weight.label}</span>
+                  <span className="block truncate text-xs text-muted-foreground" title={measures}>{typedTotal > 0 ? `${Math.round(shareOf(weight.signal))}% of the score` : "—"} · {measures}</span>
+                </span>
+                <input aria-label={`${weight.label} weight`} inputMode="decimal" value={value} disabled={readOnly} onChange={(event) => setWeights((current) => ({ ...current, [weight.signal]: event.target.value }))} className={cn(toolbarControl, "w-[80px] text-right tabular-nums")} />
+                <span className="w-[86px] shrink-0 text-right">
+                  {atItsDefault || weight.defaultWeight === null
+                    ? <StatusChip tone="neutral" dot={false}>{atItsDefault ? "Default" : "Overridden"}</StatusChip>
+                    : <button type="button" disabled={readOnly} className="text-xs font-semibold text-[var(--accent-ink)] hover:underline disabled:opacity-50" title={`Back to the default, ${weight.defaultWeight.toFixed(2)}. Save to apply.`} onClick={() => setWeights((current) => ({ ...current, [weight.signal]: weight.defaultWeight!.toFixed(2) }))}>Changed · Reset</button>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <span className="inline-flex items-center gap-2">
+            <label htmlFor="holdout" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">Holdout</label>
+            <input id="holdout" inputMode="numeric" value={holdout} disabled={readOnly} onChange={(event) => setHoldout(event.target.value)} className={cn(toolbarControl, "w-[80px] text-right tabular-nums")} />
+            <span className="text-sm text-muted-foreground">% of serves, up to 50, go in plain order to measure against</span>
+          </span>
+          <span className="text-xs text-muted-foreground">{typedTotal > 0 ? "Save applies the weights to the next lead served." : "No weight set on any signal"}</span>
+        </div>
+      </section>
+
+      <QueuePreviewCard />
     </div>
   );
 }

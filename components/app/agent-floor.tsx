@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
+import { TransfersViews } from "@/components/app/inbound/transfers-views";
+import { Ring, type RingTone } from "@/components/app/inbound/stream-parts";
+import { LeadFlowMap } from "@/components/ui/lead-flow-map";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -277,6 +280,58 @@ function doingLabel(member: Member, state: RosterState, now: number) {
 }
 
 /* ── pieces ────────────────────────────────────────────────────────────── */
+
+const RING_FOR: Record<RosterState, { tone: RingTone; fill: number }> = {
+  available: { tone: "success", fill: 1 },
+  on_call: { tone: "warning", fill: 0.62 },
+  away: { tone: "error", fill: 0.62 },
+  wrap_up: { tone: "warning", fill: 0.3 },
+  offline: { tone: "muted", fill: 0 },
+};
+const PODS_SHOWN = 10;
+
+/**
+ * Inbound A2 · the Floor as pods (2026-10-25): one card per person with a presence ring — full and
+ * green when free, part-filled amber on a call or in wrap-up — what they are doing now, and Ask to
+ * pick up for the owner when someone is free and a caller waits. The Roster tab keeps the full list.
+ */
+function AgentPods({ members, now, currentUserId, isOwner, canAsk, readOnly, saving, onAsk, onAll }: { members: Member[]; now: number; currentUserId: string; isOwner: boolean; canAsk: boolean; readOnly: boolean; saving: string | null; onAsk: (member: Member) => void; onAll: () => void }) {
+  if (!members.length) return null;
+  const sorted = members
+    .map((member) => ({ member, state: rosterState(member, now) }))
+    .sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || a.member.name.localeCompare(b.member.name));
+  const shown = sorted.slice(0, PODS_SHOWN);
+  return (
+    <section aria-label="Who is on the floor" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {shown.map(({ member, state }) => {
+        const row = rosterRow({ member, state }, { currentUserId, isOwner, canAsk, readOnly, saving, onAsk });
+        const ring = RING_FOR[state];
+        const initials = member.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+        return (
+          <article key={member.id} className={cn("m-glass flex min-w-0 flex-col gap-2.5 rounded-xl border border-border p-4", state === "available" && "shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent),0_0_24px_color-mix(in_srgb,var(--primary)_16%,transparent)]")}>
+            <div className="flex items-center gap-3">
+              <Ring value={ring.fill} tone={ring.tone} size={50}>{initials}</Ring>
+              <div className="min-w-0">
+                <p className="m-0 truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-foreground">{member.id === currentUserId ? "You" : member.name}</p>
+                <p className="m-0 truncate text-xs leading-[1.5] text-muted-foreground">{row.detail ?? (member.role === "owner" ? "Owner" : member.role === "assistant" ? "Buffer" : "Producer")}</p>
+              </div>
+            </div>
+            <StatusChip tone={pillTone(row.pill.tone)} dot className="self-start">{row.pill.label}</StatusChip>
+            <p className="m-0 truncate text-sm leading-[1.5] text-[var(--body)]">{doingLabel(member, state, now)}</p>
+            {row.action && (row.action.href
+              ? <Button asChild type="button" variant="outline" size="sm" className="self-start"><Link href={row.action.href}>{row.action.label}</Link></Button>
+              : <Button type="button" onClick={row.action.onSelect} variant="outline" size="sm" className="self-start" disabled={row.action.disabled}>{row.action.label}</Button>)}
+          </article>
+        );
+      })}
+      {sorted.length > PODS_SHOWN && (
+        <button type="button" onClick={onAll} className="m-glass rounded-xl border border-dashed border-border p-4 text-sm font-semibold text-muted-foreground hover:text-foreground">
+          {sorted.length - PODS_SHOWN} more on the Roster
+        </button>
+      )}
+    </section>
+  );
+}
 
 /** Your own status. The one you are in is the filled button, with a check. */
 function StatusButton({ pressed, disabled, onClick, children, className }: { pressed: boolean; disabled: boolean; onClick: () => void; children: React.ReactNode; className?: string }) {
@@ -948,7 +1003,8 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const updated = lastUpdated ? `${shortDuration(secondsSince(lastUpdated, now))} ago` : "just now";
   const statusDisabled = readOnly || availability === null;
 
-  const header = <PageHeader title="Agent Floor" />;
+  // Inbound A · Stream (2026-10-25): one Inbound page with two views; this is its Floor view.
+  const header = <PageHeader title="Inbound" description="Your people: who is free, who is on a call, and who is waiting for them." actions={<TransfersViews current="floor" />} />;
   // On a phone the three buttons share the bottom bar's width equally.
   const statusButtonClass = phone ? "w-full min-w-0 px-2 has-[>svg]:px-2" : undefined;
   const statusButtons = (
@@ -1067,7 +1123,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   return (
     // On a phone the page keeps room at its foot for the bottom bar, so the bar never covers a card.
     <div className={cn("m-stagger flex w-full min-w-0 flex-col gap-6", phone && "pb-[calc(6rem+env(safe-area-inset-bottom))]")}>
-      {wide || phone ? header : <PageHeader title="Agent Floor" actions={queueButton} />}
+      {wide || phone ? header : <PageHeader title="Inbound" description="Your people: who is free, who is on a call, and who is waiting for them." actions={<><TransfersViews current="floor" />{queueButton}</>} />}
 
       {/* Under the title: which list to look at on the left, your own status on the right. Below lg
           the tabs scroll sideways instead of wrapping. */}
@@ -1098,6 +1154,33 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
         <StatTile label="Waiting transfers" value={waitingCount} valueTone={k.longest >= thresholds.redSeconds ? "danger" : k.longest >= thresholds.amberSeconds ? "warning" : undefined} footnote={waitingCount ? `longest ${waitLabel(k.longest)} · escalates at ${thresholdLabel(thresholds.redSeconds)}` : "nobody waiting"} />
         <StatTile label="Callbacks due today" value={k.dueToday} valueTone={k.overdue ? "danger" : undefined} footnote={k.overdue ? `${k.overdue} overdue` : "none overdue"} />
       </StatStrip>
+
+      {/* The floor as the dashboard's stream: waiting, on a call, closed this hour. */}
+      <LeadFlowMap
+        mode="path"
+        label="The floor right now"
+        hot={waitingCount ? 0 : null}
+        drops={[]}
+        worst={null}
+        aside={liveStatus}
+        stages={[
+          { label: "Waiting", value: String(waitingCount), count: waitingCount, note: waitingCount ? `longest ${waitLabel(k.longest)}` : "nobody waiting" },
+          { label: "On a call", value: String(floor.onCalls.length), count: floor.onCalls.length, note: `${k.available} of ${k.onFloor} free` },
+          { label: "Closed this hour", value: floor.closedTransfers?.thisHour == null ? "—" : String(floor.closedTransfers.thisHour), count: floor.closedTransfers?.thisHour ?? 0, note: floor.closedTransfers?.previousHour == null ? undefined : `${floor.closedTransfers.previousHour} the hour before` },
+        ]}
+      />
+
+      <AgentPods
+        members={floor.members}
+        now={now}
+        currentUserId={currentUserId}
+        isOwner={role === "owner"}
+        canAsk={Boolean(headOfQueue)}
+        readOnly={readOnly}
+        saving={saving}
+        onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)}
+        onAll={() => { setTab("roster"); setPages(FIRST_PAGES); }}
+      />
 
       {readOnly && <Callout tone="warning" title="Account suspended — the floor is read-only." />}
       {floor.truncated && <Callout tone="warning" title="Showing the 500 longest-waiting open transfers." />}

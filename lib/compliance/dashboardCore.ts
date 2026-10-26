@@ -57,7 +57,7 @@ export const PURGE_SKIP_REASONS: Record<string, string> = {
 
 export type GapLine = { category: string; numbers: number; count: number; undeterminedCount: number; undeterminedReason: string | null };
 export type ComplaintCountdown = { id: string; channel: string; regulatorState: string | null; tone: string; daysLeft: number | null; label: string };
-export type Expiry = { kind: "licence" | "eo"; name: string; expiresAt: string };
+export type Expiry = { kind: "licence"; name: string; expiresAt: string };
 
 const DAY = 86_400_000;
 const n = (x: number) => x.toLocaleString("en-US");
@@ -70,7 +70,6 @@ export function dashboardAlerts(input: {
   complaints: ComplaintCountdown[] | null;
   gaps: GapLine[] | null;
   expiries: Expiry[];
-  hasEo: boolean;
   deadlineCoverage: { missing: string[]; licensed: number; sentence: string } | null;
   now: Date;
   windowDays?: number;
@@ -95,14 +94,13 @@ export function dashboardAlerts(input: {
   if (dnc && dnc.numbers > 0) out.push({ key: "called_after_dnc", severity: "critical", text: `${plural(dnc.numbers, "number")} called after a DNC entry — fix today`, href: "/app/evidence-report", action: "See the numbers" });
   const complaint = input.gaps?.find((g) => g.category === "called_after_complaint");
   if (complaint && complaint.numbers > 0) out.push({ key: "called_after_complaint", severity: "critical", text: `${plural(complaint.numbers, "number")} called after a complaint — fix today`, href: "/app/evidence-report", action: "See the numbers" });
-  if (!input.hasEo) out.push({ key: "eo_missing", severity: "warning", text: "No E&O insurance on file", href: "/app/appointments", action: "Add it" });
   const expiring = input.expiries
     // Calendar days, date to date: a licence expiring on 7 Nov is "23 days" from 15 Oct at any hour.
     .map((e) => ({ ...e, days: Math.round((Date.parse(`${e.expiresAt.slice(0, 10)}T00:00:00Z`) - Date.parse(`${input.now.toISOString().slice(0, 10)}T00:00:00Z`)) / DAY) }))
     .filter((e) => e.days <= window)
-    .sort((a, b) => (a.kind === b.kind ? a.days - b.days : a.kind === "eo" ? -1 : 1));
+    .sort((a, b) => a.days - b.days);
   for (const e of expiring) {
-    const what = e.kind === "eo" ? "E&O insurance" : `${STATE_NAMES[e.name] ?? e.name} licence`;
+    const what = `${STATE_NAMES[e.name] ?? e.name} licence`;
     out.push({ key: `${e.kind}_${e.name}`, severity: e.days < 0 ? "critical" : "warning", text: e.days < 0 ? `${what} expired ${plural(-e.days, "day")} ago` : `${what} expires in ${plural(e.days, "day")}`, href: "/app/appointments", action: "Renew" });
   }
   if (input.deadlineCoverage && input.deadlineCoverage.missing.length) out.push({ key: "deadlines_unset", severity: "warning", text: input.deadlineCoverage.sentence, href: "/app/compliance/settings", action: "Set them" });

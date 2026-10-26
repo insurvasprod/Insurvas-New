@@ -11,16 +11,16 @@ export type TenantCarrierRow = { id: string; tenant_id: string; carrier_id: stri
 export type CommissionScheduleRow = import("./service-types").CommissionScheduleRow;
 export type AdvanceRuleRow = { id: string; tenant_id: string; carrier_id: string; product_code: string; advance_months: number; advance_pct_bp: number; clawback_months: number; clawback_type: "full" | "prorated"; effective_from: string; created_at: string };
 /** `contracted` is LA-0.4's agency switch (migration 20261013100000); false = switched off. */
-export type CarrierRequirementRow = { carrier_id: string; requires_eo: boolean; contracted: boolean };
+export type CarrierRequirementRow = { carrier_id: string; contracted: boolean };
 export type CarrierLibrarySnapshot = {
   carriers: CarrierRow[];
   products: ProductRow[];
   tenantCarriers: TenantCarrierRow[];
   commissionSchedules: CommissionScheduleRow[];
   advanceRules: AdvanceRuleRow[];
-  /** Which carriers require E&O in force (migration 20260924220100). Empty before it. */
+  /** The agency's per-carrier switch rows (migration 20260924220100). Empty before it. */
   carrierRequirements: CarrierRequirementRow[];
-  /** False until migration 20260924220100 is applied: the requirement cannot be recorded yet. */
+  /** False until migration 20260924220100 is applied: nothing per carrier can be recorded yet. */
   requirementsAvailable: boolean;
   /** False until migration 20261013100000 is applied: every carrier reads as on and the switch cannot be saved. */
   switchAvailable: boolean;
@@ -60,39 +60,35 @@ export async function getCarrierLibrary(tenantId: string): Promise<CarrierLibrar
  */
 async function readRequirements(tenantId: string): Promise<{ rows: CarrierRequirementRow[]; available: boolean; switchAvailable: boolean }> {
   const read = (columns: string) => getSupabaseServiceClient().from("tenant_carrier_requirements" as never).select(columns).eq("tenant_id" as never, tenantId as never);
-  let { data, error } = await read("carrier_id, requires_eo, contracted");
+  let { data, error } = await read("carrier_id, contracted");
   let switchAvailable = true;
   if (error && isPendingSchema(error as { message: string; code?: string })) {
     switchAvailable = false;
-    ({ data, error } = await read("carrier_id, requires_eo"));
+    ({ data, error } = await read("carrier_id"));
   }
   const failure = error as { message: string; code?: string } | null;
   if (failure && isPendingSchema(failure)) return { rows: [], available: false, switchAvailable: false };
   if (failure) throw new Error(`Could not load carrier requirements: ${failure.message}`);
-  const rows = ((data ?? []) as unknown as Partial<CarrierRequirementRow>[]).map((row) => ({ carrier_id: row.carrier_id!, requires_eo: row.requires_eo === true, contracted: row.contracted !== false }));
+  const rows = ((data ?? []) as unknown as Partial<CarrierRequirementRow>[]).map((row) => ({ carrier_id: row.carrier_id!, contracted: row.contracted !== false }));
   return { rows, available: true, switchAvailable };
 }
 
 /**
- * Records a carrier's per-agency terms: whether it requires E&O in force, and LA-0.4's switch
- * (`contracted`). Only the fields given are written, so saving one never resets the other.
+ * Records LA-0.4's per-agency switch (`contracted`) for a carrier.
  * SchemaPendingError (503) before migration 20260924220100, or 20261013100000 for the switch.
  */
-export async function saveCarrierRequirement(tenantId: string, actorId: string, input: { carrier_id: string; requires_eo?: boolean; contracted?: boolean }): Promise<CarrierRequirementRow> {
-  const fields = {
-    ...(input.requires_eo === undefined ? {} : { requires_eo: input.requires_eo }),
-    ...(input.contracted === undefined ? {} : { contracted: input.contracted }),
-  };
+export async function saveCarrierRequirement(tenantId: string, actorId: string, input: { carrier_id: string; contracted: boolean }): Promise<CarrierRequirementRow> {
+  const fields = { contracted: input.contracted };
   const { data, error } = await getSupabaseServiceClient()
     .from("tenant_carrier_requirements" as never)
     .upsert({ tenant_id: tenantId, carrier_id: input.carrier_id, ...fields, updated_at: new Date().toISOString(), updated_by: actorId } as never, { onConflict: "tenant_id,carrier_id" })
-    .select(input.contracted === undefined ? "carrier_id, requires_eo" : "carrier_id, requires_eo, contracted")
+    .select("carrier_id, contracted")
     .single();
   const failure = error as { message: string; code?: string } | null;
   if (failure && isPendingSchema(failure)) throw new SchemaPendingError();
   if (failure || !data) throw new Error(failure?.message ?? "Could not save the carrier requirement");
   const row = data as unknown as Partial<CarrierRequirementRow>;
-  return { carrier_id: row.carrier_id!, requires_eo: row.requires_eo === true, contracted: row.contracted !== false };
+  return { carrier_id: row.carrier_id!, contracted: row.contracted !== false };
 }
 
 /**

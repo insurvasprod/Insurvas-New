@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The appointment vault's shared parts: the carrier × state checkbox grid, the continuing-education
- * summary, and the licence, E&O and CE dialogs.
+ * The appointment vault's shared parts: the carrier × state checkbox grid and the licence dialog.
+ * (E&O cover and continuing education were removed from the platform 2026-10-26.)
  *
  * Two screens render them — Settings › States & licences (appointment-vault-settings.tsx) and
  * /app/appointments (carrier-appointments-page.tsx) — so they live here once rather than in either.
@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
-import { Field, KeyValues, SettingsMeter, control, st } from "@/components/app/settings/primitives";
+import { Field, control, st } from "@/components/app/settings/primitives";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { US_STATES } from "@/lib/appointments/constants";
 import { dayMonthYear } from "@/lib/format/dates";
@@ -24,8 +24,6 @@ import { SCHEMA_PENDING_MESSAGE } from "@/lib/appointments/pendingSchema";
 import { cn } from "@/lib/utils";
 import {
   LINES_OF_AUTHORITY,
-  type CeRecordRow,
-  type EoPolicyRow,
   type LicenceType,
   type LicenseRow,
 } from "@/lib/appointments/service-types";
@@ -41,45 +39,9 @@ export const shortDate = (value: string) => dayMonthYear(value);
 export const longDate = (value: string) => asDate(value).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 export const money = (cents: number | null | undefined) =>
   cents === null || cents === undefined ? "Not recorded" : (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const dollarsToCents = (value: string) => (value.trim() === "" ? null : Math.round(Number(value.replace(/[$,\s]/g, "")) * 100));
-const centsToDollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "" : String(cents / 100));
 export const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 export type SaveResult = { ok: true; body: unknown } | { ok: false; error: string };
-
-/* ── continuing education summary ──────────────────────────────────────── */
-
-export function CeSummary({ record }: { record: CeRecordRow }) {
-  const remaining = Math.max(0, record.credits_required - record.credits_completed);
-  const ethicsKnown = record.ethics_required !== null && record.ethics_required !== undefined;
-  const ethicsRemaining = ethicsKnown ? Math.max(0, (record.ethics_required ?? 0) - (record.ethics_completed ?? 0)) : 0;
-  const generalRemaining = Math.max(0, remaining - ethicsRemaining);
-  const remainingLabel =
-    remaining === 0
-      ? "None"
-      : ethicsKnown
-        ? [generalRemaining && `${generalRemaining} general`, ethicsRemaining && `${ethicsRemaining} ethics`].filter(Boolean).join(", ")
-        : plural(remaining, "credit");
-  return (
-    <div className="flex flex-col gap-4">
-      <SettingsMeter
-        value={record.credits_completed}
-        max={record.credits_required}
-        tone={record.credits_required > 0 && record.credits_completed >= record.credits_required ? "success" : "primary"}
-        ariaLabel={`${record.credits_completed} of ${record.credits_required} credits`}
-        caption={`${record.credits_completed} of ${record.credits_required} credits`}
-      />
-      <KeyValues
-        cols={1}
-        items={[
-          { label: "Cycle ends", value: shortDate(record.deadline), tone: record.deadline < today ? "error" : undefined },
-          { label: "Ethics credits", value: ethicsKnown ? `${record.ethics_completed ?? 0} of ${record.ethics_required}` : "Not recorded" },
-          { label: "Remaining", value: remainingLabel },
-        ]}
-      />
-    </div>
-  );
-}
 
 /* ── carrier × state grid ──────────────────────────────────────────────── */
 
@@ -436,184 +398,6 @@ export function LicenceDialog({
       </form>
       <RecordList
         items={licences.map((row) => ({ key: row.id, tag: row.state, text: row.license_number, sub: `expires ${shortDate(row.expires_at)}` }))}
-      />
-    </RecordDialog>
-  );
-}
-
-export function EoDialog({
-  open,
-  onOpenChange,
-  policies,
-  current,
-  extended,
-  saving,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  policies: EoPolicyRow[];
-  current: EoPolicyRow | null;
-  extended: boolean;
-  saving: boolean;
-  onSave: (payload: unknown) => Promise<SaveResult>;
-}) {
-  const fromPolicy = (row: EoPolicyRow | null) => ({
-    carrier: row?.carrier ?? "",
-    policy_number: row?.policy_number ?? "",
-    expires_at: row?.expires_at ?? "",
-    coverage: centsToDollars(row?.coverage_amount_cents),
-    per_claim: centsToDollars(row?.per_claim_cents),
-    aggregate: centsToDollars(row?.aggregate_cents),
-  });
-  const [form, setForm] = useState(() => fromPolicy(current));
-  const [error, setError] = useState("");
-  const set = (key: keyof ReturnType<typeof fromPolicy>) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.currentTarget.value;
-    setForm((state) => ({ ...state, [key]: value }));
-  };
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    const coverage = dollarsToCents(form.coverage);
-    if (coverage === null || !Number.isFinite(coverage)) {
-      setError("Enter the coverage amount in dollars");
-      return;
-    }
-    const payload: Record<string, unknown> = { carrier: form.carrier, policy_number: form.policy_number, expires_at: form.expires_at, coverage_amount_cents: coverage };
-    if (extended) {
-      payload.per_claim_cents = dollarsToCents(form.per_claim);
-      payload.aggregate_cents = dollarsToCents(form.aggregate);
-    }
-    const result = await onSave(payload);
-    if (!result.ok) setError(result.error);
-    else onOpenChange(false);
-  }
-  return (
-    <RecordDialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) setError("");
-        onOpenChange(next);
-      }}
-      title="Errors & omissions cover"
-      description="Saving a policy number you already hold updates it; a new number adds a policy."
-    >
-      <form onSubmit={(event) => void submit(event)} className="grid gap-4 sm:grid-cols-2">
-        <Field label="E&O carrier" htmlFor="eo-carrier" required>
-          <input id="eo-carrier" className={control} value={form.carrier} onChange={set("carrier")} maxLength={160} required />
-        </Field>
-        <Field label="Policy number" htmlFor="eo-policy-number" required>
-          <input id="eo-policy-number" className={control} value={form.policy_number} onChange={set("policy_number")} maxLength={120} required />
-        </Field>
-        <Field label="Expires" htmlFor="eo-expires" required>
-          <input id="eo-expires" type="date" className={control} value={form.expires_at} onChange={set("expires_at")} onInput={(event) => { const value = event.currentTarget.value; setForm((state) => ({ ...state, expires_at: value })); }} required />
-        </Field>
-        <Field label="Coverage amount ($)" htmlFor="eo-coverage" required hint="The policy's headline limit, as it appears on the declarations page.">
-          <input id="eo-coverage" inputMode="decimal" className={control} value={form.coverage} onChange={set("coverage")} required />
-        </Field>
-        <Field label="Per claim ($)" htmlFor="eo-per-claim" hint={pendingHint(extended)}>
-          <input id="eo-per-claim" inputMode="decimal" className={control} value={form.per_claim} onChange={set("per_claim")} disabled={!extended} />
-        </Field>
-        <Field label="Aggregate ($)" htmlFor="eo-aggregate" hint={pendingHint(extended)}>
-          <input id="eo-aggregate" inputMode="decimal" className={control} value={form.aggregate} onChange={set("aggregate")} disabled={!extended} />
-        </Field>
-        <FormFooter saving={saving} label="Save E&O policy" error={error} onCancel={() => onOpenChange(false)} />
-      </form>
-      <RecordList items={policies.map((row) => ({ key: row.id, tag: row.carrier, text: row.policy_number, sub: `expires ${shortDate(row.expires_at)}` }))} />
-    </RecordDialog>
-  );
-}
-
-export function CeDialog({
-  open,
-  onOpenChange,
-  records,
-  current,
-  extended,
-  saving,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  records: CeRecordRow[];
-  current: CeRecordRow | null;
-  extended: boolean;
-  saving: boolean;
-  onSave: (payload: unknown) => Promise<SaveResult>;
-}) {
-  const fromRecord = (row: CeRecordRow | null, state = row?.state ?? "AZ") => ({
-    state,
-    credits_required: row ? String(row.credits_required) : "",
-    credits_completed: row ? String(row.credits_completed) : "",
-    deadline: row?.deadline ?? "",
-    ethics_required: row?.ethics_required === null || row?.ethics_required === undefined ? "" : String(row.ethics_required),
-    ethics_completed: row?.ethics_completed === null || row?.ethics_completed === undefined ? "" : String(row.ethics_completed),
-  });
-  const [form, setForm] = useState(() => fromRecord(current));
-  const [error, setError] = useState("");
-  const set = (key: keyof ReturnType<typeof fromRecord>) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.currentTarget.value;
-    setForm((state) => ({ ...state, [key]: value }));
-  };
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    const payload: Record<string, unknown> = { state: form.state, credits_required: form.credits_required, credits_completed: form.credits_completed, deadline: form.deadline };
-    if (extended) {
-      payload.ethics_required = form.ethics_required;
-      payload.ethics_completed = form.ethics_completed;
-    }
-    const result = await onSave(payload);
-    if (!result.ok) setError(result.error);
-    else onOpenChange(false);
-  }
-  return (
-    <RecordDialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) setError("");
-        onOpenChange(next);
-      }}
-      title="Continuing education"
-      description="One cycle per state, with its credits and deadline."
-    >
-      <form onSubmit={(event) => void submit(event)} className="grid gap-4 sm:grid-cols-2">
-        <Field label="State" htmlFor="ce-state">
-          <select
-            id="ce-state"
-            className={control}
-            value={form.state}
-            onChange={(event) => {
-              const state = event.target.value;
-              setForm(fromRecord(records.find((row) => row.state === state) ?? null, state));
-            }}
-          >
-            {US_STATES.map(([code, name]) => (
-              <option key={code} value={code}>{name}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Cycle ends" htmlFor="ce-deadline" required>
-          <input id="ce-deadline" type="date" className={control} value={form.deadline} onChange={set("deadline")} onInput={(event) => { const value = event.currentTarget.value; setForm((state) => ({ ...state, deadline: value })); }} required />
-        </Field>
-        <Field label="Credits required" htmlFor="ce-required" required>
-          <input id="ce-required" type="number" min={0} max={10000} className={control} value={form.credits_required} onChange={set("credits_required")} required />
-        </Field>
-        <Field label="Credits completed" htmlFor="ce-completed" required>
-          <input id="ce-completed" type="number" min={0} max={10000} className={control} value={form.credits_completed} onChange={set("credits_completed")} required />
-        </Field>
-        <Field label="Ethics credits required" htmlFor="ce-ethics-required" hint={pendingHint(extended) ?? "Part of the total above."}>
-          <input id="ce-ethics-required" type="number" min={0} max={10000} className={control} value={form.ethics_required} onChange={set("ethics_required")} disabled={!extended} />
-        </Field>
-        <Field label="Ethics credits completed" htmlFor="ce-ethics-completed" hint={pendingHint(extended)}>
-          <input id="ce-ethics-completed" type="number" min={0} max={10000} className={control} value={form.ethics_completed} onChange={set("ethics_completed")} disabled={!extended} />
-        </Field>
-        <FormFooter saving={saving} label="Save CE record" error={error} onCancel={() => onOpenChange(false)} />
-      </form>
-      <RecordList
-        items={records.map((row) => ({ key: row.id, tag: row.state, text: `${row.credits_completed}/${row.credits_required} credits`, sub: `deadline ${shortDate(row.deadline)}` }))}
       />
     </RecordDialog>
   );

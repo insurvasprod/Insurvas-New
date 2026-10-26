@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import type { NurtureCampaignReport, NurtureReport, RotationSlot } from "@/lib/nurture/report";
 import { ANGLE_MAX, DEFAULT_PASS_CEILING, MAX_PASS_CEILING, SAID_NO_MIN_DAYS, SCRIPT_MAX, STALLED_MINUTES, type RecycleBatch } from "@/lib/nurture/contract";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,11 +16,14 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs, fullHeightCard, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
 import { RefreshButton } from "@/components/ui/data-toolbar";
+import { NextStepLine } from "@/components/app/next-step-line";
 import { cn } from "@/lib/utils";
 
 /**
- * Lead recycling, as the board draws it: five figures, one card per campaign's recycle rule with
- * what a run would pick up, the cadence recycled leads walk, and one real lead's slot rotation.
+ * Lead recycling (redesign 2026-10-26, owner pick A, canvas M2 · Assignment): the campaigns in one table,
+ * the one you pick open beside it with its rule, who is in its pool, the last run and the batch builder —
+ * no pop-up. A "Next step" line names the campaign with leads ready. Fresh against recycled (this month,
+ * and conversion all time) moved here from Activity; it sits with the past batches.
  *
  * Added from the LA-2 §4 concept (20260925706500), without moving any of that: the pool a campaign's
  * worked leads fall into (never reached, said no, never recyclable, too recent), a batch that needs
@@ -43,6 +46,8 @@ const label = (value: string) => value.replaceAll("_", " ").replace(/^\w/, (lett
 const count = (value: number) => value.toLocaleString("en-US");
 const plural = (value: number, one: string, many = `${one}s`) => `${count(value)} ${value === 1 ? one : many}`;
 const percent = (value: number | null) => (value == null ? "—" : `${value.toFixed(1)}%`);
+const INPUT = "h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm font-normal";
+const FIELD_LABEL = "text-xs font-semibold text-muted-foreground";
 
 function stamp(iso: string) { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
 function offset(ms: number) {
@@ -51,20 +56,11 @@ function offset(ms: number) {
   return hours < 48 ? `${hours}h after the first dial` : `day ${Math.round(hours / 24)}`;
 }
 
-function Fact({ label: name, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{name}</div>
-      <div className="mt-1 text-sm font-semibold leading-normal tracking-[-0.02em] tabular-nums text-foreground">{children}</div>
-    </div>
-  );
-}
-
 function Figure({ value, tone, children }: { value: number | string; tone: "good" | "danger" | "warning" | "neutral"; children: React.ReactNode }) {
   const ink = { good: "text-[var(--success-ink)]", danger: "text-[var(--error-ink)]", warning: "text-[var(--warning-ink)]", neutral: "text-foreground" }[tone];
   return (
-    <span>
-      <span className={cn("block text-2xl font-semibold leading-[1.21] tracking-[-0.02em] tabular-nums", ink)}>{typeof value === "number" ? count(value) : value}</span>
+    <span className="min-w-0">
+      <span className={cn("block text-xl font-semibold leading-[1.21] tracking-[-0.02em] tabular-nums", ink)}>{typeof value === "number" ? count(value) : value}</span>
       <span className="mt-0.5 block text-xs leading-normal text-[var(--body)]">{children}</span>
     </span>
   );
@@ -78,19 +74,31 @@ function canContinue(batch: RecycleBatch, viewer: NurtureReport["viewer"]) {
   return { ok: true, reason: "" };
 }
 
-function RuleCard({ campaign, readOnly, busy, batchesReady, viewer, progress, onChange, onSave, onStart, onResume }: {
+/** Why a campaign can't start a batch now, or "" when it can. */
+function startBlockedFor(campaign: NurtureCampaignReport, batchesReady: boolean) {
+  return !batchesReady ? "Batches need a database update that has not been applied yet."
+    : campaign.openBatch ? "This campaign already has a batch being screened."
+    : campaign.rule.max_recycles === 0 ? "The recycle cap is 0."
+    : campaign.eligibleNow === 0 ? "Nothing in this campaign meets the rule yet."
+    : "";
+}
+
+/** One campaign's rule, opened beside the table: the rule, its pool, the last run, and the batch builder. */
+function RulePanel({ campaign, readOnly, busy, batchesReady, viewer, progress, building, onBuilding, onChange, onSave, onStart, onResume, onClose }: {
   campaign: NurtureCampaignReport;
   readOnly: boolean;
   busy: boolean;
   batchesReady: boolean;
   viewer: NurtureReport["viewer"];
   progress: Progress | null;
+  building: boolean;
+  onBuilding: (next: boolean) => void;
   onChange: (change: Partial<NurtureCampaignReport["rule"]>) => void;
   onSave: () => void;
   onStart: (input: { angle: string; script: string; attemptCeiling: number }) => void;
   onResume: (batch: RecycleBatch) => void;
+  onClose: () => void;
 }) {
-  const [confirming, setConfirming] = useState(false);
   const [angle, setAngle] = useState("");
   const [script, setScript] = useState("");
   const [ceiling, setCeiling] = useState(DEFAULT_PASS_CEILING);
@@ -98,14 +106,9 @@ function RuleCard({ campaign, readOnly, busy, batchesReady, viewer, progress, on
   const run = campaign.lastRun;
   const pool = campaign.pool;
   const open = campaign.openBatch;
-  const input = "h-9 w-[72px] rounded-md border border-input bg-background px-2.5 text-sm font-normal";
   const idPrefix = `recycle-${campaign.campaign_id}`;
   const angleOk = angle.trim().length >= 3;
-  const startBlocked = !batchesReady ? "Batches need a database update that has not been applied yet."
-    : open ? "This campaign already has a batch being screened."
-    : campaign.rule.max_recycles === 0 ? "The recycle cap is 0."
-    : campaign.eligibleNow === 0 ? "Nothing in this campaign meets the rule yet."
-    : "";
+  const startBlocked = startBlockedFor(campaign, batchesReady);
   const resume = open ? canContinue(open, viewer) : null;
   const live = progress?.campaignId === campaign.campaign_id ? progress : null;
   const saidNoAllowed = campaign.rule.allowed_dispositions.includes("not_interested");
@@ -120,112 +123,140 @@ function RuleCard({ campaign, readOnly, busy, batchesReady, viewer, progress, on
     pool.noPhone ? `${count(pool.noPhone)} with no phone` : "",
   ].filter(Boolean) : [];
 
-  return (
-    <section className="rounded-lg border border-border bg-card p-6 shadow-[0_1px_2px_rgba(16,20,26,.05)]" aria-labelledby={`rule-${campaign.campaign_id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 id={`rule-${campaign.campaign_id}`} className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{campaign.campaign_name}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{count(campaign.eligible_count)} in nurture or exhausted · {count(campaign.reactivated_count)} recycled so far · scrub {campaign.scrub_status.replaceAll("_", " ")}</p>
+  const status = (
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold", active ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>
+      <span className={cn("size-1.5 rounded-full", active ? "bg-[var(--success)]" : "bg-[var(--muted-foreground)]")} aria-hidden="true" />{label(campaign.status)}
+    </span>
+  );
+
+  // Building a batch replaces the rule in the panel; starting still asks for the angle first, because a
+  // cleared lead goes back to the dialer.
+  if (building) {
+    return (
+      <DetailPanel
+        mode="split"
+        title="Build a recycle batch"
+        subtitle={`${campaign.campaign_name} · ${count(campaign.eligibleNow)} match${pool ? ` · ${count(pool.tooRecent)} left out as too recent` : ""}`}
+        onClose={() => onBuilding(false)}
+        closeLabel="Back to the rule"
+        className="m-glass lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h)-32px)] lg:self-start"
+        footer={(
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onBuilding(false)}>Cancel</Button>
+            <Button type="button" disabled={busy || !angleOk || !Number.isInteger(ceiling) || ceiling < 1 || ceiling > MAX_PASS_CEILING} title={angleOk ? undefined : "The angle is required"} onClick={() => { onBuilding(false); onStart({ angle, script, attemptCeiling: ceiling }); }}>{busy ? "Starting…" : "Scrub and create"}</Button>
+          </div>
+        )}
+      >
+        <label htmlFor={`${idPrefix}-angle`} className={FIELD_LABEL}>The new angle — required</label>
+        <textarea id={`${idPrefix}-angle`} value={angle} maxLength={ANGLE_MAX} rows={2} onChange={(event) => setAngle(event.target.value)} placeholder="What is different this time — a new carrier, a lower premium, a different product" className="-mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+        <label htmlFor={`${idPrefix}-script`} className={FIELD_LABEL}>Script — optional</label>
+        <textarea id={`${idPrefix}-script`} value={script} maxLength={SCRIPT_MAX} rows={3} onChange={(event) => setScript(event.target.value)} className="-mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+        <div className="grid grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1.5"><span className={FIELD_LABEL}>Attempts this pass (1–{MAX_PASS_CEILING})</span><input type="number" min={1} max={MAX_PASS_CEILING} aria-label={`${campaign.campaign_name}: dials each recycled lead gets on this pass`} value={ceiling} onChange={(event) => setCeiling(Number(event.target.value))} className={INPUT} /></label>
+          <span className="flex flex-col gap-1.5"><span className={FIELD_LABEL}>Cost to attribute</span><span className="text-sm font-semibold">$0.00 — already paid for</span></span>
         </div>
-        <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold", active ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>
-          <span className={cn("size-1.5 rounded-full", active ? "bg-[var(--success)]" : "bg-[var(--muted-foreground)]")} aria-hidden="true" />{label(campaign.status)}
-        </span>
-      </div>
+        <p className="m-0 rounded-lg bg-[var(--surface-alt)] px-3 py-2.5 text-xs leading-normal text-[var(--body)]">Every lead is screened against do-not-call and suppression again before it can be dialled. A batch keeps its progress if you close the tab.</p>
+      </DetailPanel>
+    );
+  }
 
-      <div className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Fact label="Age threshold">
-          <label className="inline-flex items-center gap-2"><input type="number" min={1} max={3650} aria-label={`${campaign.campaign_name}: days rested since the last dial before recycling`} value={campaign.rule.wait_days} disabled={readOnly || busy} onChange={(event) => onChange({ wait_days: Number(event.target.value) })} className={input} />days since the last dial</label>
-        </Fact>
-        <Fact label="Recycle cap">
-          <label className="inline-flex items-center gap-2"><input type="number" min={0} max={100} aria-label={`${campaign.campaign_name}: most times one lead is recycled`} value={campaign.rule.max_recycles} disabled={readOnly || busy} onChange={(event) => onChange({ max_recycles: Number(event.target.value) })} className={input} />per lead</label>
-        </Fact>
-        <Fact label="Recycles after">
-          <span className="flex flex-wrap gap-x-3 gap-y-1">
-            {OPTIONS.map((option) => {
-              const checked = campaign.rule.allowed_dispositions.includes(option);
-              return (
-                <label key={option} className="inline-flex items-center gap-1.5 font-normal" title={option === "not_interested" ? `Recycled by an owner only, and only ${SAID_NO_MIN_DAYS}+ days after the outcome` : undefined}>
-                  <input type="checkbox" checked={checked} disabled={readOnly || busy} onChange={(event) => onChange({ allowed_dispositions: event.target.checked ? [...campaign.rule.allowed_dispositions, option] : campaign.rule.allowed_dispositions.filter((value) => value !== option) })} className="size-4 accent-[var(--primary)]" />
-                  {label(option)}{option === "not_interested" ? ` (owners, ${SAID_NO_MIN_DAYS}+ days)` : ""}
-                </label>
-              );
-            })}
-          </span>
-        </Fact>
-        <Fact label="Never included">Do not call · litigator · complaint · any suppression hit</Fact>
+  return (
+    <DetailPanel
+      mode="split"
+      title={campaign.campaign_name}
+      subtitle={`${count(campaign.eligibleNow)} ready now · ${count(campaign.eligible_count)} in nurture or exhausted · ${count(campaign.reactivated_count)} recycled so far · scrub ${campaign.scrub_status.replaceAll("_", " ")}`}
+      status={status}
+      onClose={onClose}
+      className="m-glass lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h)-32px)] lg:self-start"
+      footer={(
+        <div className="flex flex-col gap-2">
+          {startBlocked && !readOnly && <span className="text-xs text-[var(--body)]">{startBlocked}</span>}
+          <div className="flex items-center justify-between gap-2">
+            <Button type="button" variant="outline" disabled={readOnly || busy} onClick={onSave}>{busy && !live ? "Saving…" : "Save rule"}</Button>
+            <Button type="button" disabled={readOnly || busy || Boolean(startBlocked)} title={startBlocked || undefined} onClick={() => onBuilding(true)}>Build a recycle batch</Button>
+          </div>
+        </div>
+      )}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1.5"><span className={FIELD_LABEL}>Rests (days since the last dial)</span><input type="number" min={1} max={3650} aria-label={`${campaign.campaign_name}: days rested since the last dial before recycling`} value={campaign.rule.wait_days} disabled={readOnly || busy} onChange={(event) => onChange({ wait_days: Number(event.target.value) })} className={INPUT} /></label>
+        <label className="flex flex-col gap-1.5"><span className={FIELD_LABEL}>Recycle at most (per lead)</span><input type="number" min={0} max={100} aria-label={`${campaign.campaign_name}: most times one lead is recycled`} value={campaign.rule.max_recycles} disabled={readOnly || busy} onChange={(event) => onChange({ max_recycles: Number(event.target.value) })} className={INPUT} /></label>
       </div>
+      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+        <legend className={cn(FIELD_LABEL, "mb-2")}>Recycles after</legend>
+        {OPTIONS.map((option) => {
+          const checked = campaign.rule.allowed_dispositions.includes(option);
+          return (
+            <label key={option} className="inline-flex items-center gap-2 text-sm font-normal" title={option === "not_interested" ? `Recycled by an owner only, and only ${SAID_NO_MIN_DAYS}+ days after the outcome` : undefined}>
+              <input type="checkbox" checked={checked} disabled={readOnly || busy} onChange={(event) => onChange({ allowed_dispositions: event.target.checked ? [...campaign.rule.allowed_dispositions, option] : campaign.rule.allowed_dispositions.filter((value) => value !== option) })} className="size-4 accent-[var(--primary)]" />
+              {label(option)}{option === "not_interested" ? ` · owners, ${SAID_NO_MIN_DAYS}+ days` : ""}
+            </label>
+          );
+        })}
+      </fieldset>
+      <p className="m-0 text-xs text-muted-foreground">Never included: do not call · litigator · complaint · any suppression hit</p>
 
-      <div className="mt-4 border-t border-border pt-4">
-        <div className="flex flex-wrap gap-7">
+      <div className="flex flex-col gap-3 border-t border-border pt-4">
+        <div className="grid grid-cols-3 gap-3">
           <Figure value={campaign.eligibleNow} tone="neutral">eligible now</Figure>
-          {pool && <Figure value={pool.tooRecent} tone="neutral">too recent — rested under {plural(campaign.rule.wait_days, "day")}{saidNoAllowed ? ` (${SAID_NO_MIN_DAYS} for said no)` : ""}</Figure>}
+          {pool && <Figure value={pool.tooRecent} tone="neutral">too recent — under {plural(campaign.rule.wait_days, "day")}{saidNoAllowed ? ` (${SAID_NO_MIN_DAYS} for said no)` : ""}</Figure>}
           {pool && <Figure value={pool.never} tone="danger">never recyclable</Figure>}
-          {run && (
-            <>
-              <Figure value={run.cleared} tone="good">cleared — last run, {stamp(run.at)}</Figure>
-              <Figure value={run.blocked} tone="danger">blocked on re-screening</Figure>
-              <Figure value={run.failed} tone="warning">held — screening did not complete</Figure>
-            </>
-          )}
         </div>
         {pool && (
-          <p className="mt-3 text-xs leading-normal text-[var(--body)]">
-            Of this campaign&apos;s worked leads: {plural(pool.exhaustedNoOutcome, "exhausted lead")} never reached, {plural(pool.saidNo, "said no", "said no")}{pool.eligibleSaidNo ? ` (${count(pool.eligibleSaidNo)} of them eligible now)` : ""}.{notPicked.length ? ` Not picked up: ${notPicked.join(" · ")}.` : ""}
+          <p className="m-0 text-xs leading-normal text-[var(--body)]">
+            <span className="font-semibold text-[var(--ink)]">Who is in the pool: </span>{plural(pool.exhaustedNoOutcome, "exhausted lead")} never reached, {plural(pool.saidNo, "said no", "said no")}{pool.eligibleSaidNo ? ` (${count(pool.eligibleSaidNo)} of them eligible now)` : ""}.{notPicked.length ? ` Not picked up: ${notPicked.join(" · ")}.` : ""}
           </p>
+        )}
+        {run && (
+          <div className="grid grid-cols-3 gap-3">
+            <Figure value={run.cleared} tone="good">cleared — last run, {stamp(run.at)}</Figure>
+            <Figure value={run.blocked} tone="danger">blocked on re-screening</Figure>
+            <Figure value={run.failed} tone="warning">held — screening did not complete</Figure>
+          </div>
         )}
       </div>
 
       {live ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3" role="status">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3" role="status">
           <RefreshCw className="size-4 animate-spin text-[var(--info-ink)]" aria-hidden="true" />
           <span className="min-w-0 flex-grow text-sm leading-normal text-[var(--body)]"><span className="font-semibold text-[var(--info-ink)]">Screening</span> · {count(live.screened)} screened this session · {count(live.cleared)} cleared · {count(live.blocked)} blocked · {count(live.failed)} held{live.pending ? ` · ${count(live.pending)} to go` : ""}</span>
         </div>
       ) : open ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3">
-          <div className="min-w-0 flex-grow text-sm leading-normal">
+        <div className="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3">
+          <span className="text-sm leading-normal">
             <span className="font-semibold text-[var(--warning-ink)]">Batch being screened</span>
             <span className="text-[var(--body)]"> · “{open.angle}” · {count(open.queued - open.pending)} of {count(open.queued)} screened · {count(open.cleared)} cleared · {count(open.blocked)} blocked · {count(open.failed)} held · started by {open.createdByName ?? "a teammate"} {stamp(open.createdAt)}{open.stalled ? ` · no progress for ${STALLED_MINUTES}+ minutes` : ""}</span>
-          </div>
+          </span>
           {resume && !resume.ok && <span className="text-xs text-[var(--body)]">{resume.reason}</span>}
-          <Button type="button" variant="outline" disabled={readOnly || busy || !resume?.ok} title={resume?.reason || undefined} onClick={() => onResume(open)}>{open.stalled && open.createdBy !== viewer.userId ? "Resume batch" : "Continue screening"}</Button>
+          <span><Button type="button" variant="outline" size="sm" disabled={readOnly || busy || !resume?.ok} title={resume?.reason || undefined} onClick={() => onResume(open)}>{open.stalled && open.createdBy !== viewer.userId ? "Resume batch" : "Continue screening"}</Button></span>
         </div>
       ) : null}
+    </DetailPanel>
+  );
+}
 
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-        {startBlocked && !readOnly && <span className="text-xs text-[var(--body)]">{startBlocked}</span>}
-        <Button type="button" variant="outline" disabled={readOnly || busy} onClick={onSave}>{busy && !live ? "Saving…" : "Save rule"}</Button>
-        <Button type="button" disabled={readOnly || busy || Boolean(startBlocked)} title={startBlocked || undefined} onClick={() => setConfirming(true)}>Build a recycle batch</Button>
-      </div>
-
-      {/* The new batch is a dialog rather than a card that pushes the rule down (2026-10-06 redesign).
-          Starting still asks to be confirmed: a cleared lead goes back to the dialer. */}
-      <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent className="sm:max-w-[640px]">
-          <DialogHeader>
-            <DialogTitle>New batch · {campaign.campaign_name}</DialogTitle>
-            <DialogDescription>{count(campaign.eligibleNow)} match{pool ? ` · ${count(pool.tooRecent)} excluded as too recent` : ""}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="flex min-w-0 flex-col gap-3">
-              <label htmlFor={`${idPrefix}-angle`} className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">The new angle — required</label>
-              <textarea id={`${idPrefix}-angle`} value={angle} maxLength={ANGLE_MAX} rows={2} onChange={(event) => setAngle(event.target.value)} placeholder="What is different this time — a new carrier, a lower premium, a different product" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-              <label htmlFor={`${idPrefix}-script`} className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Script — optional</label>
-              <textarea id={`${idPrefix}-script`} value={script} maxLength={SCRIPT_MAX} rows={3} onChange={(event) => setScript(event.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            </div>
-            <div className="flex flex-col gap-4">
-              <Fact label="Attempts this pass">
-                <label className="inline-flex items-center gap-2"><input type="number" min={1} max={MAX_PASS_CEILING} aria-label={`${campaign.campaign_name}: dials each recycled lead gets on this pass`} value={ceiling} onChange={(event) => setCeiling(Number(event.target.value))} className={input} />of {MAX_PASS_CEILING}</label>
-              </Fact>
-              <Fact label="Cost to attribute">$0.00 — already paid for</Fact>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirming(false)}>Cancel</Button>
-            <Button type="button" disabled={busy || !angleOk || !Number.isInteger(ceiling) || ceiling < 1 || ceiling > MAX_PASS_CEILING} title={angleOk ? undefined : "The angle is required"} onClick={() => { setConfirming(false); onStart({ angle, script, attemptCeiling: ceiling }); }}>{busy ? "Starting…" : "Scrub and create"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </section>
+/** This month's fresh and recycled leads side by side, and conversion all time (moved from Activity, 2026-10-26). */
+function FreshVsRecycled({ data }: { data: Payload }) {
+  const rows = (["fresh", "recycled"] as const).map((source) => ({ source, row: data.sources.find((item) => item.source === source) ?? null, conversion: data.conversion?.[source] ?? null }));
+  if (!data.sources.length && !data.conversion) return null;
+  return (
+    <TableCard title="Fresh vs recycled" description="Served, dialled and contacts this month · policies all time">
+      <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
+        <thead><tr><th scope="col">Source</th><th scope="col" className="text-right">Served</th><th scope="col" className="text-right">Dialled</th><th scope="col" className="text-right">Contacts</th><th scope="col" className="text-right">Contact rate</th><th scope="col" className="text-right">Policies per 100 worked</th></tr></thead>
+        <tbody>
+          {rows.map(({ source, row, conversion }) => (
+            <tr key={source}>
+              <td className="font-medium">{label(source)}</td>
+              <td className="text-right tabular-nums">{row ? count(row.served) : "—"}</td>
+              <td className="text-right tabular-nums">{row ? count(row.dialled) : "—"}</td>
+              <td className="text-right tabular-nums">{row ? count(row.contacts) : "—"}</td>
+              <td className="text-right tabular-nums">{percent(row?.contactRate ?? null)}</td>
+              <td className="text-right tabular-nums" title={conversion ? `${plural(conversion.policies, "policy", "policies")} from ${count(conversion.leads)} leads` : undefined}>{percent(conversion?.percent ?? null)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableCard>
   );
 }
 
@@ -308,7 +339,8 @@ export function NurtureWorkspace() {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [openIdle, setOpenIdle] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [tab, setTab] = useState<"rules" | "batches" | "cadence">("rules");
 
@@ -319,6 +351,12 @@ export function NurtureWorkspace() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error);
       setData(body);
+      // On a wide screen the campaign with the most ready opens beside the table; a phone keeps the list.
+      setSelected((current) => {
+        if (current || typeof window === "undefined" || !window.matchMedia("(min-width: 1024px)").matches) return current;
+        const ready = (body as Payload).campaigns.filter((campaign) => campaign.eligibleNow > 0).sort((a, b) => b.eligibleNow - a.eligibleNow)[0];
+        return ready?.campaign_id ?? null;
+      });
     } catch (error) {
       notify.fail(error instanceof Error ? error.message : "Could not load nurture");
     } finally {
@@ -366,7 +404,7 @@ export function NurtureWorkspace() {
         if (step.busyElsewhere) { notify.fail("The rest of this batch is being screened in another session. It will finish there."); break; }
       }
     } catch (error) {
-      notify.fail(`${error instanceof Error ? error.message : "Screening stopped"} — the batch keeps its progress; continue it from this card.`);
+      notify.fail(`${error instanceof Error ? error.message : "Screening stopped"} — the batch keeps its progress; continue it from the campaign's panel.`);
     } finally {
       setProgress(null);
       await load();
@@ -388,7 +426,7 @@ export function NurtureWorkspace() {
     if (batchId) await screen(batchId, campaign.campaign_id);
   }
 
-  const header = <PageHeader title="Lead recycling" />;
+  const header = <PageHeader title="Lead recycling" actions={<RefreshButton onClick={() => void load()} refreshing={loading} />} />;
 
   if (!data) {
     if (loading) return <PageLoading />;
@@ -408,24 +446,28 @@ export function NurtureWorkspace() {
   const idle = campaigns.filter((campaign) => !working.includes(campaign));
   const change = totals.recycledLastMonth > 0 ? Math.round(((totals.recycledThisMonth - totals.recycledLastMonth) / totals.recycledLastMonth) * 100) : null;
   const lastMonthName = MONTHS[(new Date().getMonth() + 11) % 12];
-  const card = (campaign: NurtureCampaignReport) => (
-    <RuleCard
-      campaign={campaign}
-      readOnly={readOnly}
-      busy={saving === campaign.campaign_id || progress?.campaignId === campaign.campaign_id}
-      batchesReady={batchesReady}
-      viewer={viewer}
-      progress={progress}
-      onChange={(next) => update(campaign.campaign_id, next)}
-      onSave={() => void save(campaign)}
-      onStart={(input) => void start(campaign, input)}
-      onResume={(batch) => void screen(batch.id, campaign.campaign_id)}
-    />
-  );
+  const opened = campaigns.find((campaign) => campaign.campaign_id === selected) ?? null;
+  const choose = (id: string | null, build = false) => { setSelected(id); setBuilding(build); setTab("rules"); };
+
+  // The one thing to do next: a batch part-way screened that this viewer may continue, then the
+  // campaigns with leads ready to dial again.
+  const resumable = progress ? null : campaigns.find((campaign) => campaign.openBatch && canContinue(campaign.openBatch, viewer).ok) ?? null;
+  const ready = campaigns.filter((campaign) => !startBlockedFor(campaign, batchesReady)).sort((a, b) => b.eligibleNow - a.eligibleNow);
+  const readyTotal = ready.reduce((sum, campaign) => sum + campaign.eligibleNow, 0);
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
+
+      {!readOnly && resumable?.openBatch ? (
+        <NextStepLine action={<Button type="button" size="sm" onClick={() => { choose(resumable.campaign_id); void screen(resumable.openBatch!.id, resumable.campaign_id); }}>{resumable.openBatch.stalled && resumable.openBatch.createdBy !== viewer.userId ? "Resume batch" : "Continue screening"}</Button>}>
+          <strong className="font-semibold text-[var(--ink)]">A batch on {resumable.campaign_name} is part-way screened</strong> — {count(resumable.openBatch.pending)} still to check. It picks up where it stopped.
+        </NextStepLine>
+      ) : !readOnly && !progress && ready.length ? (
+        <NextStepLine action={<Button type="button" size="sm" onClick={() => choose(ready[0].campaign_id, true)}>Start with {ready[0].campaign_name}</Button>}>
+          <strong className="font-semibold text-[var(--ink)]">{plural(readyTotal, "aged lead")} {readyTotal === 1 ? "is" : "are"} ready</strong> to dial again across {plural(ready.length, "campaign")}. Build a batch — every lead is screened again first.
+        </NextStepLine>
+      ) : null}
 
       {/* Four figures an operator acts on (2026-10-06 redesign). "In nurture" is the Eligible
           tile's footnote; the recycled contact rate is the conversion tile's, or its own tile when
@@ -440,14 +482,14 @@ export function NurtureWorkspace() {
               label="Recycled conversion"
               value={percent(data.conversion.recycled.percent)}
               footnote={`vs ${percent(data.conversion.fresh.percent)} fresh · ${plural(data.conversion.recycled.policies, "policy", "policies")} from ${count(data.conversion.recycled.leads)} recycled · ${contactRate?.recycled == null ? "no contact rate yet" : `${contactRate.recycled.toFixed(1)}% contact${contactRate.fresh == null ? "" : ` vs ${contactRate.fresh.toFixed(1)}%`}`}`}
-              action={<Link href="/app/activity" className="text-xs font-semibold text-foreground hover:underline">Scorecard</Link>}
+              action={<button type="button" onClick={() => setTab("batches")} className="text-xs font-semibold text-foreground hover:underline">Compare</button>}
             />
           : <StatTile
               label="Recycled contact rate"
               value={contactRate?.recycled == null ? "—" : `${contactRate.recycled.toFixed(1)}%`}
               valueTone={contactRate?.recycled == null ? undefined : "primary"}
               footnote={`${contactRate?.fresh == null ? "no fresh dials to compare" : `vs ${contactRate.fresh.toFixed(1)}% fresh`}${recycledAllTime ? ` · ${count(recycledAllTime.recycled)} recycled, ${plural(recycledAllTime.policies, "policy", "policies")}` : ""}`}
-              action={<Link href="/app/activity" className="text-xs font-semibold text-foreground hover:underline">Scorecard</Link>}
+              action={<button type="button" onClick={() => setTab("batches")} className="text-xs font-semibold text-foreground hover:underline">Compare</button>}
             />}
       </StatStrip>
 
@@ -463,72 +505,97 @@ export function NurtureWorkspace() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { key: "rules", label: "Recycle rules", count: campaigns.length },
+          { key: "rules", label: "Campaigns", count: campaigns.length },
           { key: "batches", label: "Past batches", count: batches.length },
           { key: "cadence", label: "Cadence & rotation" },
         ]}
-        actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}
       />
 
-      {/* Recycle rules (2026-10-06): one row per campaign — the rule, what it would pick up now, the last
-          run and any batch in flight — instead of a full card each (twelve cards ran ~5,000px). "Open rule"
-          shows the full rule card (every control, the never-included line, Build a recycle batch) in a
-          pop-up. Campaigns with work come first. */}
-      <div key={tab} role="tabpanel" id="recycle-panel" aria-labelledby={`recycle-panel-tab-${tab}`} className="min-w-0">
+      {/* Campaigns: one row each — the rule, what it would pick up now, the last run and any batch in
+          flight. The row you pick opens beside the table (2026-10-26: a side panel, not a pop-up), with
+          every control, the never-included line, and Build a recycle batch. Campaigns with work first. */}
+      <div key={tab} role="tabpanel" id="recycle-panel" aria-labelledby={`recycle-panel-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
       {tab === "rules" && (
         campaigns.length ? (
-          <TableCard className="flex flex-col lg:h-[calc(100dvh-var(--top-bar-h)-347px)] [&>*:nth-child(1)]:min-h-0 [&>*:nth-child(1)]:flex-1 [&>*:nth-child(1)]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:bg-card">
-            <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
-              <thead>
-                <tr>
-                  <th scope="col">Campaign</th>
-                  <th scope="col" className="w-[110px]">Status</th>
-                  <th scope="col" className="w-[100px] text-right">Rests</th>
-                  <th scope="col" className="w-[70px] text-right">Cap</th>
-                  <th scope="col" className="w-[200px]">Recycles after</th>
-                  <th scope="col" className="w-[100px] text-right">Eligible now</th>
-                  <th scope="col" className="w-[100px] text-right">Too recent</th>
-                  <th scope="col" className="w-[190px]">Last run</th>
-                  <th scope="col" className="w-[140px]">Batch</th>
-                  <th scope="col" className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody className="m-seq">
-                {[...working, ...idle].map((campaign) => {
-                  const live = progress?.campaignId === campaign.campaign_id;
-                  const active = campaign.status === "active";
-                  return (
-                    <tr key={campaign.campaign_id} className="m-row">
-                      <td className="max-w-[260px] truncate font-semibold" title={campaign.campaign_name}>{campaign.campaign_name}</td>
-                      <td><span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", active ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{label(campaign.status)}</span></td>
-                      <td className="text-right tabular-nums">{plural(campaign.rule.wait_days, "day")}</td>
-                      <td className="text-right tabular-nums">{campaign.rule.max_recycles}</td>
-                      <td className="max-w-[200px] truncate" title={campaign.rule.allowed_dispositions.map(label).join(", ")}>{campaign.rule.allowed_dispositions.map(label).join(", ") || <span className="text-muted-foreground">no outcomes chosen</span>}</td>
-                      <td className="text-right font-semibold tabular-nums">{count(campaign.eligibleNow)}</td>
-                      <td className="text-right tabular-nums text-muted-foreground">{campaign.pool ? count(campaign.pool.tooRecent) : "—"}</td>
-                      <td className="whitespace-nowrap text-xs tabular-nums">{campaign.lastRun ? <span title={`Last run ${stamp(campaign.lastRun.at)}`}><span className="text-[var(--success-ink)]">{count(campaign.lastRun.cleared)} cleared</span> · <span className="text-[var(--error-ink)]">{count(campaign.lastRun.blocked)} blocked</span>{campaign.lastRun.failed ? <> · <span className="text-[var(--warning-ink)]">{count(campaign.lastRun.failed)} held</span></> : null}</span> : <span className="text-muted-foreground">never run</span>}</td>
-                      <td className="whitespace-nowrap text-xs">{live ? <span className="font-semibold text-[var(--info-ink)]">Screening now</span> : campaign.openBatch ? <span className="font-semibold text-[var(--warning-ink)]" title={`“${campaign.openBatch.angle}”`}>Being screened</span> : <span className="text-muted-foreground">—</span>}</td>
-                      <td className="text-right">
-                        <Button type="button" variant="outline" size="sm" onClick={() => setOpenIdle(campaign.campaign_id)}>Open rule</Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </TableCard>
+          <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
+            <TableCard className="min-w-0 flex-1">
+              <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
+                <thead>
+                  <tr>
+                    <th scope="col">Campaign</th>
+                    <th scope="col" className="w-[120px]">Status</th>
+                    <th scope="col" className="w-[80px] text-right">Rests</th>
+                    <th scope="col" className="w-[56px] text-right">Cap</th>
+                    <th scope="col" className="w-[180px]">Recycles after</th>
+                    <th scope="col" className="w-[90px] text-right">Ready</th>
+                    <th scope="col" className="w-[90px] text-right">Too recent</th>
+                  </tr>
+                </thead>
+                <tbody className="m-seq">
+                  {[...working, ...idle].map((campaign) => {
+                    const live = progress?.campaignId === campaign.campaign_id;
+                    const active = campaign.status === "active";
+                    const isOpen = campaign.campaign_id === selected;
+                    return (
+                      <tr key={campaign.campaign_id} className={cn("m-row cursor-pointer", isOpen && "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]")} onClick={() => choose(isOpen ? null : campaign.campaign_id)}>
+                        <td className="max-w-[280px]">
+                          <button type="button" className="block max-w-full truncate text-left font-semibold hover:underline" aria-expanded={isOpen} onClick={(event) => { event.stopPropagation(); choose(isOpen ? null : campaign.campaign_id); }} title={campaign.campaign_name}>{campaign.campaign_name}</button>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {campaign.lastRun ? <><span className="text-[var(--success-ink)]">{count(campaign.lastRun.cleared)} cleared</span> · <span className="text-[var(--error-ink)]">{count(campaign.lastRun.blocked)} blocked</span>{campaign.lastRun.failed ? <> · <span className="text-[var(--warning-ink)]">{count(campaign.lastRun.failed)} held</span></> : null} · {stamp(campaign.lastRun.at)}</> : "never run"}
+                          </span>
+                        </td>
+                        <td>
+                          {live ? <span className="text-xs font-semibold text-[var(--info-ink)]">Screening now</span>
+                            : campaign.openBatch ? <span className="text-xs font-semibold text-[var(--warning-ink)]" title={`“${campaign.openBatch.angle}”`}>Being screened</span>
+                            : <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", active ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{label(campaign.status)}</span>}
+                        </td>
+                        <td className="text-right tabular-nums">{plural(campaign.rule.wait_days, "day")}</td>
+                        <td className="text-right tabular-nums">{campaign.rule.max_recycles}</td>
+                        <td className="max-w-[180px] truncate" title={campaign.rule.allowed_dispositions.map(label).join(", ")}>{campaign.rule.allowed_dispositions.map(label).join(", ") || <span className="text-muted-foreground">no outcomes chosen</span>}</td>
+                        <td className={cn("text-right font-semibold tabular-nums", campaign.eligibleNow > 0 && "text-[var(--accent-ink)]")}>{count(campaign.eligibleNow)}</td>
+                        <td className="text-right tabular-nums text-muted-foreground">{campaign.pool ? count(campaign.pool.tooRecent) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </TableCard>
+            {opened && (
+              <RulePanel
+                key={opened.campaign_id}
+                campaign={opened}
+                readOnly={readOnly}
+                busy={saving === opened.campaign_id || progress?.campaignId === opened.campaign_id}
+                batchesReady={batchesReady}
+                viewer={viewer}
+                progress={progress}
+                building={building}
+                onBuilding={setBuilding}
+                onChange={(next) => update(opened.campaign_id, next)}
+                onSave={() => void save(opened)}
+                onStart={(input) => void start(opened, input)}
+                onResume={(batch) => void screen(batch.id, opened.campaign_id)}
+                onClose={() => choose(null)}
+              />
+            )}
+          </div>
         ) : (
           <TableCard>
             <EmptyState
               title="No campaigns yet"
               hint="Create one to set a recycle rule."
-              action={<Button asChild type="button" variant="outline"><Link href="/app/campaigns">Vendors &amp; campaigns</Link></Button>}
+              action={<Button asChild type="button" variant="outline"><Link href="/app/lead-sources?tab=campaigns">Vendors &amp; campaigns</Link></Button>}
             />
           </TableCard>
         )
       )}
 
-      {tab === "batches" && <PastBatches batches={batches} baseline={batchBaseline} onOpenRules={() => setTab("rules")} />}
+      {tab === "batches" && (
+        <>
+          <FreshVsRecycled data={data} />
+          <PastBatches batches={batches} baseline={batchBaseline} onOpenRules={() => setTab("rules")} />
+        </>
+      )}
 
       {tab === "cadence" && (
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
@@ -589,19 +656,6 @@ export function NurtureWorkspace() {
         </div>
       )}
       </div>
-
-      {(() => {
-        const opened = campaigns.find((campaign) => campaign.campaign_id === openIdle);
-        return (
-          <Dialog open={Boolean(opened)} onOpenChange={(open) => { if (!open) setOpenIdle(null); }}>
-            <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-[960px] [&>section]:border-0 [&>section]:shadow-none">
-              <DialogTitle className="sr-only">Recycle rule{opened ? ` · ${opened.campaign_name}` : ""}</DialogTitle>
-              {opened && card(opened)}
-            </DialogContent>
-          </Dialog>
-        );
-      })()}
     </div>
   );
 }
-

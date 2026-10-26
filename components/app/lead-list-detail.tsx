@@ -1,11 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ArrowRight, ChevronLeft } from "lucide-react";
 
 import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadListClaimButton } from "@/components/app/lead-list-claim-button";
 import { TabbedPanels } from "@/components/app/lead-ops-view-tabs";
 import { Button } from "@/components/ui/button";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { InfoTip } from "@/components/ui/info-tip";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
@@ -148,9 +149,9 @@ function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: Po
       return <>This list {why}, so Serve next hands out none of it. Change it on <Link href="/app/campaigns" className={link}>Vendors &amp; campaigns</Link>.</>;
     }
     case "no_agent":
-      return <>{states}. Nobody here holds a current licence there, and no setter is active. <Link href="/app/settings#states-licences" className={link}>Add a licence</Link> to work them.</>;
+      return <>{states}. Nobody here holds a current licence there, and no setter is active. <Link href="/app/settings#carriers/carriers-licences" className={link}>Add a licence</Link> to work them.</>;
     case "at_capacity":
-      return <>{states}. <Link href="/app/assignments" className={link}>Raise a capacity</Link> on Lead assignment.</>;
+      return <>{states}. <Link href="/app/assignments" className={link}>Raise a capacity</Link> on Lead routing.</>;
     case "no_state":
       return "Add a state to these leads to call them.";
     case "rules_stale":
@@ -249,6 +250,20 @@ export function LeadListDetailView({
   // credit, over the same usable rows. Not "back to the invoice price" — rows on your own list are
   // never credited, so the two only meet when every removal is creditable.
   const postCreditCents = d.recordsUsable > 0 ? (netSpend - d.claims.pendingCents) / d.recordsUsable : null;
+
+  const canClaim = canSeeMoney && d.claims.supported && d.claims.unclaimedRows > 0 && !claimBlocked;
+  const canAssign = assign.manager && d.assignable > 0 && !assign.blocked;
+  const closingSoon = d.returnDaysLeft != null && d.returnDaysLeft > 0 && d.returnDaysLeft <= 3;
+  const nextStep: { text: ReactNode; action: ReactNode } | null =
+    canClaim && closingSoon
+      ? { text: <>The return window closes in <strong className="font-semibold text-[var(--ink)]">{d.returnDaysLeft} {d.returnDaysLeft === 1 ? "day" : "days"}</strong> — {count(d.claims.unclaimedRows)} rows ({money(d.claims.unclaimedCents)}) are still unclaimed.</>, action: <LeadListClaimButton campaignId={d.campaignId} rows={d.claims.unclaimedRows} amount={money(d.claims.unclaimedCents)} blocked={claimBlocked} /> }
+      : canAssign
+        ? { text: <><strong className="font-semibold text-[var(--ink)]">{count(d.assignable)}</strong> usable {d.assignable === 1 ? "lead has" : "leads have"} no owner yet. Assign them so they reach the dialer.</>, action: <LeadListAssignDrawer campaignId={d.campaignId} listName={d.campaignName} assignable={d.assignable} /> }
+        : canClaim
+          ? { text: <>{count(d.claims.unclaimedRows)} rows the vendor owes you for ({money(d.claims.unclaimedCents)}) are not claimed yet.</>, action: <LeadListClaimButton campaignId={d.campaignId} rows={d.claims.unclaimedRows} amount={money(d.claims.unclaimedCents)} blocked={claimBlocked} /> }
+          : d.poolBlockers && d.poolBlockers.total > 0
+            ? { text: <>{count(d.poolBlockers.total)} leads in the pool are not being served. The <strong className="font-semibold text-[var(--ink)]">Not being served</strong> tab says what unblocks each.</>, action: null }
+            : null;
 
   const subtitle = [
     d.vendorName,
@@ -370,13 +385,15 @@ export function LeadListDetailView({
   );
 
   return (
+    // 2026-10-26: a list's page on the moving ribbon, like Lead sources it opens from.
+    <DashboardStage ribbon>
     <div className="m-stagger flex flex-col gap-6">
       <Link
-        href="/app/lead-lists"
+        href="/app/lead-sources"
         className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronLeft className="size-4" aria-hidden="true" />
-        Lead lists
+        Lead sources
       </Link>
       <PageHeader
         title={d.campaignName}
@@ -446,6 +463,14 @@ export function LeadListDetailView({
         />
       </StatStrip>
 
+      {nextStep && (
+        <section aria-label="Next step" className="m-glass flex flex-wrap items-center gap-4 rounded-xl border border-border px-4 py-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-[var(--accent-ink)]"><ArrowRight className="size-4" aria-hidden="true" /></span>
+          <span className="min-w-0 flex-1 text-sm text-[var(--body)]"><span className="block text-xs font-semibold text-[var(--accent-ink)]">Next step</span>{nextStep.text}</span>
+          {nextStep.action}
+        </section>
+      )}
+
       {/* 2026-10-06 redesign: the three long sections are tabs, one at a time; health and consent
           stay beside them, always in view. */}
       <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
@@ -490,5 +515,6 @@ export function LeadListDetailView({
         </div>
       </div>
     </div>
+    </DashboardStage>
   );
 }
