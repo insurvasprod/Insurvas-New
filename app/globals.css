@@ -1601,11 +1601,14 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 /* Short screens (a 1366×768 laptop, a zoomed 1080p screen): the same layout, tighter, so every auth
    screen fits without scrolling (owner, 2026-10-27). The order and widths do not change. */
 @media (max-height: 820px) {
-  .portal-tenant-auth-shell .portal-auth-split-form { padding-block: 24px; }
-  .portal-tenant-auth-shell .portal-auth-form-inner > a:first-child { margin-bottom: 1.25rem; }
-  .portal-tenant-auth-shell [data-auth-steps] { margin-bottom: 1rem; }
-  .portal-tenant-auth-shell [data-auth-heading] { margin-bottom: 1rem; }
+  .portal-tenant-auth-shell .portal-auth-split-form { padding-block: 20px; }
+  .portal-tenant-auth-shell .portal-auth-form-inner > a:first-child { margin-bottom: 1rem; }
+  .portal-tenant-auth-shell [data-auth-steps] { margin-bottom: .75rem; }
+  .portal-tenant-auth-shell [data-auth-heading] { margin-bottom: .875rem; }
   .portal-tenant-auth-shell [data-auth-heading] h1 { font-size: 2rem; }
+  .portal-tenant-auth-shell [data-auth-heading] p { margin-top: .375rem; }
+  .portal-tenant-auth-shell [data-auth-back] { margin-bottom: .75rem; }
+  .portal-tenant-auth-shell [data-auth-fields] { gap: .75rem; }
   .portal-tenant-auth-shell .portal-login-footer { margin-top: 1rem; }
 }
 .portal-tenant-auth-shell .portal-auth-split-form > div { justify-content: flex-start; }

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ArrowRight, LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /**
  * Ends the agent session and returns to sign in. `variant="link"` is the arrow link the onboarding
@@ -31,8 +32,10 @@ export function LogoutButton({ variant = "button", className }: { variant?: "but
 
   if (variant === "link") {
     return (
-      <span className="inline-flex flex-col items-center">
-        <button type="button" onClick={handleLogout} disabled={loading} aria-busy={loading} className={className}>
+      // The arrow sits on the text's line: the button is a row of its own (owner, 2026-10-27: the
+      // arrow wrapped under "Sign out" and the line no longer matched "Signed in as").
+      <span className="inline-flex flex-col items-start">
+        <button type="button" onClick={handleLogout} disabled={loading} aria-busy={loading} className={cn("inline-flex items-center gap-1 whitespace-nowrap", className)}>
           {loading ? "Signing out…" : "Sign out"}
           <ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" />
         </button>

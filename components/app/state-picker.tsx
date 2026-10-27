@@ -1,9 +1,10 @@
 "use client";
 
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 import { authControl } from "@/components/app/auth-card";
+import { pickerOption, pickerPanel } from "@/components/app/multi-picker";
 import { US_STATES } from "@/lib/signup/constants";
 import { cn } from "@/lib/utils";
 
@@ -60,23 +61,23 @@ export function StatePicker({ value, onChange, id, describedBy }: { value: strin
         aria-describedby={describedBy}
         autoComplete="off"
         placeholder="Type a state: Texas, Florida…"
-        className={cn(authControl, "pr-9")}
+        className={cn(authControl, "pr-9", open && "border-[var(--accent-ink)]")}
         value={open ? query : chosen}
         onFocus={() => { setOpen(true); setQuery(""); setActive(Math.max(0, US_STATES.findIndex(([code]) => code === value))); }}
         onBlur={() => window.setTimeout(() => { setOpen(false); setQuery(""); }, 120)}
         onChange={(event) => { setQuery(event.target.value); setActive(0); setOpen(true); }}
         onKeyDown={onKeyDown}
       />
-      <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-[26px] size-4 text-muted-foreground" />
+      <ChevronDown aria-hidden="true" className={cn("pointer-events-none absolute right-3 top-[22px] size-4 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
       {open && (
         <ul
           ref={listRef}
           id={listId}
           role="listbox"
           aria-label="States"
-          className="absolute inset-x-0 top-full z-20 m-0 mt-1.5 max-h-60 list-none overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--color-card)] p-1.5 shadow-[var(--shadow-overlay,0_20px_50px_rgba(0,0,0,.45))]"
+          className={cn(pickerPanel, "top-full mt-1.5 max-h-[300px]")}
         >
-          {matches.length === 0 && <li className="px-2.5 py-2 text-sm text-muted-foreground" role="presentation">No state matches “{query}”.</li>}
+          {matches.length === 0 && <li className="px-2.5 py-2.5 text-sm text-muted-foreground" role="presentation">No state matches “{query}”.</li>}
           {matches.map(([code, name], index) => (
             <li
               key={code}
@@ -85,13 +86,11 @@ export function StatePicker({ value, onChange, id, describedBy }: { value: strin
               aria-selected={code === value}
               onMouseDown={(event) => { event.preventDefault(); pick(code); }}
               onMouseEnter={() => setActive(index)}
-              className={cn(
-                "flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-sm text-foreground",
-                index === active && "bg-[var(--primary-soft)]",
-                code === value && "font-semibold text-[var(--accent-ink)]",
-              )}
+              className={pickerOption(index === active, code === value)}
             >
-              {name}<span className="text-xs text-muted-foreground">{code}</span>
+              <span className="min-w-0 flex-1 truncate">{name}</span>
+              <span className="w-6 text-xs tabular-nums text-muted-foreground">{code}</span>
+              <Check aria-hidden="true" className={cn("size-4 shrink-0 stroke-[2.5] text-[var(--accent-ink)]", code !== value && "invisible")} />
             </li>
           ))}
         </ul>

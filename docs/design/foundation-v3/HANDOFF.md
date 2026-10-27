@@ -84,9 +84,112 @@ answers.
     account in the matching `onboarding_state`; `npm run session` mints an *active* tenant,
     which the funnel redirects away from).
 
+## Owner review of step 3 (2026-10-27, evening)
+
+**Status correction:** module 5 is no longer uncommitted. It is commit `8fabff8` ("Foundation v3
+signup flow…"); the worktree has only `tasks/` untracked. The table above is out of date on that row.
+
+The owner reviewed step 3 (`/app/onboarding/business-profile`) in the browser at 1920×1080 and says
+**none of the step 3 feedback is done yet**. Their list, with where the code is:
+
+1. **Scrolling when it is not needed.** The page still scrolls on a 1920×1080 screen: the
+   legal footer (Privacy · Terms · Support) and the "Signed in as" line sit below the fold. The
+   compact mode only starts at `max-height: 820px`, so it never applies here. The owner also
+   reports unneeded scrolling on step 1. Goal: steps 1 and 3 fit in the window with no scrollbar at
+   common laptop and desktop heights (1366×768, 1536×864, 1920×1080); measure each.
+   Files: `components/portal/auth-layout.tsx`, the `.portal-tenant-auth-shell` / `.portal-login-footer`
+   rules in `app/globals.css` (~line 1559–1600; CRLF, see the commit note).
+2. **"What you sell" and "Where your leads come from" become dropdowns**, not chip rows. Both are
+   multi-select, so this is a multi-select dropdown (checkbox list, selected items shown in the
+   trigger as a count or short list), keyboard-accessible, themed like `StatePicker`
+   (`components/app/state-picker.tsx`), 44px trigger to match the auth fields. "Other" still opens
+   the free-text field. "Applications a month" stays as chips unless the owner says otherwise.
+   File: `components/app/business-profile-form.tsx`.
+3. **The dropdowns' design is "too bad"; make it better.** This covers the new ones and the
+   existing Primary state picker: the owner wants a cleaner, more professional menu (surface,
+   spacing, selected and hover states, check marks). Run `/ui-taste` on it and show the owner
+   before committing.
+4. **Do not prefill the business name from the email.** Remove `nameFromEmail`, the
+   `PERSONAL_DOMAINS` list, the `suggested` state and the "Taken from your email address. Change it
+   if it is not right." note in `business-profile-form.tsx`, and stop passing `email` to the form
+   from `app/app/onboarding/business-profile/page.tsx`. The field starts empty (or from the saved
+   profile when coming back from checkout). Update the spec and any test that mentions it.
+5. **"Sign out" is badly aligned.** It renders as "Sign out" with the arrow wrapped onto a second
+   line under it, lower than "Signed in as …". Cause: `LogoutButton variant="link"`
+   (`components/app/logout-button.tsx`) wraps the button in `inline-flex flex-col items-center` and
+   the button itself is not `inline-flex`, so the icon breaks to its own line. Make the button
+   `inline-flex items-center gap-1` and keep the whole line on one baseline.
+6. **There is no Back button anywhere.** The owner sees none in the flow. The spec's "step 3: no
+   Back" decision is overridden: step 3 needs a Back too. Also verify in the browser that the step 4
+   ("Back to your agency") and step 5 ("Back to your plan") links actually render — the owner says
+   they see none. Decide with the owner where step 3's Back goes (steps 1–2 cannot be redone, so it
+   likely signs out back to the start or goes to a confirmed-email screen); ask, don't guess.
+   Files: `components/app/funnel-frame.tsx` (`back` prop), the onboarding pages under
+   `app/app/onboarding/`.
+
+Follow the usual process: short spec update → owner approval → build → browser check at the three
+sizes, light and dark → owner says "commit".
+
+### Done (2026-10-27, late; committed after the owner checked it)
+
+The owner answered the Back question: **step 3 → step 2 → step 1; step 1 has no Back.**
+
+1. **Scrolling.**
+   - The short-screen mode (`max-height: 820px` in `app/globals.css`) is tighter: less padding, and
+     smaller gaps under the logo, the steps, the heading and the Back link. The step 1 and step 3
+     forms carry `data-auth-fields`, which drops their field gap to 12px.
+   - Step 1 puts Work email and Password on one row (like First / Last name). The strength meter
+     is narrower, so it stays on one line in the half column.
+   - Measured with no vertical scroll: 1366×657, 1536×744 and 1920×969 browser windows (the
+     usable part of 1366×768, 1536×864 and 1920×1080 screens), for `/signup` and step 3. No
+     horizontal overflow at 375px.
+2. **Dropdowns.** `components/app/multi-picker.tsx` is new: a 44px trigger that names what is
+   picked ("Life insurance, Medicare +1") and a list with a tick box per row. Keyboard: arrows,
+   Home/End, Space/Enter, Escape. It opens upward when there is no room below, so it never makes
+   the page scroll. "What you sell" and "Where your leads come from" now sit side by side;
+   "Applications a month" stays as chips.
+3. **Dropdown design.** `MultiPicker` and `StatePicker` share `pickerPanel` / `pickerOption`: a
+   softer shadow, 40px rows, a grey hover and a check mark for the chosen row instead of green
+   text. The trigger's edge turns accent-coloured and the chevron flips while the list is open.
+4. **Email prefill removed.** `nameFromEmail`, `PERSONAL_DOMAINS` and the "Taken from your
+   email…" note are gone; the field starts empty, or from the saved profile.
+5. **Sign out.** `LogoutButton variant="link"` is now `inline-flex` with the arrow on the text's
+   line. The step 3 line is "Signed in as … · Sign out →" on one baseline.
+6. **Back.**
+   - Step 3 → "Back to your email" (`/app/verify-email`). For a confirmed account, that page now
+     renders `FunnelReview`: "Your email is confirmed", with Continue to where the signup stands.
+   - Step 2 → "Back to your account" (`/signup`). With a signup in progress, `/signup` renders
+     "Your account is created" (name, email, Continue, "Not you? Sign out") instead of an empty
+     form that would only fail with "account already exists".
+   - Steps 4 and 5 already had Back in code (owner only saw step 3).
+   - New: `components/app/funnel-review.tsx`.
+7. **Docs and tests.**
+   - `SPEC-signup-flow.md` §3 and `UI-CONSISTENCY.md` §13 have the new Back table and the
+     dropdown rule.
+   - `signupCopy.test.mjs` checks Back on steps 2–5, none on step 1, the two review screens, and no
+     email prefill.
+   - `funnel-review.tsx` and `multi-picker.tsx` are on the 44px auth-control list in
+     `uiConsistency.test.mjs`.
+   - `/design/auth` "step 3" now renders the real `BusinessProfileForm`, so the step can be checked
+     without a signup account.
+
+**Checks:**
+- design and signup tests: 79/79;
+- `npm test`: 3,266 tests, the same 23 pre-existing failures;
+- `npm run typecheck` and eslint on the changed files: clean.
+
+**Not checked:**
+- the two review screens (`/signup` with a signup in progress, `/app/verify-email` once
+  confirmed) with a real account: no test account in those states. Only `/signup` signed out and
+  the step 3 form (through `/design/auth`) were seen in the browser.
+
+**Commit note:**
+- `app/globals.css` is CRLF; stage it with `git -c core.autocrlf=false add app/globals.css`.
+- Do not commit `tasks/`.
+
 ## What is next
 
-1. **The owner says "commit"** → commit module 5 (see the note above).
+1. **Check the two Back review screens with a real account** (see "Not checked" above).
 2. **Visual check of steps 2–5** with a test account in each state, light and dark, plus phone
    width. Fix anything found.
 3. **Follow-up already agreed:** the marketing site still types the trial length

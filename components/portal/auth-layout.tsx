@@ -126,6 +126,7 @@ export function AuthBack({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
+      data-auth-back=""
       className="mb-5 inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArrowLeft className="size-4" aria-hidden="true" />

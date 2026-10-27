@@ -4,7 +4,9 @@ import { useState } from "react";
 
 import { AuthHeading, AuthLayout, AuthStory, type AuthPlane } from "@/components/portal/auth-layout";
 import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
+import { BusinessProfileForm } from "@/components/app/business-profile-form";
 import { FUNNEL_STEPS } from "@/components/app/funnel-frame";
+import { LogoutButton } from "@/components/app/logout-button";
 import { StoryPanel } from "@/components/app/tenant-auth-workspace";
 
 /**
@@ -68,9 +70,20 @@ export function AuthShowcase() {
       plane: "agent",
       width: "wide",
       story: <StoryPanel mode="sign-up" step={3} noPayment />,
-      back: { href: "#", label: "Back to your agency" },
+      back: { href: "#", label: "Back to your email" },
       steps: { current: 3, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[2], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
-      node: <><AuthHeading title="Tell us about your agency" /><div className="grid gap-4 sm:grid-cols-2"><AuthField label="Business name" htmlFor="ds-auth-biz"><AuthInput id="ds-auth-biz" /></AuthField><AuthField label="Primary state" htmlFor="ds-auth-state"><AuthInput id="ds-auth-state" /></AuthField></div><AuthSubmit className="mt-6">Continue</AuthSubmit></>,
+      // The real step 3 form (it only sends on Continue with every answer given), so the page's height
+      // and its dropdowns are checked here without a sign-up account in that state.
+      node: (
+        <>
+          <BusinessProfileForm />
+          <p className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm leading-normal text-muted-foreground">
+            <span>Signed in as <span className="font-semibold text-foreground">avery@agency.com</span></span>
+            <span aria-hidden="true">·</span>
+            <LogoutButton variant="link" className="text-sm font-semibold text-foreground hover:text-[var(--accent-ink)]" />
+          </p>
+        </>
+      ),
     },
     done: {
       plane: "agent",

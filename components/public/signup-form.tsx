@@ -107,7 +107,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
         <Link href="/app/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Sign in</Link>
       </FunnelHeading>
 
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 pointer-coarse:[&_input:not([type=checkbox])]:min-h-11">
+      <form onSubmit={handleSubmit} noValidate data-auth-fields="" className="flex flex-col gap-4 pointer-coarse:[&_input:not([type=checkbox])]:min-h-11">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label htmlFor="firstName" className={authLabel}>First name</label>
@@ -119,12 +119,16 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="email" className={authLabel}>Work email</label>
-          <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required className={fieldClass} />
-        </div>
+        {/* Email and password share a row on a wide screen, like the name, so step 1 fits a laptop
+            window without scrolling (owner, 2026-10-27). */}
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="email" className={authLabel}>Work email</label>
+            <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required className={fieldClass} />
+          </div>
 
-        <NewPasswordField id="password" name="password" value={password} onChange={setPassword} inputClassName={fieldClass} />
+          <NewPasswordField id="password" name="password" value={password} onChange={setPassword} inputClassName={fieldClass} />
+        </div>
 
         <div className="space-y-1.5">
           <label htmlFor="phone" className={authLabel}>Phone number</label>

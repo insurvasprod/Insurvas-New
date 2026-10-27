@@ -293,16 +293,22 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - Trial length comes from the chosen plan through `trialDaysForPlan` (`lib/checkout/trialDays.ts`,
   the number checkout and Whop grant) and dates from `firstChargeDate`; before a plan is chosen no
   number is shown. Card wording comes from `checkoutPaymentMode()`. Nothing types "N-day".
-- Back goes only where the server lets you go back:
+- Every step from 2 on has Back to the step before it (owner, 2026-10-27). A step that cannot be
+  redone (1 once the account exists, 2 once the email is confirmed) shows what was done and a
+  Continue to where the signup stands (`FunnelReview`), never a form that would only fail:
 
   | Step | Back |
   |---|---|
-  | 1 Your account, 2 Your email | none (2 keeps "Wrong address?" and Sign out) |
-  | 3 Your agency | none; "Signed in as … · Sign out" instead, since steps 1–2 cannot be redone |
+  | 1 Your account | none |
+  | 2 Your email | ← Back to your account (keeps "Wrong address?" and Sign out) |
+  | 3 Your agency | ← Back to your email; "Signed in as … · Sign out" under the form |
   | 4 Your plan | ← Back to your agency |
   | 5 Payment | ← Back to your plan (and "Change plan" in the receipt) |
+- A question with several answers from a short list is a dropdown with checkboxes
+  (`components/app/multi-picker.tsx`), not a row of chips; it shares its list style with the state
+  picker.
 - First screens ask only what is needed: no confirm-password field (show/hide and the strength
-  meter cover typos). Sign-in and every sign-up step fit without scrolling at 1366×768.
+  meter cover typos). Sign-in and every sign-up step fit without scrolling at 1366×768 (a 1366×657 browser window).
 - No marketing claims, internal notes or explanatory text on auth pages beyond one line under the
   title.
 

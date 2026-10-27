@@ -158,8 +158,8 @@ still allows. That rule is enforced by each page today:
 | Step | Back | Why |
 |---|---|---|
 | 1 Your account | none | First step. |
-| 2 Your email | none; keeps "Wrong address?" and Sign out | The account exists. Changing the address is the way back. |
-| 3 Your agency | none; adds "Signed in as {email} · Sign out" under the form | Steps 1–2 are done and cannot be redone: the account exists and the email is confirmed. Sign-out is the honest exit. |
+| 2 Your email | **← Back to your account** → `/signup` | Revised 2026-10-27 (owner). With a signup in progress, `/signup` shows "Your account is created" (name, email, Continue, "Not you? Sign out") instead of the form. |
+| 3 Your agency | **← Back to your email** → `/app/verify-email`; "Signed in as {email} · Sign out" stays under the form | Revised 2026-10-27 (owner). Once the email is confirmed, `/app/verify-email` shows "Your email is confirmed" with Continue, instead of the waiting panel that moved on by itself. |
 | 4 Your plan | **← Back to your agency** → `/app/onboarding/business-profile` | Agency is editable while `ready_for_checkout` (`business-profile/page.tsx:9`). |
 | 5 Payment | **← Back to your plan** → `/app/onboarding/plan` | The plan is choosable while `awaiting_payment` (`plan/page.tsx:12`). "Change plan" in the receipt stays. "Edit your agency details" under the form goes, because Back covers it in two clicks. |
 
@@ -172,7 +172,7 @@ still allows. That rule is enforced by each page today:
 **`lib/design/signupCopy.test.mjs`:**
 - no auth or sign-up file contains a typed trial length (`\d+-day`) or imports `TRIAL_DAYS`;
 - the checkout and plan pages take the trial through `trialDaysForPlan`'s rule;
-- steps 4 and 5 pass `back` to `FunnelFrame`, and steps 1–3 do not;
+- steps 2–5 have Back to the step before; step 1 does not (revised 2026-10-27);
 - the phrases removed in item 1 do not appear in auth files.
 
 **Unit tests for `resolveTrialDays` (the rule `trialDaysForPlan` applies) and `firstChargeDate`:**

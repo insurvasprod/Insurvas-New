@@ -33,13 +33,14 @@ export default async function BusinessProfilePage() {
       }
     : null;
 
-  // No Back on this step: the account exists and the email is confirmed, so steps 1–2 cannot be
-  // redone. Signing out is the honest way out (owner, 2026-10-27).
+  // Back goes to step 2, which shows the address as confirmed and comes straight back here (owner,
+  // 2026-10-27: "we don't have a back button anywhere"). Signing out stays beside the address.
   return (
-    <FunnelFrame step={3} wide>
-      <BusinessProfileForm initial={initial} email={context.email} />
-      <p className="mt-5 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-        Signed in as <span className="font-semibold text-foreground">{context.email}</span> ·
+    <FunnelFrame step={3} wide back={{ href: "/app/verify-email", label: "Back to your email" }}>
+      <BusinessProfileForm initial={initial} />
+      <p className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm leading-normal text-muted-foreground">
+        <span>Signed in as <span className="font-semibold text-foreground">{context.email}</span></span>
+        <span aria-hidden="true">·</span>
         <LogoutButton variant="link" className="text-sm font-semibold text-foreground hover:text-[var(--accent-ink)]" />
       </p>
     </FunnelFrame>
