@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 import { authControl } from "@/components/app/auth-card";
 import { cn } from "@/lib/utils";
@@ -100,8 +100,8 @@ const FOOTER = 41;
  * Several answers from a short fixed list, in one 44px field (owner, 2026-10-27: "What you sell" and
  * "Where your leads come from" as dropdowns, not rows of chips).
  *
- * The field shows each pick as a tag you can remove without opening the list, then "+N" for those
- * that do not fit. The list stays open while you tick, ends with "N selected · Clear", and closes on
+ * The field names the picks in plain text, like the state picker, then "+N" for those that do
+ * not fit. The list stays open while you tick, ends with "N selected · Clear", and closes on
  * Escape, Enter on the field, or a click outside.
  */
 export function MultiPicker({ options, value, onChange, placeholder, label, describedBy }: {
@@ -140,7 +140,8 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
         if (tag.offsetLeft + tag.offsetWidth > room) break;
         count += 1;
       }
-      setFits(count);
+      // The first pick always shows, cut with an ellipsis if it alone is too long.
+      setFits(Math.max(1, count));
     };
     setFits(Number.POSITIVE_INFINITY);
     const frame = window.requestAnimationFrame(measure);
@@ -170,8 +171,13 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
     if (refocus) buttonRef.current?.focus();
   }
 
+  // The latest picks, not the ones from the last render: two quick ticks both count.
+  const latest = useRef(value);
+  useEffect(() => { latest.current = value; }, [value]);
   function toggle(next: string) {
-    onChange(value.includes(next) ? value.filter((item) => item !== next) : [...value, next]);
+    const current = latest.current;
+    latest.current = current.includes(next) ? current.filter((item) => item !== next) : [...current, next];
+    onChange(latest.current);
   }
 
   function onListKey(event: KeyboardEvent<HTMLUListElement>) {
@@ -191,32 +197,28 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
   return (
     <div
       ref={fieldRef}
-      className={cn(authControl, "relative flex cursor-pointer items-center gap-1.5 px-1.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]", open && "border-[var(--accent-ink)]")}
-      onClick={(event) => { if (event.target === event.currentTarget) { if (open) hide(); else show(); } }}
+      className={cn(authControl, "relative flex cursor-pointer items-center gap-1.5 bg-transparent pl-3 pr-1.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]", open && "border-[var(--accent-ink)]")}
+      onClick={(event) => { if ((event.target as HTMLElement).closest("button")) return; if (open) hide(); else show(); }}
     >
-      <span ref={tagsRef} className={cn("flex min-w-0 items-center gap-1 overflow-hidden", picked.length ? "flex-1" : "hidden")}>
+      <span ref={tagsRef} className={cn("flex min-w-0 items-center overflow-hidden", picked.length ? "flex-1" : "hidden")}>
+        {/* Plain text in the field's own type, like the state picker's "Arizona" (owner, 2026-10-27):
+            picks are added and removed in the list, where every row has its tick box. */}
         {picked.map((option, index) => (
           <span
             key={option.value}
             data-tag=""
             className={cn(
-              "inline-flex h-7 max-w-[11rem] shrink-0 items-center gap-1 rounded-md bg-[var(--surface-alt)] pl-2 pr-1 text-sm font-medium text-foreground",
+              "whitespace-nowrap text-base tracking-[-0.02em] text-foreground",
+              index === 0 && "min-w-0 truncate",
               index >= fits && "invisible absolute",
             )}
           >
-            <span className="truncate">{option.label}</span>
-            <button
-              type="button"
-              onClick={() => toggle(option.value)}
-              aria-label={`Remove ${option.label}`}
-              tabIndex={index >= fits ? -1 : 0}
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-[var(--border)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
-            >
-              <X className="size-3.5" aria-hidden="true" />
-            </button>
+            {option.label}
+            {/* A no-break space: a plain one at the end of the piece is dropped. */}
+            {index < Math.min(fits, picked.length) - 1 && ", "}
           </span>
         ))}
-        {hidden > 0 && <span className="shrink-0 px-1 text-sm font-semibold tabular-nums text-muted-foreground">+{hidden}</span>}
+        {hidden > 0 && <span className="shrink-0 pl-1.5 text-base tabular-nums text-muted-foreground">+{hidden}</span>}
       </span>
       <button
         ref={buttonRef}
@@ -228,7 +230,7 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
         aria-controls={listId}
         aria-label={picked.length ? `${label}: ${picked.map((option) => option.label).join(", ")}` : label}
         aria-describedby={describedBy}
-        className={cn("flex h-full items-center gap-2 rounded-sm pr-1.5 text-left outline-none", picked.length ? "shrink-0" : "min-w-0 flex-1 pl-1.5")}
+        className={cn("flex h-full items-center gap-2 rounded-sm pr-1.5 text-left outline-none", picked.length ? "shrink-0" : "min-w-0 flex-1")}
       >
         {picked.length === 0 && <span className="min-w-0 flex-1 truncate text-muted-foreground">{placeholder}</span>}
         <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
@@ -272,7 +274,7 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
               <button
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onChange([])}
+                onClick={() => { latest.current = []; onChange([]); }}
                 disabled={picked.length === 0}
                 className="rounded-sm font-semibold text-[var(--accent-ink)] hover:underline disabled:pointer-events-none disabled:text-muted-foreground disabled:opacity-60"
               >

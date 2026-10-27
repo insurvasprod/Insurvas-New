@@ -1589,20 +1589,23 @@ a.portal-top-foot-action { text-decoration: none; }
    side swap — and below 1024px the story disappears rather than pushing the form down. Scoped to
    the agent shell; the partner door keeps its own layout. */
 .portal-tenant-auth-shell { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.portal-tenant-auth-shell .portal-auth-split-form { display: flex; flex-direction: column; background: var(--canvas); padding: 40px 64px; }
+.portal-tenant-auth-shell .portal-auth-split-form { display: flex; flex-direction: column; background: var(--canvas); padding: 40px 64px; overflow-x: hidden; }
 .portal-tenant-auth-shell .portal-auth-split-story { padding: 40px 64px; }
 .portal-tenant-auth-shell[data-mode="sign-up"] .portal-auth-split-form,
 .portal-tenant-auth-shell[data-mode="sign-up"] .portal-auth-split-story { transform: none; }
 .portal-tenant-auth-shell .portal-auth-form-inner { width: 100%; max-width: 472px; }
-/* One auth layout (UI-CONSISTENCY §13): the column starts at the top on every screen rather than
-   centring, and the scrollbar's space is always reserved, so the logo, the steps and the heading sit
-   at the same place whether a screen is three fields or twelve. */
+/* One auth layout (UI-CONSISTENCY §13): the logo at the top, the rest centred below it (see
+   data-align further down), and the scrollbar's space always reserved. */
 html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 /* Short screens (a 1366×768 laptop, a zoomed 1080p screen): the same layout, tighter, so every auth
    screen fits without scrolling (owner, 2026-10-27). The order and widths do not change. */
-@media (max-height: 820px) {
+/* 900px, not 820px: a 1080p or 1200p screen at 125% Windows scaling gives the browser about 826px
+   of height, and step 4 did not fit there (owner, 2026-10-27). */
+@media (max-height: 900px) {
   .portal-tenant-auth-shell .portal-auth-split-form { padding-block: 20px; }
-  .portal-tenant-auth-shell .portal-auth-form-inner > a:first-child { margin-bottom: 1rem; }
+  .portal-tenant-auth-shell [data-auth-logo] > a { margin-bottom: 1rem; }
+  /* On a centred door the space under the logo comes from the centring; keep only a minimum. */
+  .portal-tenant-auth-shell [data-align="center"] > [data-auth-logo] > a { margin-bottom: .5rem; }
   .portal-tenant-auth-shell [data-auth-steps] { margin-bottom: .75rem; }
   .portal-tenant-auth-shell [data-auth-heading] { margin-bottom: .875rem; }
   .portal-tenant-auth-shell [data-auth-heading] h1 { font-size: 2rem; }
@@ -1611,10 +1614,24 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
   .portal-tenant-auth-shell [data-auth-fields] { gap: .75rem; }
   .portal-tenant-auth-shell [data-auth-fields] section > h2 { margin-bottom: .375rem; }
   .portal-tenant-auth-shell [data-plan-card] { padding-block: .5rem; }
-  .portal-tenant-auth-shell .portal-login-footer { margin-top: 1rem; }
+  .portal-tenant-auth-shell [data-auth-divider] { margin-block: .625rem; }
+  /* The seat row keeps clear space around its controls (owner, 2026-10-27: they touched the edge). */
+  .portal-tenant-auth-shell [data-seat-row] { min-height: 2.75rem; padding-block: .375rem; }
+  .portal-tenant-auth-shell [data-stepper] { height: 2rem; }
+  .portal-tenant-auth-shell [data-stepper] > button { width: 2rem; }
+  .portal-tenant-auth-shell .portal-login-footer { margin-top: .75rem; }
 }
 .portal-tenant-auth-shell .portal-auth-split-form > div { justify-content: flex-start; }
-.portal-tenant-auth-shell .portal-auth-form-inner { margin: 0 auto; }
+.portal-tenant-auth-shell .portal-auth-form-inner { margin: 0 auto; display: flex; flex-direction: column; flex: 1 0 auto; }
+/* Every auth screen, the sign-up steps included (owner, 2026-10-27: "all of them in the center"):
+   the logo stays at the top and the block from the steps to the legal links sits in the middle of
+   the space below it. Auto margins, so a screen taller than the window simply starts at the top. */
+.portal-tenant-auth-shell .portal-auth-form-inner[data-align="center"] > [data-auth-body] { margin-block: auto; }
+/* On a touch screen a standalone link-button (Back, Sign out, Forgot password?, Switch to agency) is
+   44px to tap, the same as every auth field; with a mouse it keeps its own height. */
+@media (pointer: coarse) {
+  .portal-tenant-auth-shell [data-tap] { display: inline-flex; min-height: 44px; align-items: center; }
+}
 .portal-tenant-auth-shell .portal-auth-split-form :is(input:not([type="radio"]), select) { background-color: var(--card); }
 @media (max-width: 1023px) {
   .portal-tenant-auth-shell { grid-template-columns: minmax(0, 1fr); }

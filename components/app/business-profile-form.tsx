@@ -33,11 +33,13 @@ const FIELD_INFO = {
 type InfoKey = keyof typeof FIELD_INFO;
 
 /** A field's label with its (i). Hover or focus shows the hint floating above, so nothing below moves. */
-function FieldLabel({ id, label }: { id: InfoKey; label: string }) {
+function FieldLabel({ id, label, end = false }: { id: InfoKey; label: string; end?: boolean }) {
   return (
-    <span className="flex items-center gap-1.5">
+    // On a phone the hint spans the label row (the outer span is its box), so it never runs off the
+    // screen; from 640px it sits by the (i), toward the inside of the column.
+    <span className="relative flex items-center gap-1.5">
       <span className={authLabel}>{label}</span>
-      <span className="group relative inline-flex">
+      <span className="group inline-flex sm:relative">
         <button
           type="button"
           aria-label={`What ${label.toLowerCase()} needs`}
@@ -51,7 +53,7 @@ function FieldLabel({ id, label }: { id: InfoKey; label: string }) {
         <span
           id={`info-${id}`}
           role="tooltip"
-          className="pointer-events-none invisible absolute bottom-full -left-2 z-20 mb-1.5 w-64 rounded-lg border border-[var(--border-strong)] bg-[var(--color-card)] px-3 py-2 text-xs font-normal leading-normal text-[var(--body)] opacity-0 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))] transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+          className={cn("pointer-events-none invisible absolute bottom-full inset-x-0 z-20 mb-1.5 rounded-lg sm:right-auto sm:-left-2 sm:w-64 border border-[var(--border-strong)] bg-[var(--color-card)] px-3 py-2 text-xs font-normal leading-normal text-[var(--body)] opacity-0 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))] transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100", end && "sm:left-auto sm:-right-2")}
         >
           {FIELD_INFO[id]}
         </span>
@@ -79,7 +81,9 @@ export type BusinessProfileInitial = {
 export function BusinessProfileForm({ initial = null }: { initial?: BusinessProfileInitial | null }) {
   const router = useRouter();
   const [businessName, setBusinessName] = useState(initial?.businessName ?? "");
-  const label = (id: InfoKey, text: string): ReactNode => <FieldLabel id={id} label={text} />;
+  // A field in the right column opens its hint toward the left, so it never runs past the column
+  // (owner, 2026-10-27: the page scrolled sideways at 125% Windows scaling).
+  const label = (id: InfoKey, text: string, end = false): ReactNode => <FieldLabel id={id} label={text} end={end} />;
   const [primaryState, setPrimaryState] = useState(initial?.primaryState ?? "");
   const [products, setProducts] = useState<string[]>(initial?.productsSold ?? []);
   const [volume, setVolume] = useState(initial?.monthlyVolumeRange ?? "");
@@ -133,7 +137,7 @@ export function BusinessProfileForm({ initial = null }: { initial?: BusinessProf
         </div>
 
         <div>
-          {label("state", "Primary state")}
+          {label("state", "Primary state", true)}
           <StatePicker value={primaryState} onChange={setPrimaryState} />
         </div>
         </div>
@@ -145,7 +149,7 @@ export function BusinessProfileForm({ initial = null }: { initial?: BusinessProf
             <MultiPicker label="What you sell" placeholder="Choose products" options={PRODUCT_OPTIONS} value={products} onChange={setProducts} />
           </div>
           <div>
-            {label("sources", "Where your leads come from")}
+            {label("sources", "Where your leads come from", true)}
             <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
           </div>
         </div>

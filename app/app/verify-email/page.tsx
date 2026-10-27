@@ -19,8 +19,10 @@ export default async function VerifyEmailPage() {
         <FunnelReview
           title="Your email is confirmed"
           subtitle="Nothing more to do here."
-          rows={[{ label: "Work email", value: context.email, done: true }]}
+          rows={[{ label: "Email", value: context.email, done: true }]}
+          // Continue returns to where the signup stands; Next opens step 3 (owner, 2026-10-27).
           continueHref={destination}
+          next={{ href: "/app/onboarding/business-profile", label: "Your agency" }}
         />
       </FunnelFrame>
     );

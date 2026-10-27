@@ -312,6 +312,13 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   it goes under every later line. It fits the room left in the window and never makes it scroll.
 - The brand panel is still: `--brand-700` with one soft light, no ribbon or other motion
   (owner, 2026-10-27).
+- Every auth screen, sign-up steps included, keeps the logo at the top and centres the rest in the
+  space below it (`AuthLayout` `align`, default "center"). No auth screen scrolls, vertically or
+  sideways, at 1536×826 (the owner's 125%-scaled screen), 1366×657 or 1920×1030.
+- On touch screens a standalone link-button (Back, Sign out, Forgot password?, Switch to agency)
+  is 44px to tap (`data-tap`).
+- "Continue with Google" is on the agent doors only (sign-in, sign-up step 1). It shows only when
+  Google is enabled in Supabase. It uses Google's unmodified mark (`public/brand/google-g.svg`).
 - Step 4 asks who, billing, plan and seats, and nothing else. No add-on modules at sign-up, no
   seat slider, no band strip (the plan cards are the bands). One-agent seats are one sentence.
   Segmented controls are 36px with 8px corners and a white thumb; a single billing cycle is text.

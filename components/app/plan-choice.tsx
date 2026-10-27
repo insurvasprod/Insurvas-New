@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Check, LoaderCircle, Minus, Plus } from "lucide-react";
+import { ArrowRight, Check, LoaderCircle, Minus, Plus, Users } from "lucide-react";
 
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { AuthAlert } from "@/components/portal/auth-controls";
@@ -154,7 +154,24 @@ const segmentTrack = "flex gap-0.5 rounded-lg border border-border bg-[var(--sur
 const segment = (active: boolean) => cn(
   "h-8 flex-1 rounded-md px-3 text-sm font-semibold tracking-[-0.02em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40",
   active ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,.08),0_0_0_1px_var(--border)]" : "text-muted-foreground hover:text-foreground",
+  "aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:text-muted-foreground",
 );
+
+/** "Agency", "One-agent": for "Agency plans are billed monthly". */
+const AUDIENCE_NOUN: Record<Audience, string> = { individual: "One-agent", agency: "Agency" };
+
+/**
+ * The seats row (owner, 2026-10-27): one bordered box at one size for both audiences, so switching
+ * between them changes what is inside it, not the shape of the section.
+ */
+const seatRow = "flex min-h-[52px] flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-[var(--border-strong)] bg-card px-3 py-2";
+
+/**
+ * − [n] + as one joined control (owner, 2026-10-27: the three separate boxes touched the row's edge).
+ * One border, hairline dividers, 36px tall (32px on a short screen, data-stepper in globals.css), so
+ * the row always keeps at least 8px around it.
+ */
+const stepperButton = "grid w-9 place-items-center text-[var(--body)] transition-colors hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4";
 
 function Section({ n, title, note, children }: { n: number; title: string; note?: string; children: ReactNode }) {
   return (
@@ -173,7 +190,14 @@ export function PlanChoiceForm() {
   const { plans, plan, cycle, seats } = choice;
   const audiences = (["individual", "agency"] as const).filter((audience) => plans.some((candidate) => candidate.audience === audience));
   const shown = plans.filter((candidate) => candidate.audience === plan.audience);
-  const cycles = BILLING_CYCLES.filter((item) => shown.some((candidate) => candidate.cents[item] != null));
+  // Every cycle any plan is sold on, so the billing control has the same options for both audiences
+  // (owner, 2026-10-27); one this audience is not sold on is shown, disabled, with the reason.
+  const cycles = BILLING_CYCLES.filter((item) => plans.some((candidate) => candidate.cents[item] != null));
+  const soldHere = cycles.filter((item) => shown.some((candidate) => candidate.cents[item] != null));
+  const whyNot = (item: BillingCycle) =>
+    soldHere.length === 1 && !soldHere.includes(item)
+      ? `${AUDIENCE_NOUN[plan.audience]} plans are billed ${BILLING_CYCLE_LABELS[soldHere[0]].toLowerCase()}`
+      : plan.cents[item] == null ? `${plan.name} is not sold ${BILLING_CYCLE_LABELS[item].toLowerCase()}` : null;
   // Section numbers start after "Who it is for" when both audiences are sold.
   const first = audiences.length > 1 ? 1 : 0;
   // What is typed in the seat box, so it can be cleared and retyped without snapping to 1 midway.
@@ -181,7 +205,8 @@ export function PlanChoiceForm() {
 
   return (
     <div>
-      <FunnelHeading title="Choose your plan">Pick a plan and your seats.</FunnelHeading>
+      {/* No subtitle: the numbered sections say what to do (owner, 2026-10-27). */}
+      <FunnelHeading title="Choose your plan" />
       {/* Who and billing side by side, so the step fits a laptop window (owner, 2026-10-27). Billing
           shows even with one cycle, so the row does not change shape between one agent and agency. */}
       <form onSubmit={(event) => { event.preventDefault(); choice.save(); }} data-auth-fields="" className="flex flex-col gap-6">
@@ -198,18 +223,29 @@ export function PlanChoiceForm() {
             </Section>
           )}
           <Section n={first + 1} title="Billing">
-            {/* One cycle on sale: a sentence, not a one-option toggle that looks clickable. */}
-            {cycles.length === 1 ? (
-              <p className="flex h-9 items-center text-sm text-[var(--body)]">{BILLING_CYCLE_LABELS[cycles[0]]} only</p>
-            ) : (
             <div role="radiogroup" aria-label="Billing" className={segmentTrack}>
-              {cycles.map((item) => (
-                <button key={item} type="button" role="radio" aria-checked={cycle === item} disabled={plan.cents[item] == null} title={plan.cents[item] == null ? `${plan.name} is not sold ${BILLING_CYCLE_LABELS[item].toLowerCase()}` : undefined} className={segment(cycle === item)} onClick={() => choice.setCycle(item)}>
-                  {BILLING_CYCLE_LABELS[item]}
-                </button>
-              ))}
+              {cycles.map((item) => {
+                const reason = whyNot(item);
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    role="radio"
+                    onClick={() => { if (!reason) choice.setCycle(item); }}
+                    aria-checked={cycle === item}
+                    // Not `disabled`: a disabled button shows no tooltip, and the reason is the point.
+                    aria-disabled={reason ? true : undefined}
+                    aria-describedby={reason ? `billing-why-${item}` : undefined}
+                    tabIndex={reason ? -1 : undefined}
+                    title={reason ?? undefined}
+                    className={segment(cycle === item)}
+                  >
+                    {BILLING_CYCLE_LABELS[item]}
+                    {reason && <span id={`billing-why-${item}`} className="sr-only">{reason}</span>}
+                  </button>
+                );
+              })}
             </div>
-            )}
           </Section>
         </div>
 
@@ -252,9 +288,10 @@ export function PlanChoiceForm() {
 
         <Section n={first + 3} title="Seats">
           {plan.audience === "agency" ? (
-            <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <Button type="button" variant="outline" size="icon" className="size-9 border-[var(--border-strong)]" aria-label="One seat fewer" disabled={seats <= 1} onClick={() => choice.setSeats(seats - 1)}><Minus aria-hidden="true" /></Button>
+            <div data-seat-row="" className={seatRow}>
+              <div className="flex items-center gap-2.5">
+                <div data-stepper="" className="inline-flex h-9 items-stretch overflow-hidden rounded-md border border-[var(--border-strong)] bg-card">
+                <button type="button" onClick={() => choice.setSeats(seats - 1)} aria-label="One seat fewer" disabled={seats <= 1} className={stepperButton}><Minus aria-hidden="true" /></button>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -267,20 +304,29 @@ export function PlanChoiceForm() {
                     if (typed >= 1) choice.setSeats(typed);
                   }}
                   onBlur={() => setSeatText(null)}
-                  className="h-9 w-[88px] rounded-lg border border-[var(--border-strong)] bg-card text-center text-base font-semibold tabular-nums text-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                  className="w-16 border-x border-[var(--border-strong)] bg-transparent text-center text-base font-semibold tabular-nums text-foreground outline-none [appearance:textfield] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
-                <Button type="button" variant="outline" size="icon" className="size-9 border-[var(--border-strong)]" aria-label="One seat more" onClick={() => choice.setSeats(seats + 1)}><Plus aria-hidden="true" /></Button>
+                <button type="button" onClick={() => choice.setSeats(seats + 1)} aria-label="One seat more" className={stepperButton}><Plus aria-hidden="true" /></button>
+                </div>
                 <span className="text-sm text-muted-foreground">seats</span>
               </div>
+              <span className="text-sm text-muted-foreground">{plan.maxSeats == null ? "No seat limit" : `Up to ${plan.maxSeats} on this plan`}</span>
             </div>
           ) : (
-            // One sentence, not a disabled stepper: a one-agent plan has nothing to choose here.
-            <p className="text-sm leading-normal text-[var(--body)]">
-              1 seat.{" "}
+            <div data-seat-row="" className={seatRow}>
+              <span className="flex items-center gap-3">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-alt)] text-[var(--body)]"><Users className="size-4" aria-hidden="true" /></span>
+                <span className="leading-tight">
+                  <span className="block text-sm font-semibold text-foreground">1 seat</span>
+                  <span className="block text-xs text-muted-foreground">One-agent plans include one seat</span>
+                </span>
+              </span>
               {audiences.includes("agency") && (
-                <>Need a team? <button type="button" onClick={() => choice.setAudience("agency")} className="font-semibold text-[var(--accent-ink)] hover:underline">Switch to an agency plan</button></>
+                <button type="button" onClick={() => choice.setAudience("agency")} data-tap="" className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] [&_svg]:transition-transform hover:[&_svg]:translate-x-[2px]">
+                  Switch to agency<ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" />
+                </button>
               )}
-            </p>
+            </div>
           )}
         </Section>
 

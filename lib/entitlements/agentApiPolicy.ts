@@ -18,6 +18,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // Signed out: emails a reset link to an existing agent account. No session, no feature.
   { sourceFile: "app/api/app/auth/forgot-password/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/sign-in-link/route.ts", featureKey: null },
+  // Signed out: "Continue with Google" (2026-10-27). The sign-in itself is completeTenantSignIn.
+  { sourceFile: "app/api/app/auth/google/start/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/auth/google/callback/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/login/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/logout/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/set-password/route.ts", featureKey: null },

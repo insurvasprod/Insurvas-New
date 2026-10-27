@@ -6,7 +6,7 @@ For the next person or agent picking this up. Read this first, then
 
 ## Where the work is
 
-- **Branch:** `redesign/foundation-v3`, cut from `origin/main` at `ee10778`. Not pushed, no PR.
+- **Branch:** `redesign/foundation-v3`, cut from `origin/main` at `ee10778`. Pushed to `origin` (2026-10-27); no PR yet.
 - **Worktree:** `.claude/worktrees/foundation-v3` inside the main checkout. The main checkout is on
   `redesign/my-profile` with someone else's uncommitted profile work; do not touch it.
 - **Local setup in the worktree** (both gitignored, local only):
@@ -14,9 +14,9 @@ For the next person or agent picking this up. Read this first, then
   - `.env.local` is a copy of the main checkout's.
 - **Building:**
   - Turbopack refuses the linked `node_modules`, so use webpack:
-    `npx next dev --webpack -p 3002`, `npx next build --webpack`.
+    `npx next dev --webpack -p 3000`, `npx next build --webpack`.
   - `npm run build` works only after a real `npm ci` in the worktree.
-- **Review server:** `http://localhost:3002` (`/signup`, `/app/login`, `/partner/login`,
+- **Review server:** `http://localhost:3000` (`/signup`, `/app/login`, `/partner/login`,
   `/admin/login`, `/design`, `/design/auth`).
 - **Process:** the owner works spec-first (`/agent-skills:spec-driven-development`): spec → owner
   approval → plan (`tasks/plan.md`, `tasks/todo.md`, both untracked) → build → owner says "commit".
@@ -227,6 +227,176 @@ Add modules entirely; still brand-700 panel with one soft light; white-thumb 36p
 
 **Not run:** `npx next build --webpack`, because the dev server was using the worktree. Run it
 before pushing.
+
+## Round 3 (2026-10-27, late): step 4 billing and seats, Google groundwork. Committed and pushed
+
+Plan: `tasks/plan.md`, `tasks/todo.md`. Owner answers: phone stays required for Google sign-ups,
+any Gmail allowed, a password account is auto-linked to Google with a security event.
+
+**Part A: step 4.**
+- **Billing:** the same Monthly / Yearly control for both audiences. A cycle the audience is not
+  sold on is `aria-disabled` (not `disabled`, so its tooltip shows): "Agency plans are billed
+  monthly", with an sr-only description too.
+- **Seats:** one row shape for both audiences (`seatRow`, `data-seat-row`):
+  - one agent: icon, "1 seat", "One-agent plans include one seat", and "Switch to agency →";
+  - agency: the stepper, with "Up to N on this plan" or "No seat limit".
+  - Measured: the same top, height and width in both views.
+- **Checks:** no scroll at 1920×1030, 1536×744 or 1366×657, light and dark.
+
+**B1: one agent sign-in pipeline.**
+- Everything after the first factor moved from `app/api/app/auth/login/route.ts` to
+  `lib/tenantAuth/completeSignIn.ts` (`completeTenantSignIn`, `signInFailure`): the user row and
+  status, the link checks, the partner plane, suspension, two-factor and trusted devices, and the
+  session.
+- The route keeps the maintenance lock, parsing, the link token, the rate limit and the password.
+- The moved code is identical, except one equivalent line (`via === "link"` for `link`).
+- Seven source-text security tests now read the new file and keep the same orderings: plane
+  separation, rate limit before lookup, link once, 2FA prompt, suspension, session rows.
+- Not done: login events do not record the method yet. That needs a column; add it with B2.
+
+**Checks:**
+- auth tests: 185/185; design and signup tests: 81/81;
+- `npm test`: 3,268 tests, the same 23 pre-existing failures;
+- typecheck and lint: clean.
+
+**Owner review fixes (same round):**
+- **The owner's screen is scaled.** A 1080p/1200p display at 125% Windows scaling gives the
+  browser about **1536×826** CSS pixels. At that size:
+  - step 4 scrolled, because compact spacing started only at 820px tall. It now starts at
+    `max-height: 900px`;
+  - step 3 scrolled sideways, because the hidden "?" hint of a right-column field ("Primary
+    state", "Where your leads come from") ran past the column. Those hints now open toward the
+    left (`FieldLabel end`), and the form column has `overflow-x: hidden` as a guard.
+  - Measured at 1536×826: sign-in, steps 1, 2 (seen again), 3, and 4 (both audiences) have no
+    vertical or sideways scroll.
+  - **Use 1536×826 as a test size from now on.**
+- **Back, then Continue jumped to the end.** The review screens (step 1 and step 2 seen again)
+  keep Continue → where the signup stands, and add an outline **"Next: <step>"** button that goes
+  one step forward. Next is left out when it is the same place. Preview: `/design/auth`
+  "step 2 seen again".
+
+**Next:**
+- B0 (owner: Google Cloud client, Supabase provider, redirect URLs);
+- then B2 (start and callback routes), B3 (buttons), B4 ("Finish your account").
+
+## Round 4 (2026-10-27, night): centred screens, Google sign-in and sign-up. Committed and pushed
+
+**Where to look:**
+- Everything is on **localhost:3000**, the dev server running from this worktree.
+- The Google buttons are hidden until Google is enabled in Supabase: `/auth/v1/settings` reports
+  `google: false` today.
+- Preview them on `/design/auth`: "Sign-in · Google", "Step 1 · Google" and "Step 1 · finish
+  (Google)".
+
+**Centring.**
+- `AuthLayout` has `align`, default `"center"`: the logo stays at the top and the rest (`[data-auth-body]`)
+  takes `margin-block: auto`.
+- This covers every auth screen, sign-up steps included (the owner asked for all of them).
+- Measured with animations finished: above equals below on every screen, with no vertical or
+  sideways scroll, at 1366×657, 1536×826 and 1920×1030.
+- **Measuring note:** in a hidden preview pane, entrance animations and view transitions stall at
+  their start, which inflates `scrollHeight` by about 10px. Call `getAnimations().forEach(a =>
+  a.finish())` and `document.activeViewTransition?.skipTransition()` before measuring.
+
+**Step 1 with Google fits at 1366×657:**
+- "Have an account? Sign in" moved onto the step line (the `AuthSteps` `aside`, the `FunnelFrame`
+  `stepsAside` prop);
+- the terms checkbox is 44px only on touch;
+- the divider is tighter on short screens.
+
+**Mobile (375px):**
+- no screen scrolls sideways;
+- standalone link-buttons get a 44px tap area on touch (`data-tap`).
+
+**Google.**
+- `lib/tenantAuth/google.ts`:
+  - the provider check (cached for 5 minutes, off on error);
+  - PKCE start and exchange through Supabase;
+  - the flow cookie (httpOnly, path `/api/app/auth/google`, 10 minutes).
+- `lib/tenantAuth/googleProfile.ts` holds the pure parts: the verified flag, newly-linked
+  detection and the cookie parser. They are unit-tested.
+- **Routes:** `/api/app/auth/google/start` and `/callback`. The callback:
+  - refuses an unverified address;
+  - applies the same lockout as the password;
+  - existing account → `completeTenantSignIn(via: "google")`. Two-factor goes to
+    `/app/login?step=code`; refusals redirect back with a fixed reason key (`googleMessages.ts`);
+  - auto-link → a `google_sign_in_added` event;
+  - new address → a signed 20-minute cookie, then `/signup?google=finish`.
+- **Finish:** `GoogleFinishForm` asks for name, phone and terms. `POST /api/public/signup/google`
+  runs the same checks as the email sign-up, `self_serve_signup_with_auth`, then
+  `complete_signup_email_verification` straight away, so step 2 is skipped. It records the
+  acceptances and a `signed_in_with_google` event, and issues the session.
+- **Buttons:**
+  - sign-in: Google beside "Email me a link" under one "or";
+  - step 1: Google above the fields, then "or use your email";
+  - none on the partner or staff doors (tested).
+- **Migration** `20261027400000_security_events_google.sql` adds the two event types. Until it is
+  applied, those event rows are skipped and logged; sign-in is unaffected.
+- **Route inventories** (agentApiPolicy, planeIsolation, ag02, moneyRoutes) list the two routes.
+
+**Checks:**
+- `npm test`: 3,276 tests, the same 23 pre-existing failures, and 8 new Google tests pass;
+- typecheck and lint: clean.
+
+**Seat stepper (same round):**
+- − [n] + is one joined control (`data-stepper`): 36px, or 32px on short screens.
+- The seat row keeps 7px above and below it at every size (it was 2px).
+- On a phone, "Up to N on this plan" wraps inside the row.
+
+**Review server: always localhost:3000** (owner, 2026-10-27).
+- It is started from this worktree with `npx next dev --webpack -p 3000`. Use webpack, not
+  Turbopack, because of the linked `node_modules`.
+- It runs in the Terminal panel tab "Insurvas dev 3000".
+- `.env.local` has `NEXT_PUBLIC_APP_URL=http://localhost:3000`, so Google's callback comes back to
+  the same server.
+- Supabase's Redirect URLs need `http://localhost:3000/api/app/auth/google/callback`.
+- Nothing runs on 3002 any more.
+
+**Google fix after the owner's first real test (22:40):**
+- **Problem:** a first Google login was refused on both doors.
+- **Cause:** the `private.handle_new_auth_user` trigger gives every new Auth user a `users` row
+  (`invited`, inactive), and the callback treated any row as an account.
+- **Rule now:** `googleAccountState` (unit-tested). A bare `invited` row with no agency or partner
+  membership is a new person → "Finish your account". An agency invitation → the `invited`
+  message. Anything else → `completeTenantSignIn`.
+- The "exists" check ignores this Auth user's own row.
+- **New messages:** `invited` and `inactive`.
+- **Owner's real records** (read-only): decision "new".
+- `GoogleButton` is now the shared outline `Button`, the same as "Email me a link". Measured
+  identical background, border, shadow and text in light and dark.
+
+**Owner check, 22:48:**
+- Google sign-up worked end to end for `rionnreqica@gmail.com`: an active account with its
+  workspace.
+- **Labels:** "Work email" is now "Email" on sign-up, the review screens and the
+  verify-email correction field. The validation message reads "Enter a valid email address".
+  `signupCopy.test.mjs` refuses "work email" in auth files.
+- **"Finish your account"** is now the step 1 form:
+  - First / Last name (split from Google's name);
+  - the Email field filled and locked, with the Google mark and "Verified";
+  - phone, terms, Create account;
+  - "Not you? Use another email" on the step line.
+
+**Step 3 dropdowns match the other fields (owner, 22:49):**
+- The two multi-select fields are transparent like Business name and Primary state (they were
+  white `--card`).
+- They name the picks in plain 16px text like "Arizona" ("Health insurance, Medicare +2"), with
+  no grey chips. Picks are changed in the list.
+- Two quick ticks both count: the toggle reads the latest picks from a ref.
+
+**Last touches before the push:**
+- Step 4 has no subtitle.
+- On a phone, step 3's "?" hints span the label row; at 375px they had scrolled the page sideways.
+- **Final sweep:** every auth screen at 1920×1030, 1536×826 and 1366×657 is centred with no
+  scroll, and at 375px nothing scrolls sideways.
+- `npx next build --webpack` passes.
+
+**Not verified:**
+- The Google flow end to end: it needs B0 from the owner (a Google Cloud OAuth client, the
+  Supabase Google provider, and `https://<project>.supabase.co/auth/v1/callback` in Google's
+  redirect URIs).
+- Supabase's allowed redirect URLs must include `<NEXT_PUBLIC_APP_URL>/api/app/auth/google/callback`.
+- `npx next build --webpack` was not run (the dev server uses the worktree).
 
 ## What is next
 

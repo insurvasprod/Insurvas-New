@@ -7,8 +7,11 @@ import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/co
 import { BusinessProfileForm } from "@/components/app/business-profile-form";
 import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary } from "@/components/app/plan-choice";
 import { FUNNEL_STEPS } from "@/components/app/funnel-frame";
+import { FunnelReview } from "@/components/app/funnel-review";
 import { LogoutButton } from "@/components/app/logout-button";
-import { StoryPanel } from "@/components/app/tenant-auth-workspace";
+import { StoryPanel, TenantAuthWorkspace } from "@/components/app/tenant-auth-workspace";
+import { GoogleFinishForm } from "@/components/public/google-finish-form";
+import { SignupForm } from "@/components/public/signup-form";
 import type { PlanChoiceModule, PlanChoiceOption } from "@/lib/signup/planChoice";
 
 /**
@@ -18,7 +21,11 @@ import type { PlanChoiceModule, PlanChoiceOption } from "@/lib/signup/planChoice
  */
 const VARIANTS = [
   { key: "sign-in", label: "Agent sign-in" },
+  { key: "sign-in-google", label: "Sign-in · Google" },
+  { key: "step-1-google", label: "Step 1 · Google" },
+  { key: "google-finish", label: "Step 1 · finish (Google)" },
   { key: "step-1", label: "Sign-up · step 1" },
+  { key: "step-2-review", label: "Sign-up · step 2 seen again" },
   { key: "step-3", label: "Sign-up · step 3 (wide, back)" },
   { key: "step-4", label: "Sign-up · step 4 (plan)" },
   { key: "done", label: "Sign-up · all done" },
@@ -89,6 +96,27 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
         </>
       ),
     },
+    // The real screens with Google switched on, before it is on in Supabase (2026-10-27).
+    "sign-in-google": { plane: "agent", story: <StoryPanel mode="sign-in" />, node: null },
+    "step-1-google": {
+      plane: "agent",
+      story: <StoryPanel mode="sign-up" step={1} />,
+      steps: { current: 1, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[0], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Have an account? <a href="#" className="font-semibold text-[var(--accent-ink)]">Sign in</a></> },
+      node: <SignupForm googleEnabled />,
+    },
+    "google-finish": {
+      plane: "agent",
+      story: <StoryPanel mode="sign-up" step={1} />,
+      steps: { current: 1, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[0], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Not you? <a href="#" className="font-semibold text-[var(--accent-ink)]">Use another email</a></> },
+      node: <GoogleFinishForm email="avery@gmail.com" name="Avery Collins" />,
+    },
+    "step-2-review": {
+      plane: "agent",
+      story: <StoryPanel mode="sign-up" step={2} />,
+      back: { href: "#", label: "Back to your account" },
+      steps: { current: 2, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      node: <FunnelReview title="Your email is confirmed" subtitle="Nothing more to do here." rows={[{ label: "Email", value: "avery@agency.com", done: true }]} continueHref="#continue" next={{ href: "#next", label: "Your agency" }} />,
+    },
     "step-4": {
       plane: "agent",
       width: "wide",
@@ -138,7 +166,7 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
   );
   return (
     <>
-      {variant === "step-4" && planChoices?.plans.length ? (
+      {variant === "sign-in-google" ? <TenantAuthWorkspace googleEnabled /> : variant === "step-4" && planChoices?.plans.length ? (
         <PlanChoiceProvider plans={planChoices.plans} modules={planChoices.modules} initial={null} now={now} noPayment={false}>{layout}</PlanChoiceProvider>
       ) : layout}
       {picker}

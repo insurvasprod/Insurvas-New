@@ -35,7 +35,7 @@ export function LogoutButton({ variant = "button", className }: { variant?: "but
       // The arrow sits on the text's line: the button is a row of its own (owner, 2026-10-27: the
       // arrow wrapped under "Sign out" and the line no longer matched "Signed in as").
       <span className="inline-flex flex-col items-start">
-        <button type="button" onClick={handleLogout} disabled={loading} aria-busy={loading} className={cn("inline-flex items-center gap-1 whitespace-nowrap", className)}>
+        <button type="button" onClick={handleLogout} disabled={loading} aria-busy={loading} data-tap="" className={cn("inline-flex items-center gap-1 whitespace-nowrap", className)}>
           {loading ? "Signing out…" : "Sign out"}
           <ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" />
         </button>

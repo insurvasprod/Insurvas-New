@@ -1,20 +1,25 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { Button } from "@/components/ui/button";
 
 /**
  * A finished sign-up step seen again through Back (owner, 2026-10-27). Steps 1 and 2 cannot be redone
- * once the account exists and the email is confirmed, so Back shows what was done and a Continue to
- * where the signup stands, rather than an empty form that would only fail.
+ * once the account exists and the email is confirmed, so Back shows what was done, rather than an
+ * empty form that would only fail.
+ *
+ * Two ways on (owner, 2026-10-27): Continue returns to where the signup stands; "Next" walks one step
+ * forward, so someone who went back can step through again. Next is left out when it is the same place.
  */
-export function FunnelReview({ title, subtitle, rows, continueHref, children }: {
+export function FunnelReview({ title, subtitle, rows, continueHref, next, children }: {
   title: string;
   subtitle: string;
   rows: { label: string; value: string; done?: boolean }[];
   continueHref: string;
+  /** The step after this one, by name: "Next: Your email". */
+  next?: { href: string; label: string };
   children?: ReactNode;
 }) {
   return (
@@ -35,9 +40,16 @@ export function FunnelReview({ title, subtitle, rows, continueHref, children }: 
           </div>
         ))}
       </dl>
-      <Button asChild className="mt-6 h-11 w-full">
-        <Link href={continueHref}>Continue</Link>
-      </Button>
+      <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
+        <Button asChild className="h-11 flex-1">
+          <Link href={continueHref}>Continue</Link>
+        </Button>
+        {next && next.href !== continueHref && (
+          <Button asChild variant="outline" className="h-11 flex-1 border-[var(--border-strong)]">
+            <Link href={next.href}>Next: {next.label}<ArrowRight aria-hidden="true" /></Link>
+          </Button>
+        )}
+      </div>
       {children}
     </div>
   );

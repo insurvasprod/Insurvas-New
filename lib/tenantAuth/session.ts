@@ -209,3 +209,44 @@ export async function verifyTenantSignInLinkToken(token: string): Promise<Tenant
     return null;
   }
 }
+
+/**
+ * Google sign-up, between Google and "Finish your account" (2026-10-27). Google has proved the
+ * address; nothing exists at Insurvas yet. This carries the Auth user Google made, the verified
+ * address and the name, for twenty minutes, so the finish step can create the workspace without
+ * trusting anything the browser sends about who the person is.
+ */
+const GOOGLE_SIGNUP_AUDIENCE = "insurvas:google-signup";
+export const GOOGLE_SIGNUP_COOKIE = "insurvas_google_signup";
+export const GOOGLE_SIGNUP_MINUTES = 20;
+
+export type GoogleSignup = { sub: string; email: string; name: string; plan: string | null; cycle: string | null };
+
+export async function signGoogleSignupToken(input: GoogleSignup): Promise<string> {
+  return new SignJWT({ email: input.email, name: input.name, plan: input.plan, cycle: input.cycle })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(input.sub)
+    .setAudience(GOOGLE_SIGNUP_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(`${GOOGLE_SIGNUP_MINUTES * 60}s`)
+    .sign(getSecret());
+}
+
+export async function verifyGoogleSignupToken(token: string): Promise<GoogleSignup | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecret(), { audience: GOOGLE_SIGNUP_AUDIENCE });
+    if (typeof payload.sub !== "string" || typeof payload.email !== "string" || typeof payload.name !== "string") return null;
+    const text = (value: unknown) => (typeof value === "string" ? value : null);
+    return { sub: payload.sub, email: payload.email, name: payload.name, plan: text(payload.plan), cycle: text(payload.cycle) };
+  } catch {
+    return null;
+  }
+}
+
+export const googleSignupCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: GOOGLE_SIGNUP_MINUTES * 60,
+};
