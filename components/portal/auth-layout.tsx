@@ -90,7 +90,7 @@ export type AuthStepsProps = {
 export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress" }: AuthStepsProps) {
   const done = current > total;
   return (
-    <div className="mb-6">
+    <div data-auth-steps="" className="mb-6">
       <p className="text-sm font-semibold leading-normal tracking-[-0.02em] text-muted-foreground">
         {done ? (
           <span className="text-foreground">All {total} steps done</span>
@@ -139,7 +139,7 @@ export function AuthBack({ href, label }: { href: string; label: string }) {
 /** Every auth screen opens with this: the display face, left-aligned, at most one line under it. */
 export function AuthHeading({ title, children }: { title: ReactNode; children?: ReactNode }) {
   return (
-    <div className="mb-6">
+    <div data-auth-heading="" className="mb-6">
       <h1 className="font-[family-name:var(--font-display)] text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
         {title}
       </h1>

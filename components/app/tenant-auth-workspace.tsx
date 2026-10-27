@@ -10,7 +10,6 @@ import type { PortalAuthMode } from "@/components/portal/portal-auth-split-shell
 import { AuthHeading, AuthLayout, AuthStory } from "@/components/portal/auth-layout";
 import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
 import { OtpInput } from "@/components/app/otp-input";
-import { TRIAL_DAYS } from "@/lib/checkout/constants";
 import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
 import type { MaintenanceStatus } from "@/lib/system/constants";
 
@@ -25,31 +24,35 @@ const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
  * shell drops it entirely rather than pushing the form under the fold.
  */
 const floorLines = [
-  { label: "Inbound transfers, claimed once", value: "One claim" },
-  { label: "Screening re-checked before every dial", value: "Server-side" },
-  { label: "Cost traced through to the issued policy", value: "True CPA" },
-  { label: "Callbacks, appointments and the book", value: "One record" },
+  { label: "Inbound transfers", value: "Claimed by one agent" },
+  { label: "Every dial", value: "Checked against do-not-call" },
+  { label: "Lead cost", value: "Traced to the policy" },
+  { label: "Callbacks and appointments", value: "On the lead's record" },
 ];
 
-// The trial needs a card: it starts on Whop's hosted checkout, which takes the card (2026-10-15).
-const trialPoints = [
-  {
-    label: "A card is required for the trial",
-    detail: "You enter it on Whop’s hosted checkout page, never on an Insurvas form.",
-  },
-  {
-    label: "Your plan decides the menu",
-    detail: "Features you have not bought are never shown as broken screens.",
-  },
-];
+/** The sign-up steps, as the panel beside steps 1–3 lists them (FUNNEL_STEPS in funnel-frame.tsx). */
+const SIGN_UP_STEPS = ["Your account", "Your email", "Your agency", "Your plan", "Payment"] as const;
 
 /**
- * The brand panel beside the agent forms, in the one AuthStory style; AppAuthFrame (set password,
- * verify and confirm email) shows the sign-in one.
+ * The brand panel beside the agent forms, in the one AuthStory style. Sign-up shows where you are in
+ * the five steps, and says what the payment step will ask for in the payment mode that is on; it
+ * never names a trial length, because that depends on the plan chosen at step 4 (owner, 2026-10-27).
+ * AppAuthFrame (set password, confirm email) shows the sign-in one.
  */
-export function StoryPanel({ mode }: { mode: PortalAuthMode }) {
-  if (mode === "sign-up") return <AuthStory title="Free trial. Card required." rows={trialPoints} />;
-  return <AuthStory label="Licensed agent portal" title="Your floor is already running." rows={floorLines} />;
+export function StoryPanel({ mode, step = 1, noPayment = false }: { mode: PortalAuthMode; step?: number; noPayment?: boolean }) {
+  if (mode === "sign-up") {
+    return (
+      <AuthStory
+        title="Five steps to your workspace."
+        rows={SIGN_UP_STEPS.map((name, index) => ({
+          label: name,
+          value: index + 1 < step ? "Done" : index + 1 === step ? "Now" : undefined,
+          detail: name === "Payment" ? (noPayment ? "No card needed" : "Card on Whop's secure checkout · not charged during your trial") : undefined,
+        }))}
+      />
+    );
+  }
+  return <AuthStory label="For licensed agents" title="Your agency's floor, in one workspace." rows={floorLines} />;
 }
 
 /**
@@ -316,7 +319,7 @@ export function TenantAuthWorkspace({
       <p className="mt-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
         New to Insurvas?{" "}
         <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
-          Start a {TRIAL_DAYS}-day trial
+          Create an account
         </Link>
       </p>
 

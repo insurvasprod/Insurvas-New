@@ -22,6 +22,14 @@ export function resolveTrialDays(planTrialDays: unknown, settingTrialDays?: unkn
   return TRIAL_DAYS;
 }
 
+/**
+ * The day a trial that starts now first charges the card: every sign-up screen draws it from here,
+ * so the plan step, the payment title, the receipt and the renewal terms name the same date.
+ */
+export function firstChargeDate(trialDays: number, now: Date = new Date()): Date {
+  return new Date(now.getTime() + trialDays * 86_400_000);
+}
+
 /** Where Whop sends the customer back to. Must be https — Whop rejects anything else. */
 export function checkoutReturnUrl(): string | null {
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");

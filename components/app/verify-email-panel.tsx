@@ -17,7 +17,8 @@ const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leadi
  * land — the link can be opened on a phone — and moves on by itself, which is the promise the first
  * line of "What to expect" makes.
  */
-export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: number; noPayment?: boolean }) {
+// `noPayment` is still passed by the page; this step no longer mentions charging, so it is unused.
+export function VerifyEmailPanel({ ttlHours }: { ttlHours: number; noPayment?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -95,8 +96,7 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
   return (
     <div>
       <FunnelHeading title="Confirm your email">
-        Open the link we sent. It works once, for {ttlHours} hours, and keeps anyone else from opening a workspace in your name.
-        {noPayment ? " Nothing is charged." : " Nothing has been charged."}
+        Open the link we sent to the address below. It works once, for {ttlHours} hours. This page moves on by itself when you open it.
       </FunnelHeading>
       {loading ? (
         <div className="flex h-28 items-center justify-center" role="status" aria-label="Loading your account"><LoaderCircle className="animate-spin text-muted-foreground" /></div>
@@ -119,10 +119,7 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
             </Button>
           </div>
 
-          <p className="mt-4 flex items-center gap-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" role="status">
-            <LoaderCircle className="size-4 shrink-0 animate-spin text-[var(--accent-ink)] motion-reduce:animate-none" aria-hidden="true" />
-            Waiting for the link to be opened. This page moves on by itself, even if you open it on your phone.
-          </p>
+          <p className="sr-only" role="status">Waiting for the link to be opened.</p>
 
           {changing && (
             <form onSubmit={(event) => send("change_email", event)} className="mt-4 rounded-lg border border-border p-4">

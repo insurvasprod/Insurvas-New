@@ -73,7 +73,8 @@ export function NewPasswordField({
           {show ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
         </button>
       </div>
-      <div className="grid grid-cols-4 gap-1 pt-1" aria-hidden="true">
+      <div className="flex items-center gap-3 pt-1">
+      <div className="grid w-28 shrink-0 grid-cols-4 gap-1" aria-hidden="true">
         {[1, 2, 3, 4].map((bar) => (
           <span
             key={bar}
@@ -87,6 +88,7 @@ export function NewPasswordField({
       <p id={`${id}-strength`} aria-live="polite" className={cn("text-xs leading-normal", strength.level === 1 ? "text-[var(--error-ink)]" : strength.level >= 3 ? "text-[var(--success-ink)]" : "text-muted-foreground")}>
         {strength.label}
       </p>
+      </div>
     </div>
   );
 }

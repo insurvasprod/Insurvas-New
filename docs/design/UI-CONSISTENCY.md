@@ -40,7 +40,7 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | Overlays chosen by task | §11 | Live |
 | Status colours | §12 | Live |
 | One auth layout | §13 | Live (`lib/design/authShell.test.mjs`) |
-| Sign-up copy, Back on sign-up steps, trial wording from data | §13 | Decided, lands in `signup-flow` |
+| Sign-up copy, Back on sign-up steps, trial wording from data | §13 | Live (`lib/design/signupCopy.test.mjs`) |
 | Numbers and money | §14 | Live |
 | Inter in the apps and auth pages | [BRAND.md](BRAND.md) | Live (`lib/design/typeface.test.mjs`) |
 | Gloss surface tokens (`--gloss-*`, `--stat-icon-*`) | `app/globals.css` | Live as tokens; used from `foundation-components` |
@@ -268,8 +268,8 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - A rising number is green only when rising is good. A rising pending balance stays grey.
 
 ## 13. Auth pages (v3)
-**Status:** Live for the layout. The copy, Back and trial-wording rules below are Decided, lands in
-`signup-flow`.
+**Status:** Live. Held by `lib/design/authShell.test.mjs` (layout) and
+`lib/design/signupCopy.test.mjs` (copy, trial and Back).
 
 - One layout for sign-in, every sign-up step, the account screens, accept terms, partner and staff
   sign-in: `AuthLayout` from `components/portal/auth-layout.tsx`, or one of its wrappers
@@ -287,11 +287,24 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   `AuthSecondary`, and one `AuthAlert` with `tone="error" | "info" | "success"`. Auth screens are
   exempt from the 36px rule (§5) for this reason; app pages are not.
 - Copy follows the order things happen: the first sign-up step creates an account ("Create your
-  account"); the trial is named only on the step where it starts.
-- Trial length and card wording come from data (`resolveTrialDays`, `checkoutPaymentMode()`), never
-  typed into copy.
-- Every sign-up step after the account exists has a **Back** control to the previous step.
-- No marketing claims or explanatory text on auth pages beyond one line under the title.
+  account", button "Create account"); the trial is named only on the payment step, where it
+  starts. The full copy, screen by screen, is in
+  [foundation-v3/SPEC-signup-flow.md](foundation-v3/SPEC-signup-flow.md).
+- Trial length comes from the chosen plan through `trialDaysForPlan` (`lib/checkout/trialDays.ts`,
+  the number checkout and Whop grant) and dates from `firstChargeDate`; before a plan is chosen no
+  number is shown. Card wording comes from `checkoutPaymentMode()`. Nothing types "N-day".
+- Back goes only where the server lets you go back:
+
+  | Step | Back |
+  |---|---|
+  | 1 Your account, 2 Your email | none (2 keeps "Wrong address?" and Sign out) |
+  | 3 Your agency | none; "Signed in as … · Sign out" instead, since steps 1–2 cannot be redone |
+  | 4 Your plan | ← Back to your agency |
+  | 5 Payment | ← Back to your plan (and "Change plan" in the receipt) |
+- First screens ask only what is needed: no confirm-password field (show/hide and the strength
+  meter cover typos). Sign-in and every sign-up step fit without scrolling at 1366×768.
+- No marketing claims, internal notes or explanatory text on auth pages beyond one line under the
+  title.
 
 ## 14. Numbers and money (v3)
 **Status:** Live.

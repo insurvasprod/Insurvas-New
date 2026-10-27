@@ -123,11 +123,13 @@ export function CheckoutView(props: CheckoutViewProps) {
   const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production" } = props;
 
   const body = (
-    <FunnelFrame step={5} wide aside={<Receipt props={props} dark />}>
-      <FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day trial` : "Start your plan"}>
+    <FunnelFrame step={5} wide back={{ href: "/app/onboarding/plan", label: "Back to your plan" }} aside={<Receipt props={props} dark />}>
+      <FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day free trial` : "Start your plan"}>
         {noPayment
-          ? "No payment is taken. Your workspace opens as soon as you continue."
-          : "Pay on this page. Your card goes straight to Whop, our payment provider, and never touches Insurvas."}
+          ? "No card needed. Nothing is charged."
+          : trialDays > 0
+            ? `Add a card to start. You won't be charged until ${props.trialEnds}.`
+            : `Your first ${props.cycle ? PER[props.cycle] : "period"} is charged today.`}
       </FunnelHeading>
 
       {/* "Pending" also covers a payment the provider has not finished recording, so this must not
@@ -152,8 +154,7 @@ export function CheckoutView(props: CheckoutViewProps) {
           : <PaymentEmbed email={email} environment={environment} />}
 
         <p className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          Leave now and come back any time: you will return to this same step.{" "}
-          <Link href="/app/onboarding/business-profile" className="font-semibold text-foreground hover:underline">Edit your agency details</Link>
+          Leave now and come back any time: you will return to this same step.
         </p>
       </div>
     </FunnelFrame>

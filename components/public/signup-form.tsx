@@ -39,8 +39,6 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
   // Unticked, and initialised unticked — never derived from anything that could arrive true.
   const [accepted, setAccepted] = useState(false);
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [confirmTouched, setConfirmTouched] = useState(false);
   const [phoneCountryCode, setPhoneCountryCode] = useState(DEFAULT_PHONE_COUNTRY);
   const [phone, setPhone] = useState("");
   const [phoneTouched, setPhoneTouched] = useState(false);
@@ -64,13 +62,11 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
 
   const phoneCheck = checkPhone(phoneCountryCode, phone);
   const phoneError = phoneTouched && !phoneCheck.ok ? phoneCheck.error : null;
-  const mismatch = confirmTouched && confirm.length > 0 && confirm !== password;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     if (!passwordLongEnough(password)) { setError("Use at least 12 characters for your password."); return; }
-    if (confirm !== password) { setConfirmTouched(true); setError("The two passwords don't match."); return; }
     if (!phoneCheck.ok) { setPhoneTouched(true); setError(phoneCheck.error); return; }
     if (!accepted) { setError("Tick the box to accept the terms and privacy policy."); return; }
 
@@ -93,7 +89,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
         }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { setError(body?.error ?? "Could not create your workspace. Try again."); return; }
+      if (!response.ok) { setError(body?.error ?? "Could not create your account. Try again."); return; }
       router.push(body?.redirectTo ?? "/app/verify-email");
       router.refresh();
     } catch {
@@ -124,33 +120,11 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="email" className={authLabel}>Email</label>
+          <label htmlFor="email" className={authLabel}>Work email</label>
           <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required className={fieldClass} />
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
         <NewPasswordField id="password" name="password" value={password} onChange={setPassword} inputClassName={fieldClass} />
-
-        <div className="space-y-1.5">
-          <label htmlFor="confirmPassword" className={authLabel}>Confirm password</label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-            onBlur={() => setConfirmTouched(true)}
-            aria-invalid={mismatch || undefined}
-            aria-describedby="confirm-note"
-            className={cn(fieldClass, mismatch && "border-[var(--error)]")}
-          />
-          <p id="confirm-note" aria-live="polite" className={cn("text-xs leading-normal", mismatch ? "text-[var(--error-ink)]" : confirm && confirm === password ? "text-[var(--success-ink)]" : "text-muted-foreground")}>
-            {mismatch ? "The passwords don't match" : confirm && confirm === password ? "Passwords match" : "Type it again"}
-          </p>
-        </div>
-        </div>
 
         <div className="space-y-1.5">
           <label htmlFor="phone" className={authLabel}>Phone number</label>
@@ -174,8 +148,9 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
               className={cn(fieldClass, "min-w-0 flex-1", phoneError && "border-[var(--error)]")}
             />
           </div>
-          <p id="phone-note" aria-live="polite" className={cn("text-xs leading-normal tracking-[-0.01em]", phoneError ? "text-[var(--error-ink)]" : "text-muted-foreground")}>
-            {phoneError ?? "Only for your account: during the trial, or if a payment fails."}
+          {/* Only when something is wrong: the field's purpose is in its placeholder and label. */}
+          <p id="phone-note" aria-live="polite" className="text-xs leading-normal tracking-[-0.01em] text-[var(--error-ink)] empty:hidden">
+            {phoneError}
           </p>
         </div>
 
@@ -218,7 +193,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
 
         <AuthSubmit className="mt-1" disabled={submitting || !accepted}>
           {submitting && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-          {submitting ? "Creating your workspace…" : "Create my workspace"}
+          {submitting ? "Creating your account…" : "Create account"}
         </AuthSubmit>
 
       </form>

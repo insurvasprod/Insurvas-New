@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { BillingCycle } from "@/lib/money";
 import { fetchPlans } from "@/lib/plans/queries";
+import { resolveTrialDays } from "@/lib/checkout/constants";
+import { defaultTrialDays } from "@/lib/settings/queries";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { withSeatBands, type PlanChoiceAddon, type PlanChoiceModule, type PlanChoiceOption } from "./planChoice";
 
@@ -49,6 +51,9 @@ export async function fetchPlanChoices(): Promise<{ plans: PlanChoiceOption[]; m
     addonsBy.set(row.plan_id, [...(addonsBy.get(row.plan_id) ?? []), { addon, order: row.addons.sort_order }]);
   }
 
+  // The same rule as trialDaysForPlan (lib/checkout/trialDays.ts): a plan without its own trial gets
+  // the platform default, which is what checkout grants it, not "no trial".
+  const defaultTrial = await defaultTrialDays().catch(() => null);
   const plans = withSeatBands(latest.map((plan) => {
     const price = priceBy.get(plan.id);
     return {
@@ -57,7 +62,7 @@ export async function fetchPlanChoices(): Promise<{ plans: PlanChoiceOption[]; m
       blurb: plan.description,
       audience: plan.plan_type === "individual" ? "individual" as const : "agency" as const,
       cents: { monthly: price?.price_monthly_cents ?? null, quarterly: price?.price_quarterly_cents ?? null, yearly: price?.price_yearly_cents ?? null },
-      trialDays: price?.trial_days ?? 0,
+      trialDays: resolveTrialDays(price?.trial_days ?? null, defaultTrial),
       maxSeats: seatsBy.get(plan.id) ?? null,
       featureKeys: grantsBy.get(plan.id) ?? [],
       addons: (addonsBy.get(plan.id) ?? []).sort((a, b) => a.order - b.order || a.addon.name.localeCompare(b.addon.name)).map((entry) => entry.addon),

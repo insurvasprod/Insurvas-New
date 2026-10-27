@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { AuthHeading, AuthLayout, AuthSteps } from "@/components/portal/auth-layout";
 import { StoryPanel } from "@/components/app/tenant-auth-workspace";
+import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
 
 /**
  * The five sign-up steps (owner, 2026-10-26): account, email, agency, plan, payment. The plan has its
@@ -39,7 +40,7 @@ export function FunnelFrame({ step, children, wide = false, aside, back }: {
       width={wide ? "wide" : "default"}
       steps={{ current: step, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[step - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" }}
       back={back}
-      story={aside ?? <StoryPanel mode={step === 6 ? "sign-in" : "sign-up"} />}
+      story={aside ?? <StoryPanel mode={step === 6 ? "sign-in" : "sign-up"} step={step} noPayment={checkoutPaymentMode() === "none"} />}
     >
       {children}
     </AuthLayout>

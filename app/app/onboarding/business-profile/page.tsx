@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { FunnelFrame } from "@/components/app/funnel-frame";
 import { BusinessProfileForm, type BusinessProfileInitial } from "@/components/app/business-profile-form";
+import { LogoutButton } from "@/components/app/logout-button";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -32,5 +33,15 @@ export default async function BusinessProfilePage() {
       }
     : null;
 
-  return <FunnelFrame step={3} wide><BusinessProfileForm initial={initial} email={context.email} /></FunnelFrame>;
+  // No Back on this step: the account exists and the email is confirmed, so steps 1–2 cannot be
+  // redone. Signing out is the honest way out (owner, 2026-10-27).
+  return (
+    <FunnelFrame step={3} wide>
+      <BusinessProfileForm initial={initial} email={context.email} />
+      <p className="mt-5 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+        Signed in as <span className="font-semibold text-foreground">{context.email}</span> ·
+        <LogoutButton variant="link" className="text-sm font-semibold text-foreground hover:text-[var(--accent-ink)]" />
+      </p>
+    </FunnelFrame>
+  );
 }

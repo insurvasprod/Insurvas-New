@@ -137,8 +137,8 @@ export function BusinessProfileForm({ initial = null, email = null }: { initial?
 
   return (
     <div>
-      {/* Owner pick A, 2026-10-26: no subtitle and no setup preview; the NPN is asked later in Settings. */}
-      <FunnelHeading title="Tell us about your agency" />
+      {/* One line saying why (copy table, owner 2026-10-27); no setup preview; the NPN is asked later in Settings. */}
+      <FunnelHeading title="Tell us about your agency">We use this to set up your workspace.</FunnelHeading>
       <form onSubmit={(event) => void save(event)} noValidate className="flex flex-col gap-5">
         {/* Name and state side by side on a wide screen: the step fits without scrolling (2026-10-26). */}
         <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">

@@ -2,19 +2,12 @@ import { redirect } from "next/navigation";
 
 import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
 import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary } from "@/components/app/plan-choice";
-import { TRIAL_DAYS } from "@/lib/checkout/constants";
 import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
-import { dayMonthYear } from "@/lib/format/dates";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { fetchPlanChoices, readPlanChoice } from "@/lib/signup/planChoiceQueries";
 
 /** The plan can be chosen after Your agency, and changed again from Payment until the plan starts. */
 const CHOOSABLE = new Set(["ready_for_checkout", "awaiting_payment"]);
-
-/** When a trial started now ends, as Payment shows it. Read per request. */
-function trialEndDate() {
-  return new Date(Date.now() + TRIAL_DAYS * 86_400_000);
-}
 
 /**
  * Step 4 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, seats, and the
@@ -39,10 +32,10 @@ export default async function PlanStepPage() {
       plans={plans}
       modules={modules}
       initial={saved}
-      trialEnds={dayMonthYear(trialEndDate(), "UTC")}
+      now={new Date().toISOString()}
       noPayment={checkoutPaymentMode() === "none"}
     >
-      <FunnelFrame step={4} wide aside={<PlanChoiceSummary />}>
+      <FunnelFrame step={4} wide back={{ href: "/app/onboarding/business-profile", label: "Back to your agency" }} aside={<PlanChoiceSummary />}>
         <PlanChoiceForm />
       </FunnelFrame>
     </PlanChoiceProvider>
