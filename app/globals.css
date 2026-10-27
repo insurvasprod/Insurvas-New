@@ -1556,7 +1556,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-login-page { display: grid; min-height: 100vh; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); color: var(--portal-ink); }
 .portal-login-form-panel { display: flex; min-width: 0; align-items: center; justify-content: center; background: var(--portal-panel); padding: 3.5rem clamp(1.25rem, 6vw, 6rem); }
 .portal-login-form-inner { width: min(100%, 35rem); }
-.portal-login-footer { display: flex; gap: 1.75rem; margin-top: 2rem; color: var(--portal-muted); font-size: .8rem; }
+.portal-login-footer { display: flex; gap: 1.75rem; margin-top: 1.5rem; color: var(--portal-muted); font-size: .8rem; }
 .portal-login-footer a { text-decoration: none; }
 .portal-login-footer a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .portal-login-feature-panel { display: flex; min-width: 0; align-items: center; background: var(--brand-700); color: var(--nav-ink); padding: 3.5rem clamp(1.25rem, 6vw, 6rem); }
@@ -1589,11 +1589,17 @@ a.portal-top-foot-action { text-decoration: none; }
    side swap — and below 1024px the story disappears rather than pushing the form down. Scoped to
    the agent shell; the partner door keeps its own layout. */
 .portal-tenant-auth-shell { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.portal-tenant-auth-shell .portal-auth-split-form { display: flex; flex-direction: column; background: var(--canvas); padding: 48px 64px; }
-.portal-tenant-auth-shell .portal-auth-split-story { padding: 48px 64px; }
+.portal-tenant-auth-shell .portal-auth-split-form { display: flex; flex-direction: column; background: var(--canvas); padding: 40px 64px; }
+.portal-tenant-auth-shell .portal-auth-split-story { padding: 40px 64px; }
 .portal-tenant-auth-shell[data-mode="sign-up"] .portal-auth-split-form,
 .portal-tenant-auth-shell[data-mode="sign-up"] .portal-auth-split-story { transform: none; }
 .portal-tenant-auth-shell .portal-auth-form-inner { width: 100%; max-width: 472px; }
+/* One auth layout (UI-CONSISTENCY §13): the column starts at the top on every screen rather than
+   centring, and the scrollbar's space is always reserved, so the logo, the steps and the heading sit
+   at the same place whether a screen is three fields or twelve. */
+html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
+.portal-tenant-auth-shell .portal-auth-split-form > div { justify-content: flex-start; }
+.portal-tenant-auth-shell .portal-auth-form-inner { margin: 0 auto; }
 .portal-tenant-auth-shell .portal-auth-split-form :is(input:not([type="radio"]), select) { background-color: var(--card); }
 @media (max-width: 1023px) {
   .portal-tenant-auth-shell { grid-template-columns: minmax(0, 1fr); }
@@ -1604,8 +1610,6 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-auth-brand span { color: var(--accent-ink); }
 .portal-auth-visibility { position: absolute; top: 50%; right: .45rem; display: inline-flex; width: 2rem; height: 2rem; align-items: center; justify-content: center; transform: translateY(-50%); border-radius: 6px; color: var(--portal-muted); }
 .portal-auth-visibility:hover { background: var(--portal-group); color: var(--portal-ink); }
-.portal-auth-alert { display: grid; gap: .2rem; border: 1px solid color-mix(in srgb, var(--color-danger), var(--portal-line) 60%); border-radius: 8px; background: color-mix(in srgb, var(--color-danger), transparent 95%); padding: .7rem .8rem; color: var(--error-ink); font-size: .82rem; line-height: 1.4; }
-.portal-auth-alert strong { font-weight: 600; }
 .portal-auth-footer { display: flex; gap: 1.75rem; margin-top: 4.5rem; color: var(--portal-muted); font-size: .8rem; }
 .portal-auth-footer a { text-decoration: none; }
 .portal-auth-footer a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }

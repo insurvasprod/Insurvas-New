@@ -3,14 +3,12 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
-import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-import { AuthBrand, PortalAuthSplitShell } from "@/components/portal/portal-auth-split-shell";
+import { AuthHeading, AuthLayout, AuthStory } from "@/components/portal/auth-layout";
+import { AuthAlert, AuthInput, authLabel } from "@/components/portal/auth-controls";
 import { OtpInput } from "@/components/app/otp-input";
 
 /**
@@ -137,48 +135,25 @@ export default function AdminLoginPage() {
   // Shown only once the credentials step has passed, so it never echoes an address nobody confirmed.
   const accountEmail = onTotp ? email.trim().toLowerCase() : "";
 
-  const errorBox = error && (
-    <p
-      id="admin-login-error"
-      role="alert"
-      className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]"
-    >
-      {error}
-    </p>
-  );
+  const errorBox = error && <AuthAlert id="admin-login-error">{error}</AuthAlert>;
 
   return (
-    <PortalAuthSplitShell
-      mode="sign-in"
-      className="portal-tenant-auth-shell"
-      form={
-        <div className="m-stagger portal-auth-form-inner">
-          <AuthBrand href="/" label="Insurvas home">
-            <InsurvasLogo size="auth" />
-          </AuthBrand>
-
-          {/* The same two-bar step line as the sign-up journey (redesign, 2026-10-24). */}
-          <div className="mb-8">
-            <p className="text-sm font-semibold leading-normal tracking-[-0.02em] text-muted-foreground">
-              <span className="text-foreground">Step {onTotp ? 2 : 1} of 2</span> · {onTotp ? "Your code" : "Your account"}
-            </p>
-            <ol className="mt-3 grid grid-cols-2 gap-1.5" aria-label="Sign-in steps">
-              <li className="h-1 rounded-full bg-[var(--primary)]" aria-current={onTotp ? undefined : "step"}><span className="sr-only">Your account{onTotp ? ", done" : ", current step"}</span></li>
-              <li className={`h-1 rounded-full transition-colors duration-300 ${onTotp ? "bg-[var(--primary)]" : "bg-border"}`} aria-current={onTotp ? "step" : undefined}><span className="sr-only">Your code{onTotp ? ", current step" : ""}</span></li>
-            </ol>
-          </div>
-          <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-            {onTotp ? (enrolment ? "Set up your authenticator" : "Enter your 6-digit code") : "Staff sign in"}
-          </h1>
-          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            {onTotp ? "From your authenticator app. You are signed in as soon as the sixth digit is in." : "Insurvas staff only. Your password, then a code from your authenticator app."}
-          </p>
+    <AuthLayout
+      plane="admin"
+      steps={{ current: onTotp ? 2 : 1, total: 2, label: onTotp ? "Your code" : "Your account", labels: ["Your account", "Your code"], ariaLabel: "Sign-in steps" }}
+      story={
+        <AuthStory label="Insurvas · Super admin" title="The platform, from the inside." rowsTitle="What happens when you sign in" rows={SIGN_IN_FACTS.map((line) => ({ label: line }))} />
+      }
+    >
+      <AuthHeading title={onTotp ? (enrolment ? "Set up your authenticator" : "Enter your 6-digit code") : "Staff sign in"}>
+        {onTotp ? "From your authenticator app. You are signed in as soon as the sixth digit is in." : "Insurvas staff only. Your password, then a code from your authenticator app."}
+      </AuthHeading>
 
           {!onTotp ? (
             <form key="credentials" className="flex flex-col gap-4" onSubmit={handleCredentials}>
               <div className="space-y-1.5">
-                <Label htmlFor="email">Staff email</Label>
-                <Input
+                <label htmlFor="email" className={authLabel}>Staff email</label>
+                <AuthInput
                   id="email"
                   type="email"
                   inputMode="email"
@@ -190,7 +165,7 @@ export default function AdminLoginPage() {
               </div>
               <div className="space-y-1.5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <Label htmlFor="password">Password</Label>
+                  <label htmlFor="password" className={authLabel}>Password</label>
                   <button type="button" aria-expanded={showForgot} aria-controls="admin-forgot" onClick={() => setShowForgot((value) => !value)} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
                     Forgot password?
                   </button>
@@ -203,7 +178,7 @@ export default function AdminLoginPage() {
                   </p>
                 )}
                 <div className="relative">
-                  <Input
+                  <AuthInput
                     id="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
@@ -225,7 +200,7 @@ export default function AdminLoginPage() {
                 </div>
               </div>
               {errorBox}
-              <Button type="submit" className="mt-2 h-12 w-full" disabled={loading}>
+              <Button type="submit" className="mt-2 h-11 w-full" disabled={loading}>
                 {loading ? "Checking…" : "Continue"}
               </Button>
             </form>
@@ -270,7 +245,7 @@ export default function AdminLoginPage() {
                 onComplete={(typed) => void handleTotp(null, typed)}
               />
               {errorBox}
-              <Button type="submit" className="mt-2 h-12 w-full" disabled={loading || code.length !== 6}>
+              <Button type="submit" className="mt-2 h-11 w-full" disabled={loading || code.length !== 6}>
                 {loading ? "Verifying…" : "Verify and enter"}
               </Button>
               <button type="button" onClick={startOver} className="inline-flex items-center gap-1.5 self-start text-sm font-semibold text-muted-foreground hover:text-foreground">
@@ -285,41 +260,6 @@ export default function AdminLoginPage() {
               <Link href="/app/login">Sign in to the Insurvas app</Link>
             </LinkArrow>
           </div>
-
-          <nav className="portal-login-footer" aria-label="Legal links">
-            <Link href="/legal/privacy">Privacy</Link>
-            <Link href="/legal/tos">Terms</Link>
-            <a href="mailto:support@insurvas.com">Support</a>
-          </nav>
-        </div>
-      }
-      story={
-        <div className="m-stagger mx-auto w-full max-w-[38rem]">
-          <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--nav-muted)]">
-            Insurvas · Super admin
-          </div>
-          <h2 className="mt-3.5 max-w-[520px] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--on-dark)] lg:text-[clamp(2.75rem,4.2vw,3.75rem)]">
-            The platform, from the inside.
-          </h2>
-
-          <div className="mt-8 max-w-[460px] rounded-xl border border-[var(--nav-line)] bg-[color-mix(in_srgb,var(--nav-bg)_62%,transparent)] p-6 backdrop-blur-md">
-            <div className="flex items-center gap-2.5">
-              <ShieldCheck className="size-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />
-              <span className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-[var(--on-dark)]">
-                What happens when you sign in
-              </span>
-            </div>
-            <ul className="mt-4 p-0">
-              {SIGN_IN_FACTS.map((line) => (
-                <li key={line} className="flex list-none gap-2.5 py-1.5">
-                  <Lock className="size-[13px] shrink-0 translate-y-1 text-[var(--nav-muted)]" strokeWidth={2.4} aria-hidden="true" />
-                  <span className="text-sm leading-normal tracking-[-0.02em] text-[var(--nav-ink)]">{line}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      }
-    />
+    </AuthLayout>
   );
 }

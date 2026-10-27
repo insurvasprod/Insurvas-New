@@ -39,7 +39,8 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | No avatars for clients, leads or carriers | §10 | Live |
 | Overlays chosen by task | §11 | Live |
 | Status colours | §12 | Live |
-| One auth layout, Back on sign-up steps | §13 | Decided, lands in `auth-shell` and `signup-flow` |
+| One auth layout | §13 | Live (`lib/design/authShell.test.mjs`) |
+| Sign-up copy, Back on sign-up steps, trial wording from data | §13 | Decided, lands in `signup-flow` |
 | Numbers and money | §14 | Live |
 | Inter in the apps and auth pages | [BRAND.md](BRAND.md) | Live (`lib/design/typeface.test.mjs`) |
 | Gloss surface tokens (`--gloss-*`, `--stat-icon-*`) | `app/globals.css` | Live as tokens; used from `foundation-components` |
@@ -267,11 +268,24 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - A rising number is green only when rising is good. A rising pending balance stays grey.
 
 ## 13. Auth pages (v3)
-**Status:** Decided, lands in `auth-shell` (layout) and `signup-flow` (copy and Back). Until then,
-do not add new auth layouts; extend `PortalAuthSplitShell`.
+**Status:** Live for the layout. The copy, Back and trial-wording rules below are Decided, lands in
+`signup-flow`.
 
-- One layout for sign-in, every sign-up step, set-password, confirm-email, partner and admin login:
-  same logo position, same form column width, an optional step slot, one right-panel style.
+- One layout for sign-in, every sign-up step, the account screens, accept terms, partner and staff
+  sign-in: `AuthLayout` from `components/portal/auth-layout.tsx`, or one of its wrappers
+  (`FunnelFrame`, `AppAuthFrame`, `PartnerAuthFrame`). It is the only component that renders
+  `PortalAuthSplitShell`. Every combination is on `/design/auth` (development only).
+  - The column, always in this order: logo, `AuthSteps`, `AuthBack`, the screen (opening with
+    `AuthHeading`), legal links.
+  - Width: 472px, or `width="wide"` (720px) only for a grid of choices or a document (Your agency,
+    Your plan, Payment, accept terms).
+  - The panel is an `AuthStory` (label, title, rows with a hairline above each; a row can carry a
+    value, or a ✓/✗ state with its word), or real content (the plan summary, the receipt) passed
+    as `story`.
+- Controls from `components/portal/auth-controls.tsx`: `AuthField` + `AuthInput` (or
+  `authLabel` / `authControl` on a native control) at **44px**, `AuthSubmit` (full width, 44px),
+  `AuthSecondary`, and one `AuthAlert` with `tone="error" | "info" | "success"`. Auth screens are
+  exempt from the 36px rule (§5) for this reason; app pages are not.
 - Copy follows the order things happen: the first sign-up step creates an account ("Create your
   account"); the trial is named only on the step where it starts.
 - Trial length and card wording come from data (`resolveTrialDays`, `checkoutPaymentMode()`), never

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { CheckoutStart } from "@/components/public/checkout-start";
 import { PaymentCoupon, PaymentEmbed, PaymentProvider } from "@/components/public/checkout-embed";
 import { BILLING_CYCLE_LABELS, type BillingCycle } from "@/lib/money";
@@ -132,16 +133,14 @@ export function CheckoutView(props: CheckoutViewProps) {
       {/* "Pending" also covers a payment the provider has not finished recording, so this must not
           tell someone who has paid to pay again. */}
       {pending && !noPayment && (
-        <div role="status" className="mb-5 rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-          <p className="font-semibold text-[var(--info-ink)]">We could not confirm a payment yet</p>
-          <p className="mt-1 text-[var(--body)]">If you have already paid, do not pay again: your plan unlocks on its own once the provider records it. If you have not, the form below picks up the same checkout.</p>
-        </div>
+        <AuthAlert tone="info" className="mb-5" title="We could not confirm a payment yet">
+          If you have already paid, do not pay again: your plan unlocks on its own once the provider records it. If you have not, the form below picks up the same checkout.
+        </AuthAlert>
       )}
       {failed && !noPayment && (
-        <div role="alert" className="mb-5 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3.5 text-sm leading-normal">
-          <p className="font-semibold text-[var(--error-ink)]">Your payment did not go through</p>
-          <p className="mt-1 text-[var(--body)]">No money was taken. Try again below, or use another card or payment method.</p>
-        </div>
+        <AuthAlert className="mb-5" title="Your payment did not go through">
+          No money was taken. Try again below, or use another card or payment method.
+        </AuthAlert>
       )}
 
       <div className="flex flex-col gap-4">

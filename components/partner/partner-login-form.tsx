@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AuthHeading } from "@/components/portal/auth-layout";
+import { AuthAlert, AuthInput, authLabel } from "@/components/portal/auth-controls";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PartnerAuthFrame } from "@/components/partner/partner-auth-frame";
 
@@ -92,23 +92,20 @@ export function PartnerLoginForm() {
   if (resetting) {
     return (
       <PartnerAuthFrame>
-        <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-          {resetState === "sent" ? "Check your inbox" : "Reset your password"}
-        </h1>
         {resetState === "sent" ? (
-          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+          <AuthHeading title="Check your inbox">
             If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to a partner account, a link to choose a new password is on its way. It works once.
-          </p>
+          </AuthHeading>
         ) : (
           <>
-            <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">Enter the email you sign in with. We send a one-time link to choose a new password.</p>
+            <AuthHeading title="Reset your password">Enter the email you sign in with. We send a one-time link to choose a new password.</AuthHeading>
             <form className="flex flex-col gap-4" onSubmit={requestReset} noValidate>
               <div className="space-y-1.5">
-                <Label htmlFor="partner-reset-email">Email</Label>
-                <Input id="partner-reset-email" type="email" inputMode="email" autoComplete="username" autoFocus value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
+                <label htmlFor="partner-reset-email" className={authLabel}>Email</label>
+                <AuthInput id="partner-reset-email" type="email" inputMode="email" autoComplete="username" autoFocus value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
               </div>
-              {resetError && <p className="portal-auth-alert" role="alert">{resetError}</p>}
-              <Button type="submit" className="mt-1 h-12 w-full" disabled={resetState === "sending"}>{resetState === "sending" ? "Sending…" : "Send the reset link"}</Button>
+              {resetError && <AuthAlert>{resetError}</AuthAlert>}
+              <Button type="submit" className="mt-1 h-11 w-full" disabled={resetState === "sending"}>{resetState === "sending" ? "Sending…" : "Send the reset link"}</Button>
             </form>
           </>
         )}
@@ -121,17 +118,12 @@ export function PartnerLoginForm() {
 
   return (
     <PartnerAuthFrame>
-      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        Partner sign in
-      </h1>
-      <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-        Submit leads and follow every one to its outcome.
-      </p>
+      <AuthHeading title="Partner sign in">Submit leads and follow every one to its outcome.</AuthHeading>
 
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="partner-email">Email</Label>
-          <Input
+          <label htmlFor="partner-email" className={authLabel}>Email</label>
+          <AuthInput
             ref={emailRef}
             id="partner-email"
             type="email"
@@ -155,13 +147,13 @@ export function PartnerLoginForm() {
 
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-3">
-            <Label htmlFor="partner-password">Password</Label>
+            <label htmlFor="partner-password" className={authLabel}>Password</label>
             <button type="button" onClick={() => { setResetEmail(email); setResetState("idle"); setResetError(null); setResetting(true); }} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
               Forgot password?
             </button>
           </div>
           <div className="relative">
-            <Input
+            <AuthInput
               ref={passwordRef}
               id="partner-password"
               type={showPassword ? "text" : "password"}
@@ -206,16 +198,10 @@ export function PartnerLoginForm() {
         </label>
 
         {error && (
-          <p
-            id="partner-login-error"
-            role="alert"
-            className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]"
-          >
-            {error}
-          </p>
+          <AuthAlert id="partner-login-error">{error}</AuthAlert>
         )}
 
-        <Button type="submit" className="mt-1 h-12 w-full" disabled={loading}>
+        <Button type="submit" className="mt-1 h-11 w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { AuthHeading } from "@/components/portal/auth-layout";
+import { AuthAlert } from "@/components/portal/auth-controls";
 
 type State =
   | { status: "checking" }
@@ -17,9 +19,8 @@ const SUPPORT = "mailto:support@insurvas.com?subject=Email%20change%20I%20did%20
 
 function Card({ title, lede, children }: { title: string; lede: ReactNode; children?: ReactNode }) {
   return (
-    <div data-auth-card="" className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
-      <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">{title}</h1>
-      <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">{lede}</p>
+    <div data-auth-card="" className="m-in w-full">
+      <AuthHeading title={title}>{lede}</AuthHeading>
       {children}
     </div>
   );
@@ -123,7 +124,7 @@ export function ConfirmEmailPanel() {
         title="This link no longer works"
         lede="It has expired or was already used. Your email address is unchanged."
       >
-        <Button asChild className="mt-6 h-12 w-full"><Link href="/app/login">Sign in</Link></Button>
+        <Button asChild className="mt-6 h-11 w-full"><Link href="/app/login">Sign in</Link></Button>
         <p className="mt-4 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
           Still need the change? Ask for it again from your profile, or <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">contact your administrator</a>.
         </p>
@@ -151,12 +152,10 @@ export function ConfirmEmailPanel() {
       </div>
 
       {error && (
-        <div role="alert" className="mt-5 rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
-          {error}
-        </div>
+        <AuthAlert>{error}</AuthAlert>
       )}
 
-      <Button onClick={confirm} disabled={loading} className="mt-6 h-12 w-full px-4">
+      <Button onClick={confirm} disabled={loading} className="mt-6 h-11 w-full px-4">
         {loading ? "Confirming…" : "Confirm email address"}
       </Button>
 

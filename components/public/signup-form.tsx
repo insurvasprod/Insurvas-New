@@ -5,9 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AuthAlert, AuthSubmit, authLabel } from "@/components/portal/auth-controls";
 import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { NewPasswordField, passwordLongEnough } from "@/components/app/password-field";
@@ -19,7 +18,8 @@ type LegalDoc = { id: string; doc_type: string; version: number; title: string; 
 
 type Props = { initialPlanCode?: string; initialCycle?: string; /** CHECKOUT_PAYMENT_MODE=none: no card is asked for anywhere. */ noPayment?: boolean };
 
-const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base";
+// The auth field (components/portal/auth-controls.tsx): 44px, 16px text at every width.
+const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
 
 /**
  * Step 1 of 5 (redesign A, 2026-10-24): the account. First and last name, email, password (typed
@@ -30,7 +30,7 @@ const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base";
  * field. The plan moved to its own step, Step 4 of 5; a plan picked on the pricing page is still
  * carried through and preselected there.
  */
-export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }: Props) {
+export function SignupForm({ initialPlanCode, initialCycle }: Props) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,31 +106,33 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
 
   return (
     <div>
-      <FunnelHeading title="Start your free trial">
-        {noPayment ? "No card needed. Your workspace opens after a few short steps." : "$0 today. No card on this step. You choose your plan in step 4."}
+      <FunnelHeading title="Create your account">
+        Already have an account?{" "}
+        <Link href="/app/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Sign in</Link>
       </FunnelHeading>
 
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 pointer-coarse:[&_input:not([type=checkbox])]:min-h-11">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="firstName">First name</Label>
+            <label htmlFor="firstName" className={authLabel}>First name</label>
             <Input id="firstName" name="firstName" autoComplete="given-name" minLength={1} maxLength={60} required autoFocus className={fieldClass} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="lastName">Last name</Label>
+            <label htmlFor="lastName" className={authLabel}>Last name</label>
             <Input id="lastName" name="lastName" autoComplete="family-name" minLength={1} maxLength={60} required className={fieldClass} />
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
+          <label htmlFor="email" className={authLabel}>Email</label>
           <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required className={fieldClass} />
         </div>
 
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
         <NewPasswordField id="password" name="password" value={password} onChange={setPassword} inputClassName={fieldClass} />
 
         <div className="space-y-1.5">
-          <Label htmlFor="confirmPassword">Confirm password</Label>
+          <label htmlFor="confirmPassword" className={authLabel}>Confirm password</label>
           <Input
             id="confirmPassword"
             name="confirmPassword"
@@ -145,12 +147,13 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
             className={cn(fieldClass, mismatch && "border-[var(--error)]")}
           />
           <p id="confirm-note" aria-live="polite" className={cn("text-xs leading-normal", mismatch ? "text-[var(--error-ink)]" : confirm && confirm === password ? "text-[var(--success-ink)]" : "text-muted-foreground")}>
-            {mismatch ? "The passwords don't match" : confirm && confirm === password ? "Passwords match" : "Type the same password again"}
+            {mismatch ? "The passwords don't match" : confirm && confirm === password ? "Passwords match" : "Type it again"}
           </p>
+        </div>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="phone">Phone number</Label>
+          <label htmlFor="phone" className={authLabel}>Phone number</label>
           <div className="flex gap-2">
             {/* The prefix in the app's own dark list, a flag on each (2026-10-26: the browser's white list didn't match). */}
             <PhoneCountryPicker value={phoneCountryCode} onChange={setPhoneCountryCode} className="h-11 w-[120px] shrink-0" />
@@ -177,10 +180,10 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
         </div>
 
         {legalState === "failed" ? (
-          <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--surface-alt)] p-4 text-sm">
-            <span className="text-[var(--body)]">The terms could not be loaded, so they cannot be accepted yet.</span>
-            <button type="button" className="font-semibold text-[var(--accent-ink)] hover:underline" onClick={loadLegal}>Try again</button>
-          </div>
+          <AuthAlert>
+            The terms could not be loaded, so they cannot be accepted yet.{" "}
+            <button type="button" className="font-semibold underline underline-offset-2" onClick={loadLegal}>Try again</button>
+          </AuthAlert>
         ) : legalDocs.length > 0 ? (
           <div className="space-y-2">
             <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
@@ -204,29 +207,20 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
                 .
               </span>
             </label>
-            {legalDocs.some((doc) => doc.is_draft) && (
-              <p className="pl-8 text-xs text-[var(--warning-ink)]">These documents are drafts and have not been reviewed by a lawyer.</p>
-            )}
           </div>
         ) : legalState === "loading" ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><LoaderCircle className="size-4 animate-spin" aria-hidden="true" />Loading the terms…</div>
         ) : null}
 
         {error && (
-          <div role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
-            {error}
-          </div>
+          <AuthAlert>{error}</AuthAlert>
         )}
 
-        <Button type="submit" className="mt-1 h-12 w-full" disabled={submitting || !accepted}>
+        <AuthSubmit className="mt-1" disabled={submitting || !accepted}>
           {submitting && <LoaderCircle className="animate-spin" aria-hidden="true" />}
           {submitting ? "Creating your workspace…" : "Create my workspace"}
-        </Button>
+        </AuthSubmit>
 
-        <p className="text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/app/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Sign in</Link>
-        </p>
       </form>
     </div>
   );

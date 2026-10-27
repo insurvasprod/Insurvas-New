@@ -29,7 +29,7 @@ export default async function TenantSuspendedPage() {
           Your data is kept as it was. Once the agency is reinstated, you can sign in again with the same email and password.
         </p>
         {/* A way to someone who can help, not only a way out (redesign, 2026-10-24). */}
-        <Button asChild className="mt-6 h-12 w-full">
+        <Button asChild className="mt-6 h-11 w-full">
           <a href="mailto:support@insurvas.com?subject=Suspended%20account">Contact support</a>
         </Button>
         <div className="mt-4 flex justify-center">

@@ -6,6 +6,8 @@ import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { AuthHeading } from "@/components/portal/auth-layout";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { LogoutButton } from "@/components/app/logout-button";
 import { LegalDocumentBody } from "@/components/public/legal-document-body";
 
@@ -70,15 +72,12 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
   }
 
   return (
-    <div className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
-      <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
-        {single ? `${single.title} — version ${single.version}` : "Updated terms"}
-      </h1>
-      <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+    <div className="m-in w-full">
+      <AuthHeading title={single ? `${single.title} — version ${single.version}` : "Updated terms"}>
         {single
           ? `Effective ${effective(single.effectiveDate)}. The product is blocked until this is accepted.`
           : `${documents.length} documents have new versions. The product is blocked until they are accepted.`}
-      </p>
+      </AuthHeading>
 
       {documents.map((doc) => (
         <section key={doc.id} className="mt-6">
@@ -144,9 +143,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
       ))}
 
       {error && (
-        <div role="alert" className="mt-5 rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
-          {error}
-        </div>
+        <AuthAlert className="mt-5">{error}</AuthAlert>
       )}
 
       <div className="mt-5 flex flex-col gap-4 rounded-md bg-[var(--surface-alt)] p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -168,7 +165,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
           </span>
         </label>
 
-        <Button size="lg" className="shrink-0" disabled={!accepted || submitting} onClick={submit}>
+        <Button className="h-11 shrink-0 px-5" disabled={!accepted || submitting} onClick={submit}>
           {submitting && <LoaderCircle className="animate-spin" />}
           {submitting ? "Recording…" : "Accept and continue"}
         </Button>

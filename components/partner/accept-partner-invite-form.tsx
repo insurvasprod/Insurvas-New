@@ -6,10 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AuthFact } from "@/components/app/auth-card";
 import { FunnelHeading } from "@/components/app/funnel-frame";
+import { AuthInput, authLabel } from "@/components/portal/auth-controls";
 import { isPartnerRole, partnerRoleLabel, type PartnerRole } from "@/lib/partnerAuth/roles";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 
@@ -72,7 +71,7 @@ export function AcceptPartnerInviteForm() {
     return (
       <div>
         <FunnelHeading title="Open your invitation">This page needs the link from the invitation email an agency sent you. Open that email and press its button.</FunnelHeading>
-        <Button asChild variant="outline" className="h-12 w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
+        <Button asChild variant="outline" className="h-11 w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
       </div>
     );
   }
@@ -81,7 +80,7 @@ export function AcceptPartnerInviteForm() {
     return (
       <div>
         <FunnelHeading title="We could not check your invitation">Insurvas could not be reached. Your invitation has not been used.</FunnelHeading>
-        <Button type="button" className="h-12 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
+        <Button type="button" className="h-11 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
       </div>
     );
   }
@@ -90,7 +89,7 @@ export function AcceptPartnerInviteForm() {
     return (
       <div>
         <FunnelHeading title="This invitation no longer works">It has expired or was already used. Ask your partner administrator to send a new one.</FunnelHeading>
-        <Button asChild variant="outline" className="h-12 w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
+        <Button asChild variant="outline" className="h-11 w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
       </div>
     );
   }
@@ -109,9 +108,9 @@ export function AcceptPartnerInviteForm() {
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <input type="email" name="username" autoComplete="username" value={tokenState.email} readOnly hidden />
         <div className="space-y-1.5">
-          <Label htmlFor="existing-password">Current password</Label>
+          <label htmlFor="existing-password" className={authLabel}>Current password</label>
           <div className="relative">
-            <Input id="existing-password" type={showPassword ? "text" : "password"} autoComplete="current-password" autoFocus required value={password} onChange={(event) => { setPassword(event.target.value); if (error) setError(null); }} className="pr-11" aria-describedby={error ? "invite-password-error" : undefined} />
+            <AuthInput id="existing-password" type={showPassword ? "text" : "password"} autoComplete="current-password" autoFocus required value={password} onChange={(event) => { setPassword(event.target.value); if (error) setError(null); }} className="pr-11" aria-describedby={error ? "invite-password-error" : undefined} />
             <button type="button" className="portal-auth-visibility" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword}>{showPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</button>
           </div>
           {error && <p id="invite-password-error" className="text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
@@ -120,7 +119,7 @@ export function AcceptPartnerInviteForm() {
           <input id="invite-remember" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
           Keep me signed in on this device
         </label>
-        <Button type="submit" className="mt-1 h-12 w-full" disabled={loading}>{loading ? "Accepting…" : "Accept and open the portal"}</Button>
+        <Button type="submit" className="mt-1 h-11 w-full" disabled={loading}>{loading ? "Accepting…" : "Accept and open the portal"}</Button>
       </form>
       <p className="mt-5 text-sm text-muted-foreground">Access covers only {tokenState.partnerName}’s leads and messages. <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:underline">Use a different account</Link></p>
     </div>

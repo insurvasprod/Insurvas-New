@@ -53,7 +53,7 @@ export function PortalAuthSplitShell({
 export function AuthBrand({ href, label, children }: { href: string; label: string; children: ReactNode }) {
   return (
     <ViewTransition name="brand-logo" share="ribbon-morph" default="none">
-      <Link href={href} className="mb-10 inline-flex items-center gap-2.5 no-underline" aria-label={label}>
+      <Link href={href} className="mb-8 inline-flex items-center gap-2.5 no-underline" aria-label={label}>
         {children}
       </Link>
     </ViewTransition>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, LoaderCircle, Minus, Plus } from "lucide-react";
 
 import { FunnelHeading } from "@/components/app/funnel-frame";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { Button } from "@/components/ui/button";
 import { BILLING_CYCLES, BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import {
@@ -323,7 +324,7 @@ export function PlanChoiceForm() {
           )}
         </Section>
 
-        {choice.error && <p role="alert" className="rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{choice.error}</p>}
+        {choice.error && <AuthAlert>{choice.error}</AuthAlert>}
 
         {/* Below 1024px the summary panel is hidden with the brand story, so the total and the button sit here. */}
         <div className="flex flex-col gap-3 border-t border-border pt-4 lg:hidden">
@@ -351,7 +352,7 @@ function TrialLine({ className }: { className?: string }) {
 function ContinueButton() {
   const { saving, save } = useChoice();
   return (
-    <Button type="button" className="h-12 w-full" disabled={saving} onClick={save}>
+    <Button type="button" className="h-11 w-full" disabled={saving} onClick={save}>
       {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
       {saving ? "Saving…" : "Continue to payment"}
     </Button>

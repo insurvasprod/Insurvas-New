@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 
 import { authControl, authLabel } from "@/components/app/auth-card";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { LogoutButton } from "@/components/app/logout-button";
 import { Button } from "@/components/ui/button";
@@ -110,10 +111,10 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2.5">
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4">
               <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
             </Button>
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4">
               <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
             </Button>
           </div>
@@ -130,17 +131,17 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
                 <input type="email" required autoComplete="email" className={authControl} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
               </label>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="submit" className="h-10 px-4" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>{submitting ? "Sending…" : "Update and send a new link"}</Button>
-                <Button type="button" variant="outline" className="h-10 border-[var(--border-strong)] px-4" onClick={() => { setChanging(false); setNewEmail(email); }}>Cancel</Button>
+                <Button type="submit" className="h-11 px-4" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>{submitting ? "Sending…" : "Update and send a new link"}</Button>
+                <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" onClick={() => { setChanging(false); setNewEmail(email); }}>Cancel</Button>
               </div>
             </form>
           )}
 
-          {message && <p role="status" className="mt-4 text-center text-sm font-semibold text-[var(--success-ink)]">{message}</p>}
-          {error && <p role="alert" className="mt-4 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
+          {message && <AuthAlert tone="success" className="mt-4">{message}</AuthAlert>}
+          {error && <AuthAlert className="mt-4">{error}</AuthAlert>}
 
           <div className="mt-7 flex flex-col gap-3">
-            <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
+            <Button type="button" variant="outline" className="h-11 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
               {cooldown > 0 ? `Send again in ${cooldown} ${cooldown === 1 ? "second" : "seconds"}` : submitting && !changing ? "Sending…" : "Send the link again"}
             </Button>
             <div className="flex flex-wrap justify-between gap-4">

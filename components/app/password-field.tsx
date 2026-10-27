@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { authLabel } from "@/components/portal/auth-controls";
 import { PASSWORD_MIN } from "@/lib/tenantAuth/securityRules";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +53,7 @@ export function NewPasswordField({
   const strength = passwordStrength(value);
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <label htmlFor={id} className={authLabel}>{label}</label>
       <div className="relative">
         <Input
           id={id}
@@ -66,7 +66,8 @@ export function NewPasswordField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           aria-describedby={`${id}-strength`}
-          className={cn("pr-11", inputClassName)}
+          // Only auth screens set a new password, so the field is the 44px auth field (auth-controls.tsx).
+          className={cn("h-11 border-[var(--border-strong)] bg-card pr-11 text-base md:text-base", inputClassName)}
         />
         <button type="button" className="portal-auth-visibility" onClick={() => setShow((current) => !current)} aria-label={show ? "Hide password" : "Show password"} aria-pressed={show}>
           {show ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}

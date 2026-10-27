@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AuthFact } from "@/components/app/auth-card";
 import { FunnelHeading } from "@/components/app/funnel-frame";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { NewPasswordField, passwordLongEnough } from "@/components/app/password-field";
 import { isPartnerRole, partnerRoleLabel, type PartnerRole } from "@/lib/partnerAuth/roles";
 
@@ -94,7 +95,7 @@ export function PartnerSetPasswordForm({
     return (
       <div>
         <FunnelHeading title="We could not check your link">Insurvas could not be reached. Your link has not been used.</FunnelHeading>
-        <Button type="button" className="h-12 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
+        <Button type="button" className="h-11 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
       </div>
     );
   }
@@ -103,7 +104,7 @@ export function PartnerSetPasswordForm({
     return (
       <div>
         <FunnelHeading title="This link no longer works">It has expired or was already used. A link works once.</FunnelHeading>
-        <Button asChild className="h-12 w-full"><Link href={loginPath}>Go to partner sign in</Link></Button>
+        <Button asChild className="h-11 w-full"><Link href={loginPath}>Go to partner sign in</Link></Button>
         <p className="mt-4 text-sm text-muted-foreground">Invited by an agency? Ask your partner administrator for a new invitation. Resetting your password? Ask for a new link from sign in.</p>
       </div>
     );
@@ -128,8 +129,8 @@ export function PartnerSetPasswordForm({
         {/* The account the password is for, so a password manager files it under the right login. */}
         <input type="email" name="username" autoComplete="username" value={tokenState.email} readOnly hidden />
         <NewPasswordField id="partner-new-password" label="New password" autoFocus value={password} onChange={(next) => { setPassword(next); setError(null); }} inputClassName="h-11 border-[var(--border-strong)] bg-card px-3 text-base" />
-        {error && <p role="alert" className="rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
-        <Button type="submit" className="mt-2 h-12 w-full" disabled={loading || !passwordLongEnough(password)}>{loading ? "Saving…" : "Set password and sign in"}</Button>
+        {error && <AuthAlert>{error}</AuthAlert>}
+        <Button type="submit" className="mt-2 h-11 w-full" disabled={loading || !passwordLongEnough(password)}>{loading ? "Saving…" : "Set password and sign in"}</Button>
       </form>
       <p className="mt-5 text-sm"><Link href={loginPath} className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Back to partner sign in</Link></p>
     </div>

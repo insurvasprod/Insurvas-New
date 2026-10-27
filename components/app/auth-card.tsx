@@ -1,21 +1,17 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { AuthHeading } from "@/components/portal/auth-layout";
 
 /**
- * The centred card the signed-out and onboarding screens share (verify email, set password):
- * canvas ground, one white card, 12px radius, 40px padding, a 32px centred title.
+ * The body of an account screen inside the auth layout (set password, suspended, verification
+ * failed): the one AuthHeading, then the screen's own content. It used to be a centred card with
+ * its own box and title; inside the layout the column is the surface, so neither is drawn
+ * (foundation v3). `width` and `eyebrow` are accepted for existing callers and no longer change
+ * anything: the layout sets the width.
  */
-export function AuthPage({ children }: { children: ReactNode }) {
-  return (
-    <div className="portal-agent flex min-h-screen items-center justify-center bg-[var(--canvas)] px-4 py-10">
-      {children}
-    </div>
-  );
-}
-
-export function AuthCard({ width, eyebrow, title, description, children, className }: {
-  width: 640 | 680 | 1040;
+export function AuthCard({ title, description, children, className }: {
+  width?: 640 | 680 | 1040;
   eyebrow?: string;
   title?: string;
   description?: ReactNode;
@@ -23,15 +19,9 @@ export function AuthCard({ width, eyebrow, title, description, children, classNa
   className?: string;
 }) {
   return (
-    <div className={cn("m-in w-full", width === 640 ? "max-w-[640px]" : width === 680 ? "max-w-[680px]" : "max-w-[1040px]", className)}>
-      <div data-auth-card="" className="rounded-xl border border-border bg-card p-6 sm:p-10">
-        {eyebrow && <div className="text-center text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{eyebrow}</div>}
-        {/* A plain string, not cn(): tailwind-merge takes the custom text-title-lg for a colour and drops it
-            in favour of text-foreground, which left this title at 16px. */}
-        {title && <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">{title}</h1>}
-        {description && <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">{description}</p>}
-        {children}
-      </div>
+    <div data-auth-card="" className={cn("m-in w-full", className)}>
+      {title ? <AuthHeading title={title}>{description}</AuthHeading> : description && <p className="text-base leading-normal tracking-[-0.02em] text-muted-foreground">{description}</p>}
+      {children}
     </div>
   );
 }
@@ -45,6 +35,5 @@ export function AuthFact({ label, value }: { label: string; value: string }) {
   );
 }
 
-export const authLabel = "text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]";
-export const authControl =
-  "mt-1.5 box-border h-11 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-base leading-normal tracking-[-0.02em] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+// One definition for every auth screen (components/portal/auth-controls.tsx, foundation v3).
+export { authControl, authLabel } from "@/components/portal/auth-controls";
