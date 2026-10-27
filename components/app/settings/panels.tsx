@@ -2,8 +2,7 @@
 
 import type { ReactNode } from "react";
 import { CarriersSettings } from "@/components/app/settings/carriers-settings";
-import { DispositionSettings } from "@/components/app/disposition-settings";
-import { PipelineSettings } from "@/components/app/pipeline-settings";
+import { PipelinesOutcomesSettings } from "@/components/app/settings/pipelines-outcomes";
 import { QueueSlaSettings } from "@/components/app/queue-sla-settings";
 import { CalendarAvailabilitySettings } from "@/components/app/calendar-availability-settings";
 import { CadenceSettings } from "@/components/app/cadence-settings";
@@ -13,11 +12,11 @@ import { TeamSettings } from "@/components/app/team-settings";
 import { TemplateSettings } from "@/components/app/template-settings";
 import { BillingSettings } from "@/components/app/settings/billing-settings";
 import { BusinessIdentitySettings } from "@/components/app/settings/business-identity";
-import { NotificationPreferences } from "@/components/app/settings/notification-preferences";
+import { MyProfileSettings } from "@/components/app/settings/my-profile";
 import { IntegrationsSettings } from "@/components/app/settings/integrations";
 import { SettingsHistory } from "@/components/app/settings/settings-history";
 import {
-  SalesAiAssistant, SalesCarriersSettings, SalesDisclosures, SalesExtension, SalesFieldMaps, SalesFieldSets,
+  SalesAiAssistant, SalesDisclosures, SalesExtension, SalesFieldSets,
   SalesPipelineSync, SalesQaPreferences, SalesQuotationTemplates, SalesUnderwritingTemplates, SalesWelcomePack,
 } from "@/components/app/settings/sales";
 import type { TeamSnapshot } from "@/lib/tenantTeam/service";
@@ -36,32 +35,30 @@ import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
  * The team and workspace snapshots are read for an owner only (LA-8.1 opened Settings to every role,
  * and only owner sections draw from them); a panel that needs one and is handed null draws nothing.
  */
-export type SettingsPanelContext = { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null };
+export type SettingsPanelContext = { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null; granted: readonly string[] };
 
 export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => ReactNode> = {
+  "my-profile": () => <MyProfileSettings />,
   "business-identity": ({ team, workspace }) => <BusinessIdentitySettings team={team} workspace={workspace} />,
-  carriers: () => <CarriersSettings />,
+  // Carrier rules is a tab here that opens its own page; only offered where the agency has it.
+  carriers: ({ granted }) => <CarriersSettings carrierRules={granted.includes("statement_ingestion")} />,
   "team-access": ({ team, workspace }) => (team && workspace ? <TeamSettings initial={team} workspace={workspace} /> : null),
   calendar: () => <CalendarAvailabilitySettings />,
   cadence: () => <CadenceSettings />,
   "calling-windows": () => <CallingWindowSettingsPanel />,
   "queue-sla": () => <QueueSlaSettings />,
   "lead-posting": () => <LeadPostKeysSettings />,
-  pipelines: () => <PipelineSettings />,
-  dispositions: () => <DispositionSettings />,
+  pipelines: () => <PipelinesOutcomesSettings />,
   "form-templates": () => <TemplateSettings />,
-  "sales-carriers": () => <SalesCarriersSettings />,
   "sales-underwriting": () => <SalesUnderwritingTemplates />,
   "sales-quotation": () => <SalesQuotationTemplates />,
   "sales-field-sets": () => <SalesFieldSets />,
-  "sales-field-maps": () => <SalesFieldMaps />,
   "sales-disclosures": () => <SalesDisclosures />,
   "sales-preferences": () => <SalesQaPreferences />,
   "sales-welcome-pack": () => <SalesWelcomePack />,
   "sales-pipeline-sync": () => <SalesPipelineSync />,
   "sales-ai": () => <SalesAiAssistant />,
   "sales-extension": () => <SalesExtension />,
-  alerts: () => <NotificationPreferences />,
   integrations: () => <IntegrationsSettings />,
   "settings-history": () => <SettingsHistory />,
   billing: () => <BillingSettings />,

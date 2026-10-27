@@ -104,6 +104,9 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       section("carriers", "/admin/status-maps", "Status maps", "status-maps"),
       // LA-4.17 · the platform's default carrier rules and settings.
       section("carriers", "/admin/carrier-rules", "Carrier rules", "carrier-rules"),
+      // Carrier fact reports (20261027200000): wrong carrier facts agencies reported from Settings ›
+      // Carriers. Fixing one changes the carrier for everyone, so it keeps the carrier library's permission.
+      section("carriers", "/admin/carrier-reports", "Fact reports", "fact-reports"),
       // LA-4.10 · where each carrier's policy file lives in its portal, for the book import.
       section("carriers", "/admin/carrier-guidance", "Portal guidance", "portal-guidance"),
       // LA-5.4 · how each carrier takes a servicing change (part of the carrier record, as its rules).

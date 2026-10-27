@@ -1,26 +1,27 @@
 "use client";
 
-import { StatusChip } from "@/components/ui/status-chip";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
+import { CalendarClock, CalendarSync, Layers } from "lucide-react";
+import { DateTimePicker } from "@/components/app/settings/date-time-picker";
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
-import { Callout, DashedCard, DraftActions, Field, PlusIcon, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, SettingsTableCard, ToggleRow, btn, control, st, pillTone } from "@/components/app/settings/primitives";
+import { Callout, DashedCard, DraftActions, Field, PlusIcon, SettingsCard, SettingsSectionHeader, SettingsStack, SettingsTableCard, Switch, btn, control, st } from "@/components/app/settings/primitives";
+import { ViewTabs, type ViewTab } from "@/components/ui/view-tabs";
 import {
   BLOCK_REPEATS,
   REPEAT_LABELS,
   WEEKDAYS,
   blockWhen,
-  clockLabel,
   minutesOf,
   slotsForDay,
   slotsLostPerWeek,
   type BlockRepeat,
 } from "@/lib/appointments/calendarMath";
 import {
-  providerLabel,
   type CalendarConnectionView,
   type CalendarProviderView,
 } from "@/lib/appointments/linkedCalendarsShared";
@@ -39,6 +40,10 @@ import { cn } from "@/lib/utils";
  *
  * The whole member's calendar is one draft: edits are held here, Save changes writes them and
  * Discard drops them. Each row's editor (a day's hours, a block) edits the draft, not the database.
+ *
+ * Layout (owner pick C, 2026-10-26, without its summary sentence): whose calendar, then five tabs —
+ * Working hours (quick-start presets, a switch per day, hours inline), Appointments (length and gap as
+ * chips, the member's daily limit), Time off & breaks, Booking rules, and Whole agency (owner-only limits).
  */
 
 type Hour = { weekday: number; startTime: string; endTime: string };
@@ -59,6 +64,8 @@ type Payload = {
   schema?: { settingsReady: boolean; bookingReady?: boolean };
   /** The agency-wide daily limit (20260924230200); null = no agency limit. */
   agency?: { maxPerDay: number | null; callbackReminderMinutes?: number | null };
+  /** An agency plan (AG-0.1). A one-agent plan has no Whole agency tab. */
+  isAgency?: boolean;
 };
 type Linked = { available: boolean; providers: CalendarProviderView[]; connections: CalendarConnectionView[] };
 
@@ -97,6 +104,11 @@ function withCurrent(options: number[], current: number) {
 }
 
 type BlockEditor = { index: number | null; draft: Block };
+/** Frosted glass, as on Settings › Carriers (owner, 2026-10-27): the page's glow shows through every card. */
+const GLASS = "bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
+const GLASS_HEAD = "bg-[color-mix(in_srgb,var(--surface-alt)_45%,transparent)]";
+/** The five views of the page, one at a time (owner pick C, 2026-10-26). */
+type CalendarTab = "hours" | "appointments" | "blocks" | "rules" | "agency";
 
 export function CalendarAvailabilitySettings() {
   const [data, setData] = useState<Payload | null>(null);
@@ -109,7 +121,7 @@ export function CalendarAvailabilitySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saveError, setSaveError] = useState("");
-  const [openDay, setOpenDay] = useState<number | null>(null);
+  const [tab, setTab] = useState<CalendarTab>("hours");
   const [blockEditor, setBlockEditor] = useState<BlockEditor | null>(null);
   // The agency's cap is one value for the whole agency, so it is its own draft beside the
   // per-member edits. `undefined` = unchanged.
@@ -205,13 +217,13 @@ export function CalendarAvailabilitySettings() {
     setAgencyCap(undefined);
     setReminderLead(undefined);
     setSaveError("");
-    setOpenDay(null);
+    
   }
 
-  async function save() {
-    if (!draft) return;
+  async function save(): Promise<boolean> {
+    if (!draft) return false;
     const zone = draft.timezone?.trim();
-    if (!zone) { setSaveError("Choose the timezone these hours are in."); return; }
+    if (!zone) { setSaveError("Choose the timezone these hours are in."); return false; }
     setSaving(true);
     setSaveError("");
     try {
@@ -236,12 +248,14 @@ export function CalendarAvailabilitySettings() {
         }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { setSaveError(body?.error ?? "Could not save the calendar"); return; }
+      if (!response.ok) { setSaveError(body?.error ?? "Could not save the calendar"); return false; }
       notify.done(`${draft.name}'s calendar saved`);
-      setOpenDay(null);
+      
       await load();
+      return true;
     } catch {
       setSaveError("Could not save the calendar. Check your connection and try again.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -271,6 +285,41 @@ export function CalendarAvailabilitySettings() {
     } finally {
       setLinking("");
     }
+  }
+
+  // Unsaved changes stop a move away (owner, 2026-10-27): a reload or closed tab gets the browser's
+  // own prompt; a click on any link, or on another Settings section, outside this page is held and
+  // the owner chooses Save changes, Discard or Stay. The click is replayed once they have chosen.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const replaying = useRef(false);
+  const [leaving, setLeaving] = useState<HTMLElement | null>(null);
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    const onClick = (event: MouseEvent) => {
+      if (replaying.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = (event.target as Element | null)?.closest?.("a[href], [role='tab']");
+      if (!(target instanceof HTMLElement) || rootRef.current?.contains(target)) return;
+      if (target instanceof HTMLAnchorElement && (target.target === "_blank" || target.hasAttribute("download"))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLeaving(target);
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [dirty]);
+  function leaveNow() {
+    const target = leaving;
+    setLeaving(null);
+    if (!target) return;
+    replaying.current = true;
+    target.click();
+    replaying.current = false;
   }
 
   const header = (
@@ -319,7 +368,24 @@ export function CalendarAvailabilitySettings() {
   const busy = !editable || saving;
   const zoneOptions = [...new Set([...(zone ? [zone] : []), Intl.DateTimeFormat().resolvedOptions().timeZone, ...ZONES])].filter(Boolean);
 
+  // Monday–Friday and friends in one tap: the hours most agents keep (owner pick C, 2026-10-26).
+  const presets: Array<{ label: string; days: number[]; from: string; to: string }> = [
+    { label: "Mon–Fri, 9–5", days: [1, 2, 3, 4, 5], from: "09:00", to: "17:00" },
+    { label: "Mon–Fri, 8–6", days: [1, 2, 3, 4, 5], from: "08:00", to: "18:00" },
+    { label: "Mon–Sat, 9–5", days: [1, 2, 3, 4, 5, 6], from: "09:00", to: "17:00" },
+  ];
+  const tabs: Array<ViewTab<CalendarTab>> = [
+    { key: "hours", label: "Working hours", count: openDays },
+    { key: "appointments", label: "Appointments" },
+    { key: "blocks", label: "Time off & breaks", count: draft.blocks.length },
+    { key: "rules", label: "Booking rules" },
+    // A one-agent plan has no agency to set limits for (owner, 2026-10-27).
+    ...(data?.isAgency ? [{ key: "agency" as const, label: "Whole agency" }] : []),
+  ];
+  const view: CalendarTab = tab === "agency" && !data?.isAgency ? "hours" : tab;
+
   return (
+    <div ref={rootRef} className="contents">
     <SettingsStack>
       {header}
 
@@ -327,7 +393,7 @@ export function CalendarAvailabilitySettings() {
 
       {members.length > 1 && (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Whose calendar">
-          <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Member</span>
+          <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Whose calendar</span>
           {members.map((member) => {
             const current = member.userId === draft.userId;
             const days = new Set((edits[member.userId] ?? member).hours.map((hour) => hour.weekday)).size;
@@ -337,10 +403,10 @@ export function CalendarAvailabilitySettings() {
                 type="button"
                 aria-pressed={current}
                 className={btn("secondary", current ? "border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : "")}
-                onClick={() => { setSelected(member.userId); setOpenDay(null); setSaveError(""); }}
+                onClick={() => { setSelected(member.userId); setSaveError(""); }}
               >
                 {member.name}
-                <span className="text-xs font-normal text-[var(--muted)]">{days ? `${days}d` : "—"}</span>
+                <span className={cn("text-xs font-normal", days ? "text-[var(--muted)]" : "text-[var(--warning-ink)]")}>{days ? `${days} ${days === 1 ? "day" : "days"}` : "No hours"}</span>
                 {edits[member.userId] && <span className="sr-only">, unsaved changes</span>}
               </button>
             );
@@ -354,231 +420,210 @@ export function CalendarAvailabilitySettings() {
         </Callout>
       )}
 
-      <Callout tone="info" title="This is the source, not a copy">
-        The booking check, the dialer&rsquo;s booking panel and appointment reminders all read these hours. There is
-        no second place to set them, which is why a change here moves which times can be booked from the next booking on.
-      </Callout>
+      <ViewTabs label="Calendar settings" tabs={tabs} value={view} onChange={setTab} idPrefix="calendar-tab" controls="calendar-panel" />
 
-      {draft.hours.length === 0 && (
-        <Callout tone="warning" title="No hours set">
-          Until they are, an appointment can be booked at any time of day that is legal for the customer, and{" "}
-          {draft.name} will not appear in the roster or in the dialer&rsquo;s booking panel.
-        </Callout>
-      )}
-
-      <SettingsTableCard
-        title="Working hours"
-        actions={
-          <>
-            <span className="relative inline-flex">
-              <label htmlFor="calendar-timezone" className="sr-only">Timezone</label>
-              <select
-                id="calendar-timezone"
-                value={zone ?? ""}
-                disabled={busy}
-                onChange={(event) => setDraft({ ...draft, timezone: event.target.value || null })}
-                className="h-6 cursor-pointer appearance-none rounded-full border-0 bg-[var(--surface)] py-0 pr-7 pl-2.5 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--body)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-default"
-              >
-                <option value="">Choose a timezone…</option>
-                {zoneOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-              <svg aria-hidden width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="pointer-events-none absolute top-[7px] right-2.5 text-[var(--muted)]">
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </span>
-            <StatusChip tone={pillTone(openDays > 0 ? "success" : "warning")} dot>
-              {openDays > 0 ? `${openDays} ${openDays === 1 ? "day" : "days"} open` : "No days open"}
-            </StatusChip>
-          </>
-        }
-      >
-        <table className={st.table}>
-          <caption className="sr-only">
-            Working hours in {zone ?? "no timezone yet"}. These are {draft.name}&rsquo;s own hours, not the customer&rsquo;s;
-            the customer&rsquo;s legal calling window is checked separately and both must be satisfied.
-          </caption>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={cn(st.th, "w-[150px]")}>Day</th>
-              <th scope="col" className={cn(st.th, "w-[150px]")}>Opens</th>
-              <th scope="col" className={cn(st.th, "w-[150px]")}>Closes</th>
-              <th scope="col" className={cn(st.th, st.num, "w-[220px]")}>Slots at {length} + {buffer} min</th>
-              <th scope="col" className={cn(st.th, st.num)}><span className="sr-only">Status</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {WEEK_ORDER.map((weekday) => {
-              const spans = draft.hours
-                .map((hour, index) => ({ hour, index }))
-                .filter(({ hour }) => hour.weekday === weekday)
-                .sort((a, b) => a.hour.startTime.localeCompare(b.hour.startTime));
-              const open = spans.length > 0;
-              const expanded = openDay === weekday;
-              return (
-                <DayRows
-                  key={weekday}
-                  weekday={weekday}
-                  spans={spans}
-                  open={open}
-                  expanded={expanded}
-                  slots={open ? slotsForDay(draft.hours, weekday, length, buffer) : null}
-                  editable={editable}
+      <div id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-tab-${view}`}>
+        {view === "hours" && (
+          <SettingsTableCard
+            className={GLASS}
+            headerClassName={GLASS_HEAD}
+            title="Working hours"
+            actions={
+              <span className="relative inline-flex">
+                <label htmlFor="calendar-timezone" className="sr-only">Timezone</label>
+                <select
+                  id="calendar-timezone"
+                  value={zone ?? ""}
                   disabled={busy}
-                  onToggle={() => setOpenDay(expanded ? null : weekday)}
-                  onChange={(index, patch) => setHours(draft.hours.map((item, position) => (position === index ? { ...item, ...patch } : item)))}
-                  onRemove={(index) => setHours(draft.hours.filter((_, position) => position !== index))}
-                  onAdd={() => {
-                    const last = spans[spans.length - 1]?.hour;
-                    const start = last ? last.endTime : "09:00";
-                    const end = last ? (minutesOf(last.endTime) + 60 <= 1439 ? clockHHMM(minutesOf(last.endTime) + 60) : "23:59") : "17:00";
-                    setHours([...draft.hours, { weekday, startTime: start, endTime: end }]);
-                  }}
-                  onClose={() => setHours(draft.hours.filter((hour) => hour.weekday !== weekday))}
-                />
-              );
-            })}
-          </tbody>
-        </table>
-      </SettingsTableCard>
-
-      <SettingsGrid>
-        <SettingsCard title="Capacity">
-          <div className="flex flex-col gap-4">
-            <Field label="Appointment length" htmlFor="policy-minutes">
-              <select
-                id="policy-minutes"
-                className={control}
-                value={length}
-                disabled={busy}
-                onChange={(event) => setPolicy({ appointmentMinutes: Number(event.target.value) })}
-              >
-                {withCurrent(LENGTHS, length).map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
-              </select>
-            </Field>
-            <Field
-              label="Buffer between appointments"
-              htmlFor="policy-buffer"
-              hint={
-                buffer > 0
-                  ? `Added after each one, so a ${length}-minute slot consumes ${length + buffer}.`
-                  : "No gap: one appointment may start the minute the previous one ends."
-              }
-            >
-              <select
-                id="policy-buffer"
-                className={control}
-                value={buffer}
-                disabled={busy}
-                onChange={(event) => setPolicy({ bufferMinutes: Number(event.target.value) })}
-              >
-                {withCurrent(BUFFERS, buffer).map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
-              </select>
-            </Field>
-            <Field
-              label="Maximum per day"
-              htmlFor="agency-cap"
-              hint={
-                !bookingReady
-                  ? "Across the whole agency, not per agent. Can be set once a pending database update is applied."
-                  : !isOwner
-                    ? "Across the whole agency, not per agent. Only an owner changes it."
-                    : "Across the whole agency, not per agent."
-              }
-            >
-              <input
-                id="agency-cap"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={1000}
-                placeholder="No agency limit"
-                className={control}
-                value={(agencyCap === undefined ? savedAgencyCap : agencyCap) ?? ""}
-                disabled={busy || !bookingReady || !isOwner}
-                onChange={(event) => {
-                  const next = event.target.value.trim();
-                  setAgencyCap(next === "" ? null : Math.max(1, Math.min(1000, Math.round(Number(next)) || 1)));
-                  setSaveError("");
-                }}
-              />
-            </Field>
-            <Field
-              label="Callback reminder"
-              htmlFor="callback-reminder-lead"
-              hint={
-                !reminderReady
-                  ? "Minutes before a callback that its reminder goes out. Can be set once a pending database update is applied."
-                  : !isOwner
-                    ? "Minutes before a callback that its reminder goes out, for the whole agency. Only an owner changes it."
-                    : "Minutes before a callback that its reminder goes out, for the whole agency. Leave empty for the platform default."
-              }
-            >
-              <input
-                id="callback-reminder-lead"
-                type="number"
-                inputMode="numeric"
-                min={5}
-                max={1440}
-                placeholder="Platform default"
-                className={control}
-                value={(reminderLead === undefined ? savedReminderLead : reminderLead) ?? ""}
-                disabled={busy || !reminderReady || !isOwner}
-                onChange={(event) => {
-                  const next = event.target.value.trim();
-                  setReminderLead(next === "" ? null : Math.max(5, Math.min(1440, Math.round(Number(next)) || 5)));
-                  setSaveError("");
-                }}
-              />
-            </Field>
-            {/* Kept: the per-agent limit predates the agency one and is still enforced beside it. */}
-            <Field
-              label={`Maximum per day for ${draft.name}`}
-              htmlFor="policy-cap"
-              hint={`For ${draft.name} alone, counted in their own day. Both limits apply; the server refuses the next booking once either is reached.`}
-            >
-              <input
-                id="policy-cap"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={50}
-                className={control}
-                value={draft.policy.maxPerDay}
-                disabled={busy}
-                onChange={(event) => setPolicy({ maxPerDay: Number(event.target.value) })}
-              />
-            </Field>
-          </div>
-        </SettingsCard>
-
-        <SettingsCard title="Booking policy" bodyClassName="mt-[18px]">
-          <div className="flex flex-col gap-5">
-            {!schemaReady && (
-              <Callout tone="warning" title="This setting needs a database update that has not been applied yet.">
-                Same-day booking, linked calendars and repeating blocked time can be changed once it is. Everything
-                else on this page saves as usual.
-              </Callout>
+                  onChange={(event) => setDraft({ ...draft, timezone: event.target.value || null })}
+                  className={cn(control, "w-[240px]")}
+                >
+                  <option value="">Choose a timezone…</option>
+                  {zoneOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </span>
+            }
+          >
+            {/* A line, not a card (owner, 2026-10-27): an unset week still has to say what it does. */}
+            {draft.hours.length === 0 && (
+              <p role="status" className="m-0 border-b border-[var(--border)] px-4 py-3 text-xs leading-[1.5] text-[var(--warning-ink)]">
+                No hours set. Until they are, an appointment can be booked at any time of day that is legal for the
+                customer, and {draft.name} will not appear in the roster or in the dialer&rsquo;s booking panel.
+              </p>
             )}
-            <ToggleRow
-              id="policy-same-day"
-              title="Allow same-day booking"
-              help={`When off, nothing can be booked for later today in ${zone ?? "this calendar’s timezone"}; the earliest bookable day is tomorrow.`}
-              checked={draft.policy.allowSameDay}
-              disabled={busy || !schemaReady}
-              onChange={(next) => setPolicy({ allowSameDay: next })}
-            />
-            <ToggleRow
-              id="policy-double-booking"
-              title="Allow double-booking"
-              help={
-                bookingReady
-                  ? "Two appointments in one slot."
-                  : "Two appointments in one slot. Can be switched on once a pending database update is applied; until then the database refuses the second appointment, buffer included."
-              }
-              checked={draft.policy.allowDoubleBooking === true}
-              disabled={busy || !bookingReady}
-              onChange={(next) => setPolicy({ allowDoubleBooking: next })}
-            />
+            {editable && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3">
+                <span className="text-xs text-[var(--muted)]">Quick start</span>
+                {presets.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    className={btn("secondary")}
+                    disabled={busy}
+                    onClick={() => setHours(preset.days.map((weekday) => ({ weekday, startTime: preset.from, endTime: preset.to })))}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                {draft.hours.length > 0 && (
+                  <button type="button" className={btn("row")} disabled={busy} onClick={() => setHours([])}>Clear all</button>
+                )}
+              </div>
+            )}
+            <div>
+              {WEEK_ORDER.map((weekday) => {
+                const spans = draft.hours
+                  .map((hour, index) => ({ hour, index }))
+                  .filter(({ hour }) => hour.weekday === weekday)
+                  .sort((a, b) => a.hour.startTime.localeCompare(b.hour.startTime));
+                return (
+                  <DayRow
+                    key={weekday}
+                    weekday={weekday}
+                    spans={spans}
+                    slots={spans.length ? slotsForDay(draft.hours, weekday, length, buffer) : null}
+                    editable={editable}
+                    disabled={busy}
+                    onOpen={(next) => setHours(next ? [...draft.hours, { weekday, startTime: "09:00", endTime: "17:00" }] : draft.hours.filter((hour) => hour.weekday !== weekday))}
+                    onChange={(index, patch) => setHours(draft.hours.map((item, position) => (position === index ? { ...item, ...patch } : item)))}
+                    onRemove={(index) => setHours(draft.hours.filter((_, position) => position !== index))}
+                    onAdd={() => {
+                      const last = spans[spans.length - 1]?.hour;
+                      const start = last ? last.endTime : "09:00";
+                      const end = last ? (minutesOf(last.endTime) + 60 <= 1439 ? clockHHMM(minutesOf(last.endTime) + 60) : "23:59") : "17:00";
+                      setHours([...draft.hours, { weekday, startTime: start, endTime: end }]);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </SettingsTableCard>
+        )}
+
+        {view === "appointments" && (
+          <SettingsCard title="Appointments" className={GLASS}>
+            <div className="flex flex-col gap-5">
+              <ChipField label="Length" hint="How long one appointment takes.">
+                {withCurrent(LENGTHS, length).map((minutes) => (
+                  <Chip key={minutes} on={minutes === length} disabled={busy} onClick={() => setPolicy({ appointmentMinutes: minutes })}>{minutes} min</Chip>
+                ))}
+              </ChipField>
+              <ChipField
+                label="Gap after each"
+                hint={buffer > 0 ? `Added after each one, so a ${length}-minute appointment takes ${length + buffer} minutes of the day.` : "No gap: one appointment may start the minute the previous one ends."}
+              >
+                {withCurrent(BUFFERS, buffer).map((minutes) => (
+                  <Chip key={minutes} on={minutes === buffer} disabled={busy} onClick={() => setPolicy({ bufferMinutes: minutes })}>{minutes ? `${minutes} min` : "None"}</Chip>
+                ))}
+              </ChipField>
+            </div>
+          </SettingsCard>
+        )}
+
+        {view === "blocks" && (
+          <PagedProvider>
+          <SettingsTableCard
+            className={GLASS}
+            headerClassName={GLASS_HEAD}
+            title="Time off & breaks"
+            actions={
+              editable ? (
+                <button
+                  type="button"
+                  className={btn("secondary")}
+                  disabled={saving}
+                  onClick={() => {
+                    const start = new Date(Math.ceil((Date.now() + 1) / 3_600_000) * 3_600_000);
+                    const end = new Date(start.getTime() + 3_600_000);
+                    setBlockEditor({ index: null, draft: { startsAt: start.toISOString(), endsAt: end.toISOString(), reason: null, repeats: "none" } });
+                  }}
+                >
+                  <PlusIcon />Block some time
+                </button>
+              ) : undefined
+            }
+          >
+            <table className={st.table}>
+              <caption className="sr-only">Blocked time, shown in {zone ?? "your browser’s timezone"}. Nothing can be booked across a block, even inside working hours.</caption>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={st.th}>What</th>
+                  <th scope="col" className={cn(st.th, "w-[300px]")}>When</th>
+                  <th scope="col" className={cn(st.th, "w-[170px]")}>Repeats</th>
+                  <th scope="col" className={cn(st.th, st.num, "w-[200px]")}>Slots lost per week</th>
+                  <th scope="col" className={cn(st.th, st.num, "w-[170px]")}><span className="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              {draft.blocks.length === 0 ? (
+                <tbody>
+                  <tr>
+                    <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>
+                      Nothing blocked yet.
+                    </td>
+                  </tr>
+                </tbody>
+              ) : (
+                <PagedBody>
+                  {draft.blocks.map((block, index) => {
+                    const lost = slotsLostPerWeek(block, draft.hours, zone, length, buffer);
+                    return (
+                      <tr key={block.id ?? `new-${index}`}>
+                        <td className={cn(st.td, st.strong)}>{block.reason || "Blocked"}</td>
+                        <td className={st.td}>{blockWhen(block, zone)}</td>
+                        <td className={st.td}>{REPEAT_LABELS[block.repeats]}</td>
+                        <td className={cn(st.td, st.num)}>{lost == null ? "—" : lost}</td>
+                        <td className={cn(st.td, st.num, "whitespace-nowrap")}>
+                          {editable && (
+                            <>
+                              <button
+                                type="button"
+                                className={btn("row")}
+                                disabled={saving}
+                                aria-label={`Edit ${block.reason || "blocked time"}`}
+                                onClick={() => setBlockEditor({ index, draft: { ...block } })}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className={btn("row")}
+                                disabled={saving}
+                                aria-label={`Remove ${block.reason || "blocked time"}`}
+                                onClick={() => setBlocks(draft.blocks.filter((_, position) => position !== index))}
+                              >
+                                Remove
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </PagedBody>
+              )}
+            </table>
+            {draft.blocks.length > 10 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                <PagedPager total={draft.blocks.length} noun="blocks" />
+              </div>
+            )}
+          </SettingsTableCard>
+          </PagedProvider>
+        )}
+
+        {view === "rules" && (
+          <SettingsTableCard title="Booking rules" className={GLASS} headerClassName={GLASS_HEAD}>
+            {!schemaReady && (
+              <p role="status" className="m-0 border-b border-[var(--border)] px-4 py-3 text-xs text-[var(--warning-ink)]">
+                Same-day booking, linked calendars and repeating blocked time can be changed once a pending database update is applied.
+              </p>
+            )}
+            <RuleRow icon={<CalendarClock className="size-4" aria-hidden="true" />} title="Same-day booking" help={draft.policy.allowSameDay ? "People can book for later today." : "The earliest anyone can book is tomorrow."}>
+              <Switch id="policy-same-day" checked={draft.policy.allowSameDay} disabled={busy || !schemaReady} onChange={(next) => setPolicy({ allowSameDay: next })} label="Allow same-day booking" />
+            </RuleRow>
+            <RuleRow icon={<Layers className="size-4" aria-hidden="true" />} title="Double-booking" help={draft.policy.allowDoubleBooking ? "Two appointments can share one time." : "One appointment per time."}>
+              <Switch id="policy-double-booking" checked={draft.policy.allowDoubleBooking === true} disabled={busy || !bookingReady} onChange={(next) => setPolicy({ allowDoubleBooking: next })} label="Allow double-booking" />
+            </RuleRow>
             <LinkedCalendarRow
               member={draft}
               linked={linked}
@@ -589,100 +634,72 @@ export function CalendarAvailabilitySettings() {
               onToggle={(next) => setPolicy({ honourLinkedCalendars: next })}
               onAction={(kind, target) => void linkAction(kind, target)}
             />
-          </div>
-        </SettingsCard>
-      </SettingsGrid>
-
-      <PagedProvider>
-      <SettingsTableCard
-        title="Blocked time"
-        actions={
-          editable ? (
-            <button
-              type="button"
-              className={btn("secondary")}
-              disabled={saving}
-              onClick={() => {
-                const start = new Date(Math.ceil((Date.now() + 1) / 3_600_000) * 3_600_000);
-                const end = new Date(start.getTime() + 3_600_000);
-                setBlockEditor({ index: null, draft: { startsAt: start.toISOString(), endsAt: end.toISOString(), reason: null, repeats: "none" } });
-              }}
-            >
-              <PlusIcon />Block some time
-            </button>
-          ) : undefined
-        }
-      >
-        <table className={st.table}>
-          <caption className="sr-only">Blocked time, shown in {zone ?? "your browser’s timezone"}. Nothing can be booked across a block, even inside working hours.</caption>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={st.th}>What</th>
-              <th scope="col" className={cn(st.th, "w-[300px]")}>When</th>
-              <th scope="col" className={cn(st.th, "w-[170px]")}>Repeats</th>
-              <th scope="col" className={cn(st.th, st.num, "w-[200px]")}>Slots lost per week</th>
-              <th scope="col" className={cn(st.th, st.num, "w-[170px]")}><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          {draft.blocks.length === 0 ? (
-            <tbody>
-              <tr>
-                <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>
-                  No blocked time. Lunch, leave, training — anything added here cannot be booked across.
-                </td>
-              </tr>
-            </tbody>
-          ) : (
-            <PagedBody>
-              {draft.blocks.map((block, index) => {
-                const lost = slotsLostPerWeek(block, draft.hours, zone, length, buffer);
-                return (
-                  <tr key={block.id ?? `new-${index}`}>
-                    <td className={cn(st.td, st.strong)}>{block.reason || "Blocked"}</td>
-                    <td className={st.td}>{blockWhen(block, zone)}</td>
-                    <td className={st.td}>{REPEAT_LABELS[block.repeats]}</td>
-                    <td className={cn(st.td, st.num)}>{lost == null ? "—" : lost}</td>
-                    <td className={cn(st.td, st.num, "whitespace-nowrap")}>
-                      {editable && (
-                        <>
-                          <button
-                            type="button"
-                            className={btn("row")}
-                            disabled={saving}
-                            aria-label={`Edit ${block.reason || "blocked time"}`}
-                            onClick={() => setBlockEditor({ index, draft: { ...block } })}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className={btn("row")}
-                            disabled={saving}
-                            aria-label={`Remove ${block.reason || "blocked time"}`}
-                            onClick={() => setBlocks(draft.blocks.filter((_, position) => position !== index))}
-                          >
-                            Remove
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </PagedBody>
-          )}
-        </table>
-        {draft.blocks.length > 10 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
-            <PagedPager total={draft.blocks.length} noun="blocks" />
-          </div>
+          </SettingsTableCard>
         )}
-      </SettingsTableCard>
-      </PagedProvider>
+
+        {view === "agency" && (
+          <SettingsCard title="Whole agency" className={GLASS}>
+            <div className="flex flex-col gap-5">
+              <p className="m-0 text-xs text-[var(--muted)]">These apply to every agent, not only {draft.name}. Only an owner can change them.</p>
+              <Field
+                label="Most appointments a day, whole agency"
+                htmlFor="agency-cap"
+                hint={
+                  !bookingReady
+                    ? "All agents together. Can be set once a pending database update is applied."
+                    : "All agents together. Leave empty for no agency limit."
+                }
+              >
+                <input
+                  id="agency-cap"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={1000}
+                  placeholder="No agency limit"
+                  className={cn(control, "w-[180px]")}
+                  value={(agencyCap === undefined ? savedAgencyCap : agencyCap) ?? ""}
+                  disabled={busy || !bookingReady || !isOwner}
+                  onChange={(event) => {
+                    const next = event.target.value.trim();
+                    setAgencyCap(next === "" ? null : Math.max(1, Math.min(1000, Math.round(Number(next)) || 1)));
+                    setSaveError("");
+                  }}
+                />
+              </Field>
+              <Field
+                label="Callback reminder"
+                htmlFor="callback-reminder-lead"
+                hint={
+                  !reminderReady
+                    ? "Minutes before a callback that its reminder goes out. Can be set once a pending database update is applied."
+                    : "Minutes before a callback that its reminder goes out. Leave empty for the platform default."
+                }
+              >
+                <input
+                  id="callback-reminder-lead"
+                  type="number"
+                  inputMode="numeric"
+                  min={5}
+                  max={1440}
+                  placeholder="Platform default"
+                  className={cn(control, "w-[180px]")}
+                  value={(reminderLead === undefined ? savedReminderLead : reminderLead) ?? ""}
+                  disabled={busy || !reminderReady || !isOwner}
+                  onChange={(event) => {
+                    const next = event.target.value.trim();
+                    setReminderLead(next === "" ? null : Math.max(5, Math.min(1440, Math.round(Number(next)) || 5)));
+                    setSaveError("");
+                  }}
+                />
+              </Field>
+            </div>
+          </SettingsCard>
+        )}
+      </div>
 
       <BlockDialog
         editor={blockEditor}
-        zone={zone}
         schemaReady={schemaReady}
         onClose={() => setBlockEditor(null)}
         onApply={(block) => {
@@ -695,14 +712,113 @@ export function CalendarAvailabilitySettings() {
           setBlockEditor(null);
         }}
       />
+
+      <Dialog open={leaving !== null} onOpenChange={(open) => { if (!open && !leaveSaving) setLeaving(null); }}>
+        <DialogContent aria-describedby={undefined} className="border-[var(--border)] bg-[var(--surface)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[var(--ink)]">Save your changes?</DialogTitle>
+          </DialogHeader>
+          <p className="m-0 text-sm text-[var(--body)]">You changed {draft.name}&rsquo;s calendar and have not saved it yet.</p>
+          <div className="flex flex-wrap justify-end gap-2.5">
+            <Button type="button" variant="ghost" disabled={leaveSaving} onClick={() => setLeaving(null)}>Stay</Button>
+            <Button type="button" variant="outline" disabled={leaveSaving} onClick={() => { discard(); leaveNow(); }}>Discard changes</Button>
+            <Button
+              type="button"
+              disabled={leaveSaving}
+              onClick={() => {
+                setLeaveSaving(true);
+                void save().then((ok) => {
+                  setLeaveSaving(false);
+                  if (ok) leaveNow();
+                  else setLeaving(null);
+                });
+              }}
+            >
+              {leaveSaving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </SettingsStack>
+    </div>
   );
 }
 
+/** A labelled row of choice chips: tap one to pick it. */
+function ChipField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label}>
+      <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{label}</span>
+      <div className="mt-2 flex flex-wrap gap-2">{children}</div>
+      {hint && <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">{hint}</span>}
+    </div>
+  );
+}
+
+function Chip({ on, disabled, onClick, children }: { on: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "h-8 rounded-full px-3 text-sm font-semibold tracking-[-0.01em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+        on ? "border-[1.5px] border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] text-[var(--body)] hover:border-[var(--accent-ink)]",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** One line of Booking rules, laid out like a Working hours day: icon, what it is, its control. */
+function RuleRow({ icon, title, help, children }: { icon: ReactNode; title: string; help: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
+      <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-50)] text-[var(--accent-ink)]">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-[var(--ink)]">{title}</span>
+        <div className="mt-0.5 text-xs leading-[1.5] text-[var(--muted)]">{help}</div>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+/** Google Calendar's mark: the four-colour G. Colours spelled out, the way the brand gives them. */
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 48 48" className="size-4 shrink-0" aria-hidden="true">
+      <path fill="rgb(255, 193, 7)" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z" />
+      <path fill="rgb(255, 61, 0)" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <path fill="rgb(76, 175, 80)" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <path fill="rgb(25, 118, 210)" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z" />
+    </svg>
+  );
+}
+
+/** Outlook's mark, simplified: the blue tile with its O. */
+function OutlookMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4 shrink-0" aria-hidden="true">
+      <rect x="2" y="3" width="20" height="18" rx="3" fill="rgb(0, 120, 212)" />
+      <ellipse cx="12" cy="12" rx="4.6" ry="5.2" fill="none" stroke="rgb(255, 255, 255)" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
+const CALENDARS = [
+  { id: "google", name: "Google Calendar", Mark: GoogleMark },
+  { id: "microsoft", name: "Outlook Calendar", Mark: OutlookMark },
+] as const;
+
 /**
- * "Honour linked calendars", tied to whether this member actually has a calendar linked. With none
- * linked there is no busy time to honour, so the switch is shown as it is stored but cannot be
- * changed, and the row offers the link instead (or says the link is not set up on this deployment).
+ * Linked calendars (owner, 2026-10-27): each person connects their own Google or Outlook account
+ * with that provider's sign-in, and the meetings there block those times in Insurvas, read again on
+ * their own. One line per calendar on the right, saying where it stands: Connect, or Connected with
+ * the account, Refresh and Unlink, or a failed read. Busy time is used by default; someone who
+ * switched it off before gets a one-tap way back.
  */
 function LinkedCalendarRow({
   member,
@@ -725,61 +841,71 @@ function LinkedCalendarRow({
 }) {
   const mine = (linked?.connections ?? []).filter((connection) => connection.userId === member.userId);
   const connected = mine.filter((connection) => connection.status === "connected" || connection.status === "error");
-  const configured = (linked?.providers ?? []).filter((provider) => provider.configured);
-  const unlinkedProviders = configured.filter((provider) => !connected.some((connection) => connection.provider === provider.id));
   const ready = bookingReady && Boolean(linked?.available);
 
-  const help = !ready
-    ? "Busy time in Google or Outlook removes the slot. Linking a calendar needs a database update that has not been applied yet."
-    : connected.length === 0
-      ? configured.length === 0
-        ? `Busy time in Google or Outlook removes the slot. Linking Google or Outlook is not set up on this workspace yet, so ${member.name} has no calendar to honour.`
-        : `Busy time in Google or Outlook removes the slot. ${member.name} has no calendar linked yet — link one to use this.`
-      : "Busy time in Google or Outlook removes the slot.";
-
   return (
-    <div className="flex flex-col gap-2.5">
-      <ToggleRow
-        id="policy-linked-calendars"
-        title="Honour linked calendars"
-        help={help}
-        checked={member.policy.honourLinkedCalendars}
-        disabled={busy || !ready || connected.length === 0}
-        onChange={onToggle}
-      />
-      {ready && connected.map((connection) => (
-        <div key={connection.id} className="flex flex-wrap items-center gap-2 text-xs leading-[1.5] text-[var(--muted)]">
-          <StatusChip tone={pillTone(connection.status === "error" ? "warning" : "success")} dot>{providerLabel(connection.provider)}</StatusChip>
-          <span className="min-w-0">
-            {connection.accountEmail ?? "Linked account"}
-            {connection.status === "error"
-              ? ` · last sync failed${connection.lastError ? `: ${connection.lastError}` : ""}`
-              : connection.lastSyncedAt
-                ? ` · busy time read ${dateTime(connection.lastSyncedAt, viewerTimeZone(), { clock: "12h" })}`
-                : " · not read yet"}
-          </span>
-          {editable && (
-            <span className="ml-auto inline-flex gap-1">
-              <button type="button" className={btn("row")} disabled={Boolean(working)} onClick={() => onAction("sync", connection.id)}>
-                {working === `sync:${connection.id}` ? "Refreshing…" : "Refresh"}
-              </button>
-              <button type="button" className={btn("danger-row")} disabled={Boolean(working)} onClick={() => onAction("unlink", connection.id)}>
-                Unlink
-              </button>
+    <RuleRow
+      icon={<CalendarSync className="size-4" aria-hidden="true" />}
+      title="Linked calendars"
+      help={
+        <>
+          <span className="block">Connect your Google or Outlook calendar and the meetings there block those times here, updated automatically.</span>
+          {connected.length > 0 && !member.policy.honourLinkedCalendars && (
+            <span className="mt-1.5 flex flex-wrap items-center gap-2 text-[var(--warning-ink)]">
+              Busy time from linked calendars is switched off.
+              {editable && (
+                <Button type="button" variant="outline" size="sm" disabled={busy || !ready || connected.length === 0} onClick={() => onToggle(true)}>Turn on</Button>
+              )}
             </span>
           )}
-        </div>
-      ))}
-      {ready && editable && unlinkedProviders.length > 0 && (
-        <div className="flex flex-wrap gap-2.5">
-          {unlinkedProviders.map((provider) => (
-            <button key={provider.id} type="button" className={btn("secondary")} disabled={Boolean(working)} onClick={() => onAction("connect", provider.id)}>
-              {working === `connect:${provider.id}` ? "Opening…" : `Link ${provider.label}`}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+        </>
+      }
+    >
+      <div className="flex w-[320px] max-w-full flex-col gap-2">
+        {CALENDARS.map(({ id, name, Mark }) => {
+          const connection = connected.find((item) => item.provider === id) ?? null;
+          const configured = (linked?.providers ?? []).some((item) => item.id === id && item.configured);
+          const failed = connection?.status === "error";
+          return (
+            <div key={id} className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_40%,transparent)] px-3 py-2">
+              <Mark />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-[var(--ink)]">{name}</span>
+                <span className={cn("block truncate text-xs", failed ? "text-[var(--warning-ink)]" : connection ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>
+                  {connection
+                    ? failed
+                      ? `Needs attention${connection.lastError ? `: ${connection.lastError}` : ""}`
+                      : `${connection.accountEmail ?? "Connected"} · ${connection.lastSyncedAt ? `updated ${dateTime(connection.lastSyncedAt, viewerTimeZone(), { clock: "12h" })}` : "reading now"}`
+                    : !ready
+                      ? "Available after a pending database update"
+                      : configured
+                        ? "Not connected"
+                        : "Not available on this workspace yet"}
+                </span>
+              </span>
+              {editable && connection && (
+                <span className="inline-flex shrink-0 gap-1">
+                  <button type="button" className={btn("row")} disabled={Boolean(working)} onClick={() => onAction("sync", connection.id)}>
+                    {working === `sync:${connection.id}` ? "…" : "Refresh"}
+                  </button>
+                  <button type="button" className={btn("danger-row")} disabled={Boolean(working)} onClick={() => onAction("unlink", connection.id)}>Unlink</button>
+                </span>
+              )}
+              {editable && !connection && (
+                <button
+                  type="button"
+                  className={btn("secondary", "shrink-0")}
+                  disabled={Boolean(working) || !ready || !configured}
+                  onClick={() => onAction("connect", id)}
+                >
+                  {working === `connect:${id}` ? "Opening…" : "Connect"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </RuleRow>
   );
 }
 
@@ -787,133 +913,105 @@ function clockHHMM(minutes: number) {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-function DayRows({
+/**
+ * One weekday: a switch that opens or closes it, its hours inline (more than one block a day is
+ * allowed: a split shift), and how many appointments that leaves.
+ */
+function DayRow({
   weekday,
   spans,
-  open,
-  expanded,
   slots,
   editable,
   disabled,
-  onToggle,
+  onOpen,
   onChange,
   onRemove,
   onAdd,
-  onClose,
 }: {
   weekday: number;
   spans: Array<{ hour: Hour; index: number }>;
-  open: boolean;
-  expanded: boolean;
   slots: number | null;
   editable: boolean;
   disabled: boolean;
-  onToggle: () => void;
+  onOpen: (open: boolean) => void;
   onChange: (index: number, patch: Partial<Hour>) => void;
   onRemove: (index: number) => void;
   onAdd: () => void;
-  onClose: () => void;
 }) {
   const day = WEEKDAYS[weekday];
+  const open = spans.length > 0;
   const inverted = spans.some(({ hour }) => hour.startTime >= hour.endTime);
   return (
-    <>
-      <tr>
-        <td className={st.td}>{day}</td>
-        <td className={st.td}>
-          {open ? spans.map(({ hour, index }) => <span key={index} className="block">{clockLabel(minutesOf(hour.startTime))}</span>) : "—"}
-        </td>
-        <td className={st.td}>
-          {open ? spans.map(({ hour, index }) => <span key={index} className="block">{clockLabel(minutesOf(hour.endTime))}</span>) : "—"}
-        </td>
-        <td className={cn(st.td, st.num)}>{slots == null ? "—" : slots}</td>
-        <td className={cn(st.td, st.num, "whitespace-nowrap")}>
-          <span className="inline-flex items-center gap-1">
-            <StatusChip dot={false} tone={pillTone(open ? "success" : "neutral")}>{open ? "Open" : "Closed"}</StatusChip>
+    <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0 xl:grid-cols-[170px_1fr_110px]">
+      <div className="flex items-center gap-3">
+        <Switch id={`day-${weekday}-open`} checked={open} disabled={disabled || !editable} onChange={onOpen} label={`${day} open`} />
+        <label htmlFor={`day-${weekday}-open`} className="text-sm font-semibold text-[var(--ink)]">{day}</label>
+      </div>
+      <div className="order-3 col-span-2 flex flex-wrap items-center gap-2 xl:order-none xl:col-span-1">
+        {!open && <span className="text-sm text-[var(--muted)]">Closed — nothing can be booked</span>}
+        {spans.map(({ hour, index }) => (
+          <span key={index} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-1">
+            <label htmlFor={`day-${weekday}-${index}-from`} className="sr-only">{day} opens</label>
+            <input
+              id={`day-${weekday}-${index}-from`}
+              type="time"
+              className="h-7 rounded-md border border-transparent bg-transparent px-1 text-sm text-[var(--ink)] outline-none focus-visible:border-[var(--primary)]"
+              value={hour.startTime}
+              disabled={disabled || !editable}
+              onChange={(event) => onChange(index, { startTime: event.target.value })}
+            />
+            <span className="text-xs text-[var(--muted)]">to</span>
+            <label htmlFor={`day-${weekday}-${index}-to`} className="sr-only">{day} closes</label>
+            <input
+              id={`day-${weekday}-${index}-to`}
+              type="time"
+              className="h-7 rounded-md border border-transparent bg-transparent px-1 text-sm text-[var(--ink)] outline-none focus-visible:border-[var(--primary)]"
+              value={hour.endTime}
+              disabled={disabled || !editable}
+              onChange={(event) => onChange(index, { endTime: event.target.value })}
+            />
             {editable && (
-              <button type="button" className={btn("row")} aria-expanded={expanded} aria-label={`Edit ${day}’s hours`} onClick={onToggle}>
-                {expanded ? "Done" : "Edit"}
+              <button
+                type="button"
+                className="inline-flex size-6 items-center justify-center rounded-md text-[var(--muted)] hover:text-[var(--error-ink)]"
+                disabled={disabled}
+                aria-label={`Remove ${day} ${hour.startTime} to ${hour.endTime}`}
+                onClick={() => onRemove(index)}
+              >
+                ×
               </button>
             )}
           </span>
-        </td>
-      </tr>
-      {expanded && (
-        <tr>
-          <td colSpan={5} className={cn(st.td, "bg-[var(--surface-alt)]")}>
-            <div className="flex flex-col gap-3 py-1">
-              {spans.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">{day} is closed. Add hours to open it.</p>}
-              {spans.map(({ hour, index }) => (
-                <div key={index} className="flex flex-wrap items-end gap-3">
-                  <Field label="Opens" htmlFor={`day-${weekday}-${index}-from`} className="w-[150px]">
-                    <input
-                      id={`day-${weekday}-${index}-from`}
-                      type="time"
-                      className={control}
-                      value={hour.startTime}
-                      disabled={disabled}
-                      onChange={(event) => onChange(index, { startTime: event.target.value })}
-                    />
-                  </Field>
-                  <Field label="Closes" htmlFor={`day-${weekday}-${index}-to`} className="w-[150px]">
-                    <input
-                      id={`day-${weekday}-${index}-to`}
-                      type="time"
-                      className={control}
-                      value={hour.endTime}
-                      disabled={disabled}
-                      onChange={(event) => onChange(index, { endTime: event.target.value })}
-                    />
-                  </Field>
-                  <button
-                    type="button"
-                    className={btn("danger-row", "mb-[7px]")}
-                    disabled={disabled}
-                    aria-label={`Remove ${day} ${hour.startTime} to ${hour.endTime}`}
-                    onClick={() => onRemove(index)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              {inverted && (
-                <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">A working block has to close after it opens.</p>
-              )}
-              <div className="flex flex-wrap gap-2.5">
-                <button type="button" className={btn("secondary")} disabled={disabled} onClick={onAdd}>
-                  <PlusIcon />{spans.length ? "Add another block" : "Add hours"}
-                </button>
-                {spans.length > 0 && (
-                  <button type="button" className={btn("row")} disabled={disabled} onClick={onClose}>
-                    Close {day}
-                  </button>
-                )}
-              </div>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+        ))}
+        {open && editable && (
+          <button type="button" className={btn("row")} disabled={disabled} onClick={onAdd}>
+            <PlusIcon />Add hours
+          </button>
+        )}
+        {inverted && <p role="alert" className="m-0 w-full text-xs text-[var(--error-ink)]">Hours have to close after they open.</p>}
+      </div>
+      <span className={cn("order-2 text-right text-sm tabular-nums xl:order-none", open ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>
+        {slots == null ? "—" : `${slots} ${slots === 1 ? "slot" : "slots"}`}
+      </span>
+    </div>
   );
 }
 
 function BlockDialog({
   editor,
-  zone,
   schemaReady,
   onClose,
   onApply,
 }: {
   editor: BlockEditor | null;
-  zone: string | null;
   schemaReady: boolean;
   onClose: () => void;
   onApply: (block: Block) => void;
 }) {
   return (
     <Dialog open={editor !== null} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="border-[var(--border)] bg-[var(--surface)] sm:max-w-lg">
-        {editor && <BlockForm key={`${editor.index ?? "new"}`} editor={editor} zone={zone} schemaReady={schemaReady} onClose={onClose} onApply={onApply} />}
+      <DialogContent aria-describedby={undefined} className="border-[var(--border)] bg-[var(--surface)] sm:max-w-lg">
+        {editor && <BlockForm key={`${editor.index ?? "new"}`} editor={editor} schemaReady={schemaReady} onClose={onClose} onApply={onApply} />}
       </DialogContent>
     </Dialog>
   );
@@ -921,13 +1019,11 @@ function BlockDialog({
 
 function BlockForm({
   editor,
-  zone,
   schemaReady,
   onClose,
   onApply,
 }: {
   editor: BlockEditor;
-  zone: string | null;
   schemaReady: boolean;
   onClose: () => void;
   onApply: (block: Block) => void;
@@ -966,26 +1062,21 @@ function BlockForm({
     >
       <DialogHeader>
         <DialogTitle className="text-[var(--ink)]">{editor.index === null ? "Block some time" : "Edit blocked time"}</DialogTitle>
-        <DialogDescription className="text-[var(--muted)]">
-          Nothing can be booked across a block, even inside working hours. Times are entered in your browser&rsquo;s
-          time{zone ? ` and shown on the page in ${zone}` : ""}; a repeating block repeats that wall-clock time.
-        </DialogDescription>
       </DialogHeader>
       <Field label="What" htmlFor="block-reason">
         <input id="block-reason" className={control} value={reason} maxLength={120} placeholder="Lunch, leave, training…" onChange={(event) => setReason(event.target.value)} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="From" htmlFor="block-from">
-          <input id="block-from" type="datetime-local" className={control} value={from} onChange={(event) => setFrom(event.target.value)} />
+          <DateTimePicker id="block-from" value={from} onChange={setFrom} />
         </Field>
         <Field label="To" htmlFor="block-to">
-          <input id="block-to" type="datetime-local" className={control} value={to} onChange={(event) => setTo(event.target.value)} />
+          <DateTimePicker id="block-to" value={to} onChange={setTo} />
         </Field>
       </div>
       <Field
         label="Repeats"
         htmlFor="block-repeats"
-        hint={schemaReady ? "Every weekday and every day repeat the time; weekly repeats the weekday; yearly repeats the date." : "Repeating blocks can be saved once the pending database update is applied."}
       >
         <select id="block-repeats" className={control} value={repeats} onChange={(event) => setRepeats(event.target.value as BlockRepeat)}>
           {BLOCK_REPEATS.map((value) => (
@@ -1000,7 +1091,6 @@ function BlockForm({
           {editor.index === null ? "Add block" : "Update block"}
         </button>
       </div>
-      <p className="m-0 text-xs text-[var(--muted)]">Blocks are written with the rest of the calendar when you choose Save changes.</p>
     </form>
   );
 }

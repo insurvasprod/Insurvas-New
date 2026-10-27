@@ -163,6 +163,9 @@ export const NOT_CONSUMER = [
   "compliance_complaint_checklist", "compliance_index_reconciliation", "audit_log", "legal_acceptances",
   // LA-7.8: the agency's own payees (call centres, producers, lead vendors) and who looked up their tax IDs — not consumers.
   "payee_tax_profile", "payee_tax_reveal_log",
+  // Carrier fact reports (20261027200000): an agency owner telling Insurvas a carrier's portal, policy
+  // number format or products are wrong. Carrier facts and the reporting user — never a customer.
+  "carrier_fact_reports",
 ] as const;
 
 /** The old CRM's tables (organization-keyed, no tenant): not part of a tenant's records, so not searched. Named on the certificate. */

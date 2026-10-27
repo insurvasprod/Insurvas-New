@@ -8,8 +8,8 @@
  * routing rule is the row-level copy of assignment_candidate_is_eligible, so a cell that says
  * "Expired" is a cell the router has stopped using.
  *
- * Settings › States & licences renders appointment-vault-settings.tsx instead; both share the
- * dialogs and the checkbox grid in appointment-vault-parts.tsx.
+ * Settings › Carriers sets appointments state by state; licences are edited only here (Licences tab,
+ * "?tab=licences"). The dialogs and the checkbox grid live in appointment-vault-parts.tsx.
  *
  * 2026-10-06 redesign: appointments, licences and carrier trainings are three tabs under the
  * strip; every readiness item stays listed above them, one line each. (CE and E&O cover were
@@ -129,6 +129,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const [licencePage, setLicencePage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>("appointments");
+  // "?tab=licences" opens on Licences: where the dialer's licence refusals and a lead list's
+  // "Add a licence" point, since Settings › Carriers no longer edits licences (2026-10-26).
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the URL once, after hydration
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("tab") === "licences") setTab("licences"); }, []);
 
   const applyVault = useCallback((next: Vault) => {
     setVault(next);

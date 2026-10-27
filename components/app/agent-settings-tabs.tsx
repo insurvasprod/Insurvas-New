@@ -111,7 +111,7 @@ export function AgentSettingsTabs({
   function renderActiveContent(): ReactNode {
     if (!active) return null;
     const panel = SETTINGS_PANELS[active.id];
-    return panel ? panel({ team, workspace }) : <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
+    return panel ? panel({ team, workspace, granted }) : <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
   }
 
   return (
@@ -122,7 +122,7 @@ export function AgentSettingsTabs({
         aria-label="Settings sections"
         role="tablist"
         aria-orientation="vertical"
-        className="box-border flex w-full shrink-0 gap-1 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 pt-1 pb-2.5 lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px] lg:flex-col lg:gap-0 lg:overflow-x-visible lg:overflow-y-auto lg:overscroll-contain"
+        className="box-border flex w-full shrink-0 gap-1 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150 px-2 pt-1 pb-2.5 lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px] lg:flex-col lg:gap-0 lg:overflow-x-visible lg:overflow-y-auto lg:overscroll-contain"
       >
         {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
             caller's order, and the same name can legitimately open a second run — so the name is not
@@ -170,7 +170,7 @@ export function AgentSettingsTabs({
                     "mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] whitespace-nowrap transition-colors lg:whitespace-normal",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
                     isActive
-                      ? "bg-[var(--brand-50)] font-semibold text-[var(--accent-ink)] shadow-[inset_2px_0_0_var(--primary)]"
+                      ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]"
                       : tab.managed
                         ? "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-alt)]"
                         : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"

@@ -1,20 +1,25 @@
 "use client";
 
 /**
- * Settings › Notifications (LA-8.4, Notion sprint): per event, per channel, a digest for the
- * high-volume ones, quiet hours — and four alerts that cannot be switched off, shown locked with the
- * reason rather than hidden, because someone who cannot find why an email keeps arriving assumes the
- * setting is broken.
+ * Settings › My profile › Notifications (LA-8.4, Notion sprint; redesign 2026-10-27, owner pick A):
+ * per event, per channel, a digest for the high-volume ones, quiet hours — and four alerts that
+ * cannot be switched off, shown locked with the reason rather than hidden, because someone who
+ * cannot find why an email keeps arriving assumes the setting is broken.
+ *
+ * One table: an alert per row, a switch per channel, and "Email as" chips where a digest is offered;
+ * quiet hours sit above it and a group filter (plus "Always on") narrows it. Each change saves.
  *
  * Draws whatever the registry (lib/notifications/events.ts) holds; a new event needs no change here.
  */
 
 import { useEffect, useState } from "react";
 
-import { Callout, control, LockIcon, SettingsCard, SettingsSectionHeader, SettingsStack, Switch } from "@/components/app/settings/primitives";
+import { Callout, control, LockIcon, SettingsCard, SettingsSectionHeader, SettingsStack, st, Switch } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { NOTIFICATION_GROUPS, type DigestCadence } from "@/lib/notifications/events";
 
 type Channel = "in_app" | "email" | "push";
@@ -24,6 +29,7 @@ type EventView = {
   delivery: { in_app: boolean; email: boolean; push: boolean; digest: DigestCadence; protected: boolean };
 };
 type View = { available: boolean; timeZone: string | null; quiet: { enabled: boolean; start: string; end: string }; events: EventView[] };
+type Filter = "all" | "locked" | (typeof NOTIFICATION_GROUPS)[number];
 
 const CHANNELS: { key: Channel; label: string }[] = [
   { key: "in_app", label: "In the app" },
@@ -31,12 +37,18 @@ const CHANNELS: { key: Channel; label: string }[] = [
   { key: "push", label: "Browser" },
 ];
 const DIGEST_LABELS: Record<DigestCadence, string> = { immediate: "Each one", daily: "Daily digest", weekly: "Weekly digest", off: "No email" };
+const CHIP = (on: boolean) => cn(
+  "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+  on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--ink)]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)]",
+);
 
-export function NotificationPreferences() {
+/** `embedded`: drawn inside My profile, whose header names the section. */
+export function NotificationPreferences({ embedded = false }: { embedded?: boolean } = {}) {
   const [view, setView] = useState<View | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [quiet, setQuiet] = useState<View["quiet"] | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
     let live = true;
@@ -64,61 +76,61 @@ export function NotificationPreferences() {
     }
   }
 
-  if (error) return <SettingsStack><SettingsSectionHeader /><Callout tone="error" title={error} /></SettingsStack>;
-  if (!view || !quiet) return <SettingsStack><SettingsSectionHeader /><SettingsCard><SectionLoading rows={6} columns={4} label="Loading your notification preferences" /></SettingsCard></SettingsStack>;
+  const header = embedded ? null : <SettingsSectionHeader />;
+  if (error) return <SettingsStack>{header}<Callout tone="error" title={error} /></SettingsStack>;
+  if (!view || !quiet) return <SettingsStack>{header}<SettingsCard><SectionLoading rows={6} columns={4} label="Loading your notification preferences" /></SettingsCard></SettingsStack>;
 
-  const open = view.events.filter((e) => !e.protected);
   const locked = view.events.filter((e) => e.protected);
+  const groups = NOTIFICATION_GROUPS.filter((group) => view.events.some((e) => e.group === group));
+  const shown = filter === "all" ? view.events : filter === "locked" ? locked : view.events.filter((e) => e.group === filter);
   const quietDirty = quiet.enabled !== view.quiet.enabled || quiet.start !== view.quiet.start || quiet.end !== view.quiet.end;
-  const row = (e: EventView) => (
-    <li key={e.key} id={`notify-${e.key}`} className="grid gap-3 border-t border-[var(--border)] py-3 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5 text-sm font-semibold text-[var(--ink)]">
-          {e.protected ? <span className="inline-flex text-[var(--muted)]" aria-hidden="true"><LockIcon /></span> : null}
-          {e.label}
-        </div>
-        <div className="text-xs text-[var(--muted)]">{e.protected && e.protectedReason ? `Cannot be switched off. ${e.protectedReason}` : e.description}</div>
-      </div>
-      <div className="flex flex-wrap items-center gap-4">
+  const switchedOff = view.events.filter((e) => !e.protected && !e.delivery.in_app && !e.delivery.email && !e.delivery.push).length;
+
+  const row = (e: EventView) => {
+    const off = !e.protected && !e.delivery.in_app && !e.delivery.email && !e.delivery.push;
+    return (
+      <tr key={e.key} id={`notify-${e.key}`}>
+        <td className={st.td}>
+          <span className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--ink)]">
+            {e.label}
+            {e.protected ? <span className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-alt)] px-2 text-xs font-semibold text-[var(--muted)]"><LockIcon />Always on</span> : null}
+          </span>
+          <span className={st.sub}>{e.protected && e.protectedReason ? `Cannot be switched off. ${e.protectedReason}` : e.description}</span>
+          {off ? <span className="block text-xs text-[var(--warning-ink)]">Off: you will not hear about this.</span> : null}
+        </td>
         {CHANNELS.map((c) => (
-          <label key={c.key} className="flex items-center gap-2 text-xs text-[var(--body)]" title={e.protected ? "This alert cannot be switched off" : undefined}>
-            <Switch checked={e.delivery[c.key]} disabled={busy || e.protected || !view.available} label={`${e.label}: ${c.label}`}
-              onChange={(next) => void save({ event_key: e.key, [c.key]: next }, `${e.label}: ${c.label.toLowerCase()} ${next ? "on" : "off"}`)} />
-            {c.label}
-          </label>
+          <td key={c.key} className={cn(st.td, "text-center")} title={e.protected ? "This alert cannot be switched off" : undefined}>
+            <span className="inline-flex justify-center">
+              <Switch checked={e.delivery[c.key]} disabled={busy || e.protected || !view.available} label={`${e.label}: ${c.label}`}
+                onChange={(next) => void save({ event_key: e.key, [c.key]: next }, `${e.label}: ${c.label.toLowerCase()} ${next ? "on" : "off"}`)} />
+            </span>
+          </td>
         ))}
-        {e.supportsDigest ? (
-          <select aria-label={`${e.label}: how email arrives`} className={`${control} mt-0 w-auto`} disabled={busy || !view.available || !e.delivery.email && e.delivery.digest !== "off"}
-            value={e.delivery.email ? e.delivery.digest : "off"} onChange={(ev) => void save({ event_key: e.key, digest: ev.target.value, email: ev.target.value !== "off" }, `${e.label}: ${DIGEST_LABELS[ev.target.value as DigestCadence].toLowerCase()}`)}>
-            {(Object.keys(DIGEST_LABELS) as DigestCadence[]).map((d) => <option key={d} value={d}>{DIGEST_LABELS[d]}</option>)}
-          </select>
-        ) : null}
-      </div>
-    </li>
-  );
+        <td className={st.td}>
+          {e.supportsDigest ? (
+            <span role="group" aria-label={`${e.label}: how email arrives`} className="flex flex-wrap gap-1">
+              {(Object.keys(DIGEST_LABELS) as DigestCadence[]).map((d) => {
+                const current = e.delivery.email ? e.delivery.digest : "off";
+                return (
+                  <button key={d} type="button" aria-pressed={current === d} disabled={busy || !view.available} className={CHIP(current === d)}
+                    onClick={() => current !== d && void save({ event_key: e.key, digest: d, email: d !== "off" }, `${e.label}: ${DIGEST_LABELS[d].toLowerCase()}`)}>
+                    {DIGEST_LABELS[d]}
+                  </button>
+                );
+              })}
+            </span>
+          ) : <span className="text-xs text-[var(--muted)]">{e.delivery.email ? "Each one, as it happens" : "No email"}</span>}
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader />
+      {header}
       {!view.available ? <Callout tone="warning" title="Saving notification preferences needs a database update." /> : null}
 
-      {NOTIFICATION_GROUPS.map((group) => {
-        const events = open.filter((e) => e.group === group);
-        if (!events.length) return null;
-        return (
-          <SettingsCard key={group} title={group}>
-            <ul className="m-0 mt-3 flex list-none flex-col p-0">{events.map(row)}</ul>
-          </SettingsCard>
-        );
-      })}
-
-      {locked.length ? (
-        <SettingsCard title="Cannot be switched off" sub="Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too.">
-          <ul id="notify-protected" className="m-0 mt-3 flex list-none flex-col p-0">{locked.map(row)}</ul>
-        </SettingsCard>
-      ) : null}
-
-      <SettingsCard title="Quiet hours" sub={`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts above still come through.`}>
+      <SettingsCard title="Quiet hours" sub={`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts marked Always on still come through.`}>
         <div id="notify-quiet-hours" className="mt-3 flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-sm">
             <Switch checked={quiet.enabled} disabled={busy || !view.available} label="Quiet hours" onChange={(next) => setQuiet({ ...quiet, enabled: next })} />
@@ -133,6 +145,37 @@ export function NotificationPreferences() {
           <Button type="button" disabled={busy || !quietDirty || !view.available} onClick={() => void save({ quiet }, "Quiet hours saved")}>Save</Button>
         </div>
       </SettingsCard>
+
+      <TableCard
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")} className={CHIP(filter === "all")}>All<span className="tabular-nums opacity-70">{view.events.length}</span></button>
+            {groups.map((group) => (
+              <button key={group} type="button" aria-pressed={filter === group} onClick={() => setFilter(group)} className={CHIP(filter === group)}>
+                {group}<span className="tabular-nums opacity-70">{view.events.filter((e) => e.group === group).length}</span>
+              </button>
+            ))}
+            {locked.length ? (
+              <button id="notify-protected" type="button" aria-pressed={filter === "locked"} onClick={() => setFilter("locked")} className={CHIP(filter === "locked")}
+                title="Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too.">
+                <LockIcon />Always on<span className="tabular-nums opacity-70">{locked.length}</span>
+              </button>
+            ) : null}
+            {switchedOff ? <span className="ml-auto text-xs text-[var(--warning-ink)]">{switchedOff} switched off</span> : null}
+          </div>
+        }
+      >
+        <table className={st.table}>
+          <thead>
+            <tr className={st.headRow}>
+              <th className={st.th}>Alert</th>
+              {CHANNELS.map((c) => <th key={c.key} className={cn(st.th, "w-[104px] text-center")}>{c.label}</th>)}
+              <th className={cn(st.th, "w-[340px]")}>Email as</th>
+            </tr>
+          </thead>
+          <tbody>{shown.map(row)}</tbody>
+        </table>
+      </TableCard>
     </SettingsStack>
   );
 }

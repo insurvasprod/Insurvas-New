@@ -18,6 +18,26 @@ async function proves(read: PromiseLike<ExistenceRead>, test: (result: Existence
 }
 
 /**
+ * "Finish a carrier so you can sell it" (2026-10-27): one carrier with a contract in force (which
+ * carries the writing number) and an appointment in force — the carrier card's To finish list.
+ * Products are not read: a carrier's products are sold by default and only an owner unticking every
+ * one of them would leave it unready, which the card itself still shows.
+ */
+async function hasCarrierReadyToSell(tenantId: string): Promise<boolean> {
+  try {
+    const [contracts, appointed] = await Promise.all([
+      db().from("tenant_carriers").select("carrier_id").eq("tenant_id", tenantId).eq("is_active", true).limit(200),
+      db().from("appointments").select("carrier_id").eq("tenant_id", tenantId).is("terminated_at", null).limit(500),
+    ]);
+    if (contracts.error || appointed.error) return false;
+    const withState = new Set(((appointed.data ?? []) as { carrier_id: string }[]).map((row) => row.carrier_id));
+    return ((contracts.data ?? []) as { carrier_id: string }[]).some((row) => withState.has(row.carrier_id));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The setup checklist's per-step facts, for one tenant. Six cheap existence reads (`limit 1` or a
  * head count) run in parallel. Every read is filtered by the tenant: these go through the service
  * role, which has no RLS predicate, and an unfiltered read would walk every tenant's rows.
@@ -46,7 +66,7 @@ async function loadWalkthroughProgress(tenantId: string): Promise<SetupProgress>
     proves(db().from("assignment_rules").select("id").eq("tenant_id", tenantId).eq("is_active", true).limit(1), readFoundRow),
     proves(db().from("stage_dispositions").select("id").eq("tenant_id", tenantId).limit(1), readFoundRow),
     proves(db().from("tenant_queue_sla_settings").select("tenant_id").eq("tenant_id", tenantId).maybeSingle(), readFoundRow),
-    proves(db().from("tenant_carrier_settings").select("carrier_id").eq("tenant_id", tenantId).limit(1), readFoundRow),
+    hasCarrierReadyToSell(tenantId),
     // The agency's own wording, published — the platform rows (tenant_id null) do not count.
     proves(db().from("application_disclosures").select("id").eq("tenant_id", tenantId).eq("status", "published").limit(1), readFoundRow),
     proves(db().from("retention_settings").select("tenant_id").eq("tenant_id", tenantId).maybeSingle(), readFoundRow),

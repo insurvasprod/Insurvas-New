@@ -8,7 +8,7 @@ import { isMissingSchema, SCHEMA_PENDING_MESSAGE } from "./schemaGap";
 import { customerName, customerTimezone, resolveCustomerTimezone } from "@/lib/callbacks/timezone";
 import { ensureDefaultPublisherDispositionMappings } from "@/lib/pipelines/service";
 import { listPipelineOutcomeStages } from "@/lib/pipelines/outcomeStages";
-import { resolveOutcomeStages } from "@/lib/pipelines/outcomeResolution";
+import { resolveOutcomeStages, sameName } from "@/lib/pipelines/outcomeResolution";
 import { derivedNextAction, endsDialing, validateNextAction, type NextActionSetting } from "./nextAction";
 import { checkCallbackInCallingWindow } from "./callbackWindow";
 
@@ -137,30 +137,12 @@ export async function listDispositionConfig(tenantId: string) {
   };
 }
 
-/**
- * "Every outcome maps to a stage. Saving an outcome with no stage is refused, with the pipeline
- * named." An active outcome must be mapped (stage_dispositions) — either already, or by the stage
- * chosen in this save. An archived outcome may be saved without one: archiving is how an outcome
- * leaves the mapping.
+/*
+ * An outcome no longer needs an agency-wide stage to be saved (owner, 2026-10-27, Settings › Pipelines &
+ * outcomes). This replaces LA-1.12's "every outcome maps to a stage": an outcome with no stage keeps
+ * the lead where it is — on purpose for calls that reached nobody — unless the lead's pipeline sends it
+ * somewhere, or that pipeline has a stage with the outcome's name (20261027100000).
  */
-async function assertOutcomeHasStage(tenantId: string, dispositionKey: string, label: string, stageId: string | null) {
-  if (stageId) return;
-  const supabase = getSupabaseServiceClient();
-  // A mapping to an archived stage moves nothing (the dialer and the wizard both skip it), so it
-  // does not count as landing somewhere.
-  const mapped = await supabase.from("stage_dispositions").select("stage_id").eq("tenant_id", tenantId).eq("disposition_key", dispositionKey);
-  const stageIds = (mapped.data ?? []).map((row) => row.stage_id);
-  if (stageIds.length > 0) {
-    const live = await supabase.from("tenant_pipeline_stages").select("id").in("id", stageIds).eq("is_archived", false).limit(1);
-    if (!live.error && (live.data ?? []).length > 0) return;
-  }
-  const pipelines = await supabase.from("tenant_pipelines").select("name").eq("tenant_id", tenantId).order("name");
-  const names = (pipelines.data ?? []).map((pipeline) => pipeline.name as string);
-  throw new DispositionError(
-    "invalid_input",
-    `“${label}” has no stage, so recording it would leave the lead where it is. Choose the stage it moves the lead to${names.length ? ` — in ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`}` : ""} — before saving.`,
-  );
-}
 
 /** Map the outcome to the chosen stage (set_stage_disposition checks the stage is the tenant's). */
 async function mapOutcomeToStage(tenantId: string, dispositionKey: string, stageId: string | null) {
@@ -196,8 +178,6 @@ export async function updateDisposition(tenantId: string, dispositionId: string,
   const dispositionKey = current.data.disposition_key;
   const label = text(input.label, "Disposition label", 120);
   const stageId = input.stage_id == null || input.stage_id === "" ? null : uuid(input.stage_id, "stage");
-  const active = input.is_active === undefined ? current.data.is_active : input.is_active === true;
-  if (active) await assertOutcomeHasStage(tenantId, dispositionKey, label, stageId);
   const next = nextActionPatch(dispositionKey, input.next_action, input.next_action_minutes);
   const endsCall = next ? undefined : endsCallInput(dispositionKey, input.ends_call);
   const patch = {
@@ -220,9 +200,8 @@ export async function updateDisposition(tenantId: string, dispositionId: string,
 export async function createDisposition(tenantId: string, input: { disposition_key: unknown; label: unknown; counts_as_work_completed: unknown; closes_as: unknown; ends_call?: unknown; next_action?: unknown; next_action_minutes?: unknown; stage_id?: unknown }) {
   const dispositionKey = key(input.disposition_key, "Outcome key");
   const label = text(input.label, "Outcome label", 120);
-  // A new outcome is active, so it needs its stage now.
+  // A stage is optional: with none, the outcome keeps the lead where it is unless a pipeline moves it.
   const stageId = input.stage_id == null || input.stage_id === "" ? null : uuid(input.stage_id, "stage");
-  await assertOutcomeHasStage(tenantId, dispositionKey, label, stageId);
   const next = nextActionPatch(dispositionKey, input.next_action, input.next_action_minutes);
   const endsCall = next ? undefined : endsCallInput(dispositionKey, input.ends_call);
   const supabase = getSupabaseServiceClient();
@@ -419,16 +398,19 @@ export async function completeDisposition(tenantId: string, userId: string, inpu
  */
 export async function listMappedOutcomes(tenantId: string, pipelineId: string | null = null): Promise<Array<Disposition & { mapped_stage: NonNullable<DispositionSettingsRow["mapped_stage"]> }>> {
   const supabase = getSupabaseServiceClient();
-  const [dispositions, agencyWide, own] = await Promise.all([
+  const [dispositions, agencyWide, own, ownStages] = await Promise.all([
     selectDispositions(tenantId),
     supabase.from("stage_dispositions").select("stage_id, disposition_key").eq("tenant_id", tenantId),
     pipelineId ? listPipelineOutcomeStages(tenantId) : Promise.resolve({ ready: false, rows: [] }),
+    // The lead's pipeline's live stages, for the same-name default (20261027100000).
+    pipelineId ? supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, stage_type, is_archived").eq("pipeline_id", pipelineId).eq("is_archived", false).order("position") : Promise.resolve({ data: [], error: null }),
   ]);
   if (dispositions.error) throw new DispositionError("disposition_unavailable", `Could not load call outcomes: ${dispositions.error.message}`);
   if (agencyWide.error) throw new DispositionError("disposition_unavailable", `Could not load outcome stages: ${agencyWide.error.message}`);
+  if (ownStages.error) throw new DispositionError("disposition_unavailable", `Could not load outcome stages: ${ownStages.error.message}`);
   // Both sets of stages are read; an archived own stage is not read, so it falls back to the agency-wide one.
   const candidates = [...own.rows.filter((row) => row.pipeline_id === pipelineId), ...(agencyWide.data ?? [])];
-  const stageIds = [...new Set(candidates.map((mapping) => mapping.stage_id))];
+  const stageIds = [...new Set([...candidates.flatMap((mapping) => (mapping.stage_id ? [mapping.stage_id] : [])), ...(ownStages.data ?? []).map((stage) => stage.id)])];
   if (stageIds.length === 0) return [];
   const stages = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, stage_type, is_archived").in("id", stageIds).eq("is_archived", false);
   if (stages.error) throw new DispositionError("disposition_unavailable", `Could not load outcome stages: ${stages.error.message}`);
@@ -439,7 +421,13 @@ export async function listMappedOutcomes(tenantId: string, pipelineId: string | 
   const pipelineNames = new Map((pipelines.data ?? []).map((pipeline) => [pipeline.id as string, pipeline.name as string]));
   const stageById = new Map((stages.data ?? []).filter((stage) => pipelineNames.has(stage.pipeline_id)).map((stage) => [stage.id, stage]));
   const stageByKey = new Map<string, NonNullable<DispositionSettingsRow["mapped_stage"]>>();
-  for (const [dispositionKey, stageId] of resolveOutcomeStages(agencyWide.data ?? [], own.rows, pipelineId, (id) => stageById.has(id))) {
+  const labelOf = new Map((dispositions.data ?? []).map((row) => [row.disposition_key as string, row.label as string]));
+  const resolveOptions = {
+    pipelineOfStage: (id: string) => stageById.get(id)?.pipeline_id,
+    stageNamedLike: (dispositionKey: string) => (ownStages.data ?? []).find((stage) => sameName(stage.name, labelOf.get(dispositionKey) ?? "\u0000"))?.id,
+    keys: labelOf.keys(),
+  };
+  for (const [dispositionKey, stageId] of resolveOutcomeStages(agencyWide.data ?? [], own.rows, pipelineId, (id) => stageById.has(id), resolveOptions)) {
     const stage = stageById.get(stageId)!;
     stageByKey.set(dispositionKey, { id: stage.id, name: stage.name, stage_type: stage.stage_type, pipeline_id: stage.pipeline_id, pipeline_name: pipelineNames.get(stage.pipeline_id) ?? "Pipeline" });
   }

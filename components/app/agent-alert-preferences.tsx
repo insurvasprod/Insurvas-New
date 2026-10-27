@@ -40,7 +40,7 @@ export function AgentAlertPreferences({ feed }: { feed: AgentAlertPreferencesFee
   return (
     <div className="portal-top-settings">
       <p className="portal-top-settings-note">These controls apply only to you.</p>
-      <Link href="/app/settings#alerts" className="portal-top-settings-button">Choose which alerts reach you</Link>
+      <Link href="/app/settings#my-profile/notifications" className="portal-top-settings-button">Choose which alerts reach you</Link>
       <div className="portal-top-settings-group">
         <label className="portal-top-settings-row">
           <span>Do not disturb</span>

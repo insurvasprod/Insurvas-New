@@ -59,10 +59,12 @@ export function itemHref(section: Pick<SettingsSection, "id" | "route">, item: P
 }
 
 /**
- * Sections merged into another (2026-10-26: Carrier library and States & licences became Carriers).
+ * Sections merged into another (2026-10-26: Carrier library and States & licences became Carriers;
+ * 2026-10-27: Dispositions joined Pipelines as Pipelines & outcomes; Carrier field maps became the
+ * Carriers section's Field maps tab).
  * Old links, bookmarks and emails keep landing on the right place, on the right step.
  */
-const MOVED_TABS: Record<string, string> = { "carrier-library": "carriers", "states-licences": "carriers/carriers-licences" };
+const MOVED_TABS: Record<string, string> = { "carrier-library": "carriers", "states-licences": "carriers/carriers-states", dispositions: "pipelines", alerts: "my-profile/notifications", "sales-carriers": "carriers", "sales-field-maps": "carriers/carriers-maps" };
 
 /** A settings hash split into the tab and the control inside it: "sales-preferences/qa-buffer". */
 export function parseSettingsHash(hash: string): { tab: string; anchor: string | null } {

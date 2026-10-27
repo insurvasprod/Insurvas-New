@@ -48,6 +48,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/carrier-library/tenant-carriers/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/carrier-library/commission-schedules/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/carrier-library/advance-rules/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
+  // Settings › Carriers › Tell us (20261027200000): carrier facts reported to Insurvas. No money.
+  { sourceFile: "app/api/app/carrier-fact-reports/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/appointment-vault/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/appointment-vault/appointments/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/appointment-vault/licenses/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },

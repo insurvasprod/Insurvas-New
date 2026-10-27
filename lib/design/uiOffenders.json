@@ -5,7 +5,6 @@
     "components/app/accept-terms-panel.tsx": 1,
     "components/app/auth-card.tsx": 1,
     "components/app/business-profile-form.tsx": 1,
-    "components/app/disposition-settings.tsx": 1,
     "components/app/disposition-wizard.tsx": 1,
     "components/app/issued-policy-panel.tsx": 1,
     "components/app/lead-detail-workspace.tsx": 1,
@@ -16,8 +15,7 @@
   "hex-colour": {
     "components/admin/feature-switches-panel.tsx": 1,
     "components/admin/invoice-print-view.tsx": 25,
-    "components/admin/template-editor-dialog.tsx": 1,
-    "components/app/pipeline-stage-manager.tsx": 15
+    "components/admin/template-editor-dialog.tsx": 1
   },
   "text-px": {},
   "eyebrow": {},
@@ -45,7 +43,7 @@
     "components/admin/tenant-record/tenant-invoices-card.tsx": 1,
     "components/admin/tenant-record/users-tab-client.tsx": 2,
     "components/admin/users-list-table.tsx": 1,
-    "components/app/calendar-availability-settings.tsx": 14,
+    "components/app/calendar-availability-settings.tsx": 13,
     "components/app/column-mapping-dialog.tsx": 2,
     "components/app/issued-policy-panel.tsx": 6
   }

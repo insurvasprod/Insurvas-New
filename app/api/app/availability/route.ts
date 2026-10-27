@@ -9,6 +9,7 @@ import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
 import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { rowVisible, scopeFor } from "@/lib/agency/visibility";
+import { isAgencyTenant } from "@/lib/agency/audience";
 
 /**
  * LA-2.11 · the working hours, blocked time and booking policy every appointment rule reads.
@@ -64,7 +65,7 @@ export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
-    const [{ members: everyone, schema, agency }, scope] = await Promise.all([getCalendarSettings(auth.context.tenantId), scopeFor(auth.context)]);
+    const [{ members: everyone, schema, agency }, scope, isAgency] = await Promise.all([getCalendarSettings(auth.context.tenantId), scopeFor(auth.context), isAgencyTenant(auth.context.tenantId)]);
     // AG-0.5: inside an agency a narrowed session sees its own week and its visible producers' — never another
     // producer's hours or blocked time (block reasons are personal). Solo tenants and owners see every member.
     const members = scope === null ? everyone : everyone.filter((m) => m.userId === auth.context.userId || rowVisible(scope, m.userId));
@@ -72,7 +73,8 @@ export async function GET() {
       // `canEditOthers` travels with the payload so the screen decides what to OFFER and the route
       // stays the enforcement. A producer shown another member's editable week would get a 403 from
       // a control that looked available.
-      { members, schema, agency, canEditOthers: auth.context.role === "owner", selfUserId: auth.context.userId },
+      // isAgency: the Whole agency tab is shown on agency plans only (owner, 2026-10-27).
+      { members, schema, agency, isAgency, canEditOthers: auth.context.role === "owner", selfUserId: auth.context.userId },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

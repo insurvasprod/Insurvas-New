@@ -10,6 +10,7 @@ import {
   Building2,
   ChevronDown,
   Compass,
+  Flag,
   ContactRound,
   CreditCard,
   FileInput,
@@ -97,6 +98,7 @@ const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
   "status-maps": ListChecks,
   "carrier-rules": BookCheck,
   "portal-guidance": Compass,
+  "fact-reports": Flag,
   templates: LayoutTemplate,
   // Monitoring
   activity: LogIn,

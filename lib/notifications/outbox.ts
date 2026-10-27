@@ -25,7 +25,7 @@ import { emailDecision, loadNotificationSettings } from "./preferences";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the new columns and tables are not in database.types.ts yet
 const db = () => getSupabaseServiceClient() as any;
 const OUTBOX_KINDS = NOTIFICATION_EVENTS.filter((e) => e.email === "outbox").flatMap((e) => e.kinds);
-const settingsUrl = () => `${configuredAppOrigin("agent")}/app/settings#alerts`;
+const settingsUrl = () => `${configuredAppOrigin("agent")}/app/settings#my-profile/notifications`;
 const absolute = (link: string | null) => (link ? (link.startsWith("http") ? link : `${configuredAppOrigin("agent")}${link.startsWith("/") ? link : `/${link}`}`) : null);
 
 type Row = { id: string; tenant_id: string; recipient_user_id: string; kind: string; title: string; body: string; link: string | null; created_at: string };

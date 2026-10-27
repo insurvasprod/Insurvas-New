@@ -99,7 +99,7 @@ export async function listSecurityEvents(userId: string, emailOrRead: string | P
  * two-factor turned off. A failed send is logged and never undoes the change.
  */
 export async function sendSecurityNotice(input: { to: string; name: string; what: string; detail?: string; userId: string; tenantId: string | null }) {
-  const rendered = securityNoticeEmail({ name: input.name, what: input.what, when: new Date(), detail: input.detail, profileUrl: `${configuredAppOrigin("agent")}/app/profile#security` });
+  const rendered = securityNoticeEmail({ name: input.name, what: input.what, when: new Date(), detail: input.detail, profileUrl: `${configuredAppOrigin("agent")}/app/settings#my-profile/security` });
   await sendEmail({ to: input.to, ...rendered, templateKey: "user.security_notice", userId: input.userId, tenantId: input.tenantId })
     .catch((error: unknown) => console.error("[security-notice]", input.what, error instanceof Error ? error.message : error));
 }

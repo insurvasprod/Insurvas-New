@@ -304,6 +304,30 @@ const legacyStageName = (stageKey: string, type: PartnerPipelineType) => {
 };
 
 /**
+ * The all-in-one Sales pipeline (20261027300000) by the same legacy keys: the stage a key names there.
+ * A key it has no stage for, or a stage the agency renamed, falls back to its first open stage.
+ */
+const GENERAL_STAGE_NAMES: Record<string, string> = {
+  new: "New lead", partner_submitted: "New lead", contacted: "Trying to reach", quoted: "Qualified",
+  application_sent: "Sent to underwriting", submitted: "Submitted", issued: "Submitted", lost: "Not interested",
+};
+
+/**
+ * The agency's default pipeline with no partner type — the all-in-one Sales pipeline every new agency
+ * starts with — and the stage a legacy key names in it. Null when the agency has no such pipeline, or
+ * it has no open stage left.
+ */
+async function resolveGeneralStage(tenantId: string, stageKey: string): Promise<{ pipelineId: string; stage: PipelineStage } | null> {
+  const supabase = getSupabaseServiceClient();
+  const general = await supabase.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).is("partner_type", null).eq("is_default", true).maybeSingle();
+  if (general.error || !general.data) return null;
+  const { data: stages } = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, position, stage_type, color, is_archived, created_at, updated_at").eq("pipeline_id", general.data.id).eq("is_archived", false).order("position");
+  const live = (stages ?? []) as PipelineStage[];
+  const stage = live.find((item) => item.name === GENERAL_STAGE_NAMES[stageKey]) ?? live.find((item) => item.stage_type === "open");
+  return stage ? { pipelineId: general.data.id, stage } : null;
+}
+
+/**
  * Where a lead with no partner enters: the first open stage of the default pipeline with no partner
  * type, when the tenant has one (20260924240100); otherwise the default marketing pipeline's entry
  * stage, which is where every such lead went before a pipeline could have no partner type.
@@ -318,9 +342,20 @@ export async function resolveUnpartneredEntry(tenantId: string): Promise<{ pipel
   return resolveRuntimeStage(tenantId, "new", "marketing");
 }
 
-export async function resolveRuntimeStage(tenantId: string, stageKey: string, partnerType: PartnerPipelineType = "marketing") {
+/**
+ * The stage a legacy key names. No partner type (an agent's own lead, a win-back, a deal with no
+ * partner): the all-in-one default pipeline first, else the marketing pipeline as before. A partner
+ * type with no default pipeline of its own (a new agency starts with only the Sales pipeline,
+ * 20261027300000) uses the all-in-one one.
+ */
+export async function resolveRuntimeStage(tenantId: string, stageKey: string, partnerType: PartnerPipelineType | null = null): Promise<{ pipelineId: string; stage: PipelineStage }> {
+  if (partnerType === null) return (await resolveGeneralStage(tenantId, stageKey)) ?? resolveRuntimeStage(tenantId, stageKey, "marketing");
   const supabase = getSupabaseServiceClient();
   const { data: pipeline, error: pipelineError } = await supabase.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", partnerType).eq("is_default", true).maybeSingle();
+  if (!pipelineError && !pipeline) {
+    const general = await resolveGeneralStage(tenantId, stageKey);
+    if (general) return general;
+  }
   if (pipelineError || !pipeline) throw new Error("No default pipeline is configured for this partner type");
   const name = legacyStageName(stageKey, partnerType);
   const { data: stage, error } = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, position, stage_type, color, is_archived, created_at, updated_at").eq("pipeline_id", pipeline.id).eq("name", name).eq("is_archived", false).maybeSingle();
@@ -382,7 +417,8 @@ export async function resolveProductEntryStage(tenantId: string, productCode: st
  * is no longer created, and tenants that have one keep it (and the leads already in it) untouched.
  * The legacy name lookup stays as the fallback for a pipeline whose stages are all closed.
  */
-export async function resolvePartnerEntryStage(tenantId: string, partnerType: PartnerPipelineType): Promise<{ pipelineId: string; stage: PipelineStage }> {
+export async function resolvePartnerEntryStage(tenantId: string, partnerType: PartnerPipelineType | null): Promise<{ pipelineId: string; stage: PipelineStage }> {
+  if (partnerType === null) return resolveUnpartneredEntry(tenantId);
   const supabase = getSupabaseServiceClient();
   const { data: pipeline, error: pipelineError } = await supabase
     .from("tenant_pipelines")
@@ -391,6 +427,11 @@ export async function resolvePartnerEntryStage(tenantId: string, partnerType: Pa
     .eq("partner_type", partnerType)
     .eq("is_default", true)
     .maybeSingle();
+  // No pipeline of this partner type yet (a new agency has only the all-in-one Sales pipeline): there.
+  if (!pipelineError && !pipeline) {
+    const general = await resolveGeneralStage(tenantId, "partner_submitted");
+    if (general) return general;
+  }
   if (pipelineError || !pipeline) throw new Error("No default pipeline is configured for this partner type");
   const { data: stage, error } = await supabase
     .from("tenant_pipeline_stages")
@@ -478,8 +519,9 @@ export async function ensureDefaultPublisherDispositionMappings(tenantId: string
   await markSeeded();
 }
 
-export async function partnerTypeForLead(tenantId: string, partnerId: string | null | undefined): Promise<PartnerPipelineType> {
-  if (!partnerId) return "marketing";
+/** A lead's partner type; null with no partner, so it lands in the all-in-one default pipeline. */
+export async function partnerTypeForLead(tenantId: string, partnerId: string | null | undefined): Promise<PartnerPipelineType | null> {
+  if (!partnerId) return null;
   const { data } = await getSupabaseServiceClient().from("partners").select("partner_type").eq("id", partnerId).eq("tenant_id", tenantId).maybeSingle();
   return (data?.partner_type as PartnerPipelineType | undefined) ?? "marketing";
 }

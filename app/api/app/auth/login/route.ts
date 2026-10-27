@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
   // An invited member's first sign-in opens their walkthrough (Get set up, 2026-10-21); null for the owner.
   const landing = (await firstLoginLanding(membership.tenant_id, user.id, membership.role)) ?? "/app/dashboard";
   const redirectTo = signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state })
-    ?? (!enrolled && requiresTwoFactor(membership.role) ? "/app/profile?two_factor=required#security" : landing);
+    ?? (!enrolled && requiresTwoFactor(membership.role) ? "/app/settings?two_factor=required#my-profile/security" : landing);
   if (enrolled && !trusted) {
     await clearLoginFailures("user", email, request);
     const pending = await signTenantPending2faToken({ sub: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, redirectTo, remember, viaLink: Boolean(link) });
