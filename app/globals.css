@@ -1609,6 +1609,8 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
   .portal-tenant-auth-shell [data-auth-heading] p { margin-top: .375rem; }
   .portal-tenant-auth-shell [data-auth-back] { margin-bottom: .75rem; }
   .portal-tenant-auth-shell [data-auth-fields] { gap: .75rem; }
+  .portal-tenant-auth-shell [data-auth-fields] section > h2 { margin-bottom: .375rem; }
+  .portal-tenant-auth-shell [data-plan-card] { padding-block: .5rem; }
   .portal-tenant-auth-shell .portal-login-footer { margin-top: 1rem; }
 }
 .portal-tenant-auth-shell .portal-auth-split-form > div { justify-content: flex-start; }
@@ -3034,13 +3036,13 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
    React <ViewTransition> names the pieces (components/portal/portal-auth-split-shell.tsx); these
    are their animations. The page itself crossfades underneath.
    ═════════════════════════════════════════════════════════════════════════════════════════════ */
-.portal-auth-story-scene { position: relative; overflow: hidden; isolation: isolate; }
-/* Keeps the panel's words legible where the ribbon passes behind them. */
-.portal-auth-story-veil {
-  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+/* The brand panel is still (owner, 2026-10-27: "remove this animation … a simple professional
+   design on the right"): the brand green with one soft light from the top right. Nothing moves. */
+.portal-auth-story-scene {
+  position: relative; overflow: hidden; isolation: isolate;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--brand-700) 96%, transparent) 0%, color-mix(in srgb, var(--brand-700) 84%, transparent) 48%, color-mix(in srgb, var(--brand-700) 30%, transparent) 78%, transparent 100%),
-    radial-gradient(90% 60% at 15% 100%, color-mix(in srgb, var(--brand-700) 85%, transparent), transparent 70%);
+    radial-gradient(75% 60% at 90% 0%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 70%),
+    var(--brand-700);
 }
 
 ::view-transition-old(root),

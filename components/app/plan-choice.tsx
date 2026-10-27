@@ -9,7 +9,6 @@ import { AuthAlert } from "@/components/portal/auth-controls";
 import { Button } from "@/components/ui/button";
 import { BILLING_CYCLES, BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import {
-  addonsFor,
   agencyPlanForSeats,
   choiceTotalCents,
   cyclesFor,
@@ -23,7 +22,6 @@ import { dayMonthYear } from "@/lib/format/dates";
 type Audience = PlanChoiceOption["audience"];
 const AUDIENCE_LABEL: Record<Audience, string> = { individual: "For one agent", agency: "For an agency" };
 const PER: Record<BillingCycle, string> = { monthly: "month", quarterly: "quarter", yearly: "year" };
-const SHORT: Record<BillingCycle, string> = { monthly: "mo", quarterly: "qtr", yearly: "yr" };
 
 export type PlanChoiceInitial = { planCode: string; billingCycle: BillingCycle; seats: number | null; addonCodes: string[] };
 
@@ -33,7 +31,6 @@ type ChoiceState = {
   plan: PlanChoiceOption;
   cycle: BillingCycle;
   seats: number;
-  addonCodes: string[];
   totalCents: number | null;
   /** When the page was rendered: each plan's first charge is counted from it. */
   now: string;
@@ -44,7 +41,6 @@ type ChoiceState = {
   pickPlan: (code: string) => void;
   setCycle: (cycle: BillingCycle) => void;
   setSeats: (seats: number) => void;
-  toggleAddon: (code: string) => void;
   save: () => void;
 };
 
@@ -80,15 +76,12 @@ export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, ch
   const [planCode, setPlanCode] = useState(start.code);
   const [cycle, setCycleState] = useState<BillingCycle>(initial && start.cents[initial.billingCycle] != null ? initial.billingCycle : cyclesFor(start)[0] ?? "monthly");
   const [seats, setSeatsState] = useState(seatsFor(start, initial?.seats ?? null));
-  const [addonCodes, setAddonCodes] = useState<string[]>(initial?.addonCodes ?? []);
   // The one-agent plan last chosen, so switching to agency and back does not lose it.
   const [lastSolo, setLastSolo] = useState(start.audience === "individual" ? start.code : null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const plan = plans.find((candidate) => candidate.code === planCode) ?? start;
-  const offered = addonsFor(plan, cycle).map((addon) => addon.code);
-  const picked = addonCodes.filter((code) => offered.includes(code));
 
   function choose(next: PlanChoiceOption, nextSeats: number) {
     setError(null);
@@ -105,8 +98,8 @@ export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, ch
     plan,
     cycle,
     seats,
-    addonCodes: picked,
-    totalCents: choiceTotalCents(plan, cycle, picked),
+    // No add-on can be chosen at sign-up (owner, 2026-10-27: "we can't add modules anywhere").
+    totalCents: choiceTotalCents(plan, cycle, []),
     now,
     noPayment,
     saving,
@@ -131,14 +124,13 @@ export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, ch
       if (band && band.code !== plan.code) choose(band, count);
       else { setError(null); setSeatsState(count); }
     },
-    toggleAddon: (code) => setAddonCodes((current) => current.includes(code) ? current.filter((item) => item !== code) : [...current, code]),
     save: () => {
       setSaving(true);
       setError(null);
       fetch("/api/app/onboarding/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planCode: plan.code, billingCycle: cycle, seats, addonCodes: picked }),
+        body: JSON.stringify({ planCode: plan.code, billingCycle: cycle, seats, addonCodes: [] }),
       })
         .then(async (response) => {
           const body = await response.json().catch(() => null);
@@ -153,9 +145,15 @@ export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, ch
   return <ChoiceContext.Provider value={value}>{children}</ChoiceContext.Provider>;
 }
 
+/**
+ * A 36px segmented control with 8px corners: the chosen side is a white thumb on a grey track
+ * (owner, 2026-10-27; v3: pills only on marketing CTAs). Green stays for the primary action and the
+ * chosen plan.
+ */
+const segmentTrack = "flex gap-0.5 rounded-lg border border-border bg-[var(--surface-alt)] p-0.5";
 const segment = (active: boolean) => cn(
-  "h-9 flex-1 rounded-full px-3 text-sm font-semibold tracking-[-0.02em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40",
-  active ? "bg-[var(--primary)] text-[var(--on-primary)]" : "text-muted-foreground hover:text-foreground",
+  "h-8 flex-1 rounded-md px-3 text-sm font-semibold tracking-[-0.02em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40",
+  active ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,.08),0_0_0_1px_var(--border)]" : "text-muted-foreground hover:text-foreground",
 );
 
 function Section({ n, title, note, children }: { n: number; title: string; note?: string; children: ReactNode }) {
@@ -170,48 +168,52 @@ function Section({ n, title, note, children }: { n: number; title: string; note?
   );
 }
 
-function bandLabel(plan: PlanChoiceOption) {
-  return plan.maxSeats == null ? `${plan.minSeats}+ seats` : `${plan.minSeats}–${plan.maxSeats} seats`;
-}
-
-/** The left side: who it is for, plan and billing, seats, add-ons. */
 export function PlanChoiceForm() {
   const choice = useChoice();
   const { plans, plan, cycle, seats } = choice;
   const audiences = (["individual", "agency"] as const).filter((audience) => plans.some((candidate) => candidate.audience === audience));
   const shown = plans.filter((candidate) => candidate.audience === plan.audience);
   const cycles = BILLING_CYCLES.filter((item) => shown.some((candidate) => candidate.cents[item] != null));
-  const addons = addonsFor(plan, cycle);
+  // Section numbers start after "Who it is for" when both audiences are sold.
+  const first = audiences.length > 1 ? 1 : 0;
   // What is typed in the seat box, so it can be cleared and retyped without snapping to 1 midway.
   const [seatText, setSeatText] = useState<string | null>(null);
-  const nextBand = plan.maxSeats == null ? null : plans.find((candidate) => candidate.audience === "agency" && candidate.minSeats === (plan.maxSeats ?? 0) + 1);
 
   return (
     <div>
-      <FunnelHeading title="Choose your plan">Pick a plan and your seats. You can change it before you pay.</FunnelHeading>
-      <form onSubmit={(event) => { event.preventDefault(); choice.save(); }} className="flex flex-col gap-6">
-        {audiences.length > 1 && (
-          <Section n={1} title="Who it is for">
-            <div role="radiogroup" aria-label="Who it is for" className="flex gap-1 rounded-full border border-border bg-[var(--surface-alt)] p-1">
-              {audiences.map((audience) => (
-                <button key={audience} type="button" role="radio" aria-checked={plan.audience === audience} className={segment(plan.audience === audience)} onClick={() => choice.setAudience(audience)}>
-                  {AUDIENCE_LABEL[audience]}
-                </button>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        <Section n={audiences.length > 1 ? 2 : 1} title="Plan and billing">
-          {cycles.length > 1 && (
-            <div role="radiogroup" aria-label="Billing" className="mb-2.5 flex gap-1 rounded-full border border-border bg-[var(--surface-alt)] p-1">
+      <FunnelHeading title="Choose your plan">Pick a plan and your seats.</FunnelHeading>
+      {/* Who and billing side by side, so the step fits a laptop window (owner, 2026-10-27). Billing
+          shows even with one cycle, so the row does not change shape between one agent and agency. */}
+      <form onSubmit={(event) => { event.preventDefault(); choice.save(); }} data-auth-fields="" className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {audiences.length > 1 && (
+            <Section n={1} title="Who it is for">
+              <div role="radiogroup" aria-label="Who it is for" className={segmentTrack}>
+                {audiences.map((audience) => (
+                  <button key={audience} type="button" role="radio" aria-checked={plan.audience === audience} className={segment(plan.audience === audience)} onClick={() => choice.setAudience(audience)}>
+                    {AUDIENCE_LABEL[audience]}
+                  </button>
+                ))}
+              </div>
+            </Section>
+          )}
+          <Section n={first + 1} title="Billing">
+            {/* One cycle on sale: a sentence, not a one-option toggle that looks clickable. */}
+            {cycles.length === 1 ? (
+              <p className="flex h-9 items-center text-sm text-[var(--body)]">{BILLING_CYCLE_LABELS[cycles[0]]} only</p>
+            ) : (
+            <div role="radiogroup" aria-label="Billing" className={segmentTrack}>
               {cycles.map((item) => (
                 <button key={item} type="button" role="radio" aria-checked={cycle === item} disabled={plan.cents[item] == null} title={plan.cents[item] == null ? `${plan.name} is not sold ${BILLING_CYCLE_LABELS[item].toLowerCase()}` : undefined} className={segment(cycle === item)} onClick={() => choice.setCycle(item)}>
                   {BILLING_CYCLE_LABELS[item]}
                 </button>
               ))}
             </div>
-          )}
+            )}
+          </Section>
+        </div>
+
+        <Section n={first + 2} title="Plan">
           <div role="radiogroup" aria-label="Plan" className="flex flex-col gap-2">
             {shown.map((candidate) => {
               const on = candidate.code === plan.code;
@@ -222,6 +224,7 @@ export function PlanChoiceForm() {
                   type="button"
                   role="radio"
                   aria-checked={on}
+                  data-plan-card=""
                   disabled={cents == null}
                   onClick={() => choice.pickPlan(candidate.code)}
                   className={cn(
@@ -247,7 +250,7 @@ export function PlanChoiceForm() {
           </div>
         </Section>
 
-        <Section n={audiences.length > 1 ? 3 : 2} title="Seats">
+        <Section n={first + 3} title="Seats">
           {plan.audience === "agency" ? (
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -269,62 +272,15 @@ export function PlanChoiceForm() {
                 <Button type="button" variant="outline" size="icon" className="size-9 border-[var(--border-strong)]" aria-label="One seat more" onClick={() => choice.setSeats(seats + 1)}><Plus aria-hidden="true" /></Button>
                 <span className="text-sm text-muted-foreground">seats</span>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={Math.max(200, seats)}
-                value={seats}
-                aria-label="Seats slider"
-                onChange={(event) => choice.setSeats(Number(event.target.value))}
-                className="mt-3.5 w-full accent-[var(--primary)]"
-              />
-              <ol aria-label="Seat bands" className="mt-1.5 grid gap-1" style={{ gridTemplateColumns: shown.map((band) => `${band.maxSeats == null ? 50 : Math.max(30, band.maxSeats - band.minSeats + 1)}fr`).join(" ") }}>
-                {shown.map((band) => (
-                  <li key={band.code} className={cn("rounded-lg border px-2 py-1.5 text-xs leading-normal", band.code === plan.code ? "border-[var(--primary)] bg-[var(--primary-soft)] text-foreground" : "border-border text-muted-foreground")}>
-                    <strong className="block font-semibold">{bandLabel(band).replace(" seats", "")}</strong>
-                    {band.cents.monthly != null ? `${formatCentsAsCurrency(band.cents.monthly)}/mo` : ""}
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-2.5 text-sm leading-normal text-[var(--body)]" aria-live="polite">
-                {seats} seats → {plan.cents[cycle] != null ? `${formatCentsAsCurrency(plan.cents[cycle]!)} a ${PER[cycle]}` : plan.name}.{" "}
-                {plan.maxSeats == null
-                  ? "No seat limit."
-                  : `${plan.maxSeats - seats} more seat${plan.maxSeats - seats === 1 ? "" : "s"} fit before the next band${nextBand?.cents[cycle] != null ? ` (${formatCentsAsCurrency(nextBand.cents[cycle]!)})` : ""}.`}
-              </p>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2.5">
-              <Button type="button" variant="outline" size="icon" className="size-9 border-[var(--border-strong)]" aria-label="One seat fewer" disabled><Minus aria-hidden="true" /></Button>
-              <input type="number" aria-label="Seats" value={1} disabled readOnly className="h-9 w-[88px] rounded-lg border border-[var(--border-strong)] bg-card text-center text-base font-semibold text-foreground opacity-60" />
-              <Button type="button" variant="outline" size="icon" className="size-9 border-[var(--border-strong)]" aria-label="One seat more" disabled><Plus aria-hidden="true" /></Button>
-              <span className="text-sm leading-normal text-muted-foreground">
-                One-agent plans have one seat. Need a team?{" "}
-                {audiences.includes("agency") && <button type="button" className="font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => choice.setAudience("agency")}>Switch to an agency plan</button>}
-              </span>
-            </div>
-          )}
-        </Section>
-
-        <Section n={audiences.length > 1 ? 4 : 3} title="Add modules" note="optional">
-          {addons.length === 0 ? (
-            <p className="text-sm leading-normal text-muted-foreground">No add-on modules are offered on {plan.name} {BILLING_CYCLE_LABELS[cycle].toLowerCase()}.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {addons.map((addon) => {
-                const on = choice.addonCodes.includes(addon.code);
-                return (
-                  <label key={addon.code} className={cn("flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors", on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border-strong)] bg-card hover:border-[var(--accent-ink)]")}>
-                    <input type="checkbox" checked={on} onChange={() => choice.toggleAddon(addon.code)} className="size-[18px] shrink-0 accent-[var(--accent-ink)]" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-foreground">{addon.name}</span>
-                      {addon.description && <span className="block text-xs leading-normal text-[var(--body)]">{addon.description}</span>}
-                    </span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">+{formatCentsAsCurrency(addon.priceCents)}/{SHORT[addon.cycle]}</span>
-                  </label>
-                );
-              })}
-            </div>
+            // One sentence, not a disabled stepper: a one-agent plan has nothing to choose here.
+            <p className="text-sm leading-normal text-[var(--body)]">
+              1 seat.{" "}
+              {audiences.includes("agency") && (
+                <>Need a team? <button type="button" onClick={() => choice.setAudience("agency")} className="font-semibold text-[var(--accent-ink)] hover:underline">Switch to an agency plan</button></>
+              )}
+            </p>
           )}
         </Section>
 
@@ -366,19 +322,17 @@ function ContinueButton() {
 
 /** The right side: the plan, what it covers module by module, the lines and the total. */
 export function PlanChoiceSummary() {
-  const { plan, modules, cycle, seats, addonCodes, totalCents } = useChoice();
+  const { plan, modules, cycle, seats, totalCents } = useChoice();
   const granted = new Set(plan.featureKeys);
   const allFeatures = modules.reduce((sum, module) => sum + module.features.length, 0);
   const included = modules.reduce((sum, module) => sum + module.features.filter((feature) => granted.has(feature.key)).length, 0);
-  const picked = addonsFor(plan, cycle).filter((addon) => addonCodes.includes(addon.code));
   const lines = [
     { label: plan.name, value: plan.cents[cycle] == null ? "—" : `${formatCentsAsCurrency(plan.cents[cycle]!)} / ${PER[cycle]}` },
     { label: "Seats", value: plan.audience === "agency" ? `${seats} of ${plan.maxSeats ?? "unlimited"} in this band` : "1 (one-agent plan)" },
-    ...picked.map((addon) => ({ label: `${addon.name} add-on`, value: `+${formatCentsAsCurrency(addon.priceCents)} / ${PER[addon.cycle]}` })),
   ];
 
   return (
-    <section aria-label="Your plan summary" className="mx-auto w-full max-w-[500px] rounded-[22px] border border-[var(--nav-line)] bg-black/35 p-6 text-[var(--nav-ink)] shadow-[0_30px_80px_rgba(0,0,0,.45)] backdrop-blur-xl">
+    <section aria-label="Your plan summary" className="mx-auto w-full max-w-[500px] rounded-xl border border-[var(--nav-line)] bg-black/20 p-6 text-[var(--nav-ink)]">
       <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--nav-muted)]">Your plan</p>
       <h2 className="mt-1.5 text-2xl font-semibold leading-tight tracking-[-0.02em] text-[var(--on-dark)]">{plan.name}</h2>
       <p className="text-sm text-[var(--nav-muted)]">{included} of {allFeatures} features</p>

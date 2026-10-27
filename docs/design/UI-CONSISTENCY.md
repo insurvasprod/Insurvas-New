@@ -306,7 +306,15 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   | 5 Payment | ← Back to your plan (and "Change plan" in the receipt) |
 - A question with several answers from a short list is a dropdown with checkboxes
   (`components/app/multi-picker.tsx`), not a row of chips; it shares its list style with the state
-  picker.
+  picker. Picks show as removable tags in the field; the list ends with "N selected · Clear".
+- An open picker list is drawn at the auth shell (a portal), never inside the form column: each
+  line of the column is its own layer while the entrance animation holds, so a list drawn inside
+  it goes under every later line. It fits the room left in the window and never makes it scroll.
+- The brand panel is still: `--brand-700` with one soft light, no ribbon or other motion
+  (owner, 2026-10-27).
+- Step 4 asks who, billing, plan and seats, and nothing else. No add-on modules at sign-up, no
+  seat slider, no band strip (the plan cards are the bands). One-agent seats are one sentence.
+  Segmented controls are 36px with 8px corners and a white thumb; a single billing cycle is text.
 - First screens ask only what is needed: no confirm-password field (show/hide and the strength
   meter cover typos). Sign-in and every sign-up step fit without scrolling at 1366×768 (a 1366×657 browser window).
 - No marketing claims, internal notes or explanatory text on auth pages beyond one line under the

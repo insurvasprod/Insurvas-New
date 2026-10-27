@@ -187,6 +187,47 @@ The owner answered the Back question: **step 3 → step 2 → step 1; step 1 has
 - `app/globals.css` is CRLF; stage it with `git -c core.autocrlf=false add app/globals.css`.
 - Do not commit `tasks/`.
 
+## Round 2 (2026-10-27, night): dropdowns, still brand panel, step 4. Committed after the owner checked it
+
+Plan: `tasks/plan.md`, `tasks/todo.md` (untracked). Owner approved the recommended answers: remove
+Add modules entirely; still brand-700 panel with one soft light; white-thumb 36px toggles.
+
+1. **Dropdowns went under things.**
+   - Cause: `.m-stagger > *` keeps each line of the auth column on its own layer, so a list
+     inside one line goes under every later line, whatever its z-index.
+   - The list is now drawn at `.portal-auth-split-shell` through a portal (`PickerPortal`,
+     `useAnchoredPanel` in `components/app/multi-picker.tsx`). It has fixed position, is fitted to
+     the room left, flips up when needed, and follows scroll and resize. `StatePicker` uses the
+     same pieces.
+   - Checked: the last row is on top (`elementFromPoint`), and no page scroll in either direction.
+2. **Dropdown design.** Picks are removable tags in the field ("+N" past what fits), the list
+   ends with "N selected · Clear", rows are 36px, the chosen rows are lightly filled, and the
+   shadow is lighter.
+3. **Still brand panel.**
+   - `LandingObject` and the veil are gone from `portal-auth-split-shell.tsx`.
+   - `.portal-auth-story-scene` is `--brand-700` plus one radial light.
+   - The plan summary and the payment receipt cards lost their blur and big shadow.
+   - The marketing pages keep their own ribbon.
+4. **Step 4.**
+   - Removed: Add modules, the slider, the band strip, the band sentence and the subtitle tail.
+   - "Who it is for" and "Billing" are on one row; billing with a single cycle reads
+     "Monthly only".
+   - One-agent seats are one sentence.
+   - Compact mode tightens the plan cards and the section headings.
+   - Typing 98 seats still picks 51–150, and the summary follows.
+5. **Preview.** `/design/auth` has "step 4 (plan)", rendered with the published plans from the
+   database.
+
+**Checks:**
+- no page scroll at 1920×1030 and 1366×657 for steps 3 and 4 (both audiences), and at 1536×744
+  for sign-in;
+- light and dark;
+- design and signup tests pass; `npm test`: 3,268 tests, the same 23 pre-existing failures;
+- typecheck and eslint: clean.
+
+**Not run:** `npx next build --webpack`, because the dev server was using the worktree. Run it
+before pushing.
+
 ## What is next
 
 1. **Check the two Back review screens with a real account** (see "Not checked" above).

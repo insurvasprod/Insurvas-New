@@ -167,6 +167,17 @@ still allows. That rule is enforced by each page today:
 - Nothing typed on a later step is lost by going back: plan and profile are saved on the server
   before moving on, and forms prefill from what is saved.
 
+### 3a. Round 2 (owner, 2026-10-27)
+
+- Pickers: the list is drawn at the auth shell (portal) and fitted to the window; tags in the
+  field; "N selected · Clear" footer.
+- Brand panel: still, `--brand-700` with one soft light; the ribbon and its veil are removed.
+- Step 4:
+  - removed "Add modules" (section and summary line; the body sends `addonCodes: []`), the seat
+    slider, the band strip, the band sentence and "You can change it before you pay.";
+  - "Who it is for" and "Billing" share a row as 36px segmented controls;
+  - one-agent seats are one sentence.
+
 ### 4. Tests
 
 **`lib/design/signupCopy.test.mjs`:**

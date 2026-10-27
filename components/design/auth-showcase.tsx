@@ -5,9 +5,11 @@ import { useState } from "react";
 import { AuthHeading, AuthLayout, AuthStory, type AuthPlane } from "@/components/portal/auth-layout";
 import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
 import { BusinessProfileForm } from "@/components/app/business-profile-form";
+import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary } from "@/components/app/plan-choice";
 import { FUNNEL_STEPS } from "@/components/app/funnel-frame";
 import { LogoutButton } from "@/components/app/logout-button";
 import { StoryPanel } from "@/components/app/tenant-auth-workspace";
+import type { PlanChoiceModule, PlanChoiceOption } from "@/lib/signup/planChoice";
 
 /**
  * Every combination of the auth layout on one page (development only): the sign-up steps sit
@@ -18,6 +20,7 @@ const VARIANTS = [
   { key: "sign-in", label: "Agent sign-in" },
   { key: "step-1", label: "Sign-up · step 1" },
   { key: "step-3", label: "Sign-up · step 3 (wide, back)" },
+  { key: "step-4", label: "Sign-up · step 4 (plan)" },
   { key: "done", label: "Sign-up · all done" },
   { key: "partner", label: "Partner sign-in" },
   { key: "admin", label: "Staff sign-in · step 2" },
@@ -26,8 +29,9 @@ const VARIANTS = [
 
 type Variant = (typeof VARIANTS)[number]["key"];
 
-export function AuthShowcase() {
+export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: PlanChoiceOption[]; modules: PlanChoiceModule[] } | null }) {
   const [variant, setVariant] = useState<Variant>("sign-in");
+  const [now] = useState(() => new Date().toISOString());
 
   const picker = (
     <div className="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap justify-center gap-1 rounded-lg border border-border bg-card p-1 shadow-[var(--shadow-overlay)]" role="toolbar" aria-label="Auth layout variant">
@@ -85,6 +89,14 @@ export function AuthShowcase() {
         </>
       ),
     },
+    "step-4": {
+      plane: "agent",
+      width: "wide",
+      back: { href: "#", label: "Back to your agency" },
+      steps: { current: 4, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[3], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      story: planChoices?.plans.length ? <PlanChoiceSummary /> : <StoryPanel mode="sign-up" step={4} />,
+      node: planChoices?.plans.length ? <PlanChoiceForm /> : <AuthHeading title="Choose your plan">No published plans could be loaded here.</AuthHeading>,
+    },
     done: {
       plane: "agent",
       story: <StoryPanel mode="sign-in" />,
@@ -119,11 +131,16 @@ export function AuthShowcase() {
   };
 
   const screen = screens[variant];
+  const layout = (
+    <AuthLayout plane={screen.plane} width={screen.width} steps={screen.steps} back={screen.back} story={screen.story}>
+      {screen.node}
+    </AuthLayout>
+  );
   return (
     <>
-      <AuthLayout plane={screen.plane} width={screen.width} steps={screen.steps} back={screen.back} story={screen.story}>
-        {screen.node}
-      </AuthLayout>
+      {variant === "step-4" && planChoices?.plans.length ? (
+        <PlanChoiceProvider plans={planChoices.plans} modules={planChoices.modules} initial={null} now={now} noPayment={false}>{layout}</PlanChoiceProvider>
+      ) : layout}
       {picker}
     </>
   );

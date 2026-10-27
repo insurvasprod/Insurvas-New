@@ -4,7 +4,7 @@ import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 import { authControl } from "@/components/app/auth-card";
-import { pickerOption, pickerPanel } from "@/components/app/multi-picker";
+import { PickerPortal, pickerList, pickerOption, pickerPanel, useAnchoredPanel } from "@/components/app/multi-picker";
 import { US_STATES } from "@/lib/signup/constants";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,8 @@ export function StatePicker({ value, onChange, id, describedBy }: { value: strin
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const panelStyle = useAnchoredPanel(inputRef, open, 320);
   const chosen = US_STATES.find(([code]) => code === value)?.[1] ?? "";
 
   const matches = useMemo(() => {
@@ -52,6 +54,7 @@ export function StatePicker({ value, onChange, id, describedBy }: { value: strin
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         id={inputId}
         role="combobox"
         aria-expanded={open}
@@ -69,13 +72,16 @@ export function StatePicker({ value, onChange, id, describedBy }: { value: strin
         onKeyDown={onKeyDown}
       />
       <ChevronDown aria-hidden="true" className={cn("pointer-events-none absolute right-3 top-[22px] size-4 text-muted-foreground transition-transform duration-150", open && "rotate-180")} />
-      {open && (
+      {/* Drawn outside the form column so nothing below it covers it (multi-picker.tsx, portalTarget). */}
+      {open && panelStyle && (
+        <PickerPortal anchor={inputRef}>
+        <div style={panelStyle} className={pickerPanel}>
         <ul
           ref={listRef}
           id={listId}
           role="listbox"
           aria-label="States"
-          className={cn(pickerPanel, "top-full mt-1.5 max-h-[300px]")}
+          className={pickerList}
         >
           {matches.length === 0 && <li className="px-2.5 py-2.5 text-sm text-muted-foreground" role="presentation">No state matches “{query}”.</li>}
           {matches.map(([code, name], index) => (
@@ -94,6 +100,8 @@ export function StatePicker({ value, onChange, id, describedBy }: { value: strin
             </li>
           ))}
         </ul>
+        </div>
+        </PickerPortal>
       )}
     </div>
   );
