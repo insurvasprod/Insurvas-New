@@ -105,6 +105,10 @@ do not undo it by styling inputs with `border-border`.
 
 ## 3. Type
 
+> **Foundation v3 (2026-10-27):** Inter returns for the apps and auth pages, with Inter Tight for
+> titles and large numbers; Montserrat stays on marketing. Status and details:
+> [UI-CONSISTENCY.md §0](UI-CONSISTENCY.md#0-foundation-v3-2026-10-27) and [BRAND.md](BRAND.md).
+
 *(2026-10-05: the typeface is now **Montserrat**, see [BRAND.md](BRAND.md); the weights rule stands.)* Inter, weights 400 and 600 only. Avoid 700+ except for a compact numeric status label. Tracking
 tightens as size grows — this is the Brex voice and a headline at `0em` is wrong.
 
@@ -128,6 +132,9 @@ most common data-table defect in this codebase.
 ---
 
 ## 4. Shape, spacing, elevation
+
+> **Foundation v3 (2026-10-27):** buttons take 8px corners like inputs, and metric cards use the
+> glossy surface. See [UI-CONSISTENCY.md §4a and §5a](UI-CONSISTENCY.md#4a-stat-cards-v3).
 
 ```
 radius:   6px editorial media · 8px controls and inputs · 12px panels and cards · pill for marketing CTAs

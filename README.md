@@ -5,6 +5,10 @@ Control plane for the Insurvas platform. Built against the `SA-x.y` tickets in t
 
 Next.js 16 (App Router) · Tailwind v4 · shadcn/ui · Supabase (Postgres).
 
+**Building or changing a screen?** Read the design rules first:
+[`docs/design/UI-CONSISTENCY.md`](docs/design/UI-CONSISTENCY.md) (§0 is the v3 foundation), and
+the `README.md` in the folder you are working in.
+
 ## The two planes
 
 The split that shapes the whole codebase:

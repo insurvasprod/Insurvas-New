@@ -21,7 +21,13 @@ authority for colour, type and the logo.
   use the lighter `--primary-soft` `#dcfaf0`.
 - **Type:** Montserrat throughout, with negative tracking on headings. Coolvetica is for display
   banners only.
+  - **v3 (2026-10-27), Decided, lands in `foundation-tokens`:** the agent, partner and admin apps and
+    every auth page move to **Inter**, with **Inter Tight** for page titles and large numbers and
+    Geist Mono for identifiers. Montserrat stays on the marketing site. See
+    [UI-CONSISTENCY.md §0](UI-CONSISTENCY.md#0-foundation-v3-2026-10-27).
 - **Shape:** pill-shaped buttons, 12px cards, 8px inputs.
+  - **v3 (2026-10-27), Decided, lands in `foundation-components`:** buttons move to 8px corners
+    like inputs; cards stay 12px. See [UI-CONSISTENCY.md §5a](UI-CONSISTENCY.md#5a-control-shape-v3).
 
 ## Where it lives in code
 
@@ -30,7 +36,7 @@ authority for colour, type and the logo.
 | Colour tokens (light and dark) | `app/globals.css`, `:root` and `.dark` |
 | Contrast and naming rules, enforced | `lib/design/brandContrast.test.mjs` |
 | Admin console (the app's colours and shell with a blue accent, owner decisions 2026-10-13: accent tokens only) | `app/admin/admin-plane.css` |
-| Font | `app/layout.tsx` (Montserrat via `next/font`, self-hosted at build); `--font-sans` / `--font-display` |
+| Font | `app/layout.tsx` (Montserrat via `next/font`, self-hosted at build); `--font-sans` / `--font-display`. Inter for the apps lands in `foundation-tokens`. |
 | Logo | `components/shared/insurvas-logo.tsx`, which reads `public/brand/*.svg` |
 | Favicon / home-screen icon | `app/icon.svg`, `app/apple-icon.tsx` (rendered from the isotype) |
 | Emails | `lib/email/brand.ts` |
