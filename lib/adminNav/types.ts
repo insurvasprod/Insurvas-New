@@ -44,6 +44,7 @@ export const SIDEBAR_ICONS = [
   "status-maps",
   "carrier-rules",
   "portal-guidance",
+  "fact-reports",
   "disclosures",
   "calling-rules",
 ] as const;

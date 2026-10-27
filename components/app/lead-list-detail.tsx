@@ -149,7 +149,7 @@ function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: Po
       return <>This list {why}, so Serve next hands out none of it. Change it on <Link href="/app/campaigns" className={link}>Vendors &amp; campaigns</Link>.</>;
     }
     case "no_agent":
-      return <>{states}. Nobody here holds a current licence there, and no setter is active. <Link href="/app/settings#carriers/carriers-licences" className={link}>Add a licence</Link> to work them.</>;
+      return <>{states}. Nobody here holds a current licence there, and no setter is active. <Link href="/app/appointments?tab=licences" className={link}>Add a licence</Link> to work them.</>;
     case "at_capacity":
       return <>{states}. <Link href="/app/assignments" className={link}>Raise a capacity</Link> on Lead routing.</>;
     case "no_state":

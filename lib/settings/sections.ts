@@ -66,8 +66,13 @@ const OWNER: readonly TenantRole[] = ["owner"];
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   // ── Your account ────────────────────────────────────────────────────────────────────────────────
   {
-    group: "Your account", id: "my-profile", label: "My profile", sort_order: 10, owned_by_module: "LA-8.2", route: "/app/profile",
-    description: "Your own name, phone, photo and licence numbers, and how you sign in: email, password, two-factor and sessions.", search_keywords: ["profile", "my name", "phone number", "avatar", "photo", "licence number", "npn", "security"],
+    // Redesign 2026-10-27 (owner pick A): the profile lives here, not on a page of its own, and
+    // Notifications are part of it — four tabs (components/app/settings/my-profile.tsx). /app/profile
+    // and the old "#alerts" land here.
+    group: "Your account", id: "my-profile", label: "My profile", sort_order: 10, owned_by_module: "LA-8.2 / LA-8.4",
+    description: "Your name, phone, photo and licence numbers; how you sign in; and which alerts reach you, in the app, by email or in the browser.",
+    short: "You, how you sign in, and which alerts reach you.",
+    search_keywords: ["profile", "my name", "phone number", "avatar", "photo", "licence number", "npn", "security", "alerts", "notifications", "email alerts", "browser alerts", "push", "digest", "daily email", "weekly email", "too many emails"],
     items: [
       { label: "Display timezone", anchor: "profile-timezone", keywords: ["my timezone", "time zone", "display time"] },
       { label: "Sign-in email", anchor: "security-email", keywords: ["change email", "email address", "login email"] },
@@ -75,14 +80,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       { label: "Two-factor authentication", anchor: "security-two-factor", keywords: ["2fa", "two factor", "authenticator", "mfa", "recovery codes"] },
       { label: "Sessions", anchor: "security-sessions", keywords: ["sign out", "log out", "devices", "lost laptop", "stolen phone", "end session"] },
       { label: "Security log", anchor: "security-log", keywords: ["login history", "failed logins", "security events"] },
-    ],
-  },
-  {
-    group: "Your account", id: "alerts", label: "Notifications", sort_order: 20, owned_by_module: "LA-8.4",
-    description: "Which alerts reach you, in the app, by email or in the browser — with digests, quiet hours, and the four that cannot be switched off.",
-    short: "Which alerts reach you, and how.",
-    search_keywords: ["alerts", "notifications", "email alerts", "browser alerts", "push", "digest", "daily email", "weekly email", "too many emails"],
-    items: [
       { label: "Quiet hours", anchor: "notify-quiet-hours", keywords: ["quiet hours", "do not disturb at night", "mute at night"] },
       { label: "Alerts that cannot be switched off", anchor: "notify-protected", keywords: ["doi deadline", "reinstatement", "licence expiring", "payment failed", "cannot switch off"] },
     ],
@@ -123,10 +120,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
   // ── Carriers ────────────────────────────────────────────────────────────────────────────────────
   // Owner pick D, 2026-10-26: Carrier library and States & licences in one place, in three steps.
-  { group: "Carriers", id: "carriers", label: "Carriers", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Your carriers, the states each one appointed you in, and your state licences.", short: "Carriers, contract levels, appointed states and licences.", search_keywords: ["carriers", "contract level", "writing number", "appointments", "appointed", "states", "licence", "license", "products"] },
-  { group: "Carriers", id: "sales-carriers", label: "Carrier details", sort_order: 20, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The carrier library, plus the four things an application needs from a carrier that a contract does not carry: a portal, a reference shape, a descriptor and a payment method.", search_keywords: ["products", "carrier portal", "bank descriptor", "payment method"] },
-  { group: "Carriers", id: "carrier-rules", label: "Carrier rules", sort_order: 30, owned_by_module: "LA-4.17", route: "/app/carrier-rules", required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], description: "Each carrier's retention windows, chargeback rules and statement lag, with where each figure came from.", search_keywords: ["retention window", "first payment window", "chargeback", "advance", "statement lag", "carrier rule"] },
-  { group: "Carriers", id: "sales-field-maps", label: "Carrier field maps", sort_order: 40, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Where each application field goes on a carrier's site, verified before the extension fills it.", search_keywords: ["field map", "autofill"] },
+  // 2026-10-27: Carrier details (sales-carriers) folded into each carrier's card; old links land on Carriers.
+  { group: "Carriers", id: "carriers", label: "Carriers", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Your carriers and the states each one appointed you in.", short: "Carriers, contract levels and appointed states.", search_keywords: ["carriers", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
+  // 2026-10-27 (owner): Carrier rules is a tab on Carriers that opens /app/carrier-rules, not a rail entry.
   { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
 
   // ── Sales process ───────────────────────────────────────────────────────────────────────────────
@@ -150,8 +146,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { group: "Sales process", id: "sales-pipeline-sync", label: "Pipeline sync", sort_order: 80, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Which pipeline stage a lead's card moves to as its application progresses.", search_keywords: ["stage sync"] },
 
   // ── Leads & dialing ─────────────────────────────────────────────────────────────────────────────
-  { group: "Leads & dialing", id: "pipelines", label: "Pipelines", sort_order: 10, owned_by_module: "LA-1.9", required_feature: "book_of_business", required_roles: OWNER, description: "Stages for inbound, outbound and partner work — and which disposition moves a lead into each one.", short: "Pipelines, their stages, and the stage each disposition moves a lead to.", search_keywords: ["stages", "pipeline"] },
-  { group: "Leads & dialing", id: "dispositions", label: "Dispositions", sort_order: 20, owned_by_module: "LA-1.12", required_feature: "book_of_business", required_roles: OWNER, description: "Call outcomes, what each one counts as, and what happens next.", search_keywords: ["call outcome", "disposition"] },
+  // Pipelines and Dispositions are one page (owner, 2026-10-27); old "#dispositions" links land here (registry.ts).
+  { group: "Leads & dialing", id: "pipelines", label: "Pipelines & outcomes", sort_order: 10, owned_by_module: "LA-1.9 / LA-1.12", required_feature: "book_of_business", required_roles: OWNER, description: "Your pipelines' stages, the call outcomes agents pick, and where each outcome sends the lead.", short: "Stages, call outcomes, and the stage each outcome moves a lead to.", search_keywords: ["stages", "pipeline", "call outcome", "disposition", "dispositions", "outcomes"] },
   { group: "Leads & dialing", id: "form-templates", label: "Form templates", sort_order: 30, owned_by_module: "LA-1.4", required_feature: "book_of_business", required_roles: OWNER, description: "The partner and agent forms that capture a complete lead, before anybody calls it.", search_keywords: ["lead fields", "forms", "application forms", "custom fields"] },
   { group: "Leads & dialing", id: "lead-posting", label: "Lead posting", sort_order: 40, owned_by_module: "LA-2.5", required_feature: "lead_import", required_roles: OWNER, description: "The keys your vendors post with, the URL they post to, and how their field names map onto yours.", short: "Vendor posting keys, the URL they post to and their field maps.", search_keywords: ["post key", "vendor key", "lead post", "posting url", "field map"] },
   { group: "Leads & dialing", id: "calendar", label: "Calendar & availability", sort_order: 50, owned_by_module: "LA-2.11", required_feature: "outbound_dialing", required_roles: OWNER, description: "Working hours, blocked time and how many appointments fit in a day. Every booking rule reads these.", search_keywords: ["working hours", "availability", "appointments per day", "blocked time"] },

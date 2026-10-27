@@ -87,6 +87,9 @@ export const AUDIT_ACTIONS = [
   "carrier.restored",
   // A super admin deactivated a platform carrier tenants still use (20260924357000). Reason required.
   "carrier.deactivated_in_use",
+  // Carrier fact reports (20261027200000): an agency reports a wrong fact; staff close it.
+  "carrier.fact_reported",
+  "carrier.fact_report_resolved",
   "tenant.carrier_configured",
   "tenant.commission_schedule_saved",
   "tenant.advance_rule_saved",
@@ -593,6 +596,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "carrier.archived": "Carrier deactivated",
   "carrier.restored": "Carrier reactivated",
   "carrier.deactivated_in_use": "Carrier deactivated while tenants still use it (super admin override)",
+  "carrier.fact_reported": "Carrier fact reported to Insurvas",
+  "carrier.fact_report_resolved": "Carrier fact report closed",
   "tenant.carrier_configured": "Carrier contract configured",
   "tenant.commission_schedule_saved": "Commission schedule saved",
   "tenant.advance_rule_saved": "Advance rule saved",

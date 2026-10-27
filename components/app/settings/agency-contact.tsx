@@ -21,7 +21,7 @@ import { formatSupportPhone, SUPPORT_EMAIL_MAX, SUPPORT_PHONE_MAX, supportContac
 import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 
-export function PartnerSupportCard() {
+export function PartnerSupportCard({ className }: { className?: string } = {}) {
   const [support, setSupport] = useState<SupportContact | null>(null);
   const [draft, setDraft] = useState<{ email: string; phone: string }>({ email: "", phone: "" });
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +60,12 @@ export function PartnerSupportCard() {
   }
 
   return (
-    <SettingsCard title="Partner support contact" sub="Partners see it in Messages. Leave a field blank to hide it.">
+    // Not the agency's own phone (that is Address & contact): the help line partners see (owner, 2026-10-27).
+    <SettingsCard
+      title="Support contact for your partners"
+      sub="The email and phone your partners (publishers, call centres) see in their portal's Messages when they need help. Not your business phone: that is under Address & contact. Leave a field blank to hide it."
+      className={className}
+    >
       <div id="identity-partner-support">
         {support === null && !error ? (
           <SectionLoading rows={1} columns={2} label="Loading the support contact" />
@@ -69,12 +74,12 @@ export function PartnerSupportCard() {
             {error && <Callout tone="error" title={error} className="mb-4" />}
             {support && !support.schemaReady && <Callout tone="warning" title="Saving the support contact needs a database update." className="mb-4" />}
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              <Field label="Support email" htmlFor="agency-support-email">
+              <Field label="Support email for partners" htmlFor="agency-support-email">
                 <input id="agency-support-email" type="email" autoComplete="email" className={control} maxLength={SUPPORT_EMAIL_MAX} value={draft.email}
                   disabled={!support?.schemaReady} placeholder="support@youragency.com"
                   onChange={(event) => { setError(null); setDraft((current) => ({ ...current, email: event.target.value })); }} />
               </Field>
-              <Field label="Phone" htmlFor="agency-support-phone"
+              <Field label="Support phone for partners" htmlFor="agency-support-phone"
                 hint={support?.schemaReady ? (formatSupportPhone(draft.phone) ? `Partners see it as ${formatSupportPhone(draft.phone)}.` : "No phone set.") : undefined}>
                 <input id="agency-support-phone" type="tel" autoComplete="tel" className={control} maxLength={SUPPORT_PHONE_MAX} value={draft.phone}
                   disabled={!support?.schemaReady} placeholder="(312) 555-0100"
@@ -94,10 +99,10 @@ export function PartnerSupportCard() {
   );
 }
 
-export function OwnershipCard({ team, workspace }: { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null }) {
+export function OwnershipCard({ team, workspace, className }: { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null; className?: string }) {
   const owners = (team?.members ?? []).filter((member) => member.role === "owner" && member.status === "active");
   return (
-    <SettingsCard title="Ownership">
+    <SettingsCard title="Ownership" className={className}>
       <div id="identity-ownership">
         <KeyValues
           items={[

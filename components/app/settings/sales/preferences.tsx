@@ -7,7 +7,8 @@
  * The agency-wide values the pre-submission check (LA-3.11: the per-$1,000 band, the appointment
  * rule), the draft-date optimiser (LA-3.9: the buffer), pending requirements (LA-3.18: ageing) and
  * the welcome pack (LA-3.20: send or hold) read. One draft; Discard / Save changes in the save bar.
- * Owners edit; producers see the values read-only.
+ * Owners edit; producers see the values read-only. Products with their own band (moved here from
+ * Carrier details, 2026-10-27) save one row at a time.
  */
 
 import { useState } from "react";
@@ -19,6 +20,7 @@ import { salesSettingsSchema, type SalesSettings } from "@/lib/salesSettings/sch
 import { cn } from "@/lib/utils";
 
 import { PanelState, useSalesSettings } from "./prefs-settings";
+import { ProductBands } from "./product-bands";
 import { CardFact, DiscardSave, ReadOnlyNotice, SalesPanelTop, changedLine } from "./shared";
 
 type Draft = { min: string; max: string; appointmentBlocks: boolean; buffer: 2 | 3 | 4; ageing: string; autoSend: boolean };
@@ -80,7 +82,7 @@ function Editor({ saved, canEdit, strip, save }: { saved: SalesSettings; canEdit
 
       <SettingsCard title="Premium plausibility" sub="A premium divided by face amount, in thousands. Anything outside the band is flagged on the case." action={<CardFact>{strip}</CardFact>}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Lowest per $1,000" htmlFor="qa-band-min" error={bandError ?? undefined} hint="All products. A product with its own band in Carriers and products is checked against that one.">
+          <Field label="Lowest per $1,000" htmlFor="qa-band-min" error={bandError ?? undefined} hint="All products. A product with its own band, below, is checked against that one.">
             <input id="qa-band-min" type="number" min={0} max={100} step="0.01" inputMode="decimal" className={cn(control, "tabular-nums")} value={draft.min} disabled={ro} aria-invalid={Boolean(bandError) || undefined} onChange={(e) => set({ min: e.target.value })} />
           </Field>
           <Field label="Highest per $1,000" htmlFor="qa-band-max">
@@ -133,6 +135,7 @@ export function SalesQaPreferences() {
         // Re-keyed on save so the draft restarts from what the server now holds.
         <Editor key={view.updatedAt ?? "defaults"} saved={view.settings} canEdit={view.canEdit} strip={changedLine(view.updatedAt, view.updatedBy)} save={save} />
       ))}
+      {!sample && view && <ProductBands />}
     </SettingsStack>
   );
 }

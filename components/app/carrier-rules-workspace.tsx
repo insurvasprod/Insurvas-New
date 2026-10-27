@@ -265,7 +265,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                   <p className="m-0">Layout map: {open.elsewhere.layoutKey ? <span className="font-mono text-xs">{open.elsewhere.layoutKey}</span> : "none assigned"}</p>
                   <p className="m-0">
                     Portal: {open.elsewhere.portalOrigin ?? "not set"} · Policy number pattern: {open.elsewhere.referencePattern ? <span className="font-mono text-xs">{open.elsewhere.referencePattern}</span> : "not set"}
-                    {plane === "agency" && <> · <Link href="/app/settings#sales-carriers" className="font-semibold underline">Change</Link></>}
+                    {plane === "agency" && <> · <Link href="/app/settings#carriers" className="font-semibold underline">Open the carrier</Link></>}
                   </p>
                 </section>
               </fieldset>

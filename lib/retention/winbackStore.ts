@@ -119,7 +119,7 @@ export async function releaseDueWinbacks(tenantId: string, userId: string | null
   ]);
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
   const fallbackProduct = ((templates.data ?? []) as Loose[])[0]?.product_code as string | undefined;
-  const stage = await resolveRuntimeStage(tenantId, "new", "marketing").catch(() => null);
+  const stage = await resolveRuntimeStage(tenantId, "new").catch(() => null);
 
   let released = 0;
   let blocked = 0;

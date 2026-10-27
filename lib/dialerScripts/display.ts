@@ -448,7 +448,7 @@ export function explainEmptyQueue(facts: EmptyQueueFacts): { code: EmptyQueueCod
   const held = described.includes(" Held back until their scrub passes: ") ? ` Held back until their scrub passes: ${described.split(" Held back until their scrub passes: ")[1]}` : "";
   if (!facts.anyUnclaimed) return { code: "nothing_waiting", message: `Every lead has been worked or is with another agent.${held}` };
   if (facts.workableStates && facts.workableStates.length === 0)
-    return { code: "no_licence", message: "You are not licensed in any state the agency holds a live licence for, so no lead can be served to you. Add the agency's licences on Settings › Carriers › State licences; on a team plan, an owner also sets each person's states on Settings › Team & access." };
+    return { code: "no_licence", message: "You are not licensed in any state the agency holds a live licence for, so no lead can be served to you. Add the agency's licences on Appointments › Licences; on a team plan, an owner also sets each person's states on Settings › Team & access." };
   if (facts.windows.some((row) => row.reason === "rules_stale"))
     return { code: "rules_stale", message: "The calling rules are out of date, so no one is dialled until they are refreshed." };
 

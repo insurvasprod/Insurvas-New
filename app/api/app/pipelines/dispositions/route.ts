@@ -23,12 +23,13 @@ export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("book_of_business", ["owner"], { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null) as { stage_id?: unknown; disposition_key?: unknown; pipeline_id?: unknown } | null;
-  // With a pipeline: that pipeline's own stage for the outcome. Without: the agency-wide mapping.
+  // With a pipeline: that pipeline's own stage for the outcome (stage_id null: it keeps the lead where
+  // it is in that pipeline, 20261027100000). Without: the agency-wide mapping.
   if (body?.pipeline_id) {
     try {
       const row = await setPipelineOutcomeStage(auth.context.tenantId, { pipeline_id: body.pipeline_id, stage_id: body.stage_id, disposition_key: body.disposition_key });
       await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.pipeline_outcome_stage_set", targetType: "pipeline_disposition_stage", targetId: row.id, metadata: { pipelineId: row.pipeline_id, stageId: row.stage_id, dispositionKey: row.disposition_key }, request });
-      await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "dispositions", changes: [{ key: `pipeline-mapping:${row.pipeline_id}:${row.disposition_key}`, label: `Outcome “${row.disposition_key}” moves the lead within its pipeline`, from: null, to: `to stage ${row.stage_id}` }] });
+      await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "dispositions", changes: [{ key: `pipeline-mapping:${row.pipeline_id}:${row.disposition_key}`, label: `Outcome “${row.disposition_key}” moves the lead within its pipeline`, from: null, to: row.stage_id ? `to stage ${row.stage_id}` : "keeps the lead where it is" }] });
       return NextResponse.json({ pipelineOutcome: row }, { status: 201 });
     } catch (error) {
       if (error instanceof SchemaPendingError) return NextResponse.json({ error: error.message, code: "schema_pending" }, { status: 503 });

@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isMissingSchema, SchemaPendingError } from "./schemaGap";
-import { resolveOutcomeStages, type OutcomeStageRow, type PipelineOutcomeRow } from "./outcomeResolution";
+import { resolveOutcomeStages, type OutcomeStageRow, type PipelineOutcomeRow, type ResolveOptions } from "./outcomeResolution";
 
 /**
  * An outcome's stage inside one pipeline (pipeline_disposition_stages, 20261022200000). Marketing and
@@ -35,18 +35,24 @@ export async function listPipelineOutcomeStages(tenantId: string): Promise<{ rea
   return { ready: true, rows: (result.data ?? []) as PipelineOutcomeStage[] };
 }
 
-/** Set (or replace) the stage an outcome sends a lead to inside one pipeline. The trigger refuses a stage from another pipeline. */
+/**
+ * Set (or replace) the stage an outcome sends a lead to inside one pipeline. A null stage_id means the
+ * outcome keeps that pipeline's leads where they are (20261027100000). The trigger refuses a stage from
+ * another pipeline.
+ */
 export async function setPipelineOutcomeStage(tenantId: string, input: { pipeline_id: unknown; stage_id: unknown; disposition_key: unknown }): Promise<PipelineOutcomeStage> {
   const pipelineId = String(input.pipeline_id ?? "");
-  const stageId = String(input.stage_id ?? "");
+  const stageId = input.stage_id === null ? null : String(input.stage_id ?? "");
   const key = String(input.disposition_key ?? "").trim().toLowerCase();
-  if (!UUID.test(pipelineId) || !UUID.test(stageId)) throw new Error("Choose a pipeline and one of its stages.");
+  if (!UUID.test(pipelineId) || (stageId !== null && !UUID.test(stageId))) throw new Error("Choose a pipeline and one of its stages.");
   if (!KEY.test(key)) throw new Error("Disposition key must use lowercase letters, numbers and underscores");
   const result = await table()
     .upsert({ tenant_id: tenantId, pipeline_id: pipelineId, stage_id: stageId, disposition_key: key }, { onConflict: "tenant_id,pipeline_id,disposition_key" })
     .select("id, pipeline_id, stage_id, disposition_key")
     .single();
   if (isMissingSchema(result.error)) throw new SchemaPendingError();
+  // Before 20261027100000 a row with no stage breaks the not-null rule: say what is missing.
+  if (stageId === null && result.error?.code === "23502") throw new SchemaPendingError();
   if (result.error) throw new Error(/stage_not_in_pipeline/.test(result.error.message) ? "Choose a stage from that pipeline." : `Could not save the outcome's stage: ${result.error.message}`);
   return result.data as PipelineOutcomeStage;
 }
@@ -74,9 +80,10 @@ export async function workItemPipelineId(tenantId: string, workItemId: string): 
 
 /**
  * Each outcome's stage id for a lead in `pipelineId`, from rows already read: that pipeline's own row
- * first, then the agency-wide one. Reads the pipeline rows itself.
+ * first, then the agency-wide one. Reads the pipeline rows itself. `options` adds the same-name default
+ * (see outcomeResolution.ts).
  */
-export async function outcomeStageIdsFor(tenantId: string, pipelineId: string | null, agencyWide: readonly OutcomeStageRow[], isLive?: (stageId: string) => boolean): Promise<Map<string, string>> {
+export async function outcomeStageIdsFor(tenantId: string, pipelineId: string | null, agencyWide: readonly OutcomeStageRow[], isLive?: (stageId: string) => boolean, options?: ResolveOptions): Promise<Map<string, string>> {
   const own = pipelineId ? (await listPipelineOutcomeStages(tenantId)).rows : [];
-  return resolveOutcomeStages(agencyWide, own, pipelineId, isLive);
+  return resolveOutcomeStages(agencyWide, own, pipelineId, isLive, options);
 }

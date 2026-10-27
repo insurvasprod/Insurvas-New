@@ -958,7 +958,7 @@ export function AppTopBar({ user, userId, plan }: { user: TopBarUser; /** Keys t
       searchEndpoint="/api/app/search"
       searchPlaceholder="Search leads, policies, lists, partners…"
       searchScope="Search covers this workspace only. A lead another agency owns will never appear here."
-      profileHref="/app/profile"
+      profileHref="/app/settings#my-profile"
       profileLabel="Your profile"
       profileHint="Name, phone, licence numbers"
       signOutEndpoint="/api/app/auth/logout"
