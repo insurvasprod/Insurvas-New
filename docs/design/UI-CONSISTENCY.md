@@ -41,7 +41,8 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | Status colours | §12 | Live |
 | One auth layout, Back on sign-up steps | §13 | Decided, lands in `auth-shell` and `signup-flow` |
 | Numbers and money | §14 | Live |
-| Inter in the apps and auth pages | [BRAND.md](BRAND.md) | Decided, lands in `foundation-tokens` |
+| Inter in the apps and auth pages | [BRAND.md](BRAND.md) | Live (`lib/design/typeface.test.mjs`) |
+| Gloss surface tokens (`--gloss-*`, `--stat-icon-*`) | `app/globals.css` | Live as tokens; used from `foundation-components` |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
 rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx]`, eyebrows,

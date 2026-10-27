@@ -31,12 +31,16 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  /* Montserrat is loaded and self-hosted by next/font in app/layout.tsx (--font-montserrat). */
-  --font-sans: var(--font-montserrat), 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  /* Display (campaign banners, the hero): Coolvetica per the brand guide, once its licensed files are
-     added with next/font/local; Montserrat 600 until then. */
-  --font-display: var(--font-montserrat), 'Montserrat', system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Typefaces, all self-hosted by next/font in app/layout.tsx (UI-CONSISTENCY.md §0, BRAND.md).
+     Inter is the UI face; Inter Tight is the display face for titles and large numbers; Geist Mono
+     is for identifiers people copy (policy numbers, Medicare IDs). Montserrat is the brand face:
+     the marketing pages switch to it with .type-brand. */
+  --font-sans: var(--font-inter), 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-inter-tight), var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Campaign banners and the hero may move to Coolvetica once its licensed files are added with
+     next/font/local; Montserrat until then. */
+  --font-brand: var(--font-montserrat), 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   /* The type scale above 16px (docs/design/00-FOUNDATION.md §3), as classes: text-title-sm 18,
      text-title-md 24, text-title-lg 32, text-headline-lg 40, text-hero 56. 12/14/16 are Tailwind's
      text-xs / text-sm / text-base. Nothing should need text-[Npx] (2026-10-09). */
@@ -128,6 +132,28 @@
   --shadow-hover:   0 4px 16px rgba(0, 0, 0, .12);
   --shadow-brand:   0 4px 16px rgba(7, 214, 160, .15);
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, .24);
+
+  /* v3 gloss (UI-CONSISTENCY.md §4a): the metric-card surface. Read only through the stat card and
+     the dashboard metric cards; never paint a page or a table with it. A soft top-lit gradient with
+     a brand sheen top-left, a bright rim on the top edge and a layered shadow. Text on it is held to
+     4.5:1 by lib/design/brandContrast.test.mjs. */
+  --gloss-top:          #ffffff;
+  --gloss-bottom:       #f6f9f8;
+  --gloss-sheen:        rgba(7, 214, 160, .08);
+  --gloss-edge:         #d9dfe6;
+  --gloss-rim:          rgba(255, 255, 255, .95);
+  --gloss-highlight:    #ffffff;
+  --gloss-glare:        rgba(255, 255, 255, .75);
+  --gloss-shadow:       0 1px 1px rgba(13, 64, 55, .04), 0 2px 4px -1px rgba(13, 64, 55, .05), 0 14px 30px -18px rgba(13, 64, 55, .24);
+  --gloss-shadow-hover: 0 1px 1px rgba(13, 64, 55, .04), 0 6px 10px -4px rgba(13, 64, 55, .08), 0 24px 40px -20px rgba(13, 64, 55, .32);
+  --gloss-foot:         rgba(228, 232, 238, .55);
+  --gloss-divider:      #e1e6ec;
+  /* The glossy icon tile at the top-left of a stat card. */
+  --stat-icon-top:       #eafbf4;
+  --stat-icon-bottom:    #c9f2e2;
+  --stat-icon-highlight: rgba(255, 255, 255, .95);
+  --stat-icon-drop:      rgba(0, 115, 90, .2);
+  --stat-icon-ring:      rgba(0, 115, 90, .16);
 
   /* The semantic fills, again as TEXT (4.5:1 on every light ground). */
   --success-ink: #0c6633;
@@ -280,6 +306,24 @@
   --shadow-hover:   0 4px 16px rgba(0, 0, 0, .5);
   --shadow-brand:   0 4px 16px rgba(7, 214, 160, .18);
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, .7);
+
+  /* v3 gloss: lit a step above --surface so the card still reads as raised on the dark canvas. */
+  --gloss-top:          #172620;
+  --gloss-bottom:       #0f1a17;
+  --gloss-sheen:        rgba(7, 214, 160, .09);
+  --gloss-edge:         #263a33;
+  --gloss-rim:          rgba(255, 255, 255, .14);
+  --gloss-highlight:    rgba(255, 255, 255, .06);
+  --gloss-glare:        rgba(255, 255, 255, .03);
+  --gloss-shadow:       0 1px 2px rgba(0, 0, 0, .55), 0 18px 34px -20px rgba(0, 0, 0, .95);
+  --gloss-shadow-hover: 0 1px 2px rgba(0, 0, 0, .55), 0 26px 44px -20px rgba(0, 0, 0, 1);
+  --gloss-foot:         rgba(0, 0, 0, .2);
+  --gloss-divider:      #22342e;
+  --stat-icon-top:       #1c4a3c;
+  --stat-icon-bottom:    #0f3a30;
+  --stat-icon-highlight: rgba(255, 255, 255, .12);
+  --stat-icon-drop:      rgba(0, 0, 0, .45);
+  --stat-icon-ring:      rgba(7, 214, 160, .22);
 
   --success-ink: #45c07d;
   --warning-ink: #e2973a;
@@ -1691,6 +1735,13 @@ body {
   background: var(--color-page-bg);
   color: var(--color-text-dark);
   font-family: var(--font-sans);
+}
+
+/* The marketing pages keep the brand face (BRAND.md): set on the outermost element of / and
+   /pricing only. The apps and every auth page stay on Inter (lib/design/typeface.test.mjs). */
+.type-brand {
+  --font-display: var(--font-brand);
+  font-family: var(--font-brand);
 }
 
 /* Wide data grids scroll inside their own frame; they must never widen the app shell itself.

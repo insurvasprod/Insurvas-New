@@ -19,11 +19,12 @@ authority for colour, type and the logo.
   for the focus ring.
 - **Soft green `#c5ffed`:** the light end of the ramp (`--brand-100`). Chip and selection grounds
   use the lighter `--primary-soft` `#dcfaf0`.
-- **Type:** Montserrat throughout, with negative tracking on headings. Coolvetica is for display
+- **Type:** the guide's brand face is Montserrat, with negative tracking on headings. Coolvetica is for display
   banners only.
-  - **v3 (2026-10-27), Decided, lands in `foundation-tokens`:** the agent, partner and admin apps and
-    every auth page move to **Inter**, with **Inter Tight** for page titles and large numbers and
-    Geist Mono for identifiers. Montserrat stays on the marketing site. See
+  - **v3 (2026-10-27), Live:** the agent, partner and admin apps, every auth page, legal and
+    affiliate pages use **Inter**, with **Inter Tight** for page titles and large numbers
+    (`--font-display`) and Geist Mono for identifiers. Montserrat stays on the marketing pages (`/`
+    and `/pricing`, through `.type-brand`) and in emails. See
     [UI-CONSISTENCY.md §0](UI-CONSISTENCY.md#0-foundation-v3-2026-10-27).
 - **Shape:** pill-shaped buttons, 12px cards, 8px inputs.
   - **v3 (2026-10-27), Decided, lands in `foundation-components`:** buttons move to 8px corners
@@ -36,7 +37,7 @@ authority for colour, type and the logo.
 | Colour tokens (light and dark) | `app/globals.css`, `:root` and `.dark` |
 | Contrast and naming rules, enforced | `lib/design/brandContrast.test.mjs` |
 | Admin console (the app's colours and shell with a blue accent, owner decisions 2026-10-13: accent tokens only) | `app/admin/admin-plane.css` |
-| Font | `app/layout.tsx` (Montserrat via `next/font`, self-hosted at build); `--font-sans` / `--font-display`. Inter for the apps lands in `foundation-tokens`. |
+| Font | `app/layout.tsx` loads Inter, Inter Tight, Geist Mono and Montserrat via `next/font` (self-hosted at build). Tokens in `app/globals.css`: `--font-sans` (Inter), `--font-display` (Inter Tight), `--font-mono` (Geist Mono), `--font-brand` (Montserrat, applied with `.type-brand` on the marketing pages). Held by `lib/design/typeface.test.mjs`. |
 | Logo | `components/shared/insurvas-logo.tsx`, which reads `public/brand/*.svg` |
 | Favicon / home-screen icon | `app/icon.svg`, `app/apple-icon.tsx` (rendered from the isotype) |
 | Emails | `lib/email/brand.ts` |
