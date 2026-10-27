@@ -31,12 +31,16 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  /* Montserrat is loaded and self-hosted by next/font in app/layout.tsx (--font-montserrat). */
-  --font-sans: var(--font-montserrat), 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  /* Display (campaign banners, the hero): Coolvetica per the brand guide, once its licensed files are
-     added with next/font/local; Montserrat 600 until then. */
-  --font-display: var(--font-montserrat), 'Montserrat', system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Typefaces, all self-hosted by next/font in app/layout.tsx (UI-CONSISTENCY.md §0, BRAND.md).
+     Inter is the UI face; Inter Tight is the display face for titles and large numbers; Geist Mono
+     is for identifiers people copy (policy numbers, Medicare IDs). Montserrat is the brand face:
+     the marketing pages switch to it with .type-brand. */
+  --font-sans: var(--font-inter), 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-inter-tight), var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Campaign banners and the hero may move to Coolvetica once its licensed files are added with
+     next/font/local; Montserrat until then. */
+  --font-brand: var(--font-montserrat), 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   /* The type scale above 16px (docs/design/00-FOUNDATION.md §3), as classes: text-title-sm 18,
      text-title-md 24, text-title-lg 32, text-headline-lg 40, text-hero 56. 12/14/16 are Tailwind's
      text-xs / text-sm / text-base. Nothing should need text-[Npx] (2026-10-09). */
@@ -128,6 +132,28 @@
   --shadow-hover:   0 4px 16px rgba(0, 0, 0, .12);
   --shadow-brand:   0 4px 16px rgba(7, 214, 160, .15);
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, .24);
+
+  /* v3 gloss (UI-CONSISTENCY.md §4a): the metric-card surface. Read only through the stat card and
+     the dashboard metric cards; never paint a page or a table with it. A soft top-lit gradient with
+     a brand sheen top-left, a bright rim on the top edge and a layered shadow. Text on it is held to
+     4.5:1 by lib/design/brandContrast.test.mjs. */
+  --gloss-top:          #ffffff;
+  --gloss-bottom:       #f6f9f8;
+  --gloss-sheen:        rgba(7, 214, 160, .08);
+  --gloss-edge:         #d9dfe6;
+  --gloss-rim:          rgba(255, 255, 255, .95);
+  --gloss-highlight:    #ffffff;
+  --gloss-glare:        rgba(255, 255, 255, .75);
+  --gloss-shadow:       0 1px 1px rgba(13, 64, 55, .04), 0 2px 4px -1px rgba(13, 64, 55, .05), 0 14px 30px -18px rgba(13, 64, 55, .24);
+  --gloss-shadow-hover: 0 1px 1px rgba(13, 64, 55, .04), 0 6px 10px -4px rgba(13, 64, 55, .08), 0 24px 40px -20px rgba(13, 64, 55, .32);
+  --gloss-foot:         rgba(228, 232, 238, .55);
+  --gloss-divider:      #e1e6ec;
+  /* The glossy icon tile at the top-left of a stat card. */
+  --stat-icon-top:       #eafbf4;
+  --stat-icon-bottom:    #c9f2e2;
+  --stat-icon-highlight: rgba(255, 255, 255, .95);
+  --stat-icon-drop:      rgba(0, 115, 90, .2);
+  --stat-icon-ring:      rgba(0, 115, 90, .16);
 
   /* The semantic fills, again as TEXT (4.5:1 on every light ground). */
   --success-ink: #0c6633;
@@ -280,6 +306,24 @@
   --shadow-hover:   0 4px 16px rgba(0, 0, 0, .5);
   --shadow-brand:   0 4px 16px rgba(7, 214, 160, .18);
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, .7);
+
+  /* v3 gloss: lit a step above --surface so the card still reads as raised on the dark canvas. */
+  --gloss-top:          #172620;
+  --gloss-bottom:       #0f1a17;
+  --gloss-sheen:        rgba(7, 214, 160, .09);
+  --gloss-edge:         #263a33;
+  --gloss-rim:          rgba(255, 255, 255, .14);
+  --gloss-highlight:    rgba(255, 255, 255, .06);
+  --gloss-glare:        rgba(255, 255, 255, .03);
+  --gloss-shadow:       0 1px 2px rgba(0, 0, 0, .55), 0 18px 34px -20px rgba(0, 0, 0, .95);
+  --gloss-shadow-hover: 0 1px 2px rgba(0, 0, 0, .55), 0 26px 44px -20px rgba(0, 0, 0, 1);
+  --gloss-foot:         rgba(0, 0, 0, .2);
+  --gloss-divider:      #22342e;
+  --stat-icon-top:       #1c4a3c;
+  --stat-icon-bottom:    #0f3a30;
+  --stat-icon-highlight: rgba(255, 255, 255, .12);
+  --stat-icon-drop:      rgba(0, 0, 0, .45);
+  --stat-icon-ring:      rgba(7, 214, 160, .22);
 
   --success-ink: #45c07d;
   --warning-ink: #e2973a;
@@ -1512,7 +1556,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-login-page { display: grid; min-height: 100vh; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); color: var(--portal-ink); }
 .portal-login-form-panel { display: flex; min-width: 0; align-items: center; justify-content: center; background: var(--portal-panel); padding: 3.5rem clamp(1.25rem, 6vw, 6rem); }
 .portal-login-form-inner { width: min(100%, 35rem); }
-.portal-login-footer { display: flex; gap: 1.75rem; margin-top: 2rem; color: var(--portal-muted); font-size: .8rem; }
+.portal-login-footer { display: flex; gap: 1.75rem; margin-top: 1.5rem; color: var(--portal-muted); font-size: .8rem; }
 .portal-login-footer a { text-decoration: none; }
 .portal-login-footer a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .portal-login-feature-panel { display: flex; min-width: 0; align-items: center; background: var(--brand-700); color: var(--nav-ink); padding: 3.5rem clamp(1.25rem, 6vw, 6rem); }
@@ -1545,11 +1589,27 @@ a.portal-top-foot-action { text-decoration: none; }
    side swap — and below 1024px the story disappears rather than pushing the form down. Scoped to
    the agent shell; the partner door keeps its own layout. */
 .portal-tenant-auth-shell { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.portal-tenant-auth-shell .portal-auth-split-form { display: flex; flex-direction: column; background: var(--canvas); padding: 48px 64px; }
-.portal-tenant-auth-shell .portal-auth-split-story { padding: 48px 64px; }
+.portal-tenant-auth-shell .portal-auth-split-form { display: flex; flex-direction: column; background: var(--canvas); padding: 40px 64px; }
+.portal-tenant-auth-shell .portal-auth-split-story { padding: 40px 64px; }
 .portal-tenant-auth-shell[data-mode="sign-up"] .portal-auth-split-form,
 .portal-tenant-auth-shell[data-mode="sign-up"] .portal-auth-split-story { transform: none; }
 .portal-tenant-auth-shell .portal-auth-form-inner { width: 100%; max-width: 472px; }
+/* One auth layout (UI-CONSISTENCY §13): the column starts at the top on every screen rather than
+   centring, and the scrollbar's space is always reserved, so the logo, the steps and the heading sit
+   at the same place whether a screen is three fields or twelve. */
+html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
+/* Short screens (a 1366×768 laptop, a zoomed 1080p screen): the same layout, tighter, so every auth
+   screen fits without scrolling (owner, 2026-10-27). The order and widths do not change. */
+@media (max-height: 820px) {
+  .portal-tenant-auth-shell .portal-auth-split-form { padding-block: 24px; }
+  .portal-tenant-auth-shell .portal-auth-form-inner > a:first-child { margin-bottom: 1.25rem; }
+  .portal-tenant-auth-shell [data-auth-steps] { margin-bottom: 1rem; }
+  .portal-tenant-auth-shell [data-auth-heading] { margin-bottom: 1rem; }
+  .portal-tenant-auth-shell [data-auth-heading] h1 { font-size: 2rem; }
+  .portal-tenant-auth-shell .portal-login-footer { margin-top: 1rem; }
+}
+.portal-tenant-auth-shell .portal-auth-split-form > div { justify-content: flex-start; }
+.portal-tenant-auth-shell .portal-auth-form-inner { margin: 0 auto; }
 .portal-tenant-auth-shell .portal-auth-split-form :is(input:not([type="radio"]), select) { background-color: var(--card); }
 @media (max-width: 1023px) {
   .portal-tenant-auth-shell { grid-template-columns: minmax(0, 1fr); }
@@ -1560,8 +1620,6 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-auth-brand span { color: var(--accent-ink); }
 .portal-auth-visibility { position: absolute; top: 50%; right: .45rem; display: inline-flex; width: 2rem; height: 2rem; align-items: center; justify-content: center; transform: translateY(-50%); border-radius: 6px; color: var(--portal-muted); }
 .portal-auth-visibility:hover { background: var(--portal-group); color: var(--portal-ink); }
-.portal-auth-alert { display: grid; gap: .2rem; border: 1px solid color-mix(in srgb, var(--color-danger), var(--portal-line) 60%); border-radius: 8px; background: color-mix(in srgb, var(--color-danger), transparent 95%); padding: .7rem .8rem; color: var(--error-ink); font-size: .82rem; line-height: 1.4; }
-.portal-auth-alert strong { font-weight: 600; }
 .portal-auth-footer { display: flex; gap: 1.75rem; margin-top: 4.5rem; color: var(--portal-muted); font-size: .8rem; }
 .portal-auth-footer a { text-decoration: none; }
 .portal-auth-footer a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
@@ -1691,6 +1749,13 @@ body {
   background: var(--color-page-bg);
   color: var(--color-text-dark);
   font-family: var(--font-sans);
+}
+
+/* The marketing pages keep the brand face (BRAND.md): set on the outermost element of / and
+   /pricing only. The apps and every auth page stay on Inter (lib/design/typeface.test.mjs). */
+.type-brand {
+  --font-display: var(--font-brand);
+  font-family: var(--font-brand);
 }
 
 /* Wide data grids scroll inside their own frame; they must never widen the app shell itself.
@@ -2832,6 +2897,61 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   background: transparent;
   box-shadow: -1px 0 0 var(--border), 0 -1px 0 var(--border);
 }
+
+/* ── v3 stat card (components/ui/stat-card.tsx, UI-CONSISTENCY.md §4a) ──────────────────────────
+   The glossy "footer fact" card: a top-lit gradient with a brand sheen top-left, a bright rim along
+   the top edge, a layered shadow and a 2px lift on hover. Every value is a token from the gloss
+   block in :root / .dark; text sits on opaque colour, so contrast is the plain card's. */
+.m-stat-card {
+  position: relative;
+  isolation: isolate;
+  border-color: var(--gloss-edge);
+  background:
+    radial-gradient(140% 90% at 0% 0%, var(--gloss-sheen), transparent 60%),
+    linear-gradient(180deg, var(--gloss-top), var(--gloss-bottom));
+  box-shadow: inset 0 1px 0 var(--gloss-highlight), var(--gloss-shadow);
+}
+.m-stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--gloss-glare), transparent 40%);
+}
+.m-stat-card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--gloss-rim), transparent 55%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.m-stat-card:hover { box-shadow: inset 0 1px 0 var(--gloss-highlight), var(--gloss-shadow-hover); }
+@media (prefers-reduced-motion: no-preference) {
+  .m-stat-card { transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s ease; }
+  .m-stat-card:hover { transform: translateY(-2px); }
+}
+.m-stat-card-icon {
+  background: linear-gradient(180deg, var(--stat-icon-top), var(--stat-icon-bottom));
+  box-shadow: inset 0 1px 0 var(--stat-icon-highlight), 0 1px 2px var(--stat-icon-drop), 0 0 0 1px var(--stat-icon-ring);
+}
+.m-stat-card-foot {
+  border-top-color: var(--gloss-divider);
+  background: var(--gloss-foot);
+}
+.m-stat-card[data-tone="warn"] .m-stat-card-foot {
+  border-top-color: transparent;
+  background: var(--warning-surface);
+  box-shadow: inset 0 1px 0 var(--gloss-highlight);
+  color: var(--warning-ink);
+}
+.m-stat-card[data-tone="warn"] .m-stat-card-foot * { color: inherit; }
 
 /* ── Glass + glow layer (2026-10-13) ─────────────────────────────────────────────────────────────
    The look the owner picked for the three role homes, applied everywhere through the shared

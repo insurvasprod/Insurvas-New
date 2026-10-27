@@ -1,18 +1,14 @@
 import { redirect } from "next/navigation";
 
 import { CheckoutView } from "@/components/public/checkout-view";
-import { TRIAL_DAYS } from "@/lib/checkout/constants";
+import { firstChargeDate, resolveTrialDays } from "@/lib/checkout/constants";
+import { trialDaysForPlan } from "@/lib/checkout/trialDays";
 import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
 import { dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, priceForCycle, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { readPlanChoice } from "@/lib/signup/planChoiceQueries";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-
-/** When a trial started now ends: the cancel-by date and the first charge. Read per request. */
-function trialEndDate() {
-  return new Date(Date.now() + TRIAL_DAYS * 86_400_000);
-}
 
 /** The Whop environment our API key belongs to, so the embedded form talks to the same one. */
 function whopEnvironment(): "production" | "sandbox" {
@@ -71,6 +67,8 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
     ? await supabase.from("addons").select("code, name, price_cents, billing_cycle").in("code", choice.addonCodes)
     : { data: [] as { code: string; name: string; price_cents: number; billing_cycle: BillingCycle }[] };
 
+  // The chosen plan's trial: the number checkout completion and the Whop plan mapping grant.
+  const trialDays = selection ? await trialDaysForPlan(selection.plan_id) : resolveTrialDays(null);
   const cycle = selection?.billing_cycle ?? null;
   const priceCents = cycle ? priceForCycle(prices, cycle) : null;
 
@@ -91,9 +89,8 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
       cycle={cycle}
       price={priceCents === null ? null : formatCentsAsCurrency(priceCents)}
       setupFee={prices?.setup_fee_cents ? formatCentsAsCurrency(prices.setup_fee_cents) : null}
-      // Card at signup, not charged for the trial — the constant the checkout itself opens with.
-      trialDays={TRIAL_DAYS}
-      trialEnds={dayMonthYear(trialEndDate(), "UTC")}
+      trialDays={trialDays}
+      trialEnds={dayMonthYear(firstChargeDate(trialDays), "UTC")}
       addons={(addonRows ?? []).map((addon) => ({ name: addon.name, price: formatCentsAsCurrency(addon.price_cents), cycle: addon.billing_cycle }))}
       pending={pending === "1"}
       failed={failed === "1"}

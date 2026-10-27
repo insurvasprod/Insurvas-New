@@ -5,6 +5,7 @@ import { Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { authControl, authLabel } from "@/components/app/auth-card";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { StatePicker } from "@/components/app/state-picker";
 import { Button } from "@/components/ui/button";
@@ -136,8 +137,8 @@ export function BusinessProfileForm({ initial = null, email = null }: { initial?
 
   return (
     <div>
-      {/* Owner pick A, 2026-10-26: no subtitle and no setup preview; the NPN is asked later in Settings. */}
-      <div className="mb-7"><FunnelHeading title="Tell us about your agency" /></div>
+      {/* One line saying why (copy table, owner 2026-10-27); no setup preview; the NPN is asked later in Settings. */}
+      <FunnelHeading title="Tell us about your agency">We use this to set up your workspace.</FunnelHeading>
       <form onSubmit={(event) => void save(event)} noValidate className="flex flex-col gap-5">
         {/* Name and state side by side on a wide screen: the step fits without scrolling (2026-10-26). */}
         <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
@@ -184,9 +185,9 @@ export function BusinessProfileForm({ initial = null, email = null }: { initial?
           </label>
         )}
 
-        {error && <p role="alert" className="rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
+        {error && <AuthAlert>{error}</AuthAlert>}
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" className="h-12 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
+          <Button type="submit" className="h-11 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
         </div>
       </form>
     </div>

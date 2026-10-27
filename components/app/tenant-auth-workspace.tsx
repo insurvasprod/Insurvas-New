@@ -3,16 +3,13 @@
 import { startTransition, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
-import { AuthBrand, PortalAuthSplitShell, type PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
-import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import type { PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
+import { AuthHeading, AuthLayout, AuthStory } from "@/components/portal/auth-layout";
+import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
 import { OtpInput } from "@/components/app/otp-input";
-import { TRIAL_DAYS } from "@/lib/checkout/constants";
 import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
 import type { MaintenanceStatus } from "@/lib/system/constants";
 
@@ -27,76 +24,35 @@ const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
  * shell drops it entirely rather than pushing the form under the fold.
  */
 const floorLines = [
-  { label: "Inbound transfers, claimed once", value: "One claim" },
-  { label: "Screening re-checked before every dial", value: "Server-side" },
-  { label: "Cost traced through to the issued policy", value: "True CPA" },
-  { label: "Callbacks, appointments and the book", value: "One record" },
+  { label: "Inbound transfers", value: "Claimed by one agent" },
+  { label: "Every dial", value: "Checked against do-not-call" },
+  { label: "Lead cost", value: "Traced to the policy" },
+  { label: "Callbacks and appointments", value: "On the lead's record" },
 ];
 
-// The trial needs a card: it starts on Whop's hosted checkout, which takes the card (2026-10-15).
-const trialPoints = [
-  {
-    title: "A card is required for the trial",
-    description: "You enter it on Whop\u2019s hosted checkout page, never on an Insurvas form.",
-  },
-  {
-    title: "Your plan decides the menu",
-    description: "Features you have not bought are never shown as broken screens.",
-  },
-];
+/** The sign-up steps, as the panel beside steps 1–3 lists them (FUNNEL_STEPS in funnel-frame.tsx). */
+const SIGN_UP_STEPS = ["Your account", "Your email", "Your agency", "Your plan", "Payment"] as const;
 
-/** The brand panel beside the agent forms; AppAuthFrame (set password, verify and confirm email) shows the sign-in one. */
-export function StoryPanel({ mode }: { mode: PortalAuthMode }) {
+/**
+ * The brand panel beside the agent forms, in the one AuthStory style. Sign-up shows where you are in
+ * the five steps, and says what the payment step will ask for in the payment mode that is on; it
+ * never names a trial length, because that depends on the plan chosen at step 4 (owner, 2026-10-27).
+ * AppAuthFrame (set password, confirm email) shows the sign-in one.
+ */
+export function StoryPanel({ mode, step = 1, noPayment = false }: { mode: PortalAuthMode; step?: number; noPayment?: boolean }) {
   if (mode === "sign-up") {
     return (
-      <div className="m-stagger mx-auto w-full max-w-[38rem]">
-        <h2 className="mb-8 max-w-[520px] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--on-dark)] lg:text-[clamp(2.75rem,4.2vw,3.75rem)]">
-          Free trial. Card required.
-        </h2>
-        <div className="flex max-w-[460px] flex-col gap-6">
-          {trialPoints.map((point) => (
-            <div key={point.title} className="flex items-start gap-3.5">
-              <span className="inline-flex size-[38px] shrink-0 items-center justify-center rounded-lg bg-[var(--nav-line)] text-[var(--primary)]">
-                <Check className="size-4 stroke-[3]" aria-hidden="true" />
-              </span>
-              <span>
-                <span className="block text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-[var(--on-dark)]">
-                  {point.title}
-                </span>
-                <span className="mt-1 block text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)]">
-                  {point.description}
-                </span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <AuthStory
+        title="Five steps to your workspace."
+        rows={SIGN_UP_STEPS.map((name, index) => ({
+          label: name,
+          value: index + 1 < step ? "Done" : index + 1 === step ? "Now" : undefined,
+          detail: name === "Payment" ? (noPayment ? "No card needed" : "Card on Whop's secure checkout · not charged during your trial") : undefined,
+        }))}
+      />
     );
   }
-
-  return (
-    <div className="m-stagger mx-auto w-full max-w-[38rem]">
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--nav-muted)]">
-        Licensed agent portal
-      </div>
-      <h2 className="mt-3.5 max-w-[520px] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--on-dark)] lg:text-[clamp(2.75rem,4.2vw,3.75rem)]">
-        Your floor is already running.
-      </h2>
-      <div className="mt-8 max-w-[460px]">
-        {floorLines.map((line) => (
-          <div
-            key={line.label}
-            className="flex items-center justify-between gap-4 border-t border-[var(--nav-line)] py-3"
-          >
-            <span className="text-sm leading-normal tracking-[-0.02em] text-[var(--nav-ink)]">{line.label}</span>
-            <span className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] tabular-nums text-[var(--on-dark)]">
-              {line.value}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <AuthStory label="For licensed agents" title="Your agency's floor, in one workspace." rows={floorLines} />;
 }
 
 /**
@@ -287,26 +243,13 @@ export function TenantAuthWorkspace({
     </label>
   );
 
-  const brand = (
-    <AuthBrand href="/" label="Insurvas home">
-      <InsurvasLogo size="auth" />
-    </AuthBrand>
-  );
-
   const signIn = (
-    <div className="m-stagger portal-auth-form-inner">
-      {brand}
-      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        Welcome back
-      </h1>
-      <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-        Sign in to your agency&rsquo;s workspace.
-      </p>
+    <>
+      <AuthHeading title="Welcome back">Sign in to your agency&rsquo;s workspace.</AuthHeading>
 
       <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-login-email">Email</Label>
-          <Input
+        <AuthField label="Email" htmlFor="tenant-login-email">
+          <AuthInput
             ref={emailRef}
             id="tenant-login-email"
             type="email"
@@ -319,17 +262,19 @@ export function TenantAuthWorkspace({
               setLoginError(null);
             }}
           />
-        </div>
+        </AuthField>
 
-        <div className="space-y-1.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <Label htmlFor="tenant-login-password">Password</Label>
+        <AuthField
+          label="Password"
+          htmlFor="tenant-login-password"
+          aside={
             <button type="button" onClick={openReset} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
               Forgot password?
             </button>
-          </div>
+          }
+        >
           <div className="relative">
-            <Input
+            <AuthInput
               ref={passwordRef}
               id="tenant-login-password"
               type={showLoginPassword ? "text" : "password"}
@@ -352,38 +297,29 @@ export function TenantAuthWorkspace({
               {showLoginPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
             </button>
           </div>
-        </div>
+        </AuthField>
 
         {rememberBox}
 
-        {maintenance?.level === "locked" && (
-          <div role="alert" className="portal-auth-alert">
-            <strong>Sign in is temporarily unavailable</strong>
-            <span>{maintenance.message}</span>
-          </div>
-        )}
-        {loginError && (
-          <p className="portal-auth-alert" role="alert">
-            {loginError}
-          </p>
-        )}
+        {maintenance?.level === "locked" && <AuthAlert title="Sign in is temporarily unavailable">{maintenance.message}</AuthAlert>}
+        {loginError && <AuthAlert>{loginError}</AuthAlert>}
 
-        <Button type="submit" className="mt-1 h-12 w-full" disabled={loginLoading || maintenance?.level === "locked"}>
+        <AuthSubmit className="mt-1" disabled={loginLoading || maintenance?.level === "locked"}>
           {loginLoading ? "Signing in…" : "Sign in"}
-        </Button>
+        </AuthSubmit>
       </form>
 
       <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
         <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
       </div>
-      <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={openLinkRequest} disabled={maintenance?.level === "locked"}>
+      <AuthSecondary onClick={openLinkRequest} disabled={maintenance?.level === "locked"}>
         Email me a sign-in link
-      </Button>
+      </AuthSecondary>
 
       <p className="mt-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
         New to Insurvas?{" "}
         <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
-          Start a {TRIAL_DAYS}-day trial
+          Create an account
         </Link>
       </p>
 
@@ -394,42 +330,29 @@ export function TenantAuthWorkspace({
         </Link>
         .
       </p>
-
-      <nav className="portal-login-footer" aria-label="Legal links">
-        <Link href="/legal/privacy">Privacy</Link>
-        <Link href="/legal/tos">Terms</Link>
-        <a href="mailto:support@insurvas.com">Support</a>
-      </nav>
-    </div>
+    </>
   );
 
   const reset = (
-    <div className="m-stagger portal-auth-form-inner">
-      {brand}
-      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        {resetState === "sent" ? "Check your inbox" : "Reset your password"}
-      </h1>
+    <>
       {resetState === "sent" ? (
         <>
-          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+          <AuthHeading title="Check your inbox">
             If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to an agent account, a link to choose a new password is on its way. It works once.
-          </p>
+          </AuthHeading>
           <p className="text-sm leading-normal text-[var(--body)]">Nothing arrived after a few minutes? Check spam, then write to <a href="mailto:support@insurvas.com?subject=Password%20help" className="font-semibold text-foreground">support@insurvas.com</a>.</p>
         </>
       ) : (
         <>
-          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            Enter the email you sign in with. We send a one-time link to choose a new password.
-          </p>
+          <AuthHeading title="Reset your password">Enter the email you sign in with. We send a one-time link to choose a new password.</AuthHeading>
           <form className="flex flex-col gap-4" onSubmit={handleReset} noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="tenant-reset-email">Email</Label>
-              <Input id="tenant-reset-email" type="email" inputMode="email" autoComplete="username" required value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
-            </div>
-            {resetError && <p className="portal-auth-alert" role="alert">{resetError}</p>}
-            <Button type="submit" className="mt-2 h-12 w-full" disabled={resetState === "sending" || maintenance?.level === "locked"}>
+            <AuthField label="Email" htmlFor="tenant-reset-email">
+              <AuthInput id="tenant-reset-email" type="email" inputMode="email" autoComplete="username" required value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
+            </AuthField>
+            {resetError && <AuthAlert>{resetError}</AuthAlert>}
+            <AuthSubmit className="mt-2" disabled={resetState === "sending" || maintenance?.level === "locked"}>
               {resetState === "sending" ? "Sending…" : "Send the reset link"}
-            </Button>
+            </AuthSubmit>
           </form>
         </>
       )}
@@ -440,23 +363,18 @@ export function TenantAuthWorkspace({
           </button>
         </LinkArrow>
       </div>
-    </div>
+    </>
   );
 
   const twoFactor = (
-    <div className="m-stagger portal-auth-form-inner">
-      {brand}
-      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        {useRecoveryCode ? "Enter a recovery code" : "Enter your 6-digit code"}
-      </h1>
-      <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+    <>
+      <AuthHeading title={useRecoveryCode ? "Enter a recovery code" : "Enter your 6-digit code"}>
         {useRecoveryCode ? "Type one of the recovery codes you saved. Each one works once." : "From your authenticator app. You are signed in as soon as the sixth digit is in."}
-      </p>
+      </AuthHeading>
       <form className="flex flex-col gap-4" onSubmit={(event) => void handleTwoFactor(event)} noValidate>
         {useRecoveryCode ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="tenant-login-code">Recovery code</Label>
-            <Input
+          <AuthField label="Recovery code" htmlFor="tenant-login-code">
+            <AuthInput
               id="tenant-login-code"
               autoComplete="off"
               autoFocus
@@ -466,7 +384,7 @@ export function TenantAuthWorkspace({
               value={twoFactorCode}
               onChange={(event) => { setTwoFactorCode(event.target.value); setLoginError(null); }}
             />
-          </div>
+          </AuthField>
         ) : (
           <OtpInput
             idPrefix="tenant-login-code"
@@ -481,10 +399,10 @@ export function TenantAuthWorkspace({
           <input type="checkbox" checked={trustDevice} onChange={(event) => setTrustDevice(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
           Trust this device for {TRUSTED_DEVICE_DAYS} days
         </label>
-        {loginError && <p className="portal-auth-alert" role="alert">{loginError}</p>}
-        <Button type="submit" className="mt-1 h-12 w-full" disabled={loginLoading || !twoFactorCode.trim()}>
+        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        <AuthSubmit className="mt-1" disabled={loginLoading || !twoFactorCode.trim()}>
           {loginLoading ? "Checking…" : "Verify and sign in"}
-        </Button>
+        </AuthSubmit>
       </form>
       <div className="mt-[22px] flex flex-wrap items-center justify-between gap-4">
         <LinkArrow asChild>
@@ -498,7 +416,7 @@ export function TenantAuthWorkspace({
           </button>
         </LinkArrow>
       </div>
-    </div>
+    </>
   );
 
   const backToPassword = (
@@ -512,25 +430,21 @@ export function TenantAuthWorkspace({
   );
 
   const linkRequestPanel = (
-    <div className="m-stagger portal-auth-form-inner">
-      {brand}
-      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        {linkRequest === "sent" ? "Check your inbox" : "Sign in with a link"}
-      </h1>
+    <>
       {linkRequest === "sent" ? (
         <>
-          <p className="mb-6 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+          <AuthHeading title="Check your inbox">
             If <strong className="font-semibold text-foreground">{linkEmail.trim()}</strong> belongs to an agent account, a sign-in link is on its way. It works once, for {SIGN_IN_LINK_MINUTES} minutes.
-          </p>
+          </AuthHeading>
           <div className="flex flex-wrap gap-2.5">
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+            <AuthSecondary asChild className="w-auto px-4">
               <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
-            </Button>
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+            </AuthSecondary>
+            <AuthSecondary asChild className="w-auto px-4">
               <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
-            </Button>
+            </AuthSecondary>
           </div>
-          {linkError && <p className="portal-auth-alert mt-4" role="alert">{linkError}</p>}
+          {linkError && <AuthAlert className="mt-4">{linkError}</AuthAlert>}
           <p className="mt-5 text-sm leading-normal text-[var(--body)]">
             Nothing arrived?{" "}
             <button type="button" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline disabled:text-muted-foreground disabled:no-underline" disabled={linkCooldown > 0} onClick={() => void requestLink()}>
@@ -540,49 +454,44 @@ export function TenantAuthWorkspace({
         </>
       ) : (
         <>
-          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            We email you a link that signs you in once, within {SIGN_IN_LINK_MINUTES} minutes. No password needed.
-          </p>
+          <AuthHeading title="Sign in with a link">We email you a link that signs you in once, within {SIGN_IN_LINK_MINUTES} minutes. No password needed.</AuthHeading>
           <form className="flex flex-col gap-4" onSubmit={(event) => void requestLink(event)} noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="tenant-link-email">Email</Label>
-              <Input id="tenant-link-email" type="email" inputMode="email" autoComplete="username" autoFocus required value={linkEmail} onChange={(event) => { setLinkEmail(event.target.value); setLinkError(null); }} />
-            </div>
+            <AuthField label="Email" htmlFor="tenant-link-email">
+              <AuthInput id="tenant-link-email" type="email" inputMode="email" autoComplete="username" autoFocus required value={linkEmail} onChange={(event) => { setLinkEmail(event.target.value); setLinkError(null); }} />
+            </AuthField>
             {rememberBox}
-            {linkError && <p className="portal-auth-alert" role="alert">{linkError}</p>}
-            <Button type="submit" className="mt-1 h-12 w-full" disabled={linkRequest === "sending" || maintenance?.level === "locked"}>
+            {linkError && <AuthAlert>{linkError}</AuthAlert>}
+            <AuthSubmit className="mt-1" disabled={linkRequest === "sending" || maintenance?.level === "locked"}>
               {linkRequest === "sending" ? "Sending…" : "Email me the link"}
-            </Button>
+            </AuthSubmit>
           </form>
         </>
       )}
       {backToPassword}
-    </div>
+    </>
   );
 
   // Opened from the emailed link. Nothing happens until the button is pressed, so a mail scanner that
   // opens the link does not use it up.
   const linkFinishPanel = (
-    <div className="m-stagger portal-auth-form-inner">
-      {brand}
-      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        Finish signing in
-      </h1>
-      <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-        You opened your sign-in link. Press the button to sign in on this device.
-      </p>
+    <>
+      <AuthHeading title="Finish signing in">You opened your sign-in link. Press the button to sign in on this device.</AuthHeading>
       <div className="flex flex-col gap-4">
         {rememberBox}
-        {loginError && <p className="portal-auth-alert" role="alert">{loginError}</p>}
-        <Button type="button" className="h-12 w-full" autoFocus disabled={loginLoading || maintenance?.level === "locked"} onClick={() => void submitSignIn({ link: linkToken })}>
+        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        <AuthSubmit type="button" autoFocus disabled={loginLoading || maintenance?.level === "locked"} onClick={() => void submitSignIn({ link: linkToken })}>
           {loginLoading ? "Signing in…" : "Sign in"}
-        </Button>
+        </AuthSubmit>
       </div>
       {backToPassword}
-    </div>
+    </>
   );
 
   const form = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
 
-  return <PortalAuthSplitShell mode="sign-in" className="portal-agent portal-tenant-auth-shell" form={form} story={<StoryPanel mode="sign-in" />} />;
+  return (
+    <AuthLayout plane="agent" story={<StoryPanel mode="sign-in" />}>
+      {form}
+    </AuthLayout>
+  );
 }

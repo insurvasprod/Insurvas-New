@@ -16,6 +16,7 @@ authority. Where any file below or any mockup disagrees with it, it wins. Its ru
 
 | File | What it is |
 |---|---|
+| [`foundation-v3/`](foundation-v3/CAPABILITY-MAP.md) | **The v3 foundation (2026-10-27).** The capability map, one spec per module, and [`mockup.html`](foundation-v3/mockup.html), the visual reference (open it in a browser). Its rules live in `UI-CONSISTENCY.md` §0. |
 | [`UI-CONSISTENCY.md`](UI-CONSISTENCY.md) | **Read first.** How every page is built: one header, `StatStrip`, `TableCard` + `DataToolbar`, 36px controls, skeleton loading, no eyebrow, orange apps and a blue admin console. |
 | [`00-FOUNDATION.md`](00-FOUNDATION.md) | The contract every page inherits. Tokens, type scale, the page skeleton, the six required states, the shell, accessibility floor, responsive rules. **Every page prompt assumes you have read this.** |
 | [`01-PUBLIC-AND-AUTH.md`](01-PUBLIC-AND-AUTH.md) | 17 pages. Marketing, signup, login, onboarding, checkout, legal. |

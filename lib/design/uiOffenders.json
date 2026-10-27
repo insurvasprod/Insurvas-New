@@ -2,15 +2,10 @@
   "raw-table": {},
   "extra-page-header": {},
   "tall-control": {
-    "components/app/accept-terms-panel.tsx": 1,
-    "components/app/auth-card.tsx": 1,
-    "components/app/business-profile-form.tsx": 1,
     "components/app/disposition-wizard.tsx": 1,
     "components/app/issued-policy-panel.tsx": 1,
     "components/app/lead-detail-workspace.tsx": 1,
-    "components/app/set-password-form.tsx": 1,
-    "components/app/template-settings.tsx": 1,
-    "components/app/verify-email-panel.tsx": 2
+    "components/app/template-settings.tsx": 1
   },
   "hex-colour": {
     "components/admin/feature-switches-panel.tsx": 1,
@@ -46,5 +41,20 @@
     "components/app/calendar-availability-settings.tsx": 13,
     "components/app/column-mapping-dialog.tsx": 2,
     "components/app/issued-policy-panel.tsx": 6
-  }
+  },
+  "pill-button": {},
+  "hand-filter-panel": {
+    "components/admin/audit-log-table.tsx": 1,
+    "components/admin/users-list-table.tsx": 1,
+    "components/app/agent-floor.tsx": 1,
+    "components/app/callback-calendar.tsx": 1,
+    "components/app/campaign-workspace.tsx": 1,
+    "components/app/deal-flow-workspace.tsx": 1,
+    "components/app/lead-workspace.tsx": 1,
+    "components/app/policy-book.tsx": 1,
+    "components/app/transfer-inbox.tsx": 1,
+    "components/app/true-cpa-workspace.tsx": 1,
+    "components/partner/partner-lead-pipeline.tsx": 1
+  },
+  "mixed-stat": {}
 }

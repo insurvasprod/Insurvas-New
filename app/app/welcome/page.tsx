@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { CarrierFileUploadButton } from "@/components/app/carrier-file-upload";
 import { FirstValueSample, ForwardAddress } from "@/components/app/first-value";
 import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { Button } from "@/components/ui/button";
 import { owedToYou } from "@/lib/discrepancies/service";
 import { guardPage } from "@/lib/entitlements/guardPage";
@@ -60,8 +61,8 @@ export default async function WelcomePage() {
             <p className="mt-2 text-sm text-[var(--nav-muted)]">{found.count.toLocaleString("en-US")} open item{found.count === 1 ? "" : "s"}: missing, short-paid or charged back twice</p>
           </section>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild className="h-12 flex-1 px-5"><Link href="/app/discrepancies">See what is owed</Link></Button>
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-5"><Link href="/app/setup">Continue setup</Link></Button>
+            <Button asChild className="h-11 flex-1 px-5"><Link href="/app/discrepancies">See what is owed</Link></Button>
+            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-5"><Link href="/app/setup">Continue setup</Link></Button>
           </div>
         </>
       ) : (
@@ -77,19 +78,19 @@ export default async function WelcomePage() {
             </div>
             {inbound?.address && <ForwardAddress address={inbound.address} />}
             {reading ? (
-              <p role="status" className="rounded-lg bg-[var(--surface-alt)] px-4 py-3 text-sm leading-normal text-[var(--body)]">
+              <AuthAlert tone="info">
                 Your statement is being read. That usually takes a few minutes, and the figure appears here and on your Home when it is ready.{" "}
-                <Link href="/app/welcome" className="font-semibold text-foreground hover:underline">Check again</Link>
-              </p>
+                <Link href="/app/welcome" className="font-semibold underline underline-offset-2">Check again</Link>
+              </AuthAlert>
             ) : read ? (
-              <p role="status" className="rounded-lg bg-[var(--surface-alt)] px-4 py-3 text-sm leading-normal text-[var(--body)]">
+              <AuthAlert tone="info">
                 Your files have been read and nothing is owed on them right now. Add another statement, or carry on with setup.
-              </p>
+              </AuthAlert>
             ) : failed ? (
-              <p role="alert" className="rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm leading-normal text-[var(--error-ink)]">
+              <AuthAlert>
                 {failed.originalFilename} could not be read{failed.errorDetail ? `: ${failed.errorDetail}` : "."} Try another export from the carrier, or open{" "}
                 <Link href="/app/carrier-files" className="font-semibold underline">Carrier files</Link>.
-              </p>
+              </AuthAlert>
             ) : null}
             <FirstValueSample />
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">

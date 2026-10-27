@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 export default async function Home() {
   const plans: PublicPlan[] = await fetchPublicPlans().catch(() => []);
   return (
-    <div className="min-h-screen bg-background">
+    <div className="type-brand min-h-screen bg-background">
       {/* First visit of a session: the mark is drawn out of the hero's lines, then the page opens. */}
       <LandingIntro />
       <SiteHeader current="home" floating />

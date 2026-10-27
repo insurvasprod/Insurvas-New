@@ -123,7 +123,7 @@ export function CheckoutStart({ disclosure, noPayment = false }: { disclosure?: 
         </p>
       ) : null}
 
-      <Button onClick={start} disabled={busy} aria-describedby={disclosure && !valid?.fullComp ? "renewal-terms" : undefined} className="h-12 w-full px-4">
+      <Button onClick={start} disabled={busy} aria-describedby={disclosure && !valid?.fullComp ? "renewal-terms" : undefined} className="h-11 w-full px-4">
         {busy && (noPayment || valid?.fullComp) ? "Opening your workspace…" : busy ? "Opening secure payment…" : noPayment || valid?.fullComp ? "Start using Insurvas" : "Continue to secure payment"}
       </Button>
 

@@ -4,6 +4,8 @@ import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
 import { CheckoutReturnStatus } from "@/components/public/checkout-return-status";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { resolveTrialDays } from "@/lib/checkout/constants";
+import { trialDaysForPlan } from "@/lib/checkout/trialDays";
 
 /**
  * SA-5.2 · Where Whop sends the customer after they enter a card.
@@ -41,9 +43,17 @@ export default async function CheckoutReturnPage({ searchParams }: { searchParam
     .maybeSingle();
   if (!session) redirect("/app/dashboard");
 
+  // "Starting your trial" only when the chosen plan has one (the same rule as the payment step).
+  const { data: selection } = await getSupabaseServiceClient()
+    .from("signup_selections")
+    .select("plan_id")
+    .eq("tenant_id", context.tenantId)
+    .maybeSingle<{ plan_id: string }>();
+  const trialDays = selection ? await trialDaysForPlan(selection.plan_id) : resolveTrialDays(null);
+
   return (
     <FunnelFrame step={5}>
-      <FunnelHeading title="Starting your trial">This usually takes a few seconds.</FunnelHeading>
+      <FunnelHeading title={trialDays > 0 ? "Starting your trial" : "Starting your plan"}>This usually takes a few seconds.</FunnelHeading>
       <CheckoutReturnStatus />
     </FunnelFrame>
   );

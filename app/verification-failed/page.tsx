@@ -21,7 +21,7 @@ export default function VerificationFailedPage() {
         title="That link no longer works"
         description={`It was already used, or it expired: verification links work once and last ${EMAIL_VERIFICATION_TTL_HOURS} hours. Sign in and we will send a fresh one, or take you straight in if your email is already confirmed.`}
       >
-        <Button asChild className="mt-6 h-12 w-full">
+        <Button asChild className="mt-6 h-11 w-full">
           <Link href="/app/login">Sign in</Link>
         </Button>
         <p className="mt-4 text-sm leading-normal text-muted-foreground">

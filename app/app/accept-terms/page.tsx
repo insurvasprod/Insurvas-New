@@ -5,6 +5,7 @@ import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/require
 import { outstandingDocuments } from "@/lib/legal/acceptance";
 import { fetchDocument } from "@/lib/legal/queries";
 import { AcceptTermsPanel } from "@/components/app/accept-terms-panel";
+import { AppAuthFrame } from "@/components/app/app-auth-frame";
 
 export const metadata: Metadata = { title: "Updated terms · Insurvas" };
 
@@ -45,15 +46,10 @@ export default async function AcceptTermsPage() {
     }),
   );
 
+  // The one auth layout, wide: a document to read and accept (foundation v3, owner 2026-10-27).
   return (
-    <div className="portal-agent flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] px-4 py-10 sm:p-10">
-      {/* Not a direct `main` child: the shell's `.portal-agent > main` reserves 264px for a sidebar
-          this screen does not have, which pushed the card off centre. */}
-      <div className="w-full max-w-[820px]">
-        <main>
-          <AcceptTermsPanel documents={documents} />
-        </main>
-      </div>
-    </div>
+    <AppAuthFrame width="wide">
+      <AcceptTermsPanel documents={documents} />
+    </AppAuthFrame>
   );
 }

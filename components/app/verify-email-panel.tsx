@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 
 import { authControl, authLabel } from "@/components/app/auth-card";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { LogoutButton } from "@/components/app/logout-button";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,8 @@ const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leadi
  * land — the link can be opened on a phone — and moves on by itself, which is the promise the first
  * line of "What to expect" makes.
  */
-export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: number; noPayment?: boolean }) {
+// `noPayment` is still passed by the page; this step no longer mentions charging, so it is unused.
+export function VerifyEmailPanel({ ttlHours }: { ttlHours: number; noPayment?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -94,8 +96,7 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
   return (
     <div>
       <FunnelHeading title="Confirm your email">
-        Open the link we sent. It works once, for {ttlHours} hours, and keeps anyone else from opening a workspace in your name.
-        {noPayment ? " Nothing is charged." : " Nothing has been charged."}
+        Open the link we sent to the address below. It works once, for {ttlHours} hours. This page moves on by itself when you open it.
       </FunnelHeading>
       {loading ? (
         <div className="flex h-28 items-center justify-center" role="status" aria-label="Loading your account"><LoaderCircle className="animate-spin text-muted-foreground" /></div>
@@ -110,18 +111,15 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2.5">
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4">
               <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
             </Button>
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
+            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4">
               <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
             </Button>
           </div>
 
-          <p className="mt-4 flex items-center gap-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" role="status">
-            <LoaderCircle className="size-4 shrink-0 animate-spin text-[var(--accent-ink)] motion-reduce:animate-none" aria-hidden="true" />
-            Waiting for the link to be opened. This page moves on by itself, even if you open it on your phone.
-          </p>
+          <p className="sr-only" role="status">Waiting for the link to be opened.</p>
 
           {changing && (
             <form onSubmit={(event) => send("change_email", event)} className="mt-4 rounded-lg border border-border p-4">
@@ -130,17 +128,17 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
                 <input type="email" required autoComplete="email" className={authControl} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
               </label>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="submit" className="h-10 px-4" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>{submitting ? "Sending…" : "Update and send a new link"}</Button>
-                <Button type="button" variant="outline" className="h-10 border-[var(--border-strong)] px-4" onClick={() => { setChanging(false); setNewEmail(email); }}>Cancel</Button>
+                <Button type="submit" className="h-11 px-4" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>{submitting ? "Sending…" : "Update and send a new link"}</Button>
+                <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" onClick={() => { setChanging(false); setNewEmail(email); }}>Cancel</Button>
               </div>
             </form>
           )}
 
-          {message && <p role="status" className="mt-4 text-center text-sm font-semibold text-[var(--success-ink)]">{message}</p>}
-          {error && <p role="alert" className="mt-4 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
+          {message && <AuthAlert tone="success" className="mt-4">{message}</AuthAlert>}
+          {error && <AuthAlert className="mt-4">{error}</AuthAlert>}
 
           <div className="mt-7 flex flex-col gap-3">
-            <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
+            <Button type="button" variant="outline" className="h-11 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
               {cooldown > 0 ? `Send again in ${cooldown} ${cooldown === 1 ? "second" : "seconds"}` : submitting && !changing ? "Sending…" : "Send the link again"}
             </Button>
             <div className="flex flex-wrap justify-between gap-4">

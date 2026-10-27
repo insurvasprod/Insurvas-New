@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, LoaderCircle, Minus, Plus } from "lucide-react";
 
 import { FunnelHeading } from "@/components/app/funnel-frame";
+import { AuthAlert } from "@/components/portal/auth-controls";
 import { Button } from "@/components/ui/button";
 import { BILLING_CYCLES, BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import {
@@ -16,6 +17,8 @@ import {
   type PlanChoiceOption,
 } from "@/lib/signup/planChoice";
 import { cn } from "@/lib/utils";
+import { firstChargeDate } from "@/lib/checkout/constants";
+import { dayMonthYear } from "@/lib/format/dates";
 
 type Audience = PlanChoiceOption["audience"];
 const AUDIENCE_LABEL: Record<Audience, string> = { individual: "For one agent", agency: "For an agency" };
@@ -32,7 +35,8 @@ type ChoiceState = {
   seats: number;
   addonCodes: string[];
   totalCents: number | null;
-  trialEnds: string;
+  /** When the page was rendered: each plan's first charge is counted from it. */
+  now: string;
   noPayment: boolean;
   saving: boolean;
   error: string | null;
@@ -62,11 +66,12 @@ const seatsFor = (plan: PlanChoiceOption, wanted: number | null) => {
  * Step 4 of 5, Your plan (owner pick B, 2026-10-26). One state shared by the form on the left and the
  * summary that replaces the brand story on the right, so the total moves as the owner chooses.
  */
-export function PlanChoiceProvider({ plans, modules, initial, trialEnds, noPayment, children }: {
+export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, children }: {
   plans: PlanChoiceOption[];
   modules: PlanChoiceModule[];
   initial: PlanChoiceInitial | null;
-  trialEnds: string;
+  /** When the page was rendered: each plan's first charge is counted from it. */
+  now: string;
   noPayment: boolean;
   children: ReactNode;
 }) {
@@ -102,7 +107,7 @@ export function PlanChoiceProvider({ plans, modules, initial, trialEnds, noPayme
     seats,
     addonCodes: picked,
     totalCents: choiceTotalCents(plan, cycle, picked),
-    trialEnds,
+    now,
     noPayment,
     saving,
     error,
@@ -183,7 +188,7 @@ export function PlanChoiceForm() {
 
   return (
     <div>
-      <FunnelHeading title="Choose your plan">Four choices. Your total updates as you go.</FunnelHeading>
+      <FunnelHeading title="Choose your plan">Pick a plan and your seats. You can change it before you pay.</FunnelHeading>
       <form onSubmit={(event) => { event.preventDefault(); choice.save(); }} className="flex flex-col gap-6">
         {audiences.length > 1 && (
           <Section n={1} title="Who it is for">
@@ -323,7 +328,7 @@ export function PlanChoiceForm() {
           )}
         </Section>
 
-        {choice.error && <p role="alert" className="rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{choice.error}</p>}
+        {choice.error && <AuthAlert>{choice.error}</AuthAlert>}
 
         {/* Below 1024px the summary panel is hidden with the brand story, so the total and the button sit here. */}
         <div className="flex flex-col gap-3 border-t border-border pt-4 lg:hidden">
@@ -340,7 +345,8 @@ export function PlanChoiceForm() {
 }
 
 function TrialLine({ className }: { className?: string }) {
-  const { noPayment, plan, trialEnds } = useChoice();
+  const { noPayment, plan, now } = useChoice();
+  const trialEnds = dayMonthYear(firstChargeDate(plan.trialDays, new Date(now)), "UTC");
   return (
     <p className={cn("text-sm leading-normal tracking-[-0.02em]", className)}>
       {noPayment ? "No card needed. Nothing is charged." : plan.trialDays > 0 ? `$0.00 today · ${plan.trialDays}-day trial · first charge ${trialEnds}` : "The first period is charged today."}
@@ -351,7 +357,7 @@ function TrialLine({ className }: { className?: string }) {
 function ContinueButton() {
   const { saving, save } = useChoice();
   return (
-    <Button type="button" className="h-12 w-full" disabled={saving} onClick={save}>
+    <Button type="button" className="h-11 w-full" disabled={saving} onClick={save}>
       {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
       {saving ? "Saving…" : "Continue to payment"}
     </Button>

@@ -169,7 +169,7 @@ export function PaymentEmbed({ email, environment }: { email: string; environmen
         <h2 className="text-lg font-semibold tracking-[-0.015em] text-foreground">No card needed</h2>
         <p className="mt-1 text-sm leading-normal text-[var(--body)]">Your coupon covers the plan forever, so there is nothing to pay and no card form. Your workspace opens as soon as you start.</p>
         {payment.error && <p role="alert" className="mt-3 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{payment.error}</p>}
-        <Button className="mt-4 h-12 w-full" disabled={payment.phase === "opening"} onClick={payment.startFree}>
+        <Button className="mt-4 h-11 w-full" disabled={payment.phase === "opening"} onClick={payment.startFree}>
           {payment.phase === "opening" && <LoaderCircle className="animate-spin" aria-hidden="true" />}
           {payment.phase === "opening" ? "Opening your workspace…" : "Start using Insurvas"}
         </Button>

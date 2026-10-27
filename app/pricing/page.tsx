@@ -26,7 +26,7 @@ export default async function PublicPricingPage({ searchParams }: { searchParams
   const addons = addonsResult.status === "fulfilled" ? addonsResult.value : [];
   if (plansResult.status === "rejected") console.error("[pricing] plans unavailable:", plansResult.reason);
   return (
-    <div className="min-h-screen bg-[var(--color-page-bg)]">
+    <div className="type-brand min-h-screen bg-[var(--color-page-bg)]">
       <SiteHeader current="pricing" />
       <PricingPage plans={plans} addons={addons} initialAudience={query.for === "agency" ? "agency" : "individual"} loadError={plansResult.status === "rejected" ? "Pricing is temporarily unavailable. Please try again shortly." : null} />
       <SiteFooter />

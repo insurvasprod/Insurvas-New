@@ -36,7 +36,8 @@ export function PageHeader({
   return (
     <div className={cn("flex flex-wrap items-end justify-between gap-4", className)}>
       <div className="min-w-0">
-        <h1 data-size={size} className="text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]">
+        {/* The display face (Inter Tight, foundation v3): narrower than the body face at this size. */}
+        <h1 data-size={size} className="font-[family-name:var(--font-display)] text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]">
           {title}
         </h1>
         {description && (
