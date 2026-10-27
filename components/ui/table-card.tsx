@@ -21,6 +21,7 @@ export function TableCard({
   description,
   action,
   toolbar,
+  filters,
   footer,
   children,
   className,
@@ -29,6 +30,8 @@ export function TableCard({
   description?: string;
   action?: ReactNode;
   toolbar?: ReactNode;
+  /** Under the toolbar, above the table: `<FilterPanel>` then `<ActiveFilters>` (UI-CONSISTENCY §6a). */
+  filters?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -61,6 +64,10 @@ export function TableCard({
           {toolbar}
         </div>
       )}
+
+      {/* The filter panel and the active-filter chips draw their own bottom rule; the toolbar's
+          border-b sits above them. Empty when neither is showing. */}
+      {filters && <div data-slot="table-card-filters" className="bg-[var(--surface-alt)]/40">{filters}</div>}
 
       <div className="overflow-x-auto">{children}</div>
 

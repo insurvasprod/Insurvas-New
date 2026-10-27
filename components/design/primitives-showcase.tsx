@@ -48,6 +48,10 @@ import {
 } from "@/components/ui/table";
 import { SettingsLayout, SettingsSaveBar } from "@/components/ui/settings-layout";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CalendarDays, DollarSign, Phone, Users } from "lucide-react";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 
 function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
   return (
@@ -115,6 +119,10 @@ const TONE_LABEL: Record<StatusTone, string> = {
 export function PrimitivesShowcase() {
   const [pressed, setPressed] = useState<string | null>(null);
   const [section, setSection] = useState("agency-profile");
+  // The filter demo starts open with two filters on, so the page shows the whole pattern at rest.
+  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [statuses, setStatuses] = useState(["In force", "Scheduled"]);
+  const [demoQuery, setDemoQuery] = useState("");
   const press = (label: string) => () => setPressed(label);
   const resolved = useResolvedTokens(SWATCHES);
 
@@ -194,6 +202,54 @@ export function PrimitivesShowcase() {
         <Button size="sm" onClick={press("Small")}>Small</Button>
         <Button size="xs" onClick={press("XS")}>XS</Button>
         <Button size="icon" aria-label="More" onClick={press("More")}>…</Button>
+      </Section>
+
+      <Section title="Stat cards" note="UI-CONSISTENCY §4a. The glossy footer-fact card: header, value with its change, one fact or the action in the footer. Amber only when the card needs action.">
+        <div className="grid w-full gap-6">
+          <StatRow label="Stat cards with icons">
+            <StatCard icon={Users} label="New leads" period="today" value={86} delta={{ value: 11.7, goodWhen: "up" }} fact={{ label: "Top source", value: "Facebook · 38" }} />
+            <StatCard icon={Phone} label="Contact rate" period="7 days" value={41.7} unit="%" delta={{ value: 2.1, unit: " pts", goodWhen: "up" }} fact={{ label: "Dials connected", value: "512 of 1,228" }} />
+            <StatCard icon={CalendarDays} label="Appointments" period="7 days" value={214} delta={{ value: -3.6, goodWhen: "up" }} fact={{ label: "Today", value: "38 booked · 4 no-shows" }} />
+            <StatCard icon={DollarSign} label="Commission" period="pending" value="$41,920" delta={{ value: 9.2, goodWhen: "neither" }} tone="warn" fact={{ label: "18 statements late" }} action={<LinkArrow href="#">Review</LinkArrow>} />
+          </StatRow>
+          <StatRow label="Stat cards without icons">
+            <StatCard label="Active policies" value={3482} labelTitle="In force, pending issue and at risk." meter={{ value: 3104, max: 3482, tone: "good", label: "3,104 of 3,482 in force" }} fact={{ label: "In force", value: "3,104" }} />
+            <StatCard label="Top carrier" period="this month" value="Mutual of Omaha" fact={{ label: "Policies", value: "412" }} />
+            <StatCard label="Premium written" period="today" value="$12,480" />
+          </StatRow>
+        </div>
+      </Section>
+
+      <Section title="Filters" note="UI-CONSISTENCY §6a. The Filters button opens a row of labelled fields inside the table card; applied filters stay as chips.">
+        <TableCard
+          className="w-full"
+          toolbar={
+            <DataToolbar actions={<Button onClick={press("New policy")}>New policy</Button>}>
+              <ToolbarSearch value={demoQuery} onChange={setDemoQuery} placeholder="Search name, policy or phone" />
+              <FilterButton open={filtersOpen} count={statuses.length} controls="ds-filters" onClick={() => setFiltersOpen(!filtersOpen)} />
+            </DataToolbar>
+          }
+          filters={
+            <>
+              <FilterPanel id="ds-filters" open={filtersOpen}>
+                {[["Status", statuses.join(", ") || "All statuses"], ["Carrier", "All carriers"], ["Owner", "All owners"], ["Effective date", "Any date"]].map(([label, value]) => (
+                  <div key={label} className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">{label}</Label>
+                    <select aria-label={label} className={toolbarControl} defaultValue={value}>
+                      <option>{value}</option>
+                    </select>
+                  </div>
+                ))}
+              </FilterPanel>
+              <ActiveFilters
+                filters={statuses.map((status) => ({ key: status, label: "Status", value: status, onRemove: () => setStatuses(statuses.filter((s) => s !== status)) }))}
+                onClear={() => setStatuses([])}
+              />
+            </>
+          }
+        >
+          <p className="px-4 py-6 text-sm text-muted-foreground">The table goes here.</p>
+        </TableCard>
       </Section>
 
       <Section title="LinkArrow" note="The secondary action. Ink text, an arrow that slides on hover, and a label that names the destination.">

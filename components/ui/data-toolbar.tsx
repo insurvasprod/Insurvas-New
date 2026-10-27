@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { RotateCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, RotateCw, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -69,24 +69,88 @@ export function ToolbarSearch({
 }
 
 /**
- * Opens a filter panel. `count` is how many filters are on, shown as a small badge. Other Button props
- * (and the ref) pass through, so it also works as a `<DropdownMenuTrigger asChild>` child.
+ * Opens a filter panel. `count` is how many filters are on, shown as a filled badge; the chevron
+ * flips while the panel is open. Pass the panel's id as `controls` when it is a `<FilterPanel>`.
+ * Other Button props (and the ref) pass through, so it also works as a `<DropdownMenuTrigger asChild>`
+ * child on the lists that have not moved to the inline panel yet.
  */
 export function FilterButton({
   open,
   count = 0,
+  controls,
   children = "Filters",
   onClick,
   ...props
-}: { open?: boolean; count?: number } & Omit<ComponentProps<typeof Button>, "variant">) {
+}: { open?: boolean; count?: number; controls?: string } & Omit<ComponentProps<typeof Button>, "variant">) {
   return (
-    <Button type="button" variant="outline" aria-expanded={open} onClick={onClick} {...props}>
+    <Button type="button" variant="outline" aria-expanded={open} aria-controls={controls} onClick={onClick} {...props}>
       <SlidersHorizontal aria-hidden="true" />
       {children}
       {count > 0 && (
-        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs tabular-nums text-foreground">{count}</span>
+        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
+          {count}
+          <span className="sr-only"> applied</span>
+        </span>
       )}
+      <ChevronDown className={cn("transition-transform", open && "rotate-180")} aria-hidden="true" />
     </Button>
+  );
+}
+
+/**
+ * The filters, opened inline under the toolbar (UI-CONSISTENCY §6a, the INSURVAS-CRM DataGrid
+ * pattern): a grid of labelled fields that pushes the table down, never a dropdown over it. It goes
+ * in `<TableCard filters={…}>` and renders only while `open`. Give it the `id` the FilterButton's
+ * `controls` names.
+ */
+export function FilterPanel({ id, open, children, className }: { id: string; open: boolean; children: ReactNode; className?: string }) {
+  if (!open) return null;
+  return (
+    <div
+      id={id}
+      role="region"
+      aria-label="Filters"
+      className={cn("grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-x-4 gap-y-3 border-b border-border px-4 py-4", className)}
+    >
+      {children}
+    </div>
+  );
+}
+
+export type ActiveFilter = { key: string; label: string; value: string; onRemove: () => void };
+
+/**
+ * What is filtering the list right now, as removable chips ("Status: In force ×") and a "Clear
+ * filters" link. It stays visible while the panel is closed, so a filtered list never looks like the
+ * whole list. Renders nothing when no filter is on.
+ */
+export function ActiveFilters({ filters, onClear, className }: { filters: ActiveFilter[]; onClear: () => void; className?: string }) {
+  if (filters.length === 0) return null;
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2 text-sm", className)}>
+      <span className="mr-1 text-xs font-medium text-muted-foreground">Active filters</span>
+      {filters.map((filter) => (
+        <span key={filter.key} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card pl-2.5 pr-1 text-xs">
+          <span className="text-muted-foreground">{filter.label}:</span>
+          <span className="font-medium text-foreground">{filter.value}</span>
+          <button
+            type="button"
+            onClick={filter.onRemove}
+            aria-label={`Remove ${filter.label}: ${filter.value}`}
+            className="grid size-5 place-items-center rounded text-muted-foreground outline-none hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        </span>
+      ))}
+      <button
+        type="button"
+        onClick={onClear}
+        className="ml-1 rounded text-xs font-medium text-foreground underline underline-offset-[3px] outline-none hover:text-[var(--accent-ink)] focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Clear filters
+      </button>
+    </div>
   );
 }
 

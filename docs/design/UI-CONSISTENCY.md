@@ -33,9 +33,9 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 
 | v3 rule | Section | Status |
 |---|---|---|
-| Glossy stat card replaces `StatStrip` | §4a | Decided, lands in `foundation-components` |
-| 8px corners on buttons and inputs | §5a | Decided, lands in `foundation-components` |
-| Inline filter panel under the toolbar | §6a | Decided, lands in `foundation-components` |
+| Glossy stat card (`StatRow` / `StatCard`) | §4a | Live for new and reworked pages |
+| 8px corners on buttons and inputs | §5a | Live |
+| Inline filter panel under the toolbar | §6a | Live for new and reworked lists |
 | No avatars for clients, leads or carriers | §10 | Live |
 | Overlays chosen by task | §11 | Live |
 | Status colours | §12 | Live |
@@ -83,21 +83,35 @@ Helper text belongs in a field's `hint`, a tooltip, or nowhere.
 - Never a grid of separate stat boxes; never custom KPI cards. Replace any `grid … gap-3` of
   `StatTile`s (or hand-made figure cards) with `<StatStrip>`.
 - At most one strip per page, directly under the header. 3–6 tiles. Footnotes short.
+- **v3:** `StatStrip` stays valid on pages nobody has reworked yet. A page someone reworks moves to
+  the stat cards in §4a, and does not keep a strip beside them.
 
 ### 4a. Stat cards (v3)
-**Status:** Decided, lands in `foundation-components`. Until then, keep using `StatStrip` above.
+**Status:** Live for new and reworked pages. Pages are moved one at a time, only when someone works
+on them; untouched pages keep `StatStrip` (decision 2026-10-27). The `mixed-stat` ratchet keeps a
+page from using both.
 
-The figures under a page header become a row of glossy stat cards, `StatCard` from
-`components/ui/stat.tsx`. Reference: the "Footer fact, glossy" row in the mockup.
+The figures under a page header are a row of glossy stat cards: `StatRow` and `StatCard` from
+`components/ui/stat-card.tsx`. Reference: the "Footer fact, glossy" row in the mockup, and every
+state on `/design` (development only).
 
 ```tsx
-<StatRow>
-  <StatCard icon={Users} label="New leads" period="today" value={86} change={{ value: "11.7%", direction: "up" }}
-            fact={{ label: "Top source", value: "Facebook · 38" }} />
-  <StatCard icon={DollarSign} label="Commission" period="pending" value={41920} currency
-            tone="warn" fact={{ label: "18 statements late", action: { label: "Review", href: "/app/accounting" } }} />
+import { CalendarDays, DollarSign, Users } from "lucide-react";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
+
+<StatRow label="Today">
+  <StatCard icon={Users} label="New leads" period="today" value={86}
+            delta={{ value: 11.7, goodWhen: "up" }} fact={{ label: "Top source", value: "Facebook · 38" }} />
+  <StatCard icon={CalendarDays} label="Appointments" period="7 days" value={214}
+            delta={{ value: -3.6, goodWhen: "up" }} fact={{ label: "Today", value: "38 booked · 4 no-shows" }} />
+  <StatCard icon={DollarSign} label="Commission" period="pending" value="$41,920" tone="warn"
+            delta={{ value: 9.2, goodWhen: "neither" }} fact={{ label: "18 statements late" }}
+            action={<LinkArrow href="/app/accounting">Review</LinkArrow>} />
 </StatRow>
 ```
+
+- `delta.goodWhen` says what a rise means: `"up"`, `"down"`, or `"neither"` (always grey).
+- `meter` draws progress toward a goal between the value and the footer. There is no trend chart.
 
 - Anatomy, fixed: header (icon tile, label, period) → value with a change pill → footer with one
   supporting fact as label and value, or the action the card needs.
@@ -120,11 +134,12 @@ The figures under a page header become a row of glossy stat cards, `StatCard` fr
   `<Button>` over `btn()` in new code.
 
 ### 5a. Control shape (v3)
-**Status:** Decided, lands in `foundation-components`. Until then, buttons stay pill-shaped.
+**Status:** Live. `Button` is 8px at every size; the `pill-button` ratchet keeps it that way.
 
 - Buttons and inputs: 8px corners. Cards, dialogs and sheets: 12px. Menus: 10px. Badges: 6px.
 - Heights do not change: 36px for buttons and inputs, 32px inside toolbars, `size="sm"` in rows.
-- Pill shapes remain only for toggle tracks and the count badge on the Filters button.
+- Pill shapes remain only for toggle tracks, the count badge on the Filters button, and the
+  marketing and pricing CTAs, which keep the brand's pill ([BRAND.md](BRAND.md)).
 
 ## 6. Lists: `TableCard` + `DataToolbar` — the Partner quality table is the model
 ```tsx
@@ -154,9 +169,23 @@ The figures under a page header become a row of glossy stat cards, `StatCard` fr
   hang below the toolbar; the table scrolls sideways inside its own wrapper.
 
 ### 6a. Filters open inline (v3)
-**Status:** Decided, lands in `foundation-components`. Until then, use `FilterButton` as above.
+**Status:** Live for new and reworked lists. The 11 lists that already had their own filter panels
+keep them until someone works on them; the `hand-filter-panel` ratchet only goes down.
 
-Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in that repo):
+Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in that repo), built from
+`FilterButton`, `FilterPanel` and `ActiveFilters` in `components/ui/data-toolbar.tsx` and the
+`filters` slot of `TableCard`:
+
+```tsx
+<TableCard
+  toolbar={<DataToolbar actions={…}><ToolbarSearch … /><FilterButton open={open} count={chips.length} controls="policy-filters" onClick={() => setOpen(!open)} /></DataToolbar>}
+  filters={<>
+    <FilterPanel id="policy-filters" open={open}>{/* labelled fields */}</FilterPanel>
+    <ActiveFilters filters={chips} onClear={clearAll} />
+  </>}
+>…</TableCard>
+```
+
 
 - The toolbar holds search, one **Filters** button with a count badge of applied filters, then the
   actions. No individual facet buttons in the toolbar row.

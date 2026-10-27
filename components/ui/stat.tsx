@@ -31,11 +31,12 @@ export function DeltaChip({
   /** Signed. 0 renders as the flat, neutral state. */
   value: number;
   unit?: string;
-  goodWhen?: "up" | "down";
+  /** "neither" for a figure whose direction is not good or bad — a pending balance (UI-CONSISTENCY §12). */
+  goodWhen?: "up" | "down" | "neither";
   title?: string;
 }) {
   const direction = value === 0 ? "flat" : value > 0 ? "up" : "down";
-  const good = direction === "flat" ? null : direction === goodWhen;
+  const good = direction === "flat" || goodWhen === "neither" ? null : direction === goodWhen;
 
   const tone =
     good === null
