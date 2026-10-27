@@ -1,0 +1,612 @@
+{
+  "version": "Proposed v2",
+  "date": "2026-10-27",
+  "font": "Inter",
+  "weights": [
+    400,
+    500,
+    600
+  ],
+  "light": {
+    "mode": "Light",
+    "canvas": "#F6F8FA",
+    "surface": "#FFFFFF",
+    "raised": "#F0F3F5",
+    "text": "#18212B",
+    "secondary": "#475467",
+    "muted": "#5F6B7A",
+    "border": "#D9E0DC",
+    "control": "#7A8980",
+    "primary": "#087F63",
+    "onPrimary": "#FFFFFF",
+    "hover": "#06674F",
+    "pressed": "#055540",
+    "focus": "#087F63",
+    "link": "#076E56",
+    "soft": "#E7F4EE",
+    "disabled": "#E8EEEA",
+    "disabledText": "#68736D",
+    "success": "#166534",
+    "successBg": "#EAF7EF",
+    "info": "#1D4F91",
+    "infoBg": "#EDF4FF",
+    "warning": "#854D0E",
+    "warningBg": "#FFF5DE",
+    "danger": "#B42318",
+    "dangerBg": "#FFF0EE"
+  },
+  "dark": {
+    "mode": "Dark",
+    "canvas": "#101715",
+    "surface": "#18211E",
+    "raised": "#202B26",
+    "text": "#F2F6F4",
+    "secondary": "#C1CDC7",
+    "muted": "#9FB0A7",
+    "border": "#34433B",
+    "control": "#708579",
+    "primary": "#35D6AA",
+    "onPrimary": "#0B2119",
+    "hover": "#5DE2BD",
+    "pressed": "#19B991",
+    "focus": "#35D6AA",
+    "link": "#5DE2BD",
+    "soft": "#173C2D",
+    "disabled": "#27332D",
+    "disabledText": "#82938A",
+    "success": "#83D6A3",
+    "successBg": "#153424",
+    "info": "#A3C7FF",
+    "infoBg": "#1B2F4D",
+    "warning": "#F1CD81",
+    "warningBg": "#3A2B14",
+    "danger": "#FFB1A8",
+    "dangerBg": "#40201E"
+  },
+  "qa": {
+    "checks": 64,
+    "passed": 64,
+    "pairs": [
+      {
+        "theme": "Light",
+        "pair": "text / canvas",
+        "foreground": "#18212B",
+        "background": "#F6F8FA",
+        "ratio": 15.276464560343083,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "text / surface",
+        "foreground": "#18212B",
+        "background": "#FFFFFF",
+        "ratio": 16.263131530883538,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "text / raised",
+        "foreground": "#18212B",
+        "background": "#F0F3F5",
+        "ratio": 14.593298450546875,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "secondary / canvas",
+        "foreground": "#475467",
+        "background": "#F6F8FA",
+        "ratio": 7.22059125503685,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "secondary / surface",
+        "foreground": "#475467",
+        "background": "#FFFFFF",
+        "ratio": 7.686950396641675,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "secondary / raised",
+        "foreground": "#475467",
+        "background": "#F0F3F5",
+        "ratio": 6.8976851782645126,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "muted / canvas",
+        "foreground": "#5F6B7A",
+        "background": "#F6F8FA",
+        "ratio": 5.096242736191928,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "muted / surface",
+        "foreground": "#5F6B7A",
+        "background": "#FFFFFF",
+        "ratio": 5.425395752048129,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "muted / raised",
+        "foreground": "#5F6B7A",
+        "background": "#F0F3F5",
+        "ratio": 4.868337888777205,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "link / canvas",
+        "foreground": "#076E56",
+        "background": "#F6F8FA",
+        "ratio": 5.846834122570998,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "link / surface",
+        "foreground": "#076E56",
+        "background": "#FFFFFF",
+        "ratio": 6.22446587684125,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "link / raised",
+        "foreground": "#076E56",
+        "background": "#F0F3F5",
+        "ratio": 5.585362699889227,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "onPrimary / primary",
+        "foreground": "#FFFFFF",
+        "background": "#087F63",
+        "ratio": 4.968951115601282,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "onPrimary / hover",
+        "foreground": "#FFFFFF",
+        "background": "#06674F",
+        "ratio": 6.861073855070547,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "onPrimary / pressed",
+        "foreground": "#FFFFFF",
+        "background": "#055540",
+        "ratio": 8.823952374464024,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "focus / canvas",
+        "foreground": "#087F63",
+        "background": "#F6F8FA",
+        "ratio": 4.667490112553759,
+        "minimum": 3
+      },
+      {
+        "theme": "Light",
+        "pair": "focus / surface",
+        "foreground": "#087F63",
+        "background": "#FFFFFF",
+        "ratio": 4.968951115601282,
+        "minimum": 3
+      },
+      {
+        "theme": "Light",
+        "pair": "focus / raised",
+        "foreground": "#087F63",
+        "background": "#F0F3F5",
+        "ratio": 4.458759155851694,
+        "minimum": 3
+      },
+      {
+        "theme": "Light",
+        "pair": "control / canvas",
+        "foreground": "#7A8980",
+        "background": "#F6F8FA",
+        "ratio": 3.4501120129545972,
+        "minimum": 3
+      },
+      {
+        "theme": "Light",
+        "pair": "control / surface",
+        "foreground": "#7A8980",
+        "background": "#FFFFFF",
+        "ratio": 3.6729457422118266,
+        "minimum": 3
+      },
+      {
+        "theme": "Light",
+        "pair": "control / raised",
+        "foreground": "#7A8980",
+        "background": "#F0F3F5",
+        "ratio": 3.2958224132281,
+        "minimum": 3
+      },
+      {
+        "theme": "Light",
+        "pair": "success / successBg",
+        "foreground": "#166534",
+        "background": "#EAF7EF",
+        "ratio": 6.467934748036549,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "info / infoBg",
+        "foreground": "#1D4F91",
+        "background": "#EDF4FF",
+        "ratio": 7.360017479583113,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "warning / warningBg",
+        "foreground": "#854D0E",
+        "background": "#FFF5DE",
+        "ratio": 6.3185896004015225,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "danger / dangerBg",
+        "foreground": "#B42318",
+        "background": "#FFF0EE",
+        "ratio": 5.932714621240258,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "text / soft",
+        "foreground": "#18212B",
+        "background": "#E7F4EE",
+        "ratio": 14.383320769832672,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "link / soft",
+        "foreground": "#076E56",
+        "background": "#E7F4EE",
+        "ratio": 5.504996940931806,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "danger / canvas",
+        "foreground": "#B42318",
+        "background": "#F6F8FA",
+        "ratio": 6.175433486140776,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "danger / surface",
+        "foreground": "#B42318",
+        "background": "#FFFFFF",
+        "ratio": 6.57428861557707,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "danger / raised",
+        "foreground": "#B42318",
+        "background": "#F0F3F5",
+        "ratio": 5.899267043678432,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Light",
+        "pair": "primary / surface",
+        "foreground": "#087F63",
+        "background": "#FFFFFF",
+        "ratio": 4.968951115601282,
+        "minimum": 3
+      },
+      {
+        "theme": "Dark",
+        "pair": "text / canvas",
+        "foreground": "#F2F6F4",
+        "background": "#101715",
+        "ratio": 16.672816271692003,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "text / surface",
+        "foreground": "#F2F6F4",
+        "background": "#18211E",
+        "ratio": 15.107569667231978,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "text / raised",
+        "foreground": "#F2F6F4",
+        "background": "#202B26",
+        "ratio": 13.424879824602256,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "secondary / canvas",
+        "foreground": "#C1CDC7",
+        "background": "#101715",
+        "ratio": 11.099631820969424,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "secondary / surface",
+        "foreground": "#C1CDC7",
+        "background": "#18211E",
+        "ratio": 10.057596646142555,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "secondary / raised",
+        "foreground": "#C1CDC7",
+        "background": "#202B26",
+        "ratio": 8.93737571779309,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "muted / canvas",
+        "foreground": "#9FB0A7",
+        "background": "#101715",
+        "ratio": 7.99911055704474,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "muted / surface",
+        "foreground": "#9FB0A7",
+        "background": "#18211E",
+        "ratio": 7.248152804372042,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "muted / raised",
+        "foreground": "#9FB0A7",
+        "background": "#202B26",
+        "ratio": 6.440849355148259,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "link / canvas",
+        "foreground": "#5DE2BD",
+        "background": "#101715",
+        "ratio": 11.319529705929632,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "link / surface",
+        "foreground": "#5DE2BD",
+        "background": "#18211E",
+        "ratio": 10.256850483201491,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "link / raised",
+        "foreground": "#5DE2BD",
+        "background": "#202B26",
+        "ratio": 9.114436547299574,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "onPrimary / primary",
+        "foreground": "#0B2119",
+        "background": "#35D6AA",
+        "ratio": 9.11091112934656,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "onPrimary / hover",
+        "foreground": "#0B2119",
+        "background": "#5DE2BD",
+        "ratio": 10.498232960565346,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "onPrimary / pressed",
+        "foreground": "#0B2119",
+        "background": "#19B991",
+        "ratio": 6.73440534208414,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "focus / canvas",
+        "foreground": "#35D6AA",
+        "background": "#101715",
+        "ratio": 9.823675047421457,
+        "minimum": 3
+      },
+      {
+        "theme": "Dark",
+        "pair": "focus / surface",
+        "foreground": "#35D6AA",
+        "background": "#18211E",
+        "ratio": 8.901426894456314,
+        "minimum": 3
+      },
+      {
+        "theme": "Dark",
+        "pair": "focus / raised",
+        "foreground": "#35D6AA",
+        "background": "#202B26",
+        "ratio": 7.909980821386044,
+        "minimum": 3
+      },
+      {
+        "theme": "Dark",
+        "pair": "control / canvas",
+        "foreground": "#708579",
+        "background": "#101715",
+        "ratio": 4.60443892151855,
+        "minimum": 3
+      },
+      {
+        "theme": "Dark",
+        "pair": "control / surface",
+        "foreground": "#708579",
+        "background": "#18211E",
+        "ratio": 4.1721734739836265,
+        "minimum": 3
+      },
+      {
+        "theme": "Dark",
+        "pair": "control / raised",
+        "foreground": "#708579",
+        "background": "#202B26",
+        "ratio": 3.7074743806815,
+        "minimum": 3
+      },
+      {
+        "theme": "Dark",
+        "pair": "success / successBg",
+        "foreground": "#83D6A3",
+        "background": "#153424",
+        "ratio": 7.82183086375437,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "info / infoBg",
+        "foreground": "#A3C7FF",
+        "background": "#1B2F4D",
+        "ratio": 7.799851254285221,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "warning / warningBg",
+        "foreground": "#F1CD81",
+        "background": "#3A2B14",
+        "ratio": 8.980226452060856,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "danger / dangerBg",
+        "foreground": "#FFB1A8",
+        "background": "#40201E",
+        "ratio": 8.387630918569068,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "text / soft",
+        "foreground": "#F2F6F4",
+        "background": "#173C2D",
+        "ratio": 11.195705811739495,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "link / soft",
+        "foreground": "#5DE2BD",
+        "background": "#173C2D",
+        "ratio": 7.601002880959194,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "danger / canvas",
+        "foreground": "#FFB1A8",
+        "background": "#101715",
+        "ratio": 10.477833693640973,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "danger / surface",
+        "foreground": "#FFB1A8",
+        "background": "#18211E",
+        "ratio": 9.494173024452538,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "danger / raised",
+        "foreground": "#FFB1A8",
+        "background": "#202B26",
+        "ratio": 8.43670654478,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Dark",
+        "pair": "primary / surface",
+        "foreground": "#35D6AA",
+        "background": "#18211E",
+        "ratio": 8.901426894456314,
+        "minimum": 3
+      },
+      {
+        "theme": "Shared",
+        "pair": "Header label",
+        "foreground": "#D7E8DF",
+        "background": "#0D4037",
+        "ratio": 9.136713645482596,
+        "minimum": 4.5
+      },
+      {
+        "theme": "Shared",
+        "pair": "Wordmark",
+        "foreground": "#FFFFFF",
+        "background": "#0D4037",
+        "ratio": 11.630234685602941,
+        "minimum": 4.5
+      }
+    ]
+  },
+  "rules": {
+    "controlHeight": 36,
+    "touchTarget": 44,
+    "controlRadius": 8,
+    "cardRadius": 12
+  },
+  "sources": [
+    {
+      "title": "shadcn/ui - semantic theming",
+      "url": "https://ui.shadcn.com/docs/theming"
+    },
+    {
+      "title": "Radix - accessibility responsibilities",
+      "url": "https://www.radix-ui.com/primitives/docs/overview/accessibility"
+    },
+    {
+      "title": "Inter - text designs & tabular figures",
+      "url": "https://rsms.me/inter/"
+    },
+    {
+      "title": "W3C - text contrast",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+    },
+    {
+      "title": "W3C - meaningful UI contrast",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+    }
+  ]
+}

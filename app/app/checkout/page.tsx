@@ -25,8 +25,8 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
   if (context.userStatus !== "active") redirect("/app/login");
   // The plan has started: nothing is left to pay, and opening a checkout would only undo that.
   if (context.onboardingState === "completed") redirect("/app/dashboard");
-  // A live plan with sign-up still marked unfinished (a later checkout open used to reset it, 2026-10-26):
-  // finish the sign-up here instead of trapping the owner between the dashboard and this page.
+  // A live plan with sign-up still marked unfinished. If business details are absent, finish that
+  // setup after payment; otherwise release the owner to the workspace.
   const { data: live } = await getSupabaseServiceClient()
     .from("subscriptions")
     .select("id")
@@ -35,14 +35,17 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
     .limit(1)
     .maybeSingle<{ id: string }>();
   if (live) {
+    const { data: profile } = await getSupabaseServiceClient().from("business_profiles")
+      .select("tenant_id").eq("tenant_id", context.tenantId).maybeSingle();
+    const nextState = profile ? "completed" : "business_profile";
     const { error: finishError } = await getSupabaseServiceClient()
       .from("tenants")
-      .update({ onboarding_state: "completed" })
+      .update({ onboarding_state: nextState })
       .eq("id", context.tenantId)
       .in("onboarding_state", ["ready_for_checkout", "awaiting_payment"]);
     // Not silently: the shell would send the owner straight back here, round and round.
     if (finishError) throw new Error(`Could not finish sign-up for ${context.tenantId}: ${finishError.message}`);
-    redirect("/app/dashboard");
+    redirect(nextState === "business_profile" ? "/app/onboarding/business-profile" : "/app/dashboard");
   }
   const destination = signupDestination(context);
   // Payment follows the plan step; an owner who has chosen comes here from it while still ready_for_checkout.
@@ -62,7 +65,7 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
         supabase.from("plan_prices").select("*").eq("plan_id", selection.plan_id).maybeSingle<PlanPrices>(),
         supabase.from("plan_features").select("feature_key").eq("plan_id", selection.plan_id),
         supabase.from("plan_limits").select("max_seats").eq("plan_id", selection.plan_id).maybeSingle<{ max_seats: number | null }>(),
-        // The seats and add-ons from Step 4 of 5 (kept once 20261026300000 is applied).
+        // The saved seats and add-ons from the plan step.
         readPlanChoice(context.tenantId),
       ])
     : [{ data: null }, { data: null }, { data: null }, { data: null }, null];

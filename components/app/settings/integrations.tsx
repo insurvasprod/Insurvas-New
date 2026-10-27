@@ -11,7 +11,7 @@ import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { SettingsRailTabs } from "@/components/ui/settings-rail-tabs";
 import { InfoTip } from "@/components/ui/info-tip";
 import { Callout, control, Field, SettingsSectionHeader, SettingsStack, st } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
@@ -132,7 +132,7 @@ export function IntegrationsSettings() {
     <SettingsStack>
       <SettingsSectionHeader />
 
-      <ViewTabs
+      <SettingsRailTabs
         label="Integrations"
         value={view}
         onChange={setView}

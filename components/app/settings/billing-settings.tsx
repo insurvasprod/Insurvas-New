@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { HoverHint } from "@/components/ui/hover-hint";
 import { SectionLoading } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { SettingsRailTabs } from "@/components/ui/settings-rail-tabs";
 import { dayMonthYear } from "@/lib/format/dates";
 import { BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import { notify } from "@/lib/notify";
@@ -76,7 +76,7 @@ const TIER_LOOK: Record<UsageTier, { bar: string; text: string; row: string }> =
 const ANCHOR_TAB: Record<string, Tab> = { "billing-limits": "overview", "billing-plan": "plan", "billing-invoices": "invoices", "billing-card": "invoices", "billing-cancel": "invoices" };
 /** A plan can include forty features; the card shows the first few and opens the rest on request. */
 const FEATURES_SHOWN = 10;
-const CARD = "rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
+const CARD = "rounded-[12px] border border-[var(--border)] bg-[var(--surface)]";
 const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
 
 function tierCaption(l: Limit, warnPercent: number): string {
@@ -248,7 +248,7 @@ export function BillingSettings() {
       ) : null}
       {!sub ? <Callout tone="info" title="This workspace has no subscription">It runs on the platform&apos;s default access. To choose a plan, contact support@insurvas.com.</Callout> : null}
 
-      <ViewTabs
+      <SettingsRailTabs
         label="Plan and billing"
         value={tab}
         onChange={setTab}

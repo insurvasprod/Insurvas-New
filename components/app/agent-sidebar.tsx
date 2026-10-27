@@ -154,6 +154,9 @@ function DisclosureSection({
   nested?: boolean;
 }) {
   if (items.length === 0 && !children) return null;
+  // A category with one destination adds a click without adding a choice: render that destination
+  // directly, with its own icon and active state, instead of making users open a redundant parent.
+  if (items.length === 1 && !children) return <NavItemLink item={items[0]} onNavigate={onNavigate} nested={nested} />;
 
   const sectionId = `agent-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
@@ -559,9 +562,6 @@ function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: A
       </nav>
       <ul className="portal-agent-rail-foot">
         {tree.settings.map(link)}
-        {/* The account (owner ask 2026-10-26): the top bar portals its account button and menu into
-            this slot (AppTopBar accountHostId). The plan is a line in that menu, not an icon here. */}
-        <li id="agent-rail-account" className="portal-agent-rail-account" />
       </ul>
 
       {fly && (
@@ -578,7 +578,7 @@ function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: A
           {fly.kind === "tip" && fly.label}
           {fly.kind === "group" && (
             <>
-              <p className="portal-agent-rail-fly-head">{fly.label}</p>
+              {fly.items.length > 1 && <p className="portal-agent-rail-fly-head">{fly.label}</p>}
               <ul>
                 {fly.items.map((item) => {
                   const Icon = iconFor(item.icon);

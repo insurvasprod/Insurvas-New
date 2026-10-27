@@ -79,12 +79,12 @@ export async function fetchPlanChoices(): Promise<{ plans: PlanChoiceOption[]; m
   return { plans, modules: [...grouped.values()].sort((a, b) => a.order - b.order).map((group) => group.module) };
 }
 
-export type SavedPlanChoice = { planCode: string; billingCycle: BillingCycle; seats: number | null; addonCodes: string[] };
+export type SavedPlanChoice = { planCode: string; billingCycle: BillingCycle; seats: number | null; addonCodes: string[]; selectedFromPricing: boolean };
 
 /** What this tenant chose, for the plan step and Payment. Null before any choice. */
 export async function readPlanChoice(tenantId: string): Promise<SavedPlanChoice | null> {
   const supabase = getSupabaseServiceClient();
-  const { data: selection } = await supabase.from("signup_selections").select("plan_id, billing_cycle").eq("tenant_id", tenantId).maybeSingle();
+  const { data: selection } = await supabase.from("signup_selections").select("plan_id, billing_cycle, selected_from_pricing").eq("tenant_id", tenantId).maybeSingle();
   if (!selection) return null;
   const [{ data: plan }, seats, addons] = await Promise.all([
     supabase.from("plans").select("code").eq("id", selection.plan_id).maybeSingle(),
@@ -95,6 +95,7 @@ export async function readPlanChoice(tenantId: string): Promise<SavedPlanChoice 
   return {
     planCode: plan.code,
     billingCycle: selection.billing_cycle,
+    selectedFromPricing: selection.selected_from_pricing,
     seats: seats.error ? null : ((seats.data as { seats: number | null } | null)?.seats ?? null),
     addonCodes: addons.error ? [] : ((addons.data ?? []) as unknown as { addons: { code: string } | null }[]).flatMap((row) => (row.addons ? [row.addons.code] : [])),
   };
@@ -111,7 +112,7 @@ export async function savePlanChoice(tenantId: string, choice: { planCode: strin
 
   const { error } = await supabase
     .from("signup_selections")
-    .upsert({ tenant_id: tenantId, plan_id: plan.id, billing_cycle: choice.billingCycle, selected_at: new Date().toISOString() }, { onConflict: "tenant_id" });
+    .upsert({ tenant_id: tenantId, plan_id: plan.id, billing_cycle: choice.billingCycle, selected_at: new Date().toISOString(), selected_from_pricing: false }, { onConflict: "tenant_id" });
   if (error) return { ok: false, error: "Could not save your plan. Try again.", status: 500 };
 
   const seats = await untyped().from("signup_selections").update({ seats: choice.seats }).eq("tenant_id", tenantId);

@@ -26,6 +26,7 @@ export default async function PlanStepPage() {
   if (context.userStatus !== "active" || !CHOOSABLE.has(context.onboardingState)) redirect(signupDestination(context) ?? "/app/dashboard");
 
   const [{ plans, modules }, saved] = await Promise.all([fetchPlanChoices(), readPlanChoice(context.tenantId)]);
+  if (context.onboardingState === "ready_for_checkout" && saved?.selectedFromPricing) redirect("/app/checkout");
   if (plans.length === 0) {
     return (
       <FunnelFrame step={4}>

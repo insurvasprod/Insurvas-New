@@ -3,18 +3,39 @@ import Link from "next/link";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { AuthBrand, PortalAuthSplitShell } from "@/components/portal/portal-auth-split-shell";
-import { StoryPanel } from "@/components/app/tenant-auth-workspace";
+import { AuthShowcase } from "@/components/app/auth-showcase";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * The five sign-up steps (owner, 2026-10-26): account, email, agency, plan, payment. The plan has its
- * own step now; before, it sat on the account form and step 4 was the trial.
+ * The sign-up steps: account, email, about you, plan, payment, optional business setup.
  */
-export const FUNNEL_STEPS = ["Your account", "Your email", "Your agency", "Your plan", "Payment"] as const;
-/** 6 is the welcome screen after the plan starts: every step done. */
-export type FunnelStep = 1 | 2 | 3 | 4 | 5 | 6;
+export const FUNNEL_STEPS = ["Your account", "Your email", "About you", "Your plan", "Payment", "Business setup"] as const;
+/** 7 is the welcome screen after optional business setup: every step done. */
+export type FunnelStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-/** "Step 2 of 5 · Your email" over five bars. One stepper for the whole journey, so no screen counts differently. */
+/** A consistent bottom navigation row for steps that can move both backward and forward. */
+export function FunnelStepFooter({ backHref, continueLabel = "Continue", busyLabel, busy = false, disabled = false, onContinue }: {
+  backHref?: string;
+  continueLabel?: string;
+  busyLabel?: string;
+  busy?: boolean;
+  disabled?: boolean;
+  onContinue?: () => void;
+}) {
+  return (
+    <div className={`mt-2 grid ${backHref ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
+      {backHref && <Button type="button" asChild variant="outline" className="h-12 w-full border-[var(--border-strong)]">
+        <Link href={backHref}>Back</Link>
+      </Button>}
+      <Button type={onContinue ? "button" : "submit"} className="h-12 w-full" disabled={disabled || busy} onClick={onContinue}>
+        {busy ? busyLabel ?? "Saving…" : continueLabel}
+      </Button>
+    </div>
+  );
+}
+
+/** One progress indicator for the full sign-up journey, so no screen counts differently. */
 export function FunnelStepper({ step }: { step: FunnelStep }) {
   const done = step > FUNNEL_STEPS.length;
   return (
@@ -70,7 +91,7 @@ export function FunnelFrame({ step, children, wide = false, aside }: {
           </nav>
         </div>
       }
-      story={aside ?? <StoryPanel mode={step === 6 ? "sign-in" : "sign-up"} />}
+      story={aside ?? <AuthShowcase step={step} key={step} />}
     />
   );
 }

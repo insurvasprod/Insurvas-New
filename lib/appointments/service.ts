@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { CarrierRow } from "@/lib/carriers/constants";
-import { switchedOffCarrierIds, type TenantCarrierRow } from "@/lib/carriers/service";
+import { getCarrierSetupDrafts, switchedOffCarrierIds, type CarrierSetupDraftRow, type TenantCarrierRow } from "@/lib/carriers/service";
 import type { AppointmentRow, AppointmentStatus, CarrierTrainingRow, LicenseRow } from "./service-types";
 import { canWriteReasonFromVault, type CanWriteResult } from "./eligibility";
 import { isPendingSchema, SchemaPendingError } from "./pendingSchema";
@@ -11,6 +11,9 @@ import { isPendingSchema, SchemaPendingError } from "./pendingSchema";
 export type AppointmentVault = {
   carriers: CarrierRow[];
   tenantCarriers: TenantCarrierRow[];
+  /** Incomplete Contracting form values; never contracts or eligibility inputs. */
+  carrierSetupDrafts: CarrierSetupDraftRow[];
+  carrierSetupDraftsAvailable: boolean;
   appointments: AppointmentRow[];
   licenses: LicenseRow[];
   /** False until migration 20260924110000 is applied: licence type and lines cannot be stored yet. */
@@ -40,7 +43,7 @@ export async function getAppointmentVault(tenantId: string): Promise<Appointment
   // expires_at and 'pending' arrive with 20260924310000; before it the appointments are read as they were.
   const appointmentRows = (detailed: boolean) =>
     supabase.from("appointments").select(detailed ? APPOINTMENT_DETAILED : APPOINTMENT_BASE).eq("tenant_id", tenantId).order("effective_from", { ascending: false }).order("created_at", { ascending: false });
-  const [carriers, tenantCarriers, firstAppointments, firstRecords, requirements, trainings, switchedOff] = await Promise.all([
+  const [carriers, tenantCarriers, firstAppointments, firstRecords, requirements, trainings, switchedOff, setupDrafts] = await Promise.all([
     supabase.from("carriers").select("id, code, name, is_active, sort_order, created_at, updated_at").is("organization_id", null).eq("is_active", true).order("sort_order").order("name"),
     supabase.from("tenant_carriers").select("id, tenant_id, carrier_id, contract_level_bp, writing_number, effective_from, is_active, created_at").eq("tenant_id", tenantId).order("effective_from", { ascending: false }),
     appointmentRows(true),
@@ -49,6 +52,7 @@ export async function getAppointmentVault(tenantId: string): Promise<Appointment
     supabase.from("tenant_carrier_requirements" as never).select("carrier_id").eq("tenant_id" as never, tenantId as never),
     supabase.from("tenant_carrier_training" as never).select(TRAINING_COLUMNS).eq("tenant_id" as never, tenantId as never).order("due_on" as never),
     switchedOffCarrierIds(tenantId),
+    getCarrierSetupDrafts(tenantId),
   ]);
   const appointmentDetails = !isPendingSchema(firstAppointments.error);
   const appointments = appointmentDetails ? firstAppointments : await appointmentRows(false);
@@ -59,7 +63,7 @@ export async function getAppointmentVault(tenantId: string): Promise<Appointment
   const licenses = extendedFields ? firstRecords : await records(false);
   const error = [carriers, tenantCarriers, appointments, licenses].find((result) => result.error)?.error;
   if (error) throw new Error(`Could not load appointment vault: ${error.message}`);
-  return { carriers: (carriers.data ?? []) as CarrierRow[], tenantCarriers: (tenantCarriers.data ?? []) as TenantCarrierRow[], appointments: (appointments.data ?? []) as unknown as AppointmentRow[], licenses: (licenses.data ?? []) as unknown as LicenseRow[], extendedFields, carrierRequirements: requirements.error ? null : ((requirements.data ?? []) as unknown as Array<{ carrier_id: string }>).map((row) => ({ carrier_id: row.carrier_id, contracted: !switchedOff.has(row.carrier_id) })), appointmentDetails, carrierTrainings: carrierTrainingsMissing ? null : ((trainings.data ?? []) as unknown as CarrierTrainingRow[]) };
+  return { carriers: (carriers.data ?? []) as CarrierRow[], tenantCarriers: (tenantCarriers.data ?? []) as TenantCarrierRow[], appointments: (appointments.data ?? []) as unknown as AppointmentRow[], licenses: (licenses.data ?? []) as unknown as LicenseRow[], extendedFields, carrierRequirements: requirements.error ? null : ((requirements.data ?? []) as unknown as Array<{ carrier_id: string }>).map((row) => ({ carrier_id: row.carrier_id, contracted: !switchedOff.has(row.carrier_id) })), appointmentDetails, carrierTrainings: carrierTrainingsMissing ? null : ((trainings.data ?? []) as unknown as CarrierTrainingRow[]), carrierSetupDrafts: setupDrafts.rows, carrierSetupDraftsAvailable: setupDrafts.available };
 }
 
 export type AppointmentInput = {

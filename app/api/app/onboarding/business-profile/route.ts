@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { deriveRecommendedSetupSteps } from "@/lib/signup/constants";
 import { resolveSignupContext } from "@/lib/signup/context";
-import { businessProfileSchema } from "@/lib/signup/schemas";
+import { aboutYouSchema, businessProfileSchema } from "@/lib/signup/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export async function POST(request: NextRequest) {
@@ -19,10 +19,16 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid business profile" }, { status: 400 });
   }
-
   const profile = parsed.data;
-  const setupSteps = deriveRecommendedSetupSteps(profile);
   const supabase = getSupabaseServiceClient();
+  const { data: existingSubscription } = await supabase.from("subscriptions").select("id")
+    .eq("tenant_id", context.tenantId).in("status", ["trialing", "active"]).limit(1).maybeSingle();
+  const postPayment = context.onboardingState === "business_profile" && Boolean(existingSubscription);
+  const personal = postPayment ? null : aboutYouSchema.safeParse(body);
+  if (personal && !personal.success) {
+    return NextResponse.json({ error: personal.error.issues[0]?.message ?? "Check your personal details" }, { status: 400 });
+  }
+  const setupSteps = deriveRecommendedSetupSteps(profile);
   const { data, error } = await supabase.rpc("save_signup_business_profile", {
     p_user_id: context.userId,
     p_business_name: profile.businessName,
@@ -50,6 +56,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not save your business profile" }, { status: 500 });
   }
 
-  // Step 4 of 5 is the plan (owner, 2026-10-26), then Payment.
-  return NextResponse.json({ ok: true, redirectTo: "/app/onboarding/plan", setupSteps });
+  if (personal?.success) {
+    const fullName = `${personal.data.firstName} ${personal.data.lastName}`;
+    const { error: userError } = await supabase.from("users").update({ name: fullName, phone: personal.data.phone }).eq("id", context.userId);
+    if (userError) {
+      console.error("Could not save signup personal details", userError.code, userError.message);
+      return NextResponse.json({ error: "Your business profile was saved, but your personal details could not be saved. Try again." }, { status: 500 });
+    }
+    const { error: tenantError } = await supabase.from("tenants").update({ name: `${fullName}'s Workspace` })
+      .eq("id", context.tenantId).eq("name", "New user's Workspace");
+    if (tenantError) {
+      console.error("Could not update the new workspace name", tenantError.code, tenantError.message);
+      return NextResponse.json({ error: "Your personal details were saved, but the workspace name could not be updated. Try again." }, { status: 500 });
+    }
+  }
+
+  if (data[0].onboarding_state === "completed") return NextResponse.json({ ok: true, redirectTo: "/app/onboarding/complete", setupSteps });
+
+  // A Pricing selection is already a plan decision; continue to checkout. Free-trial entry still
+  // visits the chooser. If this optional read fails, keep the safe chooser path.
+  const { data: selection, error: selectionError } = await supabase.from("signup_selections")
+    .select("selected_from_pricing").eq("tenant_id", context.tenantId).maybeSingle();
+  if (selectionError) console.error("Could not read signup plan intent", selectionError.code, selectionError.message);
+  const redirectTo = selection?.selected_from_pricing ? "/app/checkout" : "/app/onboarding/plan";
+  return NextResponse.json({ ok: true, redirectTo, setupSteps });
 }

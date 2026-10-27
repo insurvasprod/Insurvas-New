@@ -101,15 +101,15 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
       <PagedTableCard
         total={entries.length}
         noun="changes"
-        // One title per screen: the section header already says "Settings history".
-        title={mine ? "Your settings changes" : undefined}
+        // No title: one per screen. The section header says "Settings history", and in My profile the
+        // History switch above already says "Settings you changed" (2026-10-27).
         toolbar={
           <DataToolbar
             actions={
               <>
                 <Button type="button" variant="outline" disabled={entries.length === 0} onClick={() => { window.location.href = query(filters, mine, "csv"); }}>
                   <Download aria-hidden="true" />
-                  Export CSV
+                  {mine ? "Download as a spreadsheet" : "Export CSV"}
                 </Button>
                 <RefreshButton onClick={() => void reload()} refreshing={refreshing} />
               </>

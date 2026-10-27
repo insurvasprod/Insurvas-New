@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatusChip } from "@/components/ui/status-chip";
-import { ViewTabs, type ViewTab } from "@/components/ui/view-tabs";
+import { SettingsRailTabs } from "@/components/ui/settings-rail-tabs";
+import type { ViewTab } from "@/components/ui/view-tabs";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { formatDay } from "@/lib/carriers/contracts";
@@ -35,8 +36,8 @@ const OWNERS_ONLY = "Only owners can see and change the business identity.";
 
 /** The page's views, one at a time (owner pick A, 2026-10-27). */
 type IdentityTab = "business" | "tax" | "address" | "brand" | "documents" | "support";
-/** Frosted glass, as on Settings › Carriers and Calendar & availability: the page's glow shows through. */
-const GLASS = "bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
+/** Opaque surface keeps editable identity fields clear in both themes. */
+const GLASS = "bg-[var(--surface)]";
 /**
  * Settings search links to one field ("#business-identity/identity-timezone"). Each field now lives on
  * a tab, so the link opens that tab first and revealAnchor then finds the field.
@@ -213,7 +214,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
       {!response.schemaReady && <Callout tone="warning" title="Saving the business identity needs a database update." />}
 
       <div className="flex flex-wrap items-center gap-3">
-        <ViewTabs label="Business identity" tabs={tabs} value={tab} onChange={setTab} idPrefix="identity-tab" controls="identity-panel" />
+        <SettingsRailTabs label="Business identity" tabs={tabs} value={tab} onChange={setTab} idPrefix="identity-tab" controls="identity-panel" />
         <span className={cn("text-xs", ready === docs.length ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>{ready} of {docs.length} documents ready</span>
       </div>
 

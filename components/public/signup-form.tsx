@@ -8,12 +8,9 @@ import { LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { NewPasswordField, passwordLongEnough } from "@/components/app/password-field";
 import { BILLING_CYCLES, type BillingCycle } from "@/lib/money";
-import { DEFAULT_PHONE_COUNTRY, checkPhone, phoneCountry } from "@/lib/signup/phone";
-import { cn } from "@/lib/utils";
 
 type LegalDoc = { id: string; doc_type: string; version: number; title: string; is_draft: boolean };
 
@@ -22,13 +19,8 @@ type Props = { initialPlanCode?: string; initialCycle?: string; /** CHECKOUT_PAY
 const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base";
 
 /**
- * Step 1 of 5 (redesign A, 2026-10-24): the account. First and last name, email, password (typed
- * twice), phone number with its country code, and the legal box. No card here.
- *
- * 2026-10-26 (owner): the name is two fields, "Work email" is "Email", the phone has a country prefix
- * and is checked as it is typed (lib/signup/phone.ts; the server checks it again), a confirm-password
- * field. The plan moved to its own step, Step 4 of 5; a plan picked on the pricing page is still
- * carried through and preselected there.
+ * Step 1: create the account with email and password. Personal details are collected after email
+ * verification in the About you section; accepted document versions remain recorded here.
  */
 export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }: Props) {
   const router = useRouter();
@@ -39,11 +31,6 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
   // Unticked, and initialised unticked — never derived from anything that could arrive true.
   const [accepted, setAccepted] = useState(false);
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [confirmTouched, setConfirmTouched] = useState(false);
-  const [phoneCountryCode, setPhoneCountryCode] = useState(DEFAULT_PHONE_COUNTRY);
-  const [phone, setPhone] = useState("");
-  const [phoneTouched, setPhoneTouched] = useState(false);
 
   const loadLegal = useCallback(() => {
     setLegalState("loading");
@@ -62,16 +49,10 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
     loadLegal();
   }, [loadLegal]);
 
-  const phoneCheck = checkPhone(phoneCountryCode, phone);
-  const phoneError = phoneTouched && !phoneCheck.ok ? phoneCheck.error : null;
-  const mismatch = confirmTouched && confirm.length > 0 && confirm !== password;
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     if (!passwordLongEnough(password)) { setError("Use at least 12 characters for your password."); return; }
-    if (confirm !== password) { setConfirmTouched(true); setError("The two passwords don't match."); return; }
-    if (!phoneCheck.ok) { setPhoneTouched(true); setError(phoneCheck.error); return; }
     if (!accepted) { setError("Tick the box to accept the terms and privacy policy."); return; }
 
     const form = new FormData(event.currentTarget);
@@ -81,10 +62,8 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: `${String(form.get("firstName") ?? "").trim()} ${String(form.get("lastName") ?? "").trim()}`.trim(),
           email: form.get("email"),
           password,
-          phone: phoneCheck.e164,
           // A plan picked on the pricing page; Step 4 of 5 is where it is chosen or changed.
           planCode: initialPlanCode || undefined,
           billingCycle: BILLING_CYCLES.includes(initialCycle as BillingCycle) ? initialCycle : undefined,
@@ -107,74 +86,20 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
   return (
     <div>
       <FunnelHeading title="Start your free trial">
-        {noPayment ? "No card needed. Your workspace opens after a few short steps." : "$0 today. No card on this step. You choose your plan in step 4."}
+        {noPayment
+          ? "No card needed. Your workspace opens after a few short steps."
+          : initialPlanCode
+            ? "$0 today. Your Pricing selection is saved for checkout; you can review it before payment."
+            : "$0 today. No card on this step. You can choose a plan before payment."}
       </FunnelHeading>
 
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 pointer-coarse:[&_input:not([type=checkbox])]:min-h-11">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="firstName">First name</Label>
-            <Input id="firstName" name="firstName" autoComplete="given-name" minLength={1} maxLength={60} required autoFocus className={fieldClass} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="lastName">Last name</Label>
-            <Input id="lastName" name="lastName" autoComplete="family-name" minLength={1} maxLength={60} required className={fieldClass} />
-          </div>
-        </div>
-
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required className={fieldClass} />
+          <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required autoFocus className={fieldClass} />
         </div>
 
         <NewPasswordField id="password" name="password" value={password} onChange={setPassword} inputClassName={fieldClass} />
-
-        <div className="space-y-1.5">
-          <Label htmlFor="confirmPassword">Confirm password</Label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-            onBlur={() => setConfirmTouched(true)}
-            aria-invalid={mismatch || undefined}
-            aria-describedby="confirm-note"
-            className={cn(fieldClass, mismatch && "border-[var(--error)]")}
-          />
-          <p id="confirm-note" aria-live="polite" className={cn("text-xs leading-normal", mismatch ? "text-[var(--error-ink)]" : confirm && confirm === password ? "text-[var(--success-ink)]" : "text-muted-foreground")}>
-            {mismatch ? "The passwords don't match" : confirm && confirm === password ? "Passwords match" : "Type the same password again"}
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="phone">Phone number</Label>
-          <div className="flex gap-2">
-            {/* The prefix in the app's own dark list, a flag on each (2026-10-26: the browser's white list didn't match). */}
-            <PhoneCountryPicker value={phoneCountryCode} onChange={setPhoneCountryCode} className="h-11 w-[120px] shrink-0" />
-            <Input
-              id="phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel-national"
-              maxLength={24}
-              required
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              onBlur={() => setPhoneTouched(true)}
-              placeholder={phoneCountry(phoneCountryCode)?.example}
-              aria-invalid={phoneError ? true : undefined}
-              aria-describedby="phone-note"
-              className={cn(fieldClass, "min-w-0 flex-1", phoneError && "border-[var(--error)]")}
-            />
-          </div>
-          <p id="phone-note" aria-live="polite" className={cn("text-xs leading-normal tracking-[-0.01em]", phoneError ? "text-[var(--error-ink)]" : "text-muted-foreground")}>
-            {phoneError ?? "Only for your account: during the trial, or if a payment fails."}
-          </p>
-        </div>
 
         {legalState === "failed" ? (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--surface-alt)] p-4 text-sm">
@@ -220,7 +145,7 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
 
         <Button type="submit" className="mt-1 h-12 w-full" disabled={submitting || !accepted}>
           {submitting && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-          {submitting ? "Creating your workspace…" : "Create my workspace"}
+          {submitting ? "Creating your account…" : "Create account"}
         </Button>
 
         <p className="text-sm leading-normal tracking-[-0.02em] text-muted-foreground">

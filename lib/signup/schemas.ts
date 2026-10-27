@@ -13,7 +13,9 @@ const workEmail = z
   .refine((email) => !isDisposableEmail(email), "Disposable email addresses are not allowed");
 
 export const publicSignupSchema = z.object({
-  fullName: z.string().trim().min(2, "Enter your full name").max(120),
+  // Personal details are collected after email verification. Accept legacy callers while allowing
+  // the account-first form to omit them; the server uses a temporary name until About you is saved.
+  fullName: z.string().trim().min(2, "Enter your full name").max(120).optional(),
   email: workEmail,
   password: z.string().min(12, "Password must be at least 12 characters").max(200),
   // 2026-10-26: checked against the country's rules (lib/signup/phone.ts) and kept in E.164.
@@ -21,7 +23,7 @@ export const publicSignupSchema = z.object({
     const checked = checkInternationalPhone(value);
     if (!checked.ok) { ctx.addIssue({ code: "custom", message: checked.error }); return z.NEVER; }
     return checked.e164;
-  }),
+  }).optional(),
   // Optional since the plan has its own step (owner, 2026-10-26: Step 4 of 5). A plan picked on the
   // pricing page still arrives here; without one the server starts from the default plan.
   planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a valid plan").optional(),
@@ -44,6 +46,17 @@ export const verificationActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("resend") }),
   z.object({ action: z.literal("change_email"), email: workEmail }),
 ]);
+
+/** Required personal details collected after email verification, not on the account-first screen. */
+export const aboutYouSchema = z.object({
+  firstName: z.string().trim().min(1, "Enter your first name").max(60),
+  lastName: z.string().trim().min(1, "Enter your last name").max(60),
+  phone: z.string().trim().min(7, "Enter a valid phone number").max(40).transform((value, ctx) => {
+    const checked = checkInternationalPhone(value);
+    if (!checked.ok) { ctx.addIssue({ code: "custom", message: checked.error }); return z.NEVER; }
+    return checked.e164;
+  }),
+});
 
 const productValues = PRODUCT_OPTIONS.map((option) => option.value);
 const volumeValues = VOLUME_OPTIONS.map((option) => option.value);

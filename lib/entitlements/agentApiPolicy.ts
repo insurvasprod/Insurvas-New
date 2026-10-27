@@ -46,6 +46,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/partner-support-contact/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/carrier-library/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/carrier-library/tenant-carriers/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
+  // Incomplete Contracting form values; stored separately from contract and eligibility records.
+  { sourceFile: "app/api/app/carrier-library/setup-drafts/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/carrier-library/commission-schedules/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/carrier-library/advance-rules/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
   // Settings › Carriers › Tell us (20261027200000): carrier facts reported to Insurvas. No money.
@@ -401,6 +403,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/partners/[id]/users/[userId]/form-profile/route.ts", featureKey: "publisher_records", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/partners/[id]/users/[userId]/market-access/route.ts", featureKey: "publisher_records", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/onboarding/business-profile/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/onboarding/about-you/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/onboarding/business-profile/skip/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/plan/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/status/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/verification/route.ts", featureKey: null },

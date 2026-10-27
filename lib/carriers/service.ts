@@ -12,6 +12,7 @@ export type CommissionScheduleRow = import("./service-types").CommissionSchedule
 export type AdvanceRuleRow = { id: string; tenant_id: string; carrier_id: string; product_code: string; advance_months: number; advance_pct_bp: number; clawback_months: number; clawback_type: "full" | "prorated"; effective_from: string; created_at: string };
 /** `contracted` is LA-0.4's agency switch (migration 20261013100000); false = switched off. */
 export type CarrierRequirementRow = { carrier_id: string; contracted: boolean };
+export type CarrierSetupDraftRow = { carrier_id: string; contract_level_text: string | null; effective_from: string | null; writing_number: string | null; updated_at: string; updated_by: string };
 export type CarrierLibrarySnapshot = {
   carriers: CarrierRow[];
   products: ProductRow[];
@@ -52,6 +53,39 @@ export async function getCarrierLibrary(tenantId: string): Promise<CarrierLibrar
   const error = [carriers, products, tenantCarriers, schedules, rules].find((result) => result.error)?.error;
   if (error) throw new Error(`Could not load carrier library: ${error.message}`);
   return { carriers: (carriers.data ?? []) as CarrierRow[], products: (products.data ?? []) as ProductRow[], tenantCarriers: (tenantCarriers.data ?? []) as TenantCarrierRow[], commissionSchedules: (schedules.data ?? []) as CommissionScheduleRow[], advanceRules: (rules.data ?? []) as AdvanceRuleRow[], carrierRequirements: requirements.rows, requirementsAvailable: requirements.available, switchAvailable: requirements.switchAvailable };
+}
+
+/** Incomplete setup values are never promoted to tenant_carriers until a complete contract is saved. */
+export async function getCarrierSetupDrafts(tenantId: string): Promise<{ rows: CarrierSetupDraftRow[]; available: boolean }> {
+  const { data, error } = await getSupabaseServiceClient()
+    .from("tenant_carrier_setup_drafts" as never)
+    .select("carrier_id, contract_level_text, effective_from, writing_number, updated_at, updated_by" as never)
+    .eq("tenant_id" as never, tenantId as never);
+  const failure = error as { message: string; code?: string } | null;
+  if (failure && isPendingSchema(failure)) return { rows: [], available: false };
+  if (failure) throw new Error(`Could not load carrier setup drafts: ${failure.message}`);
+  return { rows: (data ?? []) as unknown as CarrierSetupDraftRow[], available: true };
+}
+
+export async function saveCarrierSetupDraft(
+  tenantId: string,
+  actorId: string,
+  input: Omit<CarrierSetupDraftRow, "updated_at" | "updated_by">,
+) {
+  const client = getSupabaseServiceClient();
+  const hasValue = Boolean(input.contract_level_text?.trim() || input.effective_from || input.writing_number?.trim());
+  const result = hasValue
+    ? await client.from("tenant_carrier_setup_drafts" as never).upsert({
+        tenant_id: tenantId, carrier_id: input.carrier_id,
+        contract_level_text: input.contract_level_text?.trim() || null,
+        effective_from: input.effective_from,
+        writing_number: input.writing_number?.trim() || null,
+        updated_at: new Date().toISOString(), updated_by: actorId,
+      } as never, { onConflict: "tenant_id,carrier_id" })
+    : await client.from("tenant_carrier_setup_drafts" as never).delete().eq("tenant_id" as never, tenantId as never).eq("carrier_id" as never, input.carrier_id as never);
+  const failure = result.error as { message: string; code?: string } | null;
+  if (failure && isPendingSchema(failure)) throw new SchemaPendingError();
+  if (failure) throw new Error(failure.message);
 }
 
 /**

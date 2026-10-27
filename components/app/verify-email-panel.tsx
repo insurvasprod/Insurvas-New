@@ -6,10 +6,34 @@ import { ArrowRight, LoaderCircle } from "lucide-react";
 
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { FunnelHeading } from "@/components/app/funnel-frame";
-import { LogoutButton } from "@/components/app/logout-button";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground hover:text-[var(--accent-ink)] disabled:opacity-50 [&_svg]:transition-transform hover:[&_svg]:translate-x-[3px]";
+
+/** The account-created step has one way forward; email verification is the next step. */
+export function AccountCreatedPanel() {
+  return (
+    <div>
+      <FunnelHeading title="Your account is created">Next, confirm your email to continue setting up your workspace.</FunnelHeading>
+      <Button asChild className="h-12 w-full">
+        <Link href="/app/verify-email" replace>Continue</Link>
+      </Button>
+    </div>
+  );
+}
+
+/** Allows Back from About you to revisit the completed email step without redirecting in a loop. */
+export function EmailConfirmedPanel({ nextHref = "/app/onboarding/about-you" }: { nextHref?: string }) {
+  return (
+    <div>
+      <FunnelHeading title="Email confirmed">Your address is verified. Continue when you’re ready to finish setting up your workspace.</FunnelHeading>
+      <Button asChild className="h-12 w-full">
+        <Link href={nextHref}>Continue</Link>
+      </Button>
+    </div>
+  );
+}
 
 /**
  * Step 2 of 5: the only screen a pending account can reach. It watches for the verification to
@@ -143,9 +167,8 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
             <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
               {cooldown > 0 ? `Send again in ${cooldown} ${cooldown === 1 ? "second" : "seconds"}` : submitting && !changing ? "Sending…" : "Send the link again"}
             </Button>
-            <div className="flex flex-wrap justify-between gap-4">
+            <div className="flex flex-wrap justify-start gap-4">
               <button type="button" className={linkButton} aria-expanded={changing} onClick={() => setChanging((value) => !value)}>Wrong address?<ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" /></button>
-              <LogoutButton variant="link" className={linkButton} />
             </div>
           </div>
         </>

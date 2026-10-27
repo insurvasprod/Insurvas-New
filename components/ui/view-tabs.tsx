@@ -53,6 +53,7 @@ export function ViewTabs<K extends string>({
   actions,
   idPrefix,
   controls,
+  vertical = false,
 }: {
   /** Accessible name of the tab list. */
   label: string;
@@ -65,17 +66,24 @@ export function ViewTabs<K extends string>({
   idPrefix?: string;
   /** The id of the panel the tabs switch, when there is one. */
   controls?: string;
+  /** Vertical navigation style, used when the Settings shell places these tabs in its left rail. */
+  vertical?: boolean;
 }) {
   const list = (
-    <TabTrack role="tablist" aria-label={label} className={TRACK}>
+    <TabTrack
+      role="tablist"
+      aria-label={label}
+      aria-orientation={vertical ? "vertical" : undefined}
+      className={vertical ? "flex h-auto w-full flex-col items-stretch gap-0.5 overflow-visible rounded-md bg-transparent p-0" : TRACK}
+    >
       {tabs.map((tab) => {
         const selected = tab.key === value;
         const body = <>{tab.label}<Count value={tab.count} tone={tab.tone} /></>;
         const id = idPrefix ? `${idPrefix}-${tab.key}` : controls ? `${controls}-tab-${tab.key}` : undefined;
         return tab.href ? (
-          <Link key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={controls} scroll={false} className={item(selected)}>{body}</Link>
+          <Link key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={controls} scroll={false} className={item(selected, vertical ? "w-full justify-start px-2.5" : "px-3")}>{body}</Link>
         ) : (
-          <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={controls} onClick={() => onChange?.(tab.key)} className={item(selected)}>{body}</button>
+          <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={controls} onClick={() => onChange?.(tab.key)} className={item(selected, vertical ? "w-full justify-start px-2.5" : "px-3")}>{body}</button>
         );
       })}
     </TabTrack>

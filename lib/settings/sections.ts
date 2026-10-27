@@ -27,7 +27,7 @@ import type { TenantRole } from "@/lib/tenantAuth/roles";
  */
 // Seven short groups (owner decision 2026-10-15, after the LA-8 walk: Selling had nineteen entries and
 // pushed the last sections off the screen). None holds more than eight.
-export type SettingsGroup = "Your account" | "Agency" | "Carriers" | "Sales process" | "Leads & dialing" | "Money & compliance" | "Platform";
+export type SettingsGroup = "Your account" | "Agency" | "Contracting" | "Sales process" | "Leads & dialing" | "Money & compliance" | "Platform";
 
 export type SettingsItem = {
   label: string;
@@ -70,16 +70,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     // Notifications are part of it — four tabs (components/app/settings/my-profile.tsx). /app/profile
     // and the old "#alerts" land here.
     group: "Your account", id: "my-profile", label: "My profile", sort_order: 10, owned_by_module: "LA-8.2 / LA-8.4",
-    description: "Your name, phone, photo and licence numbers; how you sign in; and which alerts reach you, in the app, by email or in the browser.",
+    description: "Your name, phone, photo and licence numbers; how you sign in; and which alerts reach you, in the app, by email or as a pop-up.",
     short: "You, how you sign in, and which alerts reach you.",
-    search_keywords: ["profile", "my name", "phone number", "avatar", "photo", "licence number", "npn", "security", "alerts", "notifications", "email alerts", "browser alerts", "push", "digest", "daily email", "weekly email", "too many emails"],
+    search_keywords: ["profile", "my name", "phone number", "avatar", "photo", "licence number", "security", "alerts", "notifications", "email alerts", "browser alerts", "push", "digest", "daily email", "weekly email", "too many emails"],
     items: [
-      { label: "Display timezone", anchor: "profile-timezone", keywords: ["my timezone", "time zone", "display time"] },
+      { label: "Your time zone", anchor: "profile-timezone", keywords: ["my timezone", "display timezone", "time zone", "display time"] },
       { label: "Sign-in email", anchor: "security-email", keywords: ["change email", "email address", "login email"] },
       { label: "Password", anchor: "security-password", keywords: ["change password", "reset password"] },
-      { label: "Two-factor authentication", anchor: "security-two-factor", keywords: ["2fa", "two factor", "authenticator", "mfa", "recovery codes"] },
-      { label: "Sessions", anchor: "security-sessions", keywords: ["sign out", "log out", "devices", "lost laptop", "stolen phone", "end session"] },
-      { label: "Security log", anchor: "security-log", keywords: ["login history", "failed logins", "security events"] },
+      { label: "Two-step sign-in", anchor: "security-two-factor", keywords: ["2fa", "two factor", "two-factor authentication", "authenticator", "mfa", "recovery codes", "spare codes"] },
+      { label: "Devices signed in", anchor: "security-sessions", keywords: ["sessions", "sign out", "log out", "devices", "lost laptop", "stolen phone", "end session"] },
+      { label: "Sign-in history", anchor: "security-log", keywords: ["security log", "login history", "failed logins", "security events"] },
       { label: "Quiet hours", anchor: "notify-quiet-hours", keywords: ["quiet hours", "do not disturb at night", "mute at night"] },
       { label: "Alerts that cannot be switched off", anchor: "notify-protected", keywords: ["doi deadline", "reinstatement", "licence expiring", "payment failed", "cannot switch off"] },
     ],
@@ -121,9 +121,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   // ── Carriers ────────────────────────────────────────────────────────────────────────────────────
   // Owner pick D, 2026-10-26: Carrier library and States & licences in one place, in three steps.
   // 2026-10-27: Carrier details (sales-carriers) folded into each carrier's card; old links land on Carriers.
-  { group: "Carriers", id: "carriers", label: "Carriers", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Your carriers and the states each one appointed you in.", short: "Carriers, contract levels and appointed states.", search_keywords: ["carriers", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
+  { group: "Contracting", id: "carriers", label: "Contracting", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Set up your carrier contracts and the states where you are appointed.", short: "Your carrier contracts and appointed states.", search_keywords: ["contracting", "carriers", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
   // 2026-10-27 (owner): Carrier rules is a tab on Carriers that opens /app/carrier-rules, not a rail entry.
-  { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
+  { group: "Contracting", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
 
   // ── Sales process ───────────────────────────────────────────────────────────────────────────────
   { group: "Sales process", id: "sales-underwriting", label: "Underwriting templates", sort_order: 10, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The health questions an agent reads on the Interview step, and which answers put a carrier out of reach.", search_keywords: ["underwriting", "health questions", "knockout"] },

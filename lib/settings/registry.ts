@@ -13,7 +13,7 @@ import type { SettingsGroup, SettingsItem, SettingsSection } from "./sections";
  */
 
 /** Fixed, in this order. A section moves group by changing its one `group` field. */
-export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["Your account", "Agency", "Carriers", "Sales process", "Leads & dialing", "Money & compliance", "Platform"];
+export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["Your account", "Agency", "Contracting", "Sales process", "Leads & dialing", "Money & compliance", "Platform"];
 
 /** The menu's gate: feature AND role. A section that fails either is absent, never greyed out. */
 export function sectionAllowed(section: Pick<SettingsSection, "required_feature" | "required_roles" | "disabled">, granted: ReadonlySet<string>, role: TenantRole): boolean {
