@@ -9,6 +9,6 @@ export default async function VerificationPage({ params }: { params: Promise<{ w
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Inbound transfers" description="Verify every required application field before you submit it." />;
   if (!actAsPage(guard, ["owner", "producer", "assistant"])) return <RoleGateNotice featureLabel="Inbound transfers" detail="Only owners, producers, and buffer assistants can verify an inbound transfer." />;
   const { workItemId } = await params;
-  // The inbound call screen (Inbound A, 2026-10-25), on the moving ribbon like the dialer.
-  return <DashboardStage ribbon><VerificationPanel workItemId={workItemId} readOnly={guard.entitlement.status === "suspended" || guard.entitlement.status === "paused"} canHandoff={guard.role === "assistant"} /></DashboardStage>;
+  // The inbound call screen (Inbound A, 2026-10-25), on the static stage backdrop like the dialer.
+  return <DashboardStage><VerificationPanel workItemId={workItemId} readOnly={guard.entitlement.status === "suspended" || guard.entitlement.status === "paused"} canHandoff={guard.role === "assistant"} /></DashboardStage>;
 }

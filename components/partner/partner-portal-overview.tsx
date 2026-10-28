@@ -5,15 +5,13 @@ import { BarChart3, BellRing, CheckCircle2, Hand, Inbox, MessageSquare, Send, Sh
 
 import { Button } from "@/components/ui/button";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
-import { DashTile, DashTileLoading } from "@/components/ui/dash-tile";
+import { DashTile } from "@/components/ui/dash-tile";
 import { Launchpad, type LaunchCell } from "@/components/ui/launchpad";
-import { LeadFlowMap, type FlowDrop, type FlowStage } from "@/components/ui/lead-flow-map";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
 import { oldestOpenLabel } from "@/lib/format/age";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import type { PartnerLaneCounts } from "@/lib/partnerLeads/lanes";
-import { partnerFunnel } from "@/lib/partnerLeads/funnel";
 import type { PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import { durationLabel } from "@/lib/partnerTeamReview/pulse";
 
@@ -41,13 +39,9 @@ function todayIso() {
 }
 
 /**
- * The partner home (redesign 2026-10-25, owner: "the map on top, not split; Dashboard C's tiles,
- * exactly; recent submissions, pipeline by stage, team pulse — remove them"):
- *
- *   map         where this partner's leads have got to (lib/partnerLeads/funnel.ts), full width — the
- *               organisation's for a partner admin, the person's own for a partner user (the pipeline
- *               route scopes it); the stage holding the most leads is lit
- *   launchpad   the leak tile first, then every figure as a tile: submitted today, claimed, converted,
+ * The partner home uses movable workspaces. Its next-step tile uses the partner-scoped funnel,
+ * followed by submission, pipeline, and team figures.
+ *   launchpad   every figure as a tile: submitted today, claimed, converted,
  *               still open, rejected at screening, submit, messages; team, statements and team review
  *               for a partner admin (LA-7.4: statements are the organisation's)
  *
@@ -114,59 +108,8 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
   const pulse = extras?.pulse;
   const team = extras?.team;
 
-  // The map: how far this partner's leads have got, and where most are waiting.
-  const funnel = partnerFunnel(pipeline?.stages ?? []);
-  const stageHref = (stageId: string | null) => {
-    const stage = stageId ? { id: stageId } : null;
-    return stage ? `${PIPELINE}?stage_id=${encodeURIComponent(stage.id)}&view=table` : PIPELINE;
-  };
-  const sent = funnel.steps[0]?.count ?? 0;
-  const flowStages: FlowStage[] = funnel.steps.map((step, index) => ({
-    label: step.label,
-    value: step.count.toLocaleString(),
-    count: step.count,
-    note: index === 0 ? (isAdmin ? "your organisation" : "your leads") : sent ? `${Math.round((step.count / sent) * 100)}% got here` : undefined,
-    href: stageHref(step.stageId),
-  }));
-  const flowDrops: FlowDrop[] = funnel.steps.slice(1).map((step, index) => {
-    const waiting = funnel.steps[index].count - step.count;
-    return index === 0
-      ? { text: funnel.lost ? `−${funnel.lost.toLocaleString()} lost` : "none lost", lost: funnel.lost }
-      : { text: waiting ? `${waiting.toLocaleString()} waiting` : "none waiting", lost: waiting, href: stageHref(funnel.steps[index].stageId) };
-  });
-  const stuckIndex = funnel.stuck ? funnel.steps.findIndex((step) => step.stageId === funnel.stuck?.stageId) : -1;
-  // The drop right after the stuck stage is where those leads sit; the first drop is closed-lost.
-  const worst = stuckIndex > 0 && stuckIndex < funnel.steps.length - 1 ? stuckIndex : null;
-  const stuckFrom = worst !== null ? funnel.steps[worst] : null;
-  const stuckTo = worst !== null ? funnel.steps[worst + 1] : null;
-  const converted = funnel.steps.at(-1)?.won ? funnel.steps.at(-1)!.count : 0;
-
   const cells: LaunchCell[] = [];
-  cells.push({
-    id: "lead",
-    title: "Biggest leak",
-    w: 1,
-    h: 1,
-    href: stuckFrom ? stageHref(stuckFrom.stageId) : PIPELINE,
-    node: !ready ? <DashTileLoading title="Biggest leak" /> : funnel.stuck && stuckFrom && stuckTo ? (
-      <DashTile
-        title="Biggest leak"
-        href={stageHref(stuckFrom.stageId)}
-        leak
-        big={`${Math.round((stuckTo.count / Math.max(1, stuckFrom.count)) * 100)}%`}
-        unit={`${stuckFrom.label} → ${stuckTo.label}`}
-        rows={[
-          { label: `Waiting at ${funnel.stuck.label}`, value: funnel.stuck.count.toLocaleString(), tone: "warning", href: stageHref(funnel.stuck.stageId) },
-          { label: "Closed lost", value: funnel.lost.toLocaleString(), href: PIPELINE },
-          { label: "Converted", value: converted.toLocaleString(), tone: "good", href: PIPELINE },
-        ]}
-        cta={{ label: `See the ${funnel.stuck.count.toLocaleString()} leads`, href: stageHref(funnel.stuck.stageId) }}
-      />
-    ) : (
-      <DashTile title="Start here" icon={<Send />} href={canSubmit ? "/partner/submit-lead" : "/partner/messages"} big={canSubmit ? "Send" : "Talk"} unit={canSubmit ? "your first lead" : "to your agent"} rows={[{ label: canSubmit ? "Your leads are counted on the map as the agency works them." : "Leads your organization sent are counted on the map." }]} cta={canSubmit ? { label: "Submit a lead", href: "/partner/submit-lead" } : { label: "Message your agent", href: "/partner/messages" }} />
-    ),
-  });
-  // Must-act notices (an expiring document, a paused organisation) lead the tiles, never above the map.
+  // Must-act notices (an expiring document, a paused organisation) lead the tiles.
   for (const alert of extras?.alerts ?? []) {
     cells.push({ id: `alert-${alert.id}`, title: alert.title, w: 1, h: 1, href: alert.link, node: <DashTile title={alert.title} icon={<BellRing />} href={alert.link} tone="warning" rows={[{ label: alert.body, tone: "warning", href: alert.link }]} cta={{ label: alert.actionLabel, href: alert.link }} ctaAtFoot /> });
   }
@@ -189,7 +132,7 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
   }
 
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
       <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
         <PageHeader
           title="Overview"
@@ -199,15 +142,6 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
           </>}
         />
         {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
-        {funnel.steps.length > 1 && (
-          <LeadFlowMap
-            label={isAdmin ? `Where ${partnerName ?? "your organisation"}'s leads are` : "Where your leads are"}
-            stages={flowStages}
-            drops={flowDrops}
-            worst={worst}
-            aside={funnel.pipelineName ? <span className="text-xs text-muted-foreground">{funnel.pipelineName}{funnel.partial ? " · your busiest pipeline" : ""}</span> : undefined}
-          />
-        )}
         <Launchpad storageKey={`insurvas:partner-home:${role}`} spaces={[{ key: "today", label: `${partnerName ?? "Your organization"} at a glance`, cells }]} />
       </div>
     </DashboardStage>

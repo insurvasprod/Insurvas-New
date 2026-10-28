@@ -46,8 +46,7 @@ export function TileFigure({ value }: { value: string }) {
  * One tile, exactly as Dashboard C draws it (redesign 2026-10-25): the number in the corner, the
  * title, "Live" when it polls, "Open →"; the big figure with its unit and, on a one-row tile, the
  * tile's one action beside it; then its rows — each a dot, a line and a value, each opening its page
- * — or its week of bars; on a tall tile the action sits at the foot. Amber (`leak`) is the biggest
- * leak, the one warning tile on a home.
+ * — or its week of bars; on a tall tile the action sits at the foot.
  *
  * Server-safe. `children` is for a body that loads for itself (the close-out list, pending cases).
  */
@@ -59,7 +58,6 @@ export function DashTile({
   big,
   unit,
   tone = "default",
-  leak = false,
   cta,
   ctaAtFoot = false,
   rows,
@@ -73,7 +71,6 @@ export function DashTile({
   big?: string;
   unit?: ReactNode;
   tone?: TileTone;
-  leak?: boolean;
   cta?: { label: string; href: string };
   ctaAtFoot?: boolean;
   rows?: TileRow[];
@@ -82,7 +79,7 @@ export function DashTile({
 }) {
   const ctaClass = cn(
     "inline-flex h-9 shrink-0 items-center justify-center rounded-full px-4 text-sm font-semibold leading-normal whitespace-nowrap no-underline transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-    leak ? "bg-[var(--warning)] text-[var(--on-warning)]" : "bg-[var(--primary)] text-[var(--on-primary)]",
+    "bg-[var(--primary)] text-[var(--on-primary)]",
   );
   const maxBar = Math.max(1, ...(bars ?? []).map((bar) => bar.total));
   return (
@@ -90,7 +87,7 @@ export function DashTile({
       aria-label={title}
       className={cn(
         "m-glass m-dash-tile flex min-h-[196px] min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border p-4",
-        leak ? "m-leak-tile border-[color-mix(in_srgb,var(--warning)_45%,transparent)]" : "border-border",
+        "border-border",
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -110,7 +107,7 @@ export function DashTile({
       {(big !== undefined || (cta && !ctaAtFoot)) && (
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {big !== undefined && (
-            <span className={cn("m-figure text-3xl font-semibold leading-tight tracking-[-0.03em] tabular-nums", leak ? "text-[var(--warning-ink)]" : INK[tone])}>
+            <span className={cn("m-figure text-3xl font-semibold leading-tight tracking-[-0.03em] tabular-nums", INK[tone])}>
               <TileFigure value={big} />
             </span>
           )}

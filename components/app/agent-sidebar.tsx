@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { createElement, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -29,6 +29,8 @@ import {
   ListPlus,
   LockKeyhole,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   MessageSquare,
   Package,
   PhoneIncoming,
@@ -110,6 +112,8 @@ function NavItemLink({
       <Link
         href={item.path}
         onClick={onNavigate}
+        aria-label={label}
+        title={label}
         aria-current={active ? "page" : undefined}
         className={`portal-agent-nav-link ${nested ? "portal-agent-nav-link-nested" : ""} ${active ? "is-active" : ""}`}
       >
@@ -164,6 +168,7 @@ function DisclosureSection({
       <button
         type="button"
         className="portal-agent-nav-disclosure"
+        aria-label={label}
         aria-expanded={open}
         aria-controls={sectionId}
         onClick={onToggle}
@@ -177,12 +182,12 @@ function DisclosureSection({
           aria-hidden="true"
         />
       </button>
-      {open && (children ? (
-        <div id={sectionId} className="portal-agent-nav-disclosure-content">
+      {children ? (
+        <div id={sectionId} className="portal-agent-nav-disclosure-content" hidden={!open}>
           {children}
         </div>
       ) : (
-        <ul id={sectionId} className={`portal-agent-nav-sublist ${nested ? "portal-agent-nav-sublist-nested" : ""}`}>
+        <ul id={sectionId} hidden={!open} className={`portal-agent-nav-sublist ${nested ? "portal-agent-nav-sublist-nested" : ""}`}>
           {items.map((item) => (
             <NavItemLink
               key={item.key}
@@ -192,7 +197,7 @@ function DisclosureSection({
             />
           ))}
         </ul>
-      ))}
+      )}
     </section>
   );
 }
@@ -237,15 +242,28 @@ function NavList({
   menu,
   moduleAccess,
   onNavigate,
+  isCollapsed = false,
+  onExpand,
 }: {
   menu: MenuSection[];
   moduleAccess?: AgentModuleAccess;
   onNavigate?: () => void;
+  isCollapsed?: boolean;
+  onExpand?: (groupLabel: string) => void;
 }) {
   const pathname = usePathname();
   const tree = buildSidebarTree(menu, moduleAccess);
   const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
-  const [openGroups, setOpenGroups] = useState<string[]>(() => initialOpenGroups(tree, isActive));
+  const activeGroupLabel = tree.groups.find((group) => group.items.some(isActive))?.label;
+  const [navState, setNavState] = useState<{ pathname: string; openGroup: string | null }>(() => ({
+    pathname,
+    openGroup: initialOpenGroups(tree, isActive)[0] ?? null,
+  }));
+  let openGroup = navState.openGroup;
+  if (navState.pathname !== pathname) {
+    openGroup = activeGroupLabel ?? navState.openGroup;
+    setNavState({ pathname, openGroup });
+  }
 
   return (
     <nav className="portal-agent-nav" aria-label="Agent workspace navigation">
@@ -261,15 +279,19 @@ function NavList({
           label={group.label}
           icon={iconFor(group.icon)}
           items={group.items}
-          open={openGroups.includes(group.label)}
+          open={openGroup === group.label}
           active={group.items.some(isActive)}
-          onToggle={() =>
-            setOpenGroups((current) =>
-              current.includes(group.label)
-                ? current.filter((label) => label !== group.label)
-                : [...current, group.label],
-            )
-          }
+          onToggle={() => {
+            if (isCollapsed) {
+              onExpand?.(group.label);
+              setNavState({ pathname, openGroup: group.label });
+              return;
+            }
+            setNavState({
+              pathname,
+              openGroup: openGroup === group.label ? null : group.label,
+            });
+          }}
           onNavigate={onNavigate}
         />
       ))}
@@ -429,174 +451,46 @@ export function AgentSidebar({
         </div>
       )}
 
-      <NavRail menu={menu} moduleAccess={moduleAccess} />
+      <DesktopSidebar menu={menu} moduleAccess={moduleAccess} />
     </>
   );
 }
 
-type RailFlyout =
-  | { kind: "group"; key: string; label: string; items: MenuItem[]; top: number }
-  | { kind: "tip"; key: string; label: string; top: number };
-
-/**
- * The desktop rail (redesign 2026-10-25, owner's pick "Dashboard A"): one icon per job group, Home
- * at the top and Settings and your account at the foot (the plan is a line in the account menu). Pointing at a group, focusing it or clicking it
- * opens its pages beside the rail — every page in one move, no groups to expand and collapse.
- * The phone keeps the full drawer above. The menu is the same server-filtered `buildSidebarTree()`.
- *
- * The panel is position: fixed so the rail's own scroll (short screens) never clips it.
- */
-function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: AgentModuleAccess }) {
-  const pathname = usePathname();
+/** Desktop keeps the full navigation tree inside the workspace sidebar. */
+function DesktopSidebar({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: AgentModuleAccess }) {
   const tree = buildSidebarTree(menu, moduleAccess);
-  const [fly, setFly] = useState<RailFlyout | null>(null);
-  const [seenPath, setSeenPath] = useState(pathname);
-  const closeTimer = useRef<number | null>(null);
-  const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
-
-  // A navigation closes the panel (set during render, not in an effect: it is derived from the path).
-  if (seenPath !== pathname) {
-    setSeenPath(pathname);
-    setFly(null);
-  }
-
-  useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); }, []);
-
-  const cancelClose = () => {
-    if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  };
-  // A short grace, so the pointer can cross the gap between the rail and the panel.
-  const closeSoon = () => {
-    cancelClose();
-    closeTimer.current = window.setTimeout(() => setFly(null), 160);
-  };
-  const place = (element: HTMLElement, rows: number) => {
-    const rect = element.getBoundingClientRect();
-    const height = 56 + rows * 40;
-    return Math.max(8, Math.min(rect.top - 8, window.innerHeight - height - 12));
-  };
-  const openGroup = (group: { label: string; items: MenuItem[] }, element: HTMLElement) => {
-    cancelClose();
-    setFly({ kind: "group", key: group.label, label: group.label, items: group.items, top: place(element, group.items.length) });
-  };
-  const openTip = (key: string, label: string, element: HTMLElement) => {
-    cancelClose();
-    const rect = element.getBoundingClientRect();
-    setFly((current) => (current?.kind === "group" && current.key === key ? current : { kind: "tip", key, label, top: rect.top + rect.height / 2 - 16 }));
-  };
-
-  function onKeyDown(event: React.KeyboardEvent) {
-    // Into the open panel from its group's button.
-    if ((event.key === "ArrowRight" || event.key === "ArrowDown") && fly?.kind === "group" && (event.target as HTMLElement).dataset.railKey === fly.key) {
-      const first = document.querySelector<HTMLElement>("#agent-rail-panel a");
-      if (first) { event.preventDefault(); first.focus(); }
-      return;
-    }
-    if (event.key !== "Escape" || !fly) return;
-    const key = fly.key;
-    setFly(null);
-    document.querySelector<HTMLElement>(`[data-rail-key="${CSS.escape(key)}"]`)?.focus();
-  }
-
-  const link = (item: MenuItem) => {
-    const Icon = iconFor(item.icon);
-    const active = isActive(item);
-    const label = item.navLabel ?? item.label;
-    return (
-      <li key={item.key}>
-        <Link
-          href={item.path}
-          data-rail-key={item.key}
-          aria-label={label}
-          aria-current={active ? "page" : undefined}
-          className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
-          onPointerEnter={(event) => openTip(item.key, label, event.currentTarget)}
-          onPointerLeave={closeSoon}
-          onFocus={(event) => openTip(item.key, label, event.currentTarget)}
-          onBlur={closeSoon}
-        >
-          {createElement(Icon, { className: "size-5", "aria-hidden": true })}
-        </Link>
-      </li>
-    );
-  };
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <aside data-print-hide className="portal-agent-rail hidden md:flex" onKeyDown={onKeyDown}>
-      <div className="portal-agent-rail-brand">
-        <Link href={tree.home[0]?.path ?? "/app/dashboard"} aria-label="Insurvas home">
-          <InsurvasLogo size="compact" variant="symbol" tone="dark" />
+    <aside data-print-hide className={`portal-agent-sidebar-desktop portal-agent-desktop-nav hidden md:flex md:flex-col ${isCollapsed ? "is-collapsed" : ""}`}>
+      <div className="portal-agent-sidebar-brand">
+        <Link href={tree.home[0]?.path ?? "/app/dashboard"} aria-label="Insurvas home" className="portal-agent-desktop-brand-link">
+          <InsurvasLogo size="sidebar" tone="dark" className="portal-agent-desktop-brand-full" />
+          <InsurvasLogo size="compact" variant="symbol" tone="dark" className="portal-agent-desktop-brand-compact" />
         </Link>
-      </div>
-      <nav className="portal-agent-rail-scroll" aria-label="Agent workspace navigation">
-        <ul className="portal-agent-rail-list">
-          {tree.home.map(link)}
-          {tree.groups.map((group) => {
-            const Icon = iconFor(group.icon);
-            const open = fly?.kind === "group" && fly.key === group.label;
-            const active = group.items.some(isActive);
-            return (
-              <li key={group.label}>
-                <button
-                  type="button"
-                  onClick={(event) => (open ? setFly(null) : openGroup(group, event.currentTarget))}
-                  data-rail-key={group.label}
-                  aria-label={group.label}
-                  aria-expanded={open}
-                  aria-controls={open ? "agent-rail-panel" : undefined}
-                  className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
-                  onPointerEnter={(event) => openGroup(group, event.currentTarget)}
-                  onPointerLeave={closeSoon}
-                  onFocus={(event) => openGroup(group, event.currentTarget)}
-                >
-                  <Icon className="size-5" aria-hidden="true" />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-      <ul className="portal-agent-rail-foot">
-        {tree.settings.map(link)}
-        {/* The account (owner ask 2026-10-26): the top bar portals its account button and menu into
-            this slot (AppTopBar accountHostId). The plan is a line in that menu, not an icon here. */}
-        <li id="agent-rail-account" className="portal-agent-rail-account" />
-      </ul>
-
-      {fly && (
-        <div
-          id="agent-rail-panel"
-          className="portal-agent-rail-fly m-swap"
-          data-kind={fly.kind}
-          style={{ top: fly.top }}
-          role={fly.kind === "tip" ? "tooltip" : "group"}
-          aria-label={fly.kind === "tip" ? undefined : fly.label}
-          onPointerEnter={cancelClose}
-          onPointerLeave={closeSoon}
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((collapsed) => !collapsed)}
+          aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+          className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
-          {fly.kind === "tip" && fly.label}
-          {fly.kind === "group" && (
-            <>
-              <p className="portal-agent-rail-fly-head">{fly.label}</p>
-              <ul>
-                {fly.items.map((item) => {
-                  const Icon = iconFor(item.icon);
-                  const active = isActive(item);
-                  return (
-                    <li key={item.key}>
-                      <Link href={item.path} aria-current={active ? "page" : undefined} onClick={() => setFly(null)} onBlur={closeSoon} onFocus={cancelClose}>
-                        {createElement(Icon, { className: "size-4 shrink-0", "aria-hidden": true })}
-                        <span>{item.navLabel ?? item.label}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
+          {isCollapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+        </button>
+      </div>
+      <div className="portal-agent-sidebar-scroll flex-1">
+        <NavList
+          menu={menu}
+          moduleAccess={moduleAccess}
+          isCollapsed={isCollapsed}
+          onExpand={() => setIsCollapsed(false)}
+        />
+      </div>
+      <div className="portal-agent-sidebar-account">
+        {/* AppTopBar mounts the existing account control here. */}
+        <div id="agent-rail-account" />
+      </div>
     </aside>
   );
 }

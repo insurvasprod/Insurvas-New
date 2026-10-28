@@ -49,7 +49,6 @@ export const TRACE_SCREENS: Record<string, { label: string; sources: TracedSourc
   "app/app/(shell)/carrier-files/file/[fileId]/row/[rowNumber]/page.tsx": { label: "Raw row", sources: ["policy_current", "commission_entry"] },
   "app/app/(shell)/policy-matching/page.tsx": { label: "Policy matching", sources: ["policy_current"] },
   "app/app/(shell)/exceptions/page.tsx": { label: "Exceptions", sources: ["policy_current", "commission_entry"] },
-  "app/app/(shell)/carrier-rules/page.tsx": { label: "Carrier rules", sources: ["policy_current"] },
   "app/app/(shell)/book-import/page.tsx": { label: "Book import", sources: ["policy_current"] },
 };
 

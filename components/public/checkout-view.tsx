@@ -82,7 +82,7 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
       aria-label="Your plan"
       className={cn(
         "flex w-full flex-col gap-5",
-        dark ? "mx-auto max-w-[460px] rounded-[22px] border border-[var(--nav-line)] bg-black/35 p-6 text-[var(--nav-ink)] shadow-[0_30px_80px_rgba(0,0,0,.45)] backdrop-blur-xl" : "rounded-xl border border-border bg-card p-4",
+        dark ? "mx-auto max-w-[460px] rounded-xl border border-[var(--nav-line)] bg-black/20 p-6 text-[var(--nav-ink)]" : "rounded-xl border border-border bg-card p-4",
       )}
     >
       <div className="flex items-start justify-between gap-3">

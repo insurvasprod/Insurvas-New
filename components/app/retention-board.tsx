@@ -122,7 +122,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
                 // A group heading before the first row of each group (the rows arrive grouped).
                 if (index === 0 || shown.rows[index - 1].group !== row.group) {
                   if (row.group !== "deadline") {
-                    out.push(<tr key={`group-${row.group}`}><td colSpan={7} className="bg-[var(--surface-muted,transparent)] text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[row.group]}{row.group === "no_window" && <> · <Link href="/app/carrier-rules" className="normal-case underline">set the windows in Carrier rules</Link></>}</td></tr>);
+                    out.push(<tr key={`group-${row.group}`}><td colSpan={7} className="bg-[var(--surface-muted,transparent)] text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[row.group]}{row.group === "no_window" && <> · <span className="normal-case">Insurvas sets the windows per carrier</span></>}</td></tr>);
                   }
                 }
                 const u = urgency(row.daysLeft);

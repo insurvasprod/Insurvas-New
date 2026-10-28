@@ -29,9 +29,9 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
     if (!(error instanceof PayoutError)) throw error;
     problem = error.message;
   }
-  // Partners A (2026-10-25): on the dashboard's moving ribbon.
+  // Partners A (2026-10-25): on the dashboard's static stage backdrop.
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="Payout runs" description="What each partner is owed — and the statement they see." />
       {loaded ? <PayoutsBoard runs={loaded.runs} partners={loaded.partners} readOnly={guard.entitlement.access === "read_only"} openId={open ?? null} recordLinks={records.entitled} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}

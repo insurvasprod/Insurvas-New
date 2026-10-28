@@ -226,7 +226,7 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
           {num("reinstatementPinDays", "Pinned inside (days)")}
           {num("reinstatementEscalateDays", "To the writing agent inside (days)", { tip: "Inside this many days of the deadline a case moves from the retention rep to the agent who sold it." })}
         </div>
-      ), { save: true, note: <>Each carrier&apos;s reinstatement window is kept on <Link className="underline" href="/app/carrier-rules">Carrier rules</Link>.</> })}
+      ), { save: true, note: <>Insurvas keeps each carrier&apos;s reinstatement window.</> })}
 
       {section("winback", HUB_SECTION_LABELS.winback, (
         <>
@@ -325,7 +325,7 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
           <li><strong>Win-back affordability floor: {PLATFORM_CAPS.winbackAffordabilityFloorDays} days.</strong> <span className="text-muted-foreground">Someone who could not afford it is never called back sooner.</span></li>
           <li><strong>Draft day cap: the {PLATFORM_CAPS.draftDayCap}th.</strong> <span className="text-muted-foreground">Carriers reject the 29th to the 31st.</span></li>
         </ul>
-      ), { note: <>Carrier retention windows, grace periods and chargeback rules are kept on <Link className="underline" href="/app/carrier-rules">Carrier rules</Link>, never here.</> })}
+      ), { note: <>Insurvas keeps each carrier&apos;s retention windows, grace periods and chargeback rules, never here.</> })}
 
       {hub.changes.length ? section("recent-changes", "Recent changes", (
         <ul className="text-sm">{hub.changes.map((c, i) => <li key={i}>{c.at.slice(0, 16).replace("T", " ")} — {c.by} — {c.setting.replace(/_/g, " ")}: {JSON.stringify(c.from)} → {JSON.stringify(c.to)}</li>)}</ul>

@@ -34,6 +34,7 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | v3 rule | Section | Status |
 |---|---|---|
 | Glossy stat card (`StatRow` / `StatCard`) | §4a | Live for new and reworked pages |
+| Home dashboard layout | §4b | Live (`/app/dashboard`, preview on `/design/home`) |
 | 8px corners on buttons and inputs | §5a | Live |
 | Inline filter panel under the toolbar | §6a | Live for new and reworked lists |
 | No avatars for clients, leads or carriers | §10 | Live |
@@ -124,6 +125,32 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
   composition card (for example Active policies). Both use the same glossy surface.
 - Surface: soft top-lit gradient, brand sheen in the top-left, bright top rim, layered shadow, 2px
   hover lift (none under reduced motion). Text always sits on opaque colour.
+
+### 4b. Home dashboard (v3)
+**Status:** Live.
+
+The agent home (`app/app/(shell)/dashboard/page.tsx`, redesign 2026-10-28) replaces the launchpad's
+grid of look-alike tiles. Every role sees the same order, narrowed by `resolveRoleHome`:
+
+1. `PageHeader`: greeting, date, the next-callback chip, at most three actions (one primary).
+2. Setup, while unfinished: one slim row (`HomeSetup`), never a tile.
+3. **Needs you** (`HomeAttention`): one row of small links, counts above zero only, red before amber.
+   Nothing waiting is one line ("All caught up"), not an empty card.
+4. Four stat cards (`HomeKpis`, picked per role in `lib/dashboard/homeView.ts`). On the money
+   profile the money figures take this row (`HomeMoneyCards`).
+5. A 12-column row: the 14-day calls chart (8) beside today's appointments and callbacks (4); 7 + 5
+   when the content area is under 1152px. Container queries, not viewport breakpoints, because
+   the sidebar takes its share.
+6. A 12-column row: money and retention as one ledger (8) beside top dialers (4).
+7. **Jump to**: every module as a one-line link with its figure (`HomeShortcuts`).
+
+- Panels use `HomePanel`: the stat card's glossy surface, a 15px title with its period, one
+  "View ›" link, an optional footer of facts. Panels do not lift on hover.
+- No tile numbers, no "Open →" on every block, no tabs, no green button inside a panel.
+- Every number comes from a read the page already makes; nothing new is queried for the layout.
+  A figure that was not read is left out, never drawn as 0.
+- Check a change on `/design/home` (every role, busy, quiet and new) at 1536×826, 1366×657 and
+  375 wide before calling it done.
 
 ## 5. Buttons and controls — one height
 - `<Button>` default size (h-9 / 36px) for every page and toolbar action. Do not pass `h-10`, `h-11`,
@@ -293,16 +320,37 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - Trial length comes from the chosen plan through `trialDaysForPlan` (`lib/checkout/trialDays.ts`,
   the number checkout and Whop grant) and dates from `firstChargeDate`; before a plan is chosen no
   number is shown. Card wording comes from `checkoutPaymentMode()`. Nothing types "N-day".
-- Back goes only where the server lets you go back:
+- Every step from 2 on has Back to the step before it (owner, 2026-10-27). A step that cannot be
+  redone (1 once the account exists, 2 once the email is confirmed) shows what was done and a
+  Continue to where the signup stands (`FunnelReview`), never a form that would only fail:
 
   | Step | Back |
   |---|---|
-  | 1 Your account, 2 Your email | none (2 keeps "Wrong address?" and Sign out) |
-  | 3 Your agency | none; "Signed in as … · Sign out" instead, since steps 1–2 cannot be redone |
+  | 1 Your account | none |
+  | 2 Your email | ← Back to your account (keeps "Wrong address?" and Sign out) |
+  | 3 Your agency | ← Back to your email; "Signed in as … · Sign out" under the form |
   | 4 Your plan | ← Back to your agency |
   | 5 Payment | ← Back to your plan (and "Change plan" in the receipt) |
+- A question with several answers from a short list is a dropdown with checkboxes
+  (`components/app/multi-picker.tsx`), not a row of chips; it shares its list style with the state
+  picker. Picks show as removable tags in the field; the list ends with "N selected · Clear".
+- An open picker list is drawn at the auth shell (a portal), never inside the form column: each
+  line of the column is its own layer while the entrance animation holds, so a list drawn inside
+  it goes under every later line. It fits the room left in the window and never makes it scroll.
+- The brand panel is still: `--brand-700` with one soft light, no ribbon or other motion
+  (owner, 2026-10-27).
+- Every auth screen, sign-up steps included, keeps the logo at the top and centres the rest in the
+  space below it (`AuthLayout` `align`, default "center"). No auth screen scrolls, vertically or
+  sideways, at 1536×826 (the owner's 125%-scaled screen), 1366×657 or 1920×1030.
+- On touch screens a standalone link-button (Back, Sign out, Forgot password?, Switch to agency)
+  is 44px to tap (`data-tap`).
+- "Continue with Google" is on the agent doors only (sign-in, sign-up step 1). It shows only when
+  Google is enabled in Supabase. It uses Google's unmodified mark (`public/brand/google-g.svg`).
+- Step 4 asks who, billing, plan and seats, and nothing else. No add-on modules at sign-up, no
+  seat slider, no band strip (the plan cards are the bands). One-agent seats are one sentence.
+  Segmented controls are 36px with 8px corners and a white thumb; a single billing cycle is text.
 - First screens ask only what is needed: no confirm-password field (show/hide and the strength
-  meter cover typos). Sign-in and every sign-up step fit without scrolling at 1366×768.
+  meter cover typos). Sign-in and every sign-up step fit without scrolling at 1366×768 (a 1366×657 browser window).
 - No marketing claims, internal notes or explanatory text on auth pages beyond one line under the
   title.
 

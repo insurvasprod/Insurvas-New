@@ -40,5 +40,5 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   const initialView = view === "integrity" ? "review" : view === "log" || view === "activity" ? "log" : view === "setters" ? "setters" : "agents";
   // The role decides only what the page offers (the zero-click review is owners' and producers');
   // /api/app/activity enforces the same rule on its own.
-  return <DashboardStage ribbon><ActivityLogWorkspace initialView={initialView} role={guard.role} /></DashboardStage>;
+  return <DashboardStage><ActivityLogWorkspace initialView={initialView} role={guard.role} /></DashboardStage>;
 }

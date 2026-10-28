@@ -9,6 +9,7 @@ import { LinkArrow } from "@/components/ui/link-arrow";
 import type { PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
 import { AuthHeading, AuthLayout, AuthStory } from "@/components/portal/auth-layout";
 import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
+import { GoogleButton } from "@/components/portal/google-button";
 import { OtpInput } from "@/components/app/otp-input";
 import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
 import type { MaintenanceStatus } from "@/lib/system/constants";
@@ -62,17 +63,26 @@ export function StoryPanel({ mode, step = 1, noPayment = false }: { mode: Portal
  */
 export function TenantAuthWorkspace({
   maintenance,
+  googleEnabled = false,
+  initialStep,
+  notice = null,
 }: {
   maintenance?: MaintenanceStatus | null;
+  /** "Continue with Google" shows only once Google is switched on in Supabase (lib/tenantAuth/google.ts). */
+  googleEnabled?: boolean;
+  /** "code": Google signed the person in and two-factor is next (the pending cookie is already set). */
+  initialStep?: "code";
+  /** Why Google sent the person back, already turned into a sentence (lib/tenantAuth/googleMessages.ts). */
+  notice?: string | null;
 }) {
   const router = useRouter();
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(notice);
   const [loginLoading, setLoginLoading] = useState(false);
   // LA-8.2: with two-factor on, the password is step one; the authenticator (or a recovery) code is step two.
-  const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [twoFactorStep, setTwoFactorStep] = useState(initialStep === "code");
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
 
@@ -268,7 +278,7 @@ export function TenantAuthWorkspace({
           label="Password"
           htmlFor="tenant-login-password"
           aside={
-            <button type="button" onClick={openReset} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            <button type="button" onClick={openReset} data-tap="" className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
               Forgot password?
             </button>
           }
@@ -312,9 +322,14 @@ export function TenantAuthWorkspace({
       <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
         <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
       </div>
-      <AuthSecondary onClick={openLinkRequest} disabled={maintenance?.level === "locked"}>
-        Email me a sign-in link
-      </AuthSecondary>
+      {/* The other ways in sit together under one "or": Google beside the emailed link, so it adds no
+          height (owner, 2026-10-27). Side by side from 480px; stacked on a phone. */}
+      <div className={googleEnabled ? "grid grid-cols-1 gap-2.5 min-[480px]:grid-cols-2" : undefined}>
+        {googleEnabled && <GoogleButton intent="sign-in" />}
+        <AuthSecondary onClick={openLinkRequest} disabled={maintenance?.level === "locked"}>
+          {googleEnabled ? "Email me a link" : "Email me a sign-in link"}
+        </AuthSecondary>
+      </div>
 
       <p className="mt-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
         New to Insurvas?{" "}

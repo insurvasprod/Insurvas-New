@@ -15,5 +15,5 @@ export default async function AssignmentsPage() {
   const agency = await isAgencyTenant(guard.context.tenantId);
   if (agency && guard.role !== "owner") return <RoleGateNotice reason="agency" featureLabel="Lead assignment" detail="In an agency the owner or an admin routes leads. Your assigned leads are in your queue." />;
   // One page with the agency's Lead routing (2026-10-26): in an agency the unassigned pool is a tab.
-  return <DashboardStage ribbon><AssignmentWorkspace canManage={holdsAnyRole(guard.roles, ["owner", "producer"])} pool={agency} /></DashboardStage>;
+  return <DashboardStage><AssignmentWorkspace canManage={holdsAnyRole(guard.roles, ["owner", "producer"])} pool={agency} /></DashboardStage>;
 }

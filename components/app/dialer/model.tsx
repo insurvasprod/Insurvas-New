@@ -99,7 +99,7 @@ export const FILTERS: Array<{ key: QueueFilter; label: string }> = [
   { key: "low", label: "Low priority" },
 ];
 
-// Frosted over the page's moving ribbon since the redesign (2026-10-25, Dialer A): `m-glass` is the
+// Frosted over the page's static stage backdrop since the redesign (2026-10-25, Dialer A): `m-glass` is the
 // shared card surface (app/globals.css), blurred inside the page's DashboardStage.
 export const card = "m-glass min-w-0 rounded-[16px] border border-[var(--border)]";
 

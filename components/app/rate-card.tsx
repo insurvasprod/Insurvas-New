@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -136,7 +135,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                 <section className="grid gap-2 border-t border-border pt-4">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="m-0 text-sm font-semibold text-foreground">Pays</h3>
-                    <Link href="/app/carrier-rules" className="text-xs font-medium text-[var(--accent-ink)] hover:underline">Change in Carrier rules</Link>
+                    <span className="text-xs text-muted-foreground">Set by Insurvas</span>
                   </div>
                   <p className="m-0 text-muted-foreground">{open.trigger ? `${TRIGGER_LABELS[open.trigger]}${open.lagDays !== null ? `, usually within ${open.lagDays} days` : ", with no usual lag set, so nothing is ever called overdue"}.` : "Not set: nothing is expected from this carrier until it is."}</p>
                 </section>

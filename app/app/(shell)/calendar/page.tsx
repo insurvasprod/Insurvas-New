@@ -34,9 +34,9 @@ export default async function CalendarPage({
 
   // The header lives in the calendar itself: its "Day" and "Book an appointment" actions drive the
   // calendar's own state.
-  // On the dashboard's moving ribbon, its cards frosted over it (owner ask 2026-10-26).
+  // On the dashboard's static stage backdrop, its cards frosted over it (owner ask 2026-10-26).
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
       <AppointmentCalendar highlightId={appointment} />
     </DashboardStage>
   );

@@ -18,6 +18,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // Signed out: emails a reset link to an existing agent account. No session, no feature.
   { sourceFile: "app/api/app/auth/forgot-password/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/sign-in-link/route.ts", featureKey: null },
+  // Signed out: "Continue with Google" (2026-10-27). The sign-in itself is completeTenantSignIn.
+  { sourceFile: "app/api/app/auth/google/start/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/auth/google/callback/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/login/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/logout/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/set-password/route.ts", featureKey: null },
@@ -195,7 +198,6 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/carrier-files/runs/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/carrier-files/bucket/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.17 · carrier rules and settings (windows, triggers, payout and tolerance).
-  { sourceFile: "app/api/app/carrier-rules/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/policy-matching/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/exceptions/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/book-import/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },

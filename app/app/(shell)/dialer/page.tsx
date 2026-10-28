@@ -19,9 +19,9 @@ export default async function DialerPage({ searchParams }: { searchParams: Promi
   // opens that lead through the pick (serve_lead_by_id), so every serving rule still applies.
   const { lead } = await searchParams;
   const requestedLead = typeof lead === "string" && UUID.test(lead) ? lead : null;
-  // The moving ribbon behind the frosted cards, as on the home (redesign 2026-10-25, Dialer A).
+  // The static stage backdrop behind the frosted cards, as on the home (redesign 2026-10-25, Dialer A).
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {/* The ad-hoc number check ("Check a number" in the Dialer header) opens a dialog now. Owners
           and producers only: /api/app/dial/preflight admits those two, and a setter dials what the

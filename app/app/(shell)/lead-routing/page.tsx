@@ -19,7 +19,7 @@ export default async function LeadRoutingPage() {
   // The same page as /app/assignments (2026-10-26), the pool a tab on it. Without dialing there is no rule
   // chain to show, only the pool; the page still gets its one title.
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
       {hasFeature(guard.entitlement, "outbound_dialing")
         ? <AssignmentWorkspace canManage pool />
         : <div className="m-stagger flex w-full min-w-0 flex-col gap-6"><PageHeader title="Lead routing" /><UnassignedPool /></div>}

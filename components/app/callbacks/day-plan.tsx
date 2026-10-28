@@ -21,7 +21,7 @@ export function Chip({ tone, children, dot = true }: { tone: ChipTone; children:
   return <span className={`portal-status-chip is-${tone}`}>{dot && <span aria-hidden="true" />}{children}</span>;
 }
 
-// m-glass: frosted over the page's moving ribbon, like the other redesigned pages.
+// m-glass: frosted over the page's static stage backdrop, like the other redesigned pages.
 const CARD = "m-glass rounded-xl border border-border";
 
 function hourLabel(hour: number) {

@@ -114,8 +114,16 @@ export function diffTemplateDraft(saved: TemplateDraft, draft: TemplateDraft): T
         if (savedFields.has(placed.field_key)) changes.push({ id: `place:${section.section_key}:${placed.field_key}`, title: `${q(label)} added to ${q(section.label)}` });
         continue;
       }
-      if (was.is_required !== placed.is_required)
-        changes.push({ id: `form-required:${section.section_key}:${placed.field_key}`, title: `${q(label)} ${placed.is_required ? "required" : "optional"} on the form`, sub: `Was ${was.is_required ? "required" : "optional"}` });
+      // One choice ("Do they have to answer?") can flip both flags; it is then one line, not two.
+      const fieldLine = changes.find((change) => change.id === `required:${placed.field_key}`);
+      if (was.is_required !== placed.is_required) {
+        if (fieldLine) {
+          const after = draftFields.get(placed.field_key);
+          fieldLine.title = `${q(label)}: ${after?.is_required ? "they must always answer it" : placed.is_required ? "only partners must answer it" : "they can skip it"}`;
+        } else changes.push({ id: `form-required:${section.section_key}:${placed.field_key}`, title: `${q(label)} ${placed.is_required ? "required" : "optional"} on the form`, sub: `Was ${was.is_required ? "required" : "optional"}` });
+      }
+      if ((was.width ?? "") !== (placed.width ?? ""))
+        changes.push({ id: `width:${section.section_key}:${placed.field_key}`, title: `${q(label)} now takes ${placed.width === "full" ? "the full row" : placed.width === "half" ? "half a row" : "its usual size"}` });
       const a = condition(was);
       const b = condition(placed);
       if ((a?.field_key ?? "") !== (b?.field_key ?? "") || (a?.equals ?? "") !== (b?.equals ?? ""))

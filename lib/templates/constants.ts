@@ -103,6 +103,8 @@ export type TemplateFormField = {
   is_required: boolean;
   show_when: { field_key: string; equals: string } | null;
   conditional_on?: { field_key: string; equals: string } | null;
+  /** Half or the full row of the partner form's two columns. Missing: automatic (placementWidth.ts). */
+  width?: "half" | "full";
 };
 
 export type TemplateFormSection = {
