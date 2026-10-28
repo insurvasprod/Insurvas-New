@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { notify } from "@/lib/notify";
 import {
   Archive,
@@ -56,7 +56,6 @@ import {
   PARTNER_PAYOUT_MODEL_LABELS,
   PARTNER_PAYOUT_MODELS,
   PARTNER_STATUS_LABELS,
-  PARTNER_TYPE_LABELS,
   PARTNER_TYPES,
   type PartnerPayoutModel,
   type PartnerStatus,
@@ -194,13 +193,49 @@ function ProductChip({ on, onLabel, offLabel }: { on: boolean; onLabel: string; 
   );
 }
 
+/** L4 (owner, 2026-10-28): what each kind of lead source does, in the agent's words. */
+const SOURCE_TYPE_CHOICE: Record<PartnerType, string> = {
+  publisher: "Transfers live calls to me",
+  marketing: "Sells me leads",
+  affiliate: "Refers clients to me",
+};
+/** The same, short, for the list and its filter. */
+const SOURCE_TYPE_SHORT: Record<PartnerType, string> = {
+  publisher: "Live transfers",
+  marketing: "Lead seller",
+  affiliate: "Referrals",
+};
+/** How a source is usually paid, by kind: the form starts there (L2). */
+const DEFAULT_PAY: Record<PartnerType, PartnerPayoutModel> = { publisher: "per_transfer", marketing: "per_lead", affiliate: "per_sale" };
+
+/** L3: US time zones, so nobody types an IANA name. Anything else on file is kept as an extra option. */
+const US_TIME_ZONES = [
+  ["America/New_York", "Eastern"],
+  ["America/Chicago", "Central"],
+  ["America/Denver", "Mountain"],
+  ["America/Phoenix", "Arizona"],
+  ["America/Los_Angeles", "Pacific"],
+  ["America/Anchorage", "Alaska"],
+  ["Pacific/Honolulu", "Hawaii"],
+  ["America/Puerto_Rico", "Puerto Rico"],
+] as const;
+function homeTimeZone(): string {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return US_TIME_ZONES.some(([value]) => value === zone) ? zone : "America/New_York";
+  } catch {
+    return "America/New_York";
+  }
+}
+
 const emptyDraft: PartnerDraft = {
   name: "",
   partner_type: "publisher",
+  // US only (L3): no country field; the record still carries the code the API needs.
   country: "US",
   contact_name: "",
   contact_email: "",
-  timezone: "UTC",
+  timezone: "America/New_York",
   notes: "",
 };
 // Keep server and browser markup identical. The publisher page is rendered on the
@@ -294,6 +329,12 @@ export function PartnersWorkspace({
     useState<PartnerPayoutModel>("per_transfer");
   const [termRate, setTermRate] = useState("");
   const [termDate, setTermDate] = useState("");
+  // L2: how this source is paid, asked when it is added (optional; "Not sure yet" skips it).
+  const [newPay, setNewPay] = useState<PartnerPayoutModel | "none">("per_transfer");
+  const [newRate, setNewRate] = useState("");
+  // L8: during Get set up, the form stays open after an add so the next one is one click away.
+  const guiding = useSearchParams().has("guide");
+  const [justAdded, setJustAdded] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [partnerProducts, setPartnerProducts] = useState<
     Record<string, PartnerProduct[]>
@@ -502,17 +543,54 @@ export function PartnersWorkspace({
   }
   async function savePartner(event: FormEvent) {
     event.preventDefault();
-    const path = editing ? `/api/app/partners/${editing}` : "/api/app/partners";
-    const ok = await send(
-      path,
-      editing ? "PATCH" : "POST",
-      editing ? { action: "update", ...draft } : draft,
-      editing ? "Partner updated" : "Partner created",
-    );
-    if (ok) {
-      setDraft(emptyDraft);
-      setEditing(null);
-      setDialogOpen(false);
+    if (editing) {
+      const ok = await send(`/api/app/partners/${editing}`, "PATCH", { action: "update", ...draft }, "Lead source updated");
+      if (ok) {
+        setDraft(emptyDraft);
+        setEditing(null);
+        setDialogOpen(false);
+      }
+      return;
+    }
+    // Added, then (when given) its pay, from the new record's id (L2).
+    const rate = Number(newRate);
+    const pay = newPay !== "none" && newRate.trim() !== "" && Number.isFinite(rate) && rate >= 0 ? newPay : null;
+    setBusy("/api/app/partners");
+    try {
+      const response = await fetch("/api/app/partners", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.partner?.id) { notify.block(result?.error ?? "Could not add the lead source"); return; }
+      if (pay) {
+        const today = new Date();
+        const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        const term = await fetch(`/api/app/partners/${result.partner.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(pay === "revenue_share"
+            ? { action: "add_term", payout_model: pay, rate_cents: null, rate_pct_bp: Math.round(rate * 100), effective_from: from }
+            : { action: "add_term", payout_model: pay, rate_cents: Math.round(rate * 100), rate_pct_bp: null, effective_from: from }),
+        });
+        if (!term.ok) {
+          const body = await term.json().catch(() => null);
+          notify.warn(`${draft.name} was added, but its pay was not saved`, { detail: body?.error ?? "Add it on the source's Commercial terms tab." });
+        }
+      }
+      notify.done(`${draft.name} added`);
+      await load();
+      setNewRate("");
+      setNewPay(DEFAULT_PAY[emptyDraft.partner_type]);
+      if (guiding) {
+        // L8: stay here, ready for the next one.
+        setJustAdded(draft.name);
+        setDraft({ ...emptyDraft, timezone: draft.timezone });
+      } else {
+        setDraft(emptyDraft);
+        setDialogOpen(false);
+      }
+    } catch (reason) {
+      notify.fail("Could not add the lead source", { detail: reason instanceof Error ? reason.message : undefined });
+    } finally {
+      setBusy(null);
     }
   }
   // Offboarding is typed, not clicked: the first call opens the dialog, and only the dialog's
@@ -577,7 +655,10 @@ export function PartnersWorkspace({
   }
   function openCreate() {
     setEditing(null);
-    setDraft(emptyDraft);
+    setDraft({ ...emptyDraft, timezone: homeTimeZone() });
+    setNewPay(DEFAULT_PAY[emptyDraft.partner_type]);
+    setNewRate("");
+    setJustAdded(null);
     setDialogOpen(true);
   }
   function openEdit(partner: Partner) {
@@ -656,11 +737,11 @@ export function PartnersWorkspace({
           className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
-          Back to partners
+          Back to lead sources
         </Link>
       ) : null}
       <PageHeader
-        title={detailOnly ? (selectedPartner?.name ?? "Publisher details") : "Partners"}
+        title={detailOnly ? (selectedPartner?.name ?? "Lead source") : "Lead sources"}
         actions={
           detailOnly ? (
             selectedPartner ? (
@@ -671,7 +752,7 @@ export function PartnersWorkspace({
                   </Button>
                 )}
                 <Button type="button" variant="outline" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
-                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit partner
+                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit lead source
                 </Button>
                 {!readOnly && selectedPartner.status !== "offboarded" && (
                   <DropdownMenu>
@@ -700,35 +781,35 @@ export function PartnersWorkspace({
               <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
               <Button data-guide="publisher-add" type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus aria-hidden="true" />
-                Add partner
+                Add lead source
               </Button>
             </>
           )
         }
       />
-      {!detailOnly && (
-        <section aria-label="Partner capacity" className="portal-partners-capacity grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {!detailOnly && partners.length > 0 && (
+        <section aria-label="Lead source capacity" className="portal-partners-capacity grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <CapacityMetric
-            label="Publishers"
-            noun="publishers"
+            label="Live transfers"
+            noun="live transfer sources"
             usage={usage.publishers}
             limit={limits.max_publishers}
           />
           <CapacityMetric
-            label="Marketing"
-            noun="marketing partners"
+            label="Lead sellers"
+            noun="lead sellers"
             usage={usage.marketing}
             limit={limits.max_marketing_partners}
           />
           <CapacityMetric
-            label="Affiliates"
-            noun="affiliates"
+            label="Referrals"
+            noun="referral sources"
             usage={usage.affiliates}
             limit={limits.max_affiliates}
           />
           <CapacityMetric
-            label="Partner users"
-            noun="partner users"
+            label="Source logins"
+            noun="source logins"
             usage={usage.partnerUsers}
             limit={limits.max_partner_users}
             activeOnly={false}
@@ -755,7 +836,7 @@ export function PartnersWorkspace({
               {listFiltered && <ClearFiltersButton onClick={clearListFilters} />}
               <RefreshButton onClick={() => void load()} refreshing={refreshing} />
             </>}>
-              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search partners" />
+              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search lead sources" />
               <select
                 aria-label="Filter by partner type"
                 className={cn(toolbarControl, selectedPartner && "hidden")}
@@ -765,7 +846,7 @@ export function PartnersWorkspace({
                 <option value="all">All types</option>
                 {PARTNER_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {PARTNER_TYPE_LABELS[type]}
+                    {SOURCE_TYPE_SHORT[type]}
                   </option>
                 ))}
               </select>
@@ -784,17 +865,17 @@ export function PartnersWorkspace({
               </select>
             </DataToolbar>
           }
-          footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="partners" onPage={setListPage} suffix={`${partners.length} partner records in all`} />}
+          footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="lead sources" onPage={setListPage} suffix={`${partners.length} lead source${partners.length === 1 ? "" : "s"} in all`} />}
         >
             {partners.length === 0 && !listFiltered ? (
-              <EmptyState title="No partners yet" hint="Add the publishers, marketing companies and affiliates who send you leads." action={readOnly ? undefined : <Button type="button" onClick={openCreate}><Plus aria-hidden="true" />Add partner</Button>} />
+              <EmptyState title="No lead sources yet" hint="Add each company that sends you leads, transfers calls to you or refers clients." />
             ) : filteredPartners.length === 0 ? (
-              <NoMatches noun="partners" onClear={clearListFilters} />
+              <NoMatches noun="lead sources" onClear={clearListFilters} />
             ) : (
               <table className={cn("portal-lead-table w-full text-left text-sm", selectedPartner ? "min-w-0" : "min-w-[1080px]")}>
                 <thead>
                   <tr>
-                    <th>Partner</th>
+                    <th>Lead source</th>
                     {!selectedPartner && <th>Contact email</th>}
                     {!selectedPartner && <th>Type</th>}
                     {!selectedPartner && <th>Approved for</th>}
@@ -830,7 +911,7 @@ export function PartnersWorkspace({
                           </button>
                         </td>
                         {!selectedPartner && <td className="max-w-[220px] truncate text-muted-foreground" title={partner.contact_email ?? undefined}>{partner.contact_email || "No contact email"}</td>}
-                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{PARTNER_TYPE_LABELS[partner.partner_type]}</td>}
+                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{SOURCE_TYPE_SHORT[partner.partner_type]}</td>}
                         {!selectedPartner && <td className="max-w-[220px] truncate text-muted-foreground" title={products}>{products}</td>}
                         {!selectedPartner && (
                           <td className="whitespace-nowrap">
@@ -901,7 +982,7 @@ export function PartnersWorkspace({
                   <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />
                   {PARTNER_STATUS_LABELS[selectedPartner.status]}
                 </span>
-                <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--surface-alt)] px-2.5 py-0.5 text-xs font-semibold text-[var(--body)]">{PARTNER_TYPE_LABELS[selectedPartner.partner_type]}</span>
+                <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--surface-alt)] px-2.5 py-0.5 text-xs font-semibold text-[var(--body)]">{SOURCE_TYPE_SHORT[selectedPartner.partner_type]}</span>
                 <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--primary-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-ink)]">
                   {selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}
                 </span>
@@ -1341,17 +1422,22 @@ export function PartnersWorkspace({
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit partner" : "Add a partner"}
+              {editing ? "Edit lead source" : "Add a lead source"}
             </DialogTitle>
             <DialogDescription>
               {editing
                 ? "Its history stays as it was."
-                : "A publisher, marketing company or affiliate."}
+                : "A company that sends you leads, transfers calls to you or refers clients."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={savePartner} className="grid gap-4 md:grid-cols-2">
+            {justAdded && (
+              <p role="status" className="m-0 rounded-md bg-[var(--success-surface)] px-3 py-2 text-sm text-[var(--success-ink)] md:col-span-2">
+                {justAdded} added. Add another, or close this to continue.
+              </p>
+            )}
             <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="partner-name">Partner name</Label>
+              <Label htmlFor="partner-name">Name</Label>
               <Input
                 id="partner-name"
                 value={draft.name}
@@ -1364,38 +1450,63 @@ export function PartnersWorkspace({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="partner-type">Type</Label>
+              <Label htmlFor="partner-type">What they do</Label>
               <select
                 id="partner-type"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                 value={draft.partner_type}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    partner_type: event.target.value as PartnerType,
-                  })
-                }
+                onChange={(event) => {
+                  const type = event.target.value as PartnerType;
+                  setDraft({ ...draft, partner_type: type });
+                  if (!editing) setNewPay(DEFAULT_PAY[type]);
+                }}
               >
                 {PARTNER_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {PARTNER_TYPE_LABELS[type]}
+                    {SOURCE_TYPE_CHOICE[type]}
                   </option>
                 ))}
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="partner-country">Country</Label>
-              <Input
-                id="partner-country"
-                value={draft.country}
-                onChange={(event) =>
-                  setDraft({ ...draft, country: event.target.value })
-                }
-                placeholder="US"
-                required
-                maxLength={2}
-              />
+              <Label htmlFor="partner-timezone">Their time zone</Label>
+              <select
+                id="partner-timezone"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={draft.timezone}
+                onChange={(event) => setDraft({ ...draft, timezone: event.target.value })}
+              >
+                {US_TIME_ZONES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {!US_TIME_ZONES.some(([value]) => value === draft.timezone) && <option value={draft.timezone}>{draft.timezone}</option>}
+              </select>
             </div>
+            {!editing && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="partner-pay">How you pay them</Label>
+                  <select
+                    id="partner-pay"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                    value={newPay}
+                    onChange={(event) => setNewPay(event.target.value as PartnerPayoutModel | "none")}
+                  >
+                    {PARTNER_PAYOUT_MODELS.map((model) => <option key={model} value={model}>{PARTNER_PAYOUT_MODEL_LABELS[model]}</option>)}
+                    <option value="none">Not sure yet</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="partner-rate">{newPay === "revenue_share" ? "Share (%)" : "Amount ($)"}</Label>
+                  <Input
+                    id="partner-rate"
+                    inputMode="decimal"
+                    value={newRate}
+                    disabled={newPay === "none"}
+                    onChange={(event) => setNewRate(event.target.value)}
+                    placeholder={newPay === "revenue_share" ? "e.g. 20" : "e.g. 35"}
+                  />
+                </div>
+              </>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="partner-contact">Contact name</Label>
               <Input
@@ -1417,19 +1528,6 @@ export function PartnersWorkspace({
                   setDraft({ ...draft, contact_email: event.target.value })
                 }
                 placeholder="ops@example.com"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="partner-timezone">Timezone</Label>
-              <Input
-                id="partner-timezone"
-                value={draft.timezone}
-                onChange={(event) =>
-                  setDraft({ ...draft, timezone: event.target.value })
-                }
-                placeholder="America/Phoenix"
-                required
-                maxLength={100}
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
@@ -1458,10 +1556,10 @@ export function PartnersWorkspace({
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
               >
-                Cancel
+                {justAdded ? "Done" : "Cancel"}
               </Button>
               <Button type="submit" disabled={busy !== null || createAtLimit}>
-                {busy ? "Saving…" : editing ? "Save partner" : "Create partner"}
+                {busy ? "Saving…" : editing ? "Save" : justAdded ? "Add another" : "Add lead source"}
               </Button>
             </DialogFooter>
           </form>

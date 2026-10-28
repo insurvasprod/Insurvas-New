@@ -97,7 +97,7 @@ const SETUP_STEPS = [
     instruction: "Tick the carriers you are contracted with. Contract level and writing number are optional.",
     why: "Every other step uses your carriers, so this comes first." },
   { key: "lead-sources", module: "inbound", label: "Add your lead sources", path: "/app/publishers", action: "Add lead sources", target: "publisher-add",
-    instruction: "Add each publisher or vendor that sends you leads, and how you pay them.",
+    instruction: "Add each company that sends you leads or transfers calls to you, and how you pay them.",
     why: "Cost per sale and lead-source scorecards are worked out per source." },
   { key: "team", module: "account", label: "Invite your team", path: "/app/settings#team-access", action: "Invite people", target: "team-invite",
     instruction: "Invite each person who works with you and give them a role.",
