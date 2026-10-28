@@ -13,6 +13,7 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
@@ -26,7 +27,19 @@ import { SectionLastChanged } from "@/components/app/settings/last-changed";
  * `id` and `history` (LA-8.8): the section's registry id, and whether this viewer may read the
  * settings history — then the header says who last changed something here, linking into the log.
  */
-type SectionMeta = { title: string; description: string; id?: string; history?: boolean };
+type SectionMeta = {
+  title: string;
+  description: string;
+  id?: string;
+  history?: boolean;
+  /**
+   * Inside the Settings frame (settings-shell plan, 2026-10-28): the page header already shows the
+   * section's title and purpose, top-left, so the section header draws neither, and its actions go
+   * to the header's action slot on the title's line.
+   */
+  framed?: boolean;
+  actionsSlot?: HTMLElement | null;
+};
 const SectionContext = createContext<SectionMeta | null>(null);
 
 export function SettingsSectionProvider({ value, children }: { value: SectionMeta; children: ReactNode }) {
@@ -49,6 +62,24 @@ export function SettingsSectionHeader({ actions, trail }: {
 }) {
   const meta = useContext(SectionContext);
   if (!meta) return null;
+  if (meta.framed) {
+    // One title per page: the frame's. A record open in the section keeps its own line here, with
+    // its actions; otherwise the actions move up to the title's line and only the history note stays.
+    if (trail) {
+      return (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-[240px] flex-1 items-center gap-3">{trail}</div>
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2.5">{actions}</div>}
+        </div>
+      );
+    }
+    return (
+      <>
+        {actions && (meta.actionsSlot ? createPortal(actions, meta.actionsSlot) : <div className="flex justify-end gap-2.5">{actions}</div>)}
+        {meta.history && meta.id ? <SectionLastChanged sectionKey={meta.id} /> : null}
+      </>
+    );
+  }
   if (trail) {
     return (
       <div className="flex flex-wrap items-center gap-3">

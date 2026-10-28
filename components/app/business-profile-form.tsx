@@ -134,13 +134,14 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
   const phoneError = phoneTouched && !phoneCheck.ok ? phoneCheck.error : null;
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
   // One agent without a business name does business under their own.
-  const sentBusinessName = solo && businessName.trim().length < 2 ? fullName : businessName.trim();
+  // One agent does business under their own name (no business-name field for them).
+  const sentBusinessName = solo ? fullName : businessName.trim();
 
   const missing = [
     !firstName.trim() && "first name",
     !lastName.trim() && "last name",
     !phoneCheck.ok && "phone number",
-    sentBusinessName.length < 2 && (solo ? "business name" : "agency name"),
+    !solo && sentBusinessName.length < 2 && "agency name",
     !primaryState && "primary state",
     products.length === 0 && "a product",
     !volume && "monthly applications",
@@ -178,7 +179,9 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
         {gate ? "One last step before you start. It takes a minute." : "We use this to set up your workspace."}
       </FunnelHeading>
       <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-5">
-        {/* Two to a row on a wide screen, so the step fits without scrolling (2026-10-26). */}
+        {/* One grid, two to a row on a wide screen, so the step fits without scrolling (2026-10-26).
+            One grid rather than one per row: an independent agent has no business-name field, and the
+            fields after it move up a cell instead of leaving a gap (manager review, 2026-10-28). */}
         <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
           <label className="block">
             <span className={authLabel}>First name</span>
@@ -188,9 +191,6 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
             <span className={authLabel}>Last name</span>
             <input className={authControl} autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} />
           </label>
-        </div>
-
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
           <div>
             {label("phone", "Phone number")}
             {/* One field, not two boxes side by side: the country code and the number share one border
@@ -219,32 +219,33 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
             </div>
             <p id="about-phone-note" aria-live="polite" className="mt-1 text-xs leading-normal text-[var(--error-ink)] empty:hidden">{phoneError}</p>
           </div>
+          {/* "I am an independent agent… tell us more about you, not the agency" (manager review,
+              2026-10-28, 02:15): one-agent plans are not asked for a business name at all; the
+              workspace carries the person's name, and a DBA can be added in Settings › Business identity. */}
+          {!solo && (
+            <div>
+              {label("name", "Agency name", true)}
+              <input className={authControl} aria-label="Agency name" autoComplete="organization" maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
+            </div>
+          )}
+          {/* Hints open toward the inside of the column they land in, which shifts by one for an agent. */}
           <div>
-            {label("name", solo ? "Business name (optional)" : "Agency name", true)}
-            <input className={authControl} aria-label={solo ? "Business name" : "Agency name"} autoComplete="organization" maxLength={160} placeholder={solo ? fullName || "Your own name" : undefined} value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
-          <div>
-            {label("state", "Primary State")}
+            {label("state", "Primary State", solo)}
             <StatePicker value={primaryState} onChange={setPrimaryState} />
           </div>
           <div>
-            {label("sell", "What you sell", true)}
+            {label("sell", "What you sell", !solo)}
             <MultiPicker label="What you sell" placeholder="Choose products" options={PRODUCT_OPTIONS} value={products} onChange={setProducts} />
           </div>
-        </div>
-
-        {/* Lead sources beside the monthly volume (2026-10-28: the step fits a 1366×657 laptop window).
-            The five volume chips fill the column, each as wide as its words, at the field height. */}
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+          {/* Lead sources beside the monthly volume (2026-10-28: the step fits a 1366×657 laptop window).
+              The five volume chips fill the column, each as wide as its words, at the field height. */}
           <div>
-            {label("sources", "Where your leads come from")}
+            {label("sources", "Where your leads come from", solo)}
             <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
           </div>
-          <fieldset className="min-w-0">
-            <legend className="contents">{label("volume", "Applications a month", true)}</legend>
+          {/* Alone on the last row for one agent: it takes the whole row rather than half of it. */}
+          <fieldset className={cn("min-w-0", solo && "sm:col-span-2")}>
+            <legend className="contents">{label("volume", "Applications a month", !solo)}</legend>
             <div className="mt-1.5 flex gap-1" role="radiogroup" aria-label="Applications a month">
               {VOLUME_OPTIONS.map((option) => (
                 <button key={option.value} type="button" role="radio" aria-checked={volume === option.value} className={cn(chip(volume === option.value), "min-h-11 flex-auto whitespace-nowrap px-1 text-xs tabular-nums")} onClick={() => setVolume(option.value)}>

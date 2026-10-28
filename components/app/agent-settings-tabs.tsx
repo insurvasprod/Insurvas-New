@@ -6,6 +6,7 @@ import { ArrowUpRight, ChevronDown, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
@@ -30,6 +31,7 @@ export function AgentSettingsTabs({
   initialTab = "business-identity",
   readOnly = false,
   hidden,
+  renderPanel,
 }: {
   tabs: AgentSettingsTab[];
   /** Owner-only panel context; null for everyone else, whose sections do not need it. */
@@ -48,6 +50,8 @@ export function AgentSettingsTabs({
   readOnly?: boolean;
   /** Sections the plan has no use for (LA-8.6: Team & access on a one-seat plan) — absent, like the rest. */
   hidden?: readonly string[];
+  /** The /design/settings preview only: sample content in place of the live panels, which need a session. */
+  renderPanel?: (id: string) => ReactNode;
 }) {
   // In a Get set up step (?guide=…) the screen shows only that task: the settings menu steps aside,
   // and "Back to setup" on the guide bar is the way out (owner, 2026-10-28).
@@ -61,6 +65,8 @@ export function AgentSettingsTabs({
   const firstAvailable = inPage.find((tab) => tab.id === initialTab)?.id ?? inPage[0]?.id ?? initialTab;
   const [activeId, setActiveId] = useState(firstAvailable);
   const [anchor, setAnchor] = useState<string | null>(null);
+  // The page header's action slot: a section's Save / Add buttons are drawn there, on the title's line.
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const active = useMemo(
     () => inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
     [activeId, firstAvailable, inPage]
@@ -148,6 +154,10 @@ export function AgentSettingsTabs({
         setActiveId(tab);
         setAnchor(target);
         revealGroupForSection(tab);
+        // "#carriers" is also the menu item's id, so the browser jumps to it and the page header
+        // (title, breadcrumb) leaves the screen. A section opens at the top; "#tab/anchor" still
+        // scrolls to its setting (revealAnchor below).
+        if (!target) requestAnimationFrame(() => window.scrollTo({ top: 0 }));
       }
     };
     syncFromHash();
@@ -186,16 +196,35 @@ export function AgentSettingsTabs({
   // UX-4: the component for each section comes from the registry, keyed by the section's id.
   function renderActiveContent(): ReactNode {
     if (!active) return null;
+    if (renderPanel) return renderPanel(active.id);
     const panel = SETTINGS_PANELS[active.id];
     return panel ? panel({ team, workspace, granted }) : <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
   }
 
+  /*
+   * One layout for every Settings page (settings-shell plan, 2026-10-28; manager review 30:24–31:05:
+   * "put settings, the title of the page here and the description… so the cards start from the same
+   * side"). The header row: breadcrumb, the open section's name top-left, its purpose, its actions on
+   * the right. Under it, two columns that start on one line: the settings menu, a plain list only as
+   * tall as itself, and the section's cards.
+   */
   return (
-    <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
-      {/* Max height: the window less the top bar, the page title above the rail (84px) and the page's
-          bottom padding (32px), so the rail ends at the window's bottom and never makes the page scroll. */}
-      <div className={cn("box-border flex w-full min-h-0 shrink-0 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px]", guiding && "hidden")}>
-        <div className="shrink-0 p-2 pb-1">
+    <div className="flex min-w-0 flex-col gap-6" data-settings-frame="">
+      {active && !guiding && (
+        <PageHeader
+          visible
+          title={active.label}
+          description={active.short ?? active.description}
+          breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: active.label }]}
+          actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
+        />
+      )}
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[232px_minmax(0,1fr)]">
+      {/* The menu is a list, not a card (no surface, border or blur). Sticky under the top bar and
+          only as tall as its list, capped at the window less the top bar, this header and the page's
+          padding (10.5rem), so on its own it never makes the page scroll; past that the list scrolls. */}
+      <div data-settings-rail="" className={cn("box-border flex w-full min-h-0 shrink-0 flex-col lg:sticky lg:top-[calc(var(--top-bar-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-10.5rem)]", guiding && "hidden")}>
+        <div className="shrink-0 pb-2">
           <label className="relative block">
             <span className="sr-only">Search settings</span>
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--muted)]" />
@@ -221,7 +250,7 @@ export function AgentSettingsTabs({
           </label>
         </div>
         {searching ? (
-          <div id="settings-search-results" ref={resultsRef} onKeyDown={onResultsKey} className="flex max-h-[60dvh] min-h-0 flex-col overflow-y-auto overscroll-contain px-2 pb-2.5 lg:max-h-none">
+          <div id="settings-search-results" ref={resultsRef} onKeyDown={onResultsKey} className="flex max-h-[60dvh] min-h-0 flex-col overflow-y-auto overscroll-contain pb-2.5 lg:max-h-none">
             <p role="status" className="m-0 px-2.5 pt-2.5 pb-1.5 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
               {hits.length ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}` : "No matches"}
             </p>
@@ -240,7 +269,7 @@ export function AgentSettingsTabs({
         ) : (
       <nav
         aria-label="Settings navigation"
-        className="portal-settings-nav box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain px-2 pb-2.5"
+        className="portal-settings-nav box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain pb-2.5"
       >
         {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
             caller's order, and the same name can legitimately open a second run — so the name is not
@@ -339,7 +368,7 @@ export function AgentSettingsTabs({
             tabIndex={-1}
             key={active.id}
           >
-            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner" }}>
+            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner", framed: !guiding, actionsSlot }}>
               {readOnly && !READ_ONLY_EXEMPT.has(active.id) ? (
                 <>
                   <p role="status" className="m-0 mb-4 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">
@@ -351,6 +380,7 @@ export function AgentSettingsTabs({
             </SettingsSectionProvider>
           </section>
         )}
+      </div>
       </div>
     </div>
   );
