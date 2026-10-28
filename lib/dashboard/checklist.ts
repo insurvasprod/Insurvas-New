@@ -93,51 +93,55 @@ type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped" | "group" 
  * card's To finish list (MERGED_STEPS).
  */
 const SETUP_STEPS = [
-  { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers", action: "Open settings tab", target: "carrier-library-add",
+  { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers", action: "Add carriers", target: "carrier-library-add",
     instruction: "Tick the carriers you are contracted with. Contract level and writing number are optional.",
     why: "Every other step uses your carriers, so this comes first." },
-  { key: "lead-sources", module: "inbound", label: "Add your lead sources", path: "/app/publishers", action: "Open lead sources", target: "publisher-add",
+  { key: "lead-sources", module: "inbound", label: "Add your lead sources", path: "/app/publishers", action: "Add lead sources", target: "publisher-add",
     instruction: "Add each publisher or vendor that sends you leads, and how you pay them.",
     why: "Cost per sale and lead-source scorecards are worked out per source." },
-  { key: "team", module: "account", label: "Invite your team", path: "/app/settings#team-access", action: "Open settings tab", target: "team-invite",
+  { key: "team", module: "account", label: "Invite your team", path: "/app/settings#team-access", action: "Invite people", target: "team-invite",
     instruction: "Invite each person who works with you and give them a role.",
     why: "A role decides which screens a person sees and which leads they can work." },
   { key: "import", module: "outbound", label: "Import your leads", path: "/app/import", action: "Import leads", target: "lead-import-upload",
     instruction: "Upload a CSV of leads, match its columns, and review before it lands.",
     why: "Imported leads are checked against do-not-call lists and duplicates before anyone dials them." },
-  { key: "calling-windows", module: "outbound", label: "Set your calling hours", path: "/app/settings#calling-windows", action: "Open settings tab", target: "calling-windows-save",
+  { key: "calling-windows", module: "outbound", label: "Set your calling hours", path: "/app/settings#calling-windows", action: "Set hours", target: "calling-windows-save",
     instruction: "Choose the hours your agency dials. Federal and state limits always apply on top.",
     why: "The dialer never offers a lead outside these hours in the lead's own time zone." },
-  { key: "assign", module: "outbound", label: "Assign leads to your agents", path: "/app/assignments", action: "Open assignments", target: "assignments-assign",
+  { key: "assign", module: "outbound", label: "Assign leads to your agents", path: "/app/assignments", action: "Assign leads", target: "assignments-assign",
     instruction: "Give a lead list, or single leads, to the agents who will call them.",
     why: "An agent's dialer queue only holds the leads assigned to them." },
-  { key: "outcomes", module: "pipeline", label: "Map call outcomes to stages", path: "/app/settings#pipelines", action: "Open settings tab", target: "pipeline-outcomes",
-    instruction: "Pick the pipeline stage each call outcome moves a lead to.",
-    why: "Until an outcome has a stage, recording it leaves the lead where it was." },
-  { key: "disclosures", module: "sell", label: "Publish your disclosures", path: "/app/settings#sales-disclosures", action: "Open settings tab",
-    instruction: "Write or copy the disclosures your applications need, then publish them.",
-    why: "A required disclosure must be read before an application can be submitted." },
   // LA-4.6 made the statement step 2 ("You appear to be owed $X"). Owner, 2026-10-28: it helps nobody
   // start working and matches nothing before the book is in, so it closes "Get paid right" instead.
-  { key: "statement", module: "book", label: "Upload your first carrier statement", path: "/app/statements?import=1", action: "Import a statement",
+  { key: "statement", module: "book", label: "Upload your first carrier statement", path: "/app/statements?import=1", action: "Upload statement",
     instruction: "When your next carrier statement arrives, drop it in: PDF, Excel or CSV.",
     why: STATEMENT_EXPLAINER },
-  { key: "phone", module: "account", label: "Connect your phone number", path: "/app/settings#business-identity/identity-partner-support", action: "Open settings tab",
+  // Owner, 2026-10-28: works out of the box (each result goes to the stage with its own name,
+  // 20261027100000), so this is a review in Fine-tune later, said in plain words.
+  { key: "outcomes", module: "pipeline", label: "Check where each call result moves a lead", path: "/app/settings#pipelines", action: "Review results", target: "pipeline-outcomes",
+    instruction: "Each call result already moves the lead to the stage with the same name. Change any you want to go elsewhere.",
+    why: "When you record a call result, the lead moves to the stage chosen here, so your pipeline stays up to date." },
+  // Owner, 2026-10-28: Insurvas's own disclosures already apply to every application, so this is a
+  // review in Fine-tune later: add the agency's own only where its carriers or states need them.
+  { key: "disclosures", module: "sell", label: "Check the disclosures you read to clients", path: "/app/settings#sales-disclosures", action: "Review disclosures",
+    instruction: "Insurvas's standard disclosures are already in place. Add your own only if your carriers or states need more.",
+    why: "A required disclosure must be read to the client before an application can be submitted." },
+  { key: "phone", module: "account", label: "Connect your phone number", path: "/app/settings#business-identity/identity-partner-support", action: "Add phone",
     instruction: "Enter the phone number clients and partners should call.",
     why: "It appears on documents and partner messages sent from your workspace." },
-  { key: "queue-sla", module: "inbound", label: "Set how fast transfers must be claimed", path: "/app/settings#queue-sla", action: "Open settings tab", target: "queue-sla-save",
+  { key: "queue-sla", module: "inbound", label: "Set how fast transfers must be claimed", path: "/app/settings#queue-sla", action: "Set claim times", target: "queue-sla-save",
     instruction: "Set when an unclaimed transfer warns, escalates and expires.",
     why: "These times drive the Agent Floor alerts and when the partner is told." },
-  { key: "retention", module: "retention", label: "Set your retention rules", path: "/app/retention-settings", action: "Open retention settings",
+  { key: "retention", module: "retention", label: "Set your retention rules", path: "/app/retention-settings", action: "Set retention",
     instruction: "Choose which risk bands reach the save queue.",
     why: "The save queue only shows policies at or above the band you choose here." },
-  { key: "compliance", module: "compliance", label: "Set your compliance rules", path: "/app/compliance/settings", action: "Open compliance settings",
+  { key: "compliance", module: "compliance", label: "Set your compliance rules", path: "/app/compliance/settings", action: "Review rules",
     instruction: "Review how long each kind of record is kept.",
     why: "Records are deleted or held on these rules, so check them before your first call." },
-  { key: "accounting", module: "accounting", label: "Set up accounting", path: "/app/accounting-settings", action: "Open accounting settings",
+  { key: "accounting", module: "accounting", label: "Set up accounting", path: "/app/accounting-settings", action: "Set up accounting",
     instruction: "Set the invoice tolerance your books should flag.",
     why: "Vendor invoices off by more than this are flagged for review." },
-  { key: "hierarchy", module: "agency", label: "Set your hierarchy", path: "/app/hierarchy", action: "Open hierarchy",
+  { key: "hierarchy", module: "agency", label: "Set your hierarchy", path: "/app/hierarchy", action: "Set hierarchy",
     instruction: "Place each producer under their upline.",
     why: "Overrides and producer pay follow this hierarchy." },
 ] as const satisfies readonly StepDefinition[];
@@ -146,7 +150,7 @@ const SETUP_STEPS = [
  * Shown only when the business profile recommended it (the owner ticked "existing book of
  * business"), right after the statement step: the book import is the other half of "bring your data".
  */
-const BOOK_STEP = { key: "book", module: "book", label: "Import your existing book", path: "/app/book-import", action: "Import your book",
+const BOOK_STEP = { key: "book", module: "book", label: "Import your existing book", path: "/app/book-import", action: "Import book",
   instruction: "Upload the policy reports your carriers sent you.",
   why: "Your in-force book is what retention and commission checks work from." } as const satisfies StepDefinition;
 
@@ -246,7 +250,8 @@ export function applicableSetupSteps(context: SetupChecklistContext = {}): StepD
   const granted = context.features ? new Set(context.features) : null;
   const allowed = (key: SetupStepKey) => {
     if (granted === null) return true;
-    if (key === "team" && !(context.seats === null || (typeof context.seats === "number" && context.seats > 1))) return false;
+    // One seat: nobody to invite, and nobody but yourself to give leads to (owner, 2026-10-28).
+    if ((key === "team" || key === "assign") && !(context.seats === null || (typeof context.seats === "number" && context.seats > 1))) return false;
     const anyOf = STEP_ANY_OF[key];
     return STEP_FEATURES[key].every((feature) => granted.has(feature)) && (!anyOf || anyOf.some((feature) => granted.has(feature)));
   };
@@ -264,6 +269,8 @@ export function applicableSetupSteps(context: SetupChecklistContext = {}): StepD
  * Fine-tune later holds the settings that work on their defaults (owner, 2026-10-28).
  */
 const STEP_GROUP: Partial<Record<string, SetupGroupKey>> = {
+  outcomes: "later",
+  disclosures: "later",
   book: "money",
   statement: "money",
   phone: "later",

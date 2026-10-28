@@ -16,7 +16,7 @@ import { SetupModules } from "@/components/app/setup/setup-modules";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { Meter } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -94,12 +94,14 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
           </div>
         </TableCard>
       ) : null}
+      {/* One line, not three counters (owner, 2026-10-28): the list below already shows every step. */}
       {checklist.total > 0 ? (
-        <StatStrip label="Setup progress">
-          <StatTile label="Done" value={`${checklist.completed} of ${checklist.total}`} />
-          <StatTile label="Left" value={left} />
-          <StatTile label="Skipped" value={checklist.skipped} labelTitle="Skipped steps stay here. Bring one back whenever you are ready." />
-        </StatStrip>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Meter value={checklist.completed} max={checklist.total} tone="primary" label={`${checklist.completed} of ${checklist.total} setup steps done`} className="w-full max-w-md" />
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {checklist.completed} of {checklist.total} done{left > 0 ? ` · ${left} to go` : ""}{checklist.skipped > 0 ? ` · ${checklist.skipped} skipped` : ""}
+          </span>
+        </div>
       ) : null}
       {modules.length === 0 ? (
         <TableCard>
