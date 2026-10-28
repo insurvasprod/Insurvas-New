@@ -279,10 +279,11 @@ export function CarriersSettings() {
         value={step}
         onChange={(next) => { setStep(next); setQuery(""); setFilter("all"); }}
         tabs={[
-          { key: "carriers", label: "1 · Your carriers", count: yours.length },
-          { key: "states", label: "2 · States", count: nAppointed },
+          { key: "carriers", label: "Your carriers", count: yours.length },
+          { key: "states", label: "States", count: nAppointed },
           // Field maps need the Applications feature (the extension reads them); without it the tab is absent.
-          ...(sales !== null ? [{ key: "maps" as const, label: "3 · Field maps" }] : []),
+          // Owner, 2026-10-28: an extension setting, so it waits until there is a carrier to map.
+          ...(sales !== null && yours.length > 0 ? [{ key: "maps" as const, label: "Field maps" }] : []),
         ]}
         actions={<Button type="button" data-guide="carrier-library-add" onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add carrier</Button>}
       />
@@ -309,7 +310,6 @@ export function CarriersSettings() {
                   </button>
                 );
               }))}
-            <Button type="button" variant="outline" onClick={() => setAdding(true)}>+ Add carrier</Button>
           </>)}
           {current ? (
             <CarrierCard

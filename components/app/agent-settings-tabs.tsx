@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowUpRight, ChevronDown, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
@@ -48,6 +49,9 @@ export function AgentSettingsTabs({
   /** Sections the plan has no use for (LA-8.6: Team & access on a one-seat plan) — absent, like the rest. */
   hidden?: readonly string[];
 }) {
+  // In a Get set up step (?guide=…) the screen shows only that task: the settings menu steps aside,
+  // and "Back to setup" on the guide bar is the way out (owner, 2026-10-28).
+  const guiding = useSearchParams().has("guide");
   // Sections the plan has no use for leave the list before anything else sees it.
   const tabs = useMemo(() => (hidden?.length ? registered.filter((tab) => !hidden.includes(tab.id)) : registered), [registered, hidden]);
   // Absent, not greyed out: a section this person may not open is not in the rail at all.
@@ -190,7 +194,7 @@ export function AgentSettingsTabs({
     <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
       {/* Max height: the window less the top bar, the page title above the rail (84px) and the page's
           bottom padding (32px), so the rail ends at the window's bottom and never makes the page scroll. */}
-      <div className="box-border flex w-full min-h-0 shrink-0 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px]">
+      <div className={cn("box-border flex w-full min-h-0 shrink-0 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px]", guiding && "hidden")}>
         <div className="shrink-0 p-2 pb-1">
           <label className="relative block">
             <span className="sr-only">Search settings</span>
