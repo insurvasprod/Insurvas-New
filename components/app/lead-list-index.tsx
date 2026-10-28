@@ -11,6 +11,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { fullHeightCard, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 
 /**
  * The lead-list index: what each bought list is worth, whether it can be dialled at all, how much
@@ -33,12 +34,12 @@ type StateFilter = "all" | "not_exhausted" | ListState;
 
 const STALL_MS = 7 * 86_400_000;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const STATE_UI: Record<ListState, { label: string; chip: string; dot: string }> = {
-  working: { label: "Working", chip: "bg-[var(--success-surface)] text-[var(--success-ink)]", dot: "bg-[var(--success)]" },
-  stalling: { label: "Stalling", chip: "bg-[var(--warning-surface)] text-[var(--warning-ink)]", dot: "bg-[var(--warning)]" },
-  exhausted: { label: "Exhausted", chip: "bg-[var(--surface-alt)] text-[var(--body)]", dot: "bg-[var(--muted)]" },
-  blocked: { label: "Cannot be dialed", chip: "bg-[var(--error-surface)] text-[var(--error-ink)]", dot: "bg-[var(--error)]" },
-  empty: { label: "Nothing imported", chip: "bg-[var(--surface-alt)] text-[var(--body)]", dot: "bg-[var(--muted)]" },
+const STATE_UI: Record<ListState, { label: string; tone: StatusTone }> = {
+  working: { label: "Working", tone: "good" },
+  stalling: { label: "Stalling", tone: "warning" },
+  exhausted: { label: "Exhausted", tone: "neutral" },
+  blocked: { label: "Cannot be dialed", tone: "danger" },
+  empty: { label: "Nothing imported", tone: "neutral" },
 };
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -60,15 +61,6 @@ function stateOf(list: LeadListIndexRow, now: number): ListState {
   const lastTouched = list.lastTouchedAt ? Date.parse(list.lastTouchedAt) : Date.parse(list.createdAt);
   if ((list.byState.fresh ?? 0) > 0 && Number.isFinite(lastTouched) && now - lastTouched > STALL_MS) return "stalling";
   return "working";
-}
-
-function Chip({ className, dot, children }: { className: string; dot: string; children: React.ReactNode }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold leading-normal tracking-[-0.01em] ${className}`}>
-      <span className={`size-1.5 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
-      {children}
-    </span>
-  );
 }
 
 /** Worked through: closed, still in cadence, exhausted, and what nobody has dialled yet — as one bar. */
@@ -230,13 +222,13 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
                       {list.offTerritory == null || state === "empty" ? (
                         <span className="text-muted-foreground">—</span>
                       ) : list.offTerritory === 0 ? (
-                        <Chip className="bg-[var(--success-surface)] text-[var(--success-ink)]" dot="bg-[var(--success)]">All in licence</Chip>
+                        <StatusChip tone="good">All in licence</StatusChip>
                       ) : (
-                        <Chip className="bg-[var(--error-surface)] text-[var(--error-ink)]" dot="bg-[var(--error)]">{list.offTerritory.toLocaleString()} off-territory</Chip>
+                        <StatusChip tone="danger">{list.offTerritory.toLocaleString()} off-territory</StatusChip>
                       )}
                     </td>
                     <td>{list.scrubStatus !== "scrubbed" && state !== "empty" ? (list.scrubStatus === "failed" ? "scrub failed" : "not scrubbed") : fresh > 0 ? `${fresh.toLocaleString()} never dialed` : "—"}</td>
-                    <td><Chip className={ui.chip} dot={ui.dot}>{ui.label}</Chip></td>
+                    <td><StatusChip tone={ui.tone} dot>{ui.label}</StatusChip></td>
                     <td>{state === "blocked" ? <span className="text-xs text-[var(--error-ink)]">Leads are not servable</span> : state === "empty" ? <span className="text-xs text-muted-foreground">Import a file against it</span> : <WorkedThrough list={list} />}</td>
                     <td className="text-right">
                       <Button type="button" variant="outline" size="sm" aria-label={`Open ${list.campaignName}`} onClick={(event) => { event.stopPropagation(); onOpen(list); }}>Open</Button>

@@ -95,7 +95,7 @@ export function Pager({
 }
 
 const STEP =
-  "inline-flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-xs font-semibold tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+  "inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-xs font-semibold tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 
 function Step({ to, off, current = false, label, hrefFor, onPage, className, children }: {
   to: number;

@@ -104,6 +104,8 @@ export type PreflightPlan = {
   csvHash: string;
   /** The idempotency key this plan was staged under — the file AND everything chosen about it. */
   reuseKey?: string;
+  /** The product the file is for (2026-10-28). Absent on batches staged before: those were Term Life. */
+  productCode?: string | null;
   fileName?: string | null;
   vendorId: string | null;
   campaignId: string | null;
@@ -150,6 +152,8 @@ export type ScreeningJob = {
   mapping: Record<string, string | null> | null;
   dateOrder?: ImportDateOrder | null;
   definitionVersion: number | null;
+  /** The product the file is for (2026-10-28). */
+  productCode?: string | null;
   costCents: number | null;
   recordsPurchased: number | null;
   totalRows: number;
@@ -252,6 +256,8 @@ export function preflightKey(input: {
   recordsPurchased: number | null;
   /** In the key only when set, so batches staged before date orders existed still match. */
   dateOrder?: ImportDateOrder | null;
+  /** In the key only for a product other than Term Life, so batches staged before still match. */
+  productCode?: string | null;
 }) {
   const mapping = input.mapping
     ? Object.fromEntries(Object.entries(input.mapping).sort(([left], [right]) => left.localeCompare(right)))
@@ -259,6 +265,7 @@ export function preflightKey(input: {
   const fingerprint = JSON.stringify([
     input.csvHash, input.campaignId, input.vendorId, mapping, input.costCents, input.recordsPurchased,
     ...(input.dateOrder ? [input.dateOrder] : []),
+    ...(input.productCode && input.productCode !== "term_life" ? [`product:${input.productCode}`] : []),
   ]);
   return `preflight:${createHash("sha256").update(fingerprint, "utf8").digest("hex")}`;
 }
@@ -421,6 +428,7 @@ export async function preflightImport(input: {
     costCents,
     recordsPurchased: input.recordsPurchased ?? null,
     dateOrder,
+    productCode: input.template.template.product_code,
   });
 
   // Reuse the existing plan for this exact file AND these choices, rather than screening again.
@@ -476,6 +484,7 @@ export async function preflightImport(input: {
     mapping,
     ...(dateOrder ? { dateOrder } : {}),
     definitionVersion: input.template.assignment.definition_version ?? null,
+    productCode: input.template.template.product_code,
     costCents,
     recordsPurchased,
     totalRows,
@@ -832,6 +841,7 @@ async function buildPlan(
     mapping: job.mapping,
     ...(job.dateOrder ? { dateOrder: job.dateOrder } : {}),
     definitionVersion: job.definitionVersion,
+    ...(job.productCode ? { productCode: job.productCode } : {}),
     costCents: job.costCents,
     recordsPurchased: job.recordsPurchased,
     screened: Object.fromEntries(distinctPhones.map((phone) => [phone, screened[phone]])),
@@ -1233,4 +1243,15 @@ export async function commitImport(input: {
     .eq("id", input.batchId);
 
   return summary;
+}
+
+/**
+ * The product a staged batch is for, so finishing its scrub and committing it read the file against
+ * that product's form. A batch staged before products were chosen per import is Term Life.
+ */
+export async function batchProductCode(tenantId: string, batchId: string): Promise<string | null> {
+  const db = getSupabaseServiceClient() as unknown as Db;
+  const row = await db.from("agent_lead_import_batches").select("response").eq("tenant_id", tenantId).eq("id", batchId).maybeSingle();
+  const response = (row.data as { response?: { productCode?: unknown } } | null)?.response;
+  return typeof response?.productCode === "string" ? response.productCode : null;
 }

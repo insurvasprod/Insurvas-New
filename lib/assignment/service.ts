@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { appointmentCountsForRouting } from "@/lib/appointments/eligibility";
 import { switchedOffCarrierIds } from "@/lib/carriers/service";
+import { normalizeLanguages } from "./ownLanguages";
 
 import {
   LEAD_LIST_ASSIGN_LIMIT,
@@ -333,7 +334,7 @@ export async function saveAgentCapacity(tenantId: string, userId: string, input:
   if (membership.error || !membership.data) throw new Error("Capacity user is not a member of this tenant");
   const payload: Record<string, unknown> = { tenant_id: tenantId, user_id: userId };
   if (input.maxOpenLeads !== undefined) payload.max_open_leads = input.maxOpenLeads;
-  if (input.languages !== undefined) payload.languages = [...new Set(input.languages.map((value) => value.trim().toLowerCase()).filter(Boolean))].slice(0, 12);
+  if (input.languages !== undefined) payload.languages = normalizeLanguages(input.languages);
   if (input.weekdayOff !== undefined) payload.weekday_off = input.weekdayOff;
   const needsBoard = input.languages !== undefined || input.weekdayOff !== undefined;
   const result = await db().from("agent_capacity").upsert(payload, { onConflict: "tenant_id,user_id" }).select(needsBoard ? "user_id, max_open_leads, current_open, languages, weekday_off" : "user_id, max_open_leads, current_open").single();

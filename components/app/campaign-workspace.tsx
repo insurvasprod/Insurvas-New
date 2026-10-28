@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { notify } from "@/lib/notify";
+import { useSoldProducts } from "@/components/app/products/use-sold-products";
 import {
   CAMPAIGN_STATUSES,
   CAMPAIGN_STATUS_LABEL,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/campaigns/constants";
 
 import { Button } from "@/components/ui/button";
-import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
@@ -32,10 +33,15 @@ import { TableCard } from "@/components/ui/table-card";
 import { Pager } from "@/components/ui/pager";
 import { NewVendorPanel, SIDE_PANEL_FRAME, VendorRoster } from "@/components/app/vendor-roster";
 import { Callout } from "@/components/app/settings/primitives";
+import { checkboxControl, control, Field } from "@/components/ui/field";
 import { STATE_NAMES } from "@/lib/callbacks/windowFacts";
 import { vendorCampaignWarning, vendorTakesCampaigns } from "@/lib/vendors/types";
 import { cn } from "@/lib/utils";
 import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
 /** Campaigns and vendors, one at a time (2026-10-06 redesign). */
 type View = "campaigns" | "vendors";
@@ -142,6 +148,7 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
   // so a tenant could not create the vendor they buy from or the campaign that carries its cost —
   // and without a campaign every imported lead is free, which makes the whole cost analysis empty.
   const [newVendor, setNewVendor] = useState<{ name: string; lead_type: string; return_window_days: string; terms: string } | null>(null);
+  const soldProducts = useSoldProducts();
   const [newCampaign, setNewCampaign] = useState<{ vendor_id: string; name: string; lead_type: string; product_code: string; total_spend: string; records_purchased: string; mixing_weight: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [vendorFilter, setVendorFilter] = useState("all");
@@ -155,16 +162,6 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
   // Header, strip, tab row, toolbar, column heads, totals row and pager around the campaign rows.
   const pageSize = useFittingRows(470, 45);
   const closePanel = useCallback(() => setOpenId(null), []);
-  // The filter popover closes on a click outside it or Esc, like the inbox's.
-  const filtersRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const onPointer = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setFiltersOpen(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
-  }, [filtersOpen]);
   // Campaigns concept audit (LA-2 §5). Each is null when its migration is not applied, and the line
   // that shows it is then left out rather than drawn as a zero.
   const [progress, setProgress] = useState<Record<string, CampaignProgress> | null>(null);
@@ -264,9 +261,12 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
     const resuming = run && run.status !== "scrubbed";
     if (!resuming) {
       const leads = progress?.[campaign.campaign_id]?.leads_received;
-      const ok = window.confirm(
-        `Re-screen ${leads === undefined ? "every lead" : `all ${leads.toLocaleString()} leads`} in ${campaign.name}? Each number is checked against the litigator and do-not-call lists, and the lookups count against your plan's screening allowance. The campaign serves no leads until the scrub finishes. Numbers that fail are suppressed and recorded against the campaign.`,
-      );
+      const ok = await confirmAction({
+        title: `Re-screen ${campaign.name}?`,
+        confirmLabel: "Re-screen leads",
+        destructive: false,
+        description: `Re-screen ${leads === undefined ? "every lead" : `all ${leads.toLocaleString()} leads`} in ${campaign.name}? Each number is checked against the litigator and do-not-call lists, and the lookups count against your plan's screening allowance. The campaign serves no leads until the scrub finishes. Numbers that fail are suppressed and recorded against the campaign.`,
+      });
       if (!ok) return;
     }
     stopRequested.current = false;
@@ -471,14 +471,7 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
 
     {/* Campaigns and vendors as tabs on the left, the two create actions on the right (2026-10-06 redesign). */}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="tablist" aria-label="Vendors and campaigns" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
-        {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" id={`campaigns-tab-${item.key}`} aria-controls={`campaigns-view-${item.key}`} aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
-            {item.label}
-            <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{item.count}</span>
-          </button>
-        ))}
-      </div>
+      <ViewTabs label="Vendors and campaigns" tabs={tabs} value={view} onChange={setView} idPrefix="campaigns-tab" controls={(key) => `campaigns-view-${key}`} />
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={openNewVendor}>New vendor</Button>
         <Button type="button" disabled={vendors.length === 0} title={vendors.length === 0 ? "Add a vendor first — a campaign belongs to one" : undefined} onClick={() => openNewCampaign()}>New campaign</Button>
@@ -500,7 +493,8 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
             <label className="portal-campaigns-field" htmlFor="campaign-vendor"><span>Vendor</span><select id="campaign-vendor" className={focusRing} value={newCampaign.vendor_id} onChange={(event) => setNewCampaign({ ...newCampaign, vendor_id: event.target.value })}>{vendors.filter((vendor) => vendorTakesCampaigns(vendor.status)).map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
             <label className="portal-campaigns-field"><span>Name</span><input className={focusRing} value={newCampaign.name} onChange={(event) => setNewCampaign({ ...newCampaign, name: event.target.value })} placeholder="Apex Term Life · September" /></label>
             <label className="portal-campaigns-field"><span>Lead type</span><select className={focusRing} value={newCampaign.lead_type} onChange={(event) => setNewCampaign({ ...newCampaign, lead_type: event.target.value })}><option value="list">List</option><option value="realtime">Real-time</option><option value="aged">Aged</option></select></label>
-            <label className="portal-campaigns-field"><span>Product code</span><input className={focusRing} value={newCampaign.product_code} onChange={(event) => setNewCampaign({ ...newCampaign, product_code: event.target.value })} placeholder="Optional" /></label>
+            {/* Settings › Products (2026-10-27): a product the agency sells, not a typed code. */}
+            <label className="portal-campaigns-field"><span>Product</span><select className={focusRing} value={newCampaign.product_code} onChange={(event) => setNewCampaign({ ...newCampaign, product_code: event.target.value })}><option value="">Any product</option>{(soldProducts ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}</select></label>
             <label className="portal-campaigns-field"><span>Total spend ($)</span><input className={focusRing} inputMode="decimal" value={newCampaign.total_spend} onChange={(event) => setNewCampaign({ ...newCampaign, total_spend: event.target.value })} placeholder="1750.00" /></label>
             <label className="portal-campaigns-field"><span>Records purchased</span><input className={focusRing} inputMode="numeric" value={newCampaign.records_purchased} onChange={(event) => setNewCampaign({ ...newCampaign, records_purchased: event.target.value })} placeholder="5000" /></label>
             <label className="portal-campaigns-field"><span>Mixing weight</span><input className={focusRing} inputMode="numeric" value={newCampaign.mixing_weight} onChange={(event) => setNewCampaign({ ...newCampaign, mixing_weight: event.target.value })} /></label>
@@ -531,23 +525,22 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
               <option value="all">All vendors</option>
               {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
             </select>
-            <div ref={filtersRef} className="relative">
-              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((value) => !value)} count={filterCount} />
-              {filtersOpen && <div role="group" aria-label="Filter campaigns" className="absolute top-[calc(100%+6px)] left-0 z-30 grid w-[300px] gap-3 rounded-xl border border-[var(--border-strong)] bg-card p-4 text-sm shadow-[var(--shadow-overlay)]">
-                <span className="text-xs font-semibold text-muted-foreground">Status</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {CAMPAIGN_STATUSES.map((status) => <label key={status} className="inline-flex items-center gap-2"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={statusFilter.has(status)} onChange={() => toggleStatus(status)} />{STATUS_LABEL[status]}</label>)}
-                </div>
-                <label className="grid gap-1.5"><span className="text-xs font-semibold text-muted-foreground">Lead type</span>
-                  <select aria-label="Lead type" className={toolbarControl} value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(0); }}><option value="all">Any</option><option value="list">List</option><option value="realtime">Real-time</option><option value="aged">Aged</option></select>
-                </label>
-                <div className="flex justify-end gap-2">
-                  {filterCount > 0 && <Button type="button" variant="ghost" onClick={() => { setStatusFilter(new Set()); setTypeFilter("all"); setPage(0); }}>Clear filters</Button>}
-                  <Button type="button" variant="outline" onClick={() => setFiltersOpen(false)}>Done</Button>
-                </div>
-              </div>}
-            </div>
+            <FilterButton open={filtersOpen} controls="campaign-filters" onClick={() => setFiltersOpen((value) => !value)} count={filterCount} />
           </DataToolbar>
+        }
+        filters={
+          // Inline under the toolbar (UI-CONSISTENCY §6a), not a popover over the rows.
+          <FilterPanel id="campaign-filters" open={filtersOpen}>
+            <div role="group" aria-label="Status" className="grid gap-1.5">
+              <span className="text-label text-[var(--body)]">Status</span>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                {CAMPAIGN_STATUSES.map((status) => <label key={status} className="inline-flex items-center gap-2"><input type="checkbox" className={checkboxControl} checked={statusFilter.has(status)} onChange={() => toggleStatus(status)} />{STATUS_LABEL[status]}</label>)}
+              </div>
+            </div>
+            <Field label="Lead type" htmlFor="campaign-type-filter">
+              <select id="campaign-type-filter" className={control} value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(0); }}><option value="all">Any</option><option value="list">List</option><option value="realtime">Real-time</option><option value="aged">Aged</option></select>
+            </Field>
+          </FilterPanel>
         }
         footer={!loadError && filtered.length > 0 ? <Pager page={currentPage + 1} total={filtered.length} noun="campaigns" pageSize={pageSize} onPage={(next) => setPage(next - 1)} suffix="draft campaigns first" /> : undefined}
       >
@@ -586,9 +579,9 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
                   return <TableRow key={campaign.campaign_id} className={`portal-campaigns-row${open ? " is-open" : ""}`} onClick={() => setOpenId(open ? null : campaign.campaign_id)}>
                     <TableCell className="max-w-[260px]"><button type="button" className="portal-campaigns-name block max-w-full truncate" title={campaign.name} aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpenId(open ? null : campaign.campaign_id); }}>{campaign.name}</button></TableCell>
                     <TableCell className="max-w-[180px] truncate" title={vendor}>{vendor}</TableCell>
-                    <TableCell><span className={`portal-status-chip ${campaign.status === "active" ? "is-success" : campaign.status === "draft" ? "is-warning" : "is-neutral"}`}><span aria-hidden="true" />{STATUS_LABEL[campaign.status] ?? campaign.status}</span></TableCell>
+                    <TableCell><StatusChip tone={campaign.status === "active" ? "good" : campaign.status === "draft" ? "warning" : "neutral"} dot>{STATUS_LABEL[campaign.status] ?? campaign.status}</StatusChip></TableCell>
                     {/* The scrub gate as a state, not a badge: an unscrubbed campaign's leads are not servable. */}
-                    <TableCell>{scrubShown ? <span className={`portal-status-chip ${campaign.scrub_status === "failed" ? "is-error" : campaign.scrub_status === "scrubbing" ? "is-info" : "is-warning"}`}><span aria-hidden="true" />{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? campaign.scrub_status}</span> : <span className="text-[var(--muted)]">{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? "—"}</span>}</TableCell>
+                    <TableCell>{scrubShown ? <StatusChip tone={campaign.scrub_status === "failed" ? "danger" : campaign.scrub_status === "scrubbing" ? "info" : "warning"}>{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? campaign.scrub_status}</StatusChip> : <span className="text-[var(--muted)]">{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? "—"}</span>}</TableCell>
                     <TableCell className="text-right tabular-nums">{count(leadsIn)}</TableCell>
                     <TableCell className="text-right tabular-nums">{count(dialable)}</TableCell>
                     {wide && <TableCell className="text-right tabular-nums">{count(reach?.contacted_leads)}</TableCell>}
@@ -649,6 +642,8 @@ export function CampaignWorkspace({ embedded = false }: { embedded?: boolean } =
             <label className="portal-campaigns-field"><span>Records purchased</span><input className={focusRing} inputMode="numeric" value={editValue(campaign, "records_purchased")} onChange={(event) => setEdit(campaign, "records_purchased", event.target.value)} /></label>
             <label className="portal-campaigns-field"><span>Mixing weight</span><input className={focusRing} inputMode="numeric" value={editValue(campaign, "mixing_weight")} onChange={(event) => setEdit(campaign, "mixing_weight", event.target.value)} /></label>
           </div>
+          {/* An unsaved cost asks before a click away drops it (foundation v3). */}
+          <LeaveGuard dirty={dirty} onDiscard={() => setEdits((current) => { const next = { ...current }; delete next[campaign.campaign_id]; return next; })} what={`${campaign.name}'s cost`} />
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" disabled={!dirty || busy === campaign.campaign_id} onClick={() => {
               const row = edits[campaign.campaign_id];

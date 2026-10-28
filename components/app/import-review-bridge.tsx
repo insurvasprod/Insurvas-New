@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, FileWarning } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { PageHeader } from "@/components/ui/page-header";
 import { Callout, DashedCard, SettingsCard, SettingsMeter } from "@/components/app/settings/primitives";
 import { ImportStepper } from "@/components/app/import-stepper";
@@ -50,7 +49,7 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
   );
 
   if (!csv)
-    return <DashboardStage ribbon><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+    return <><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader title="Import a list" />
       <ImportStepper current={3} />
       <DashedCard
@@ -60,10 +59,10 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
       >
         Use the same campaign and cost. Nothing was imported, and the scrub is not charged twice.
       </DashedCard>
-    </div></DashboardStage>;
+    </div></>;
 
   // Steps 3–4 on the same moving ribbon as Lead sources, where steps 1–2 open (2026-10-26).
-  return <DashboardStage ribbon><ImportReviewWorkspace plan={plan} csv={csv} /></DashboardStage>;
+  return <><ImportReviewWorkspace plan={plan} csv={csv} /></>;
 }
 
 /**
@@ -72,7 +71,7 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
  * Here rather than in the page because the primitives are a client module.
  */
 export function ImportAlreadyImported() {
-  return <DashboardStage ribbon><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+  return <><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     <PageHeader title="Import a list" />
     <ImportStepper current={5} />
     <DashedCard
@@ -85,7 +84,7 @@ export function ImportAlreadyImported() {
     >
       The leads are in your lead lists.
     </DashedCard>
-  </div></DashboardStage>;
+  </div></>;
 }
 
 /** The scrub's progress as the server reports it (importPreflight.ScreeningProgress). */
@@ -187,7 +186,7 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
   const left = progress.total - progress.screened;
   const minutes = perSecond && perSecond > 0 ? Math.ceil(left / perSecond / 60) : null;
 
-  return <DashboardStage ribbon><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+  return <><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     <PageHeader title="Import a list" />
     <ImportStepper current={3} />
     <SettingsCard pad={20} title="Screening the file" sub={`${progress.fileName ?? "This file"} · ${progress.totalRows.toLocaleString()} rows`} bodyClassName="flex flex-col gap-3">
@@ -219,5 +218,5 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
       Use the same campaign and cost. Every number is already checked, so nothing is screened or charged twice.
 
     </DashedCard>}
-  </div></DashboardStage>;
+  </div></>;
 }

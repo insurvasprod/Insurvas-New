@@ -120,10 +120,11 @@ export async function listSalesTemplates(tenantId: string, kind: SalesTemplateKi
   const list = rows<Row>(res.data);
   const carrierIds = await listedCarrierIds(tenantId);
   const productQuery = (columns: string) => client.from("carrier_products").select(columns).in("carrier_id", carrierIds).or(`tenant_id.is.null,tenant_id.eq.${tenantId}`).eq("is_active", true).order("name");
-  const [names, carriers, first] = await Promise.all([
+  const [names, carriers, first, lines] = await Promise.all([
     namesFor(list),
     namedCarriers(carrierIds),
     carrierIds.length ? productQuery("id, tenant_id, carrier_id, product_code, name, copied_from_id") : Promise.resolve({ data: [], error: null }),
+    productLines(tenantId),
   ]);
   // copied_from_id arrives with 20260926102410; before it, read without it (nothing is a copy yet).
   const products = first.error && isMissingSchema(first.error) ? await productQuery("id, tenant_id, carrier_id, product_code, name") : first;
@@ -132,7 +133,7 @@ export async function listSalesTemplates(tenantId: string, kind: SalesTemplateKi
     templates: list.map((r) => toView(r, names)),
     carriers,
     carrierProducts: preferTenantCopies(productRows).map((p) => ({ carrierId: p.carrier_id, productCode: p.product_code, name: p.name })),
-    productLines: names.lines,
+    productLines: lines,
   };
 }
 
@@ -221,6 +222,27 @@ export async function retireSalesTemplate(actor: Actor, id: string) {
   if (!upd.data) throw new ApplicationError("SALES_TEMPLATE_NOT_PUBLISHED", "This version changed a moment ago. Refresh to see it.", 409);
   await auditSalesSetting(actor, "tenant.sales_template_retired", { type: "sales_template", id: row.id }, { before: { status: "published" }, after: { status: "retired" } }, { kind: row.kind, version: row.version });
   return viewOf(upd.data as Row);
+}
+
+/**
+ * Delete one of the agency's template versions (owner ask 2026-10-28). A version an interview or a
+ * quote already loaded cannot go: both point at it with `on delete restrict`, so the database
+ * refuses and the agency is told to retire it instead. Everything else — any draft, a version no
+ * one ever used — is removed, and the deletion is audited with what it held.
+ */
+export async function deleteSalesTemplate(actor: Actor, id: string) {
+  const row = await ownRow(actor.tenantId, id);
+  const del = await db().from("sales_templates").delete().eq("id", row.id).eq("tenant_id", actor.tenantId).select("id").maybeSingle();
+  if (del.error) {
+    if ((del.error as { code?: string }).code === "23503") {
+      throw new ApplicationError("SALES_TEMPLATE_IN_USE", `Version ${row.version} has been used by interviews or quotes, so it is kept for them. Retire it instead.`, 409);
+    }
+    fail(del.error, "Sales templates");
+  }
+  if (!del.data) throw new ApplicationError("SALES_TEMPLATE_NOT_FOUND", "That template was already removed. Refresh to see the list.", 404);
+  await auditSalesSetting(actor, "tenant.sales_template_deleted", { type: "sales_template", id: row.id },
+    { before: { name: row.name, version: row.version, status: row.status, definition: row.definition }, after: null }, { kind: row.kind });
+  return { id: row.id };
 }
 
 /**

@@ -13,10 +13,11 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
-import { Field, btn } from "@/components/app/settings/primitives";
+import { Field } from "@/components/app/settings/primitives";
 import type { IssuedPoliciesResponse, IssuedPolicy } from "@/lib/issuedPolicies/types";
 import { notify } from "@/lib/notify";
 import { SectionLoading } from "@/components/ui/page-states";
+import { Button } from "@/components/ui/button";
 
 const input40 =
   "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
@@ -103,20 +104,20 @@ export function IssuedPolicyPanel({ dealId, defaultCarrier, readOnly, onChanged 
               {policy.policy_number ? `No. ${policy.policy_number} · ` : ""}Issued {day(policy.issued_at)}{policy.lapsed_at ? ` · lapsed ${day(policy.lapsed_at)}` : ""}
             </span>
             {policy.status === "issued" && canWrite && lapsing !== policy.id && (
-              <button type="button" className={btn("secondary", "mt-1.5")} onClick={() => { setLapsing(policy.id); setLapsedOn(localToday()); setFormError(""); }}>Mark lapsed</button>
+              <Button type="button" variant="outline" size="sm" className="mt-1.5" onClick={() => { setLapsing(policy.id); setLapsedOn(localToday()); setFormError(""); }}>Mark lapsed</Button>
             )}
             {lapsing === policy.id && (
               <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => void submitLapse(event, policy)} aria-label={`Mark ${policy.carrier} lapsed`}>
                 <Field label="Lapse date" htmlFor={`lapse-${policy.id}`} className="w-[170px]"><input id={`lapse-${policy.id}`} type="date" required className={input40} value={lapsedOn} min={policy.issued_at.slice(0, 10)} max={localToday()} onChange={(event) => setLapsedOn(event.target.value)} /></Field>
-                <button type="submit" className={btn("primary-sm")} disabled={saving}>{saving ? "Saving…" : "Mark lapsed"}</button>
-                <button type="button" className={btn("secondary")} onClick={() => setLapsing(null)}>Cancel</button>
+                <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Mark lapsed"}</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setLapsing(null)}>Cancel</Button>
               </form>
             )}
           </li>)}
         </ul>}
 
       {canWrite && !inForce && !issuing && (
-        <button type="button" className={btn("secondary", "mt-2")} onClick={() => { setIssuing(true); setFormError(""); }}>Mark issued</button>
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { setIssuing(true); setFormError(""); }}>Mark issued</Button>
       )}
       {issuing && (
         <form className="mt-2 grid gap-2" onSubmit={(event) => void submitIssue(event)} aria-label="Mark this deal's policy issued">
@@ -124,8 +125,8 @@ export function IssuedPolicyPanel({ dealId, defaultCarrier, readOnly, onChanged 
           <Field label="Policy number" htmlFor={`issue-number-${dealId}`} required><input id={`issue-number-${dealId}`} required maxLength={120} className={input40} value={issue.policy_number} onChange={(event) => setIssue((current) => ({ ...current, policy_number: event.target.value }))} /></Field>
           <Field label="Issue date" htmlFor={`issue-date-${dealId}`} required><input id={`issue-date-${dealId}`} type="date" required max={localToday()} className={input40} value={issue.issued_on} onChange={(event) => setIssue((current) => ({ ...current, issued_on: event.target.value }))} /></Field>
           <div className="flex gap-2">
-            <button type="submit" className={btn("primary-sm")} disabled={saving}>{saving ? "Saving…" : "Mark issued"}</button>
-            <button type="button" className={btn("secondary")} onClick={() => setIssuing(false)}>Cancel</button>
+            <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Mark issued"}</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIssuing(false)}>Cancel</Button>
           </div>
         </form>
       )}

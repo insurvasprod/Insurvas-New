@@ -6,6 +6,7 @@ import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PageLoading } from "@/components/ui/page-loading";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
@@ -342,6 +343,7 @@ export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = 
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <LeaveGuard dirty={!readOnly && dirty} what="the queue scoring" onDiscard={() => { if (!data) return; setEnabled(data.enabled); setHoldout(String(data.holdoutPct)); setWeights(Object.fromEntries(data.weights.map((weight) => [weight.signal, weight.weight.toFixed(2)]))); }} />
       <PageHeader
         title="Queue scoring"
         description="How the dialer picks the next lead"

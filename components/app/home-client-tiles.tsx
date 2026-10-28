@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, ListChecks } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { DashTile, type TileRow } from "@/components/ui/dash-tile";
 import { LaunchEmpty } from "@/components/ui/launchpad";
 import { expiryCountdown, type PendingSummary } from "@/lib/applications/listRules";
@@ -75,7 +76,7 @@ export function CloseOutTile({ href }: { href: string }) {
 
   async function record(appointment: Appointment, outcome: (typeof OUTCOMES)[number]["value"]) {
     const label = OUTCOMES.find((item) => item.value === outcome)?.label ?? outcome;
-    if (!window.confirm(`Record ${label.toLowerCase()} for ${appointment.customerName}?`)) return;
+    if (!(await confirmAction({ title: `Record ${label.toLowerCase()} for ${appointment.customerName}?`, description: "This closes the appointment with that outcome.", confirmLabel: `Record ${label.toLowerCase()}`, cancelLabel: "Not yet", destructive: false }))) return;
     setSaving(appointment.appointmentId);
     setError("");
     try {

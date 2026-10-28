@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
@@ -484,7 +485,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   };
   const STEP_LABEL: Record<Step, string> = { confirm: "Confirm", showed: "Showed", no_show: "No-show" };
   async function takeStep(item: Appointment, step: Step) {
-    if (!window.confirm(`${STEP_LABEL[step]}: ${item.customerName}?`)) return;
+    if (!(await confirmAction({ title: `${STEP_LABEL[step]}: ${item.customerName}?`, description: step === "confirm" ? "The appointment is marked confirmed." : "This closes the appointment with that outcome.", confirmLabel: STEP_LABEL[step], cancelLabel: "Not yet", destructive: step === "no_show" }))) return;
     setStepping(item.appointmentId);
     const response = await fetch(step === "confirm" ? "/api/app/appointments" : "/api/app/appointments/close-out", {
       method: step === "confirm" ? "PATCH" : "POST",

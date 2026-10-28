@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { inputControl } from "@/components/ui/field";
 
 type Line = { label: string; amount: string };
 
@@ -113,18 +113,13 @@ export function CustomInvoiceDialog({
               {lockedTenant ? (
                 <p className="text-sm font-medium">{lockedTenant.name}</p>
               ) : (
-                <Select value={tenantId} onValueChange={setTenantId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Choose a tenant…" />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select aria-label="Tenant" className={inputControl} value={tenantId} onChange={(event) => setTenantId(event.target.value)}><option value="" disabled>Choose a tenant…</option>
                     {tenants.map((tenant) => (
-                      <SelectItem key={tenant.id} value={tenant.id}>
+                      <option key={tenant.id} value={tenant.id}>
                         {tenant.name}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
               )}
             </div>
 

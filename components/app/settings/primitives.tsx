@@ -13,6 +13,7 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
 
@@ -37,9 +38,26 @@ export function SettingsSectionProvider({ value, children }: { value: SectionMet
  * Discard / Save pair. Sections that save each edit as it is made pass no actions: a Save button
  * with nothing pending behind it is a control that lies.
  */
-export function SettingsSectionHeader({ actions }: { actions?: ReactNode }) {
+export function SettingsSectionHeader({ actions, trail }: {
+  actions?: ReactNode;
+  /**
+   * A record open inside the section (owner 2026-10-28, Underwriting templates): drawn on the
+   * title's own line after an arrow, with `actions` at the end of that line. The purpose line and
+   * the last-changed note step aside while a record is open.
+   */
+  trail?: ReactNode;
+}) {
   const meta = useContext(SectionContext);
   if (!meta) return null;
+  if (trail) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="m-0 shrink-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{meta.title}</h2>
+        <div className="flex min-w-[240px] flex-1 items-center gap-3">{trail}</div>
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2.5">{actions}</div>}
+      </div>
+    );
+  }
   return (
     // Wraps only on narrow screens. At desktop width the board keeps the pair on the right however
     // long the purpose line runs, so the text takes what is left rather than pushing them under it.
@@ -72,12 +90,12 @@ export function DraftActions({
 }) {
   return (
     <>
-      <button type="button" className={btn("ghost")} onClick={onDiscard} disabled={!dirty || saving}>
+      <Button type="button" variant="ghost" onClick={onDiscard} disabled={!dirty || saving}>
         Discard
-      </button>
-      <button type="button" className={btn("primary")} onClick={onSave} disabled={!dirty || saving || disabled}>
+      </Button>
+      <Button type="button" onClick={onSave} disabled={!dirty || saving || disabled}>
         {saving ? "Saving…" : saveLabel}
-      </button>
+      </Button>
     </>
   );
 }
@@ -152,13 +170,14 @@ export function SettingsCard({
   pad?: 18 | 20 | 24;
   action?: ReactNode;
 }) {
-  const p = { 18: "p-[18px]", 20: "p-5", 24: "p-6" }[pad];
+  // Foundation v3: one card padding, 16px. `pad` is kept so no caller has to change.
+  const p = { 18: "p-4", 20: "p-4", 24: "p-4" }[pad];
   return (
-    <section className={cn("min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)]", p, className)}>
+    <section className={cn("m-glass min-w-0 rounded-[12px] border border-[var(--border)]", p, className)}>
       {(title || sub || action) && (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            {title && <h3 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h3>}
+            {title && <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>}
             {sub && <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
           </div>
           {action}
@@ -172,11 +191,11 @@ export function SettingsCard({
 /** The dashed card a section shows when the thing lives somewhere else, or does not exist yet. */
 export function DashedCard({ icon, title, children, action }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col items-center rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-5 text-center">
+    <div className="m-glass flex min-w-0 flex-col items-center rounded-[12px] border border-dashed border-[var(--border-strong)] p-5 text-center">
       {icon && (
         <span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]">{icon}</span>
       )}
-      <div className="mt-2.5 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</div>
+      <div className="mt-2.5 text-card-title text-[var(--ink)]">{title}</div>
       {children && <p className="mt-1.5 max-w-[46ch] text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{children}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>
@@ -187,9 +206,9 @@ export function DashedCard({ icon, title, children, action }: { icon?: ReactNode
 
 export function SettingsTableCard({ title, actions, children, className, headerClassName }: { title: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; /** e.g. a see-through header on a glass card. */ headerClassName?: string }) {
   return (
-    <section className={cn("flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]", className)}>
-      <div className={cn("flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3", headerClassName)}>
-        <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
+    <section className={cn("m-glass flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)]", className)}>
+      <div className={cn("m-glass-head flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3", headerClassName)}>
+        <span className="text-card-title text-[var(--ink)]">{title}</span>
         {actions && <span className="flex flex-wrap items-center gap-2.5">{actions}</span>}
       </div>
       <div className="min-w-0 overflow-x-auto">{children}</div>
@@ -197,12 +216,12 @@ export function SettingsTableCard({ title, actions, children, className, headerC
   );
 }
 
-/** Table cell classes for the boards' tables: 12px uppercase heads, 14px body, 8×12 cells. */
+/** Table cell classes for the boards' tables (foundation v3): a 40px sentence-case head at 13/500, 44px rows. */
 export const st = {
   table: "w-full border-collapse text-left",
-  headRow: "bg-[var(--surface-alt)]",
-  th: "px-3 py-2 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]",
-  td: "border-t border-[var(--border)] px-3 py-2 align-middle text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]",
+  headRow: "m-glass-head",
+  th: "h-[40px] px-3 py-2 text-label whitespace-nowrap text-[var(--muted)]",
+  td: "h-[44px] border-t border-[var(--border)] px-3 py-2 align-middle text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]",
   num: "text-right tabular-nums",
   strong: "font-semibold text-[var(--ink)]",
   sub: "block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]",
@@ -229,103 +248,8 @@ export function Pill({ tone = "neutral", dot, children, className }: { tone?: Pi
 
 /* ── fields ─────────────────────────────────────────────────────────────── */
 
-/** 36px, 14px type (16px on phones, so iOS does not zoom), strong edge: the same height as a Button and the shared Input (UI standard §5, 2026-09-28). */
-export const control =
-  "mt-1.5 box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-base md:text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
-
-export function Field({
-  label,
-  htmlFor,
-  required,
-  hint,
-  error,
-  children,
-  className,
-}: {
-  label: ReactNode;
-  htmlFor?: string;
-  required?: boolean;
-  hint?: ReactNode;
-  error?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("block min-w-0", className)}>
-      <label htmlFor={htmlFor} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
-        {label}
-        {required && <span className="text-[var(--error-ink)]"> *</span>}
-      </label>
-      {children}
-      {error ? (
-        <span role="alert" className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{error}</span>
-      ) : (
-        hint && <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{hint}</span>
-      )}
-    </div>
-  );
-}
-
-/** Title + help on the left, a 38×22 switch on the right. */
-export function ToggleRow({
-  id,
-  title,
-  help,
-  checked,
-  onChange,
-  disabled,
-}: {
-  id: string;
-  title: ReactNode;
-  help?: ReactNode;
-  checked: boolean;
-  onChange?: (next: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="min-w-0">
-        <label htmlFor={id} className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{title}</label>
-        {help && <span className="mt-1 block max-w-[420px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{help}</span>}
-      </span>
-      <Switch id={id} checked={checked} onChange={onChange} disabled={disabled} />
-    </div>
-  );
-}
-
-/** The bare 38×22 switch, for a table cell or anywhere the label sits elsewhere. */
-export function Switch({
-  id,
-  checked,
-  onChange,
-  disabled,
-  label,
-}: {
-  id?: string;
-  checked: boolean;
-  onChange?: (next: boolean) => void;
-  disabled?: boolean;
-  /** The accessible name when no <label> points at it. */
-  label?: string;
-}) {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange?.(!checked)}
-      className={cn(
-        "inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-        checked ? "justify-end bg-[var(--success)]" : "justify-start bg-[var(--border-strong)]"
-      )}
-    >
-      <span className="size-[18px] rounded-full bg-[var(--surface)] shadow-[var(--shadow-rest)]" />
-    </button>
-  );
-}
+// Moved to components/ui/field.tsx (foundation v3): every form uses them, not only Settings.
+export { checkboxControl, control, Field, Switch, textareaControl, ToggleRow } from "@/components/ui/field";
 
 /* ── key / value ────────────────────────────────────────────────────────── */
 
@@ -334,7 +258,7 @@ export function KeyValues({ items, cols = 2 }: { items: { label: ReactNode; valu
     <dl className={cn("m-0 grid gap-x-6 gap-y-4", cols === 2 ? "grid-cols-2" : "grid-cols-1")}>
       {items.map((item, i) => (
         <div key={i} className="min-w-0">
-          <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{item.label}</dt>
+          <dt className="text-xs leading-[1.33] text-[var(--muted)]">{item.label}</dt>
           <dd
             className={cn(
               "m-0 mt-1 text-sm leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums break-words",

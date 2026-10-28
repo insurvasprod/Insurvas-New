@@ -26,7 +26,8 @@ export type OutcomeOption = {
   label: string;
   closes_as: "completed" | "dropped";
   description: string;
-  stage: { id: string; name: string; pipeline_name: string; is_current: boolean } | null;
+  /** `color`: the stage's colour on the pipeline board, so the outcome reads the same in both places. */
+  stage: { id: string; name: string; pipeline_name: string; is_current: boolean; color?: string | null } | null;
   application: boolean;
   needs_verification: boolean;
   adds_to_do_not_call: boolean;
@@ -119,7 +120,7 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
   // Where the walk posts: the inbound route, or — in call mode — the dialer's disposition route.
   const postUrl = attemptId ? `/api/app/dialer/attempt/${encodeURIComponent(attemptId)}/disposition` : "/api/app/inbound/disposition";
 
-  async function send(payload: Record<string, unknown>, kind: "answer" | "complete" = payload.action === "complete" ? "complete" : "answer") {
+  async function send(payload: Record<string, unknown>, kind: "answer" | "complete" = payload.action === "complete" ? "complete" : "answer", quiet = false) {
     setSaving(true); setError("");
     const response = await fetch(postUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const body = await response.json().catch(() => null); setSaving(false);
@@ -143,16 +144,25 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
         notify.done("Call outcome recorded — opening Daily deal flow");
         if (leadId) router.push(`/app/deal-flow?focus_lead_id=${encodeURIComponent(leadId)}`);
       }
-    } else notify.done("Answer saved");
+    } else if (!quiet) notify.done("Answer saved");
     return true;
   }
 
-  async function saveAnswer(node: DispositionNode, sequence: number) {
+  async function saveAnswer(node: DispositionNode, sequence: number, quiet = false) {
     // Call mode names the attempt in the URL; the server finds its work item.
     const payload: Record<string, unknown> = attemptId ? { action: "answer", walk_id: wizard?.walk.id, node_id: node.id, sequence } : { action: "answer", work_item_id: workItemId, walk_id: wizard?.walk.id, node_id: node.id, sequence };
     if (node.node_type === "choice") payload.option_key = answer;
     else payload.answer = answer;
-    await send(payload);
+    return send(payload, "answer", quiet);
+  }
+
+  /**
+   * The flow's outcome question answered and recorded in one step (Finish the call, 2026-10-27): the
+   * answer is saved to the walk as before, then the outcome it names is recorded — one click, not the
+   * same question asked twice.
+   */
+  async function answerAndRecord(node: DispositionNode, sequence: number, key: string) {
+    if (await saveAnswer(node, sequence, true)) record(key);
   }
 
   // Everything below reads the loaded walk; null until it has loaded.
@@ -171,14 +181,16 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
     if (phase === "review") setPhase(view?.isCallback ? "details" : "outcome");
     else if (phase === "details") setPhase("outcome");
   }
-  function record() {
-    const isCallback = dispositionKey === CALLBACK_KEY;
+  /** `key`: record this outcome instead of the chosen one (a click handler's event is ignored). */
+  function record(key?: unknown) {
+    const outcome = typeof key === "string" && key ? key : dispositionKey;
+    const isCallback = outcome === CALLBACK_KEY;
     if (attemptId) {
       // The dialer's own request: the callback details ride along whenever the outcome books one,
       // and the walk is named so its answers are stored with this attempt. Retries are safe: the
       // callback path keys on the attempt (dial:<attempt>:callback), and the attempt records once.
       void send({
-        disposition: dispositionKey,
+        disposition: outcome,
         ...(wizard?.walk.id && wizard.steps.length && !wizard.callMode?.earlierWalk ? { walk_id: wizard.walk.id } : {}),
         ...(isCallback ? {
           callback_local: callbackLocal,
@@ -193,7 +205,7 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
       action: "complete",
       work_item_id: workItemId,
       walk_id: wizard?.walk.id,
-      disposition_key: dispositionKey,
+      disposition_key: outcome,
       callback_subtype: isCallback && callbackSubtype ? callbackSubtype : undefined,
       callback_local: isCallback ? callbackLocal : undefined,
       callback_assigned_to: isCallback && callbackAssignee ? callbackAssignee : undefined,
@@ -206,7 +218,7 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
   return {
     wizard, loading, saving, error, answer, setAnswer, editingSequence, phase,
     dispositionKey, setDispositionKey, callbackSubtype, setCallbackSubtype, callbackLocal, setCallbackLocal, callbackAssignee, setCallbackAssignee, callbackTimezone, setCallbackTimezone,
-    load, beginEdit, cancelEdit, saveAnswer, next, back, record, view,
+    load, beginEdit, cancelEdit, saveAnswer, answerAndRecord, next, back, record, view,
   };
 }
 

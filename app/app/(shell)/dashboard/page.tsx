@@ -30,7 +30,6 @@ import {
 import { CloseOutTile, PendingTile } from "@/components/app/home-client-tiles";
 import { DashTileLoading } from "@/components/ui/dash-tile";
 import { Launchpad, type LaunchCell, type LaunchSpace } from "@/components/ui/launchpad";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -207,7 +206,7 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   const name = firstName ? `, ${firstName}` : "";
 
   return (
-    <DashboardStage ribbon>
+    <>
       <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
         {/* The finish moment, when the last step was done somewhere other than the guide bar: this render stamps it. */}
         {shown.has("setup") && checklist.total > 0 && checklist.complete && !setupProgress.finished ? <SetupCelebration steps={checklist.total} done={checklist.completed} audience="owner" /> : null}
@@ -246,6 +245,6 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
           </Card>
         )}
       </div>
-    </DashboardStage>
+    </>
   );
 }

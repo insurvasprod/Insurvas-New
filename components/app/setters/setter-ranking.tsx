@@ -86,7 +86,7 @@ function SetterPanel({ setter, onClose }: { setter: Setter; onClose: () => void 
       onClose={onClose}
       bodyClassName="flex flex-col gap-4 p-4"
       // Stays in view while the page scrolls; long content scrolls inside it.
-      className="xl:sticky xl:top-[calc(var(--top-bar-h)+16px)] xl:max-h-[calc(100dvh-var(--top-bar-h)-32px)] xl:bg-[color-mix(in_srgb,var(--color-card)_var(--glass-alpha),transparent)] xl:backdrop-blur-[16px]"
+      className="xl:sticky xl:top-[calc(var(--top-bar-h)+16px)] xl:max-h-[calc(100dvh-var(--top-bar-h)-32px)]"
     >
       <p className={cn("m-0 rounded-xl px-4 py-3 text-sm", weak ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>
         {closed === 0

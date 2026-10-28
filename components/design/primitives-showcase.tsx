@@ -27,16 +27,6 @@ import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { SearchCommand } from "@/components/ui/search-command";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import {
   Table,
@@ -52,6 +42,7 @@ import { CalendarDays, DollarSign, Phone, Users } from "lucide-react";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
+import { inputControl } from "@/components/ui/field";
 
 function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
   return (
@@ -299,23 +290,18 @@ export function PrimitivesShowcase() {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ds-carrier">Carrier</Label>
-            <Select>
-              <SelectTrigger id="ds-carrier" className="w-full">
-                <SelectValue placeholder="Select a carrier" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Preferred</SelectLabel>
-                  <SelectItem value="aetna">Aetna</SelectItem>
-                  <SelectItem value="cigna">Cigna</SelectItem>
-                </SelectGroup>
-                <SelectSeparator />
-                <SelectGroup>
-                  <SelectLabel>All carriers</SelectLabel>
-                  <SelectItem value="oscar">Oscar</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+            <select id="ds-carrier" className={inputControl}><option value="" disabled>Select a carrier</option>
+                
+                  <option disabled>Preferred</option>
+                  <option value="aetna">Aetna</option>
+                  <option value="cigna">Cigna</option>
+                
+                
+                
+                  <option disabled>All carriers</option>
+                  <option value="oscar">Oscar</option>
+                
+              </select>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ds-tenant">Tenant ID</Label>

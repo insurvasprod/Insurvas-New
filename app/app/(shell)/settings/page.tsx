@@ -7,7 +7,6 @@ import { getTeamSnapshot } from "@/lib/tenantTeam/service";
 import { planHiddenSettingsSections } from "@/lib/tenantTeam/seats";
 import { outboundLimitSnapshot } from "@/lib/metering/outbound";
 import { PageHeader } from "@/components/ui/page-header";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { getWorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 import { AgentSettingsTabs } from "@/components/app/agent-settings-tabs";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
@@ -37,10 +36,10 @@ export default async function SettingsPage() {
   // On the moving ribbon, like the homes and the redesign boards (owner, 2026-10-26); the rail and
   // the cards above it are frosted glass, so the ribbon shows through.
   return (
-    <DashboardStage ribbon className="m-stagger portal-settings-page flex flex-col gap-6">
+    <div className="m-stagger portal-settings-page flex flex-col gap-6">
       <PageHeader title="Settings" />
 
       <AgentSettingsTabs team={team} workspace={workspace} tabs={SETTINGS_SECTIONS} hidden={planHiddenSettingsSections(entitlement.limits.max_seats)} granted={granted} role={context.role} readOnly={entitlement.access === "read_only"} />
-    </DashboardStage>
+    </div>
   );
 }

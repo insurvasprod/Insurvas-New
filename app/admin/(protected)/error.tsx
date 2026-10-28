@@ -3,6 +3,14 @@
 import Link from "next/link";
 import { useEffect } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/page-states";
+
+/**
+ * A console page that failed to render. The kit's error state on a card (foundation v3), with the
+ * two ways on: try the page again, or go back to the console's home.
+ */
 export default function AdminRouteError({
   reset,
 }: {
@@ -15,34 +23,19 @@ export default function AdminRouteError({
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-2xl items-center justify-center">
-      <section
-        aria-labelledby="admin-error-title"
-        className="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8 text-center shadow-sm"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Admin workspace</p>
-        <h1 id="admin-error-title" className="mt-3 text-2xl font-semibold text-[var(--color-text)]">
-          This page could not load
-        </h1>
-        <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[var(--color-muted)]">
-          Something went wrong while loading this workspace. Try again, or return to the dashboard while the issue is investigated.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => reset()}
-            className="rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--on-primary)] transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
-          >
-            Try again
-          </button>
-          <Link
-            href="/admin"
-            className="rounded-lg border border-[var(--color-border)] px-4 py-2.5 text-sm font-semibold text-[var(--color-text)] transition hover:bg-[var(--color-page-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
-          >
-            Back to dashboard
-          </Link>
-        </div>
-      </section>
+    <div className="mx-auto flex min-h-[60vh] w-full max-w-2xl items-center justify-center">
+      <Card className="w-full">
+        <ErrorState
+          title="This page could not load"
+          detail="Something went wrong while loading this workspace. Try again, or return to the dashboard while the issue is investigated."
+          action={
+            <span className="flex flex-wrap justify-center gap-2">
+              <Button type="button" onClick={() => reset()}>Try again</Button>
+              <Button asChild variant="outline"><Link href="/admin">Back to dashboard</Link></Button>
+            </span>
+          }
+        />
+      </Card>
     </div>
   );
 }

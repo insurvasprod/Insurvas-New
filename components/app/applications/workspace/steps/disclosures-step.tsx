@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 
 import { dateTime } from "@/components/app/applications/parts";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
-import { StepCard } from "@/components/app/applications/workspace/step-card";
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
 
 type Method = NonNullable<DisclosureView["method"]>;
 const METHOD_BUTTON: Record<Method, string> = { read_aloud: "Read aloud", emailed: "Email it", mailed: "Mail it" };
@@ -90,7 +90,7 @@ function triggerSentence(trigger: Trigger | undefined, attempt: AttemptView, int
   return `Required because ${parts.join(" and ")}${where}.`;
 }
 
-function DisclosureRow({ d, reason, readOnly, sample, onChange }: { d: DisclosureView; reason: string | null; readOnly: boolean; sample: boolean; onChange: (patch: Partial<DisclosureView>) => void }) {
+function DisclosureRow({ d, n, isNext, reason, readOnly, sample, onChange }: { d: DisclosureView; n: number; isNext: boolean; reason: string | null; readOnly: boolean; sample: boolean; onChange: (patch: Partial<DisclosureView>) => void }) {
   const { actions, timeZone } = useWorkspace();
   const [naOpen, setNaOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -118,10 +118,14 @@ function DisclosureRow({ d, reason, readOnly, sample, onChange }: { d: Disclosur
   }
 
   return (
-    <div id={`disclosure.${d.code}`} tabIndex={-1} className="m-row flex flex-col gap-3 border-t border-[var(--border)] px-[22px] py-4 outline-none first:border-t-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h3 className="text-sm font-semibold text-[var(--ink)]">{d.title}</h3>
+    <div id={`disclosure.${d.code}`} tabIndex={-1} className={cn("flex h-full flex-col gap-3 rounded-[14px] border p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring", isNext ? "border-[color-mix(in_srgb,var(--primary)_60%,transparent)] bg-[var(--primary-soft)]" : "border-[var(--border)] bg-[var(--surface-alt)]")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <span aria-hidden="true" className="inline-grid size-[30px] shrink-0 place-items-center rounded-full bg-[var(--surface)] text-xs font-bold text-[var(--muted)]">{n}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h3 className="text-card-title text-[var(--ink)]">
+            {d.title}
+            {isNext && <span className="ml-2 inline-flex rounded-full bg-[var(--primary)] px-2 py-0.5 align-middle text-xs font-bold text-[var(--ink)]">Give now</span>}
+          </h3>
           {d.status === "not_applicable" && d.note ? (
             <span className="text-xs text-[var(--muted)]">“{d.note}”</span>
           ) : reason ? (
@@ -205,35 +209,36 @@ function DisclosuresStepFor() {
       ? <StatusChip tone="danger">{open.length} required, not acknowledged</StatusChip>
       : <StatusChip tone="good">All acknowledged</StatusChip>;
 
+  const given = list.length - open.length;
+  // Owner 2026-10-28: one card like the other steps; the notices fold once each is given or not applicable.
   return (
-    <StepCard
-      title="Disclosures"
-      chips={chip}
-      bodyClassName="gap-0 p-0"
-      actions={<>
-        <Button type="button" variant="outline" onClick={() => goTo("payment")}><ArrowLeft aria-hidden="true" />Back to Payment</Button>
-        <Button type="button" onClick={() => goTo("review")} disabled={!readOnly && open.length > 0} title={!readOnly && open.length > 0 ? `Acknowledge ${open.map((d) => d.title).join(", ")} first, or mark it not applicable` : undefined}>
-          Continue to Review<ArrowRight aria-hidden="true" />
-        </Button>
-      </>}
-    >
+    <section aria-label="Disclosures" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
+      <div className="flex flex-wrap items-center justify-end gap-2">{chip}</div>
       {list.length === 0 ? (
         <EmptyState title="No disclosures apply" hint="Answering yes to existing coverage adds the replacement notice." />
       ) : (
-        <div className="flex flex-col">
-          {list.map((d) => (
+        <FoldSection heading="Notices to give" done={given} total={list.length} complete={open.length === 0} unit="given">
+          {list.map((d, i) => (
             <DisclosureRow
               key={d.id}
               d={d}
+              n={i + 1}
+              isNext={open[0]?.id === d.id}
               reason={triggerSentence(triggers.find((t) => t.disclosureId === d.id), attempt, interview)}
               readOnly={readOnly}
               sample={sample}
               onChange={(p) => change(d.id, p)}
             />
           ))}
-        </div>
+        </FoldSection>
       )}
-    </StepCard>
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border)] pt-3">
+        <Button type="button" variant="outline" onClick={() => goTo("payment")}><ArrowLeft aria-hidden="true" />Back to Payment</Button>
+        <Button type="button" onClick={() => goTo("review")} disabled={!readOnly && open.length > 0} title={!readOnly && open.length > 0 ? `Acknowledge ${open.map((d) => d.title).join(", ")} first, or mark it not applicable` : undefined}>
+          Continue to Review<ArrowRight aria-hidden="true" />
+        </Button>
+      </div>
+    </section>
   );
 }
 

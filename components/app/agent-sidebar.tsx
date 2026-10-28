@@ -1,19 +1,24 @@
 "use client";
 
-import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { createElement, Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
   Brain,
   BriefcaseBusiness,
+  Building2,
   Calculator,
+  DollarSign,
+  House,
+  Phone,
   CalendarCheck,
   UserRoundCheck,
   CalendarClock,
   CalendarDays,
   ChartNoAxesCombined,
   ChevronDown,
+  ChevronsUpDown,
   Circle,
   ClipboardList,
   ContactRound,
@@ -31,8 +36,11 @@ import {
   Menu,
   MessageSquare,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
   PhoneIncoming,
   PhoneOutgoing,
+  Pin,
   Radar,
   RadioTower,
   Receipt,
@@ -78,7 +86,9 @@ import {
 
 import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/menu/sidebar";
+import { buildSidebarAreas, buildSidebarTree, type ModuleAccess, type SidebarArea, type SidebarTree } from "@/lib/menu/sidebar";
+import { NAV_COLLAPSED_COOKIE, OPEN_WORKSPACES_EVENT } from "@/lib/menu/navEvents";
+import { useNavStatus } from "@/components/app/nav/use-nav-status";
 
 /** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
 export type AgentModuleAccess = ModuleAccess;
@@ -87,115 +97,16 @@ function iconFor(name: string) {
   return ICONS[name as keyof typeof ICONS] ?? Circle;
 }
 
+/** A page's icon in the rail; Home is the house (NavB, 2026-10-28) rather than the dashboard grid. */
+function itemIcon(item: MenuItem) {
+  return item.key === "home.dashboard" ? House : iconFor(item.icon);
+}
+
 function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavItemLink({
-  item,
-  onNavigate,
-  nested = false,
-}: {
-  item: MenuItem;
-  onNavigate?: () => void;
-  nested?: boolean;
-}) {
-  const pathname = usePathname();
-  const active = isActivePath(pathname, item.path);
-  const Icon = iconFor(item.icon);
-  const label = item.navLabel ?? item.label;
-
-  return (
-    <li>
-      <Link
-        href={item.path}
-        onClick={onNavigate}
-        aria-current={active ? "page" : undefined}
-        className={`portal-agent-nav-link ${nested ? "portal-agent-nav-link-nested" : ""} ${active ? "is-active" : ""}`}
-      >
-        <span className="portal-agent-nav-link-copy">
-          {createElement(Icon, {
-            className: "portal-agent-nav-icon",
-            "aria-hidden": true,
-          })}
-          <span className="portal-agent-nav-label">{label}</span>
-        </span>
-        {!item.built && (
-          <span
-            className="portal-agent-nav-waypoint"
-            title="On the way"
-            aria-label="On the way"
-          />
-        )}
-      </Link>
-    </li>
-  );
-}
-
-function DisclosureSection({
-  label,
-  icon: Icon,
-  items,
-  children,
-  open,
-  onToggle,
-  onNavigate,
-  active,
-  nested = false,
-}: {
-  label: string;
-  icon: typeof BriefcaseBusiness;
-  items: MenuItem[];
-  children?: ReactNode;
-  open: boolean;
-  onToggle: () => void;
-  onNavigate?: () => void;
-  active: boolean;
-  nested?: boolean;
-}) {
-  if (items.length === 0 && !children) return null;
-
-  const sectionId = `agent-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-
-  return (
-    <section
-      className={`portal-agent-nav-section ${nested ? "portal-agent-nav-business-group" : ""} ${active ? "is-active" : ""}`}
-    >
-      <button
-        type="button"
-        className="portal-agent-nav-disclosure"
-        aria-expanded={open}
-        aria-controls={sectionId}
-        onClick={onToggle}
-      >
-        <span className="portal-agent-nav-disclosure-copy">
-          <Icon className="portal-agent-nav-icon" aria-hidden="true" />
-          <span>{label}</span>
-        </span>
-        <ChevronDown
-          className={`portal-agent-nav-chevron ${open ? "is-open" : ""}`}
-          aria-hidden="true"
-        />
-      </button>
-      {open && (children ? (
-        <div id={sectionId} className="portal-agent-nav-disclosure-content">
-          {children}
-        </div>
-      ) : (
-        <ul id={sectionId} className={`portal-agent-nav-sublist ${nested ? "portal-agent-nav-sublist-nested" : ""}`}>
-          {items.map((item) => (
-            <NavItemLink
-              key={item.key}
-              item={item}
-              nested
-              onNavigate={onNavigate}
-            />
-          ))}
-        </ul>
-      ))}
-    </section>
-  );
-}
+const labelOf = (item: MenuItem) => item.navLabel ?? item.label;
 
 export type AgentPlanSummary = {
   /** Display name of the plan, or null when the workspace has none. */
@@ -226,60 +137,156 @@ function PlanCard({ plan }: { plan: AgentPlanSummary }) {
   );
 }
 
+// ---- pins: this person's shortcuts, in this browser ------------------------------------------------
+
+const MAX_PINS = 6;
+const pinKey = (userId?: string) => `insurvas.nav.pins.v1:${userId ?? "me"}`;
+
 /**
- * Entitlement-aware navigation for the licensed-agent shell.
- *
- * The server still supplies the filtered menu and every route keeps its own guard. The arrangement
- * — Home, the job groups in order, Settings — is data in `lib/menu/sidebar.ts` (UX-3; regrouped by
- * job 2026-10-13); this component renders `buildSidebarTree()` and only owns what is open.
+ * Pages pinned to the top of the menu (Navigation A). A convenience kept in this browser, keyed by
+ * the person: storage can be missing or blocked, so every read and write is guarded and the menu
+ * works without it. A pin for a page this person can no longer open simply is not drawn.
  */
-function NavList({
-  menu,
-  moduleAccess,
+function usePins(userId?: string): [string[], (key: string) => void] {
+  const [pins, setPins] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(pinKey(userId)) ?? "[]") as unknown;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from storage after mount, never during render
+      if (Array.isArray(parsed)) setPins(parsed.filter((key): key is string => typeof key === "string").slice(0, MAX_PINS));
+    } catch { /* no pins is the honest fallback */ }
+  }, [userId]);
+  const toggle = (key: string) => {
+    setPins((current) => {
+      const next = current.includes(key) ? current.filter((pinned) => pinned !== key) : [...current, key].slice(-MAX_PINS);
+      try { window.localStorage.setItem(pinKey(userId), JSON.stringify(next)); } catch { /* kept for this visit only */ }
+      return next;
+    });
+  };
+  return [pins, toggle];
+}
+
+// ---- the labelled menu (the sidebar, and the phone drawer) -----------------------------------------
+
+/** How loud a count is (owner 2026-10-28): green for a little waiting, then yellow, orange, red. */
+function countTone(n: number) {
+  return n >= 50 ? "red" : n >= 20 ? "orange" : n >= 10 ? "yellow" : "green";
+}
+
+function Count({ n }: { n: number | undefined }) {
+  if (!n) return null;
+  return <span className="portal-nav-count" data-tone={countTone(n)} aria-label={`${n} waiting`}>{n > 99 ? "99+" : n}</span>;
+}
+
+/**
+ * Navigation A (owner's pick 2026-10-28): every page by name, in its job group, with what waits on it.
+ * Home, the pages you pinned, the groups (fold any of them), and Settings at the foot. The menu is the
+ * server-filtered `buildSidebarTree()`; nothing here grants or hides a page.
+ */
+function NavTree({
+  tree,
+  pins,
+  togglePin,
   onNavigate,
 }: {
-  menu: MenuSection[];
-  moduleAccess?: AgentModuleAccess;
+  tree: SidebarTree;
+  pins: string[];
+  togglePin: (key: string) => void;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const tree = buildSidebarTree(menu, moduleAccess);
+  const { counts } = useNavStatus();
   const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
-  const [openGroups, setOpenGroups] = useState<string[]>(() => initialOpenGroups(tree, isActive));
+  const areas = buildSidebarAreas(tree);
+  const [openGroups, setOpenGroups] = useState<string[]>(() => {
+    const holder = areas.find((area) => area.items.some(isActive));
+    return holder ? [holder.label] : areas[0] ? [areas[0].label] : [];
+  });
+  const [seenPath, setSeenPath] = useState(pathname);
+  // Arriving on a page opens its area (derived from the path, so set during render).
+  if (seenPath !== pathname) {
+    setSeenPath(pathname);
+    const holder = areas.find((area) => area.items.some((item) => isActivePath(pathname, item.path)));
+    if (holder && !openGroups.includes(holder.label)) setOpenGroups([...openGroups, holder.label]);
+  }
+
+  const everything = [...tree.home, ...tree.groups.flatMap((group) => group.items), ...tree.settings];
+  const pinned = pins.flatMap((key) => everything.filter((item) => item.key === key));
+
+  const row = (item: MenuItem, withIcon: boolean) => {
+    const label = labelOf(item);
+    const isPinned = pins.includes(item.key);
+    return (
+      <li key={item.key} className="portal-nav-row">
+        <Link
+          href={item.path}
+          onClick={onNavigate}
+          aria-current={isActive(item) ? "page" : undefined}
+          title={label.length > 22 ? label : undefined}
+          className={`portal-nav-link ${withIcon ? "" : "portal-nav-link-sub"}`}
+        >
+          {withIcon && createElement(itemIcon(item), { className: "portal-nav-icon", "aria-hidden": true })}
+          <span className="portal-nav-label">{label}</span>
+          <Count n={counts[item.key]} />
+        </Link>
+        <button
+          type="button"
+          onClick={() => togglePin(item.key)}
+          aria-pressed={isPinned}
+          aria-label={isPinned ? `Unpin ${label}` : `Pin ${label} to the top`}
+          title={isPinned ? "Unpin" : "Pin to the top"}
+          className="portal-nav-pin"
+        >
+          <Pin className="size-3.5" aria-hidden="true" />
+        </button>
+      </li>
+    );
+  };
 
   return (
-    <nav className="portal-agent-nav" aria-label="Agent workspace navigation">
-      <ul className="portal-agent-nav-home">
-        {tree.home.map((item) => (
-          <NavItemLink key={item.key} item={item} onNavigate={onNavigate} />
-        ))}
-      </ul>
+    <div className="portal-nav-tree">
+      <ul className="portal-nav-list">{tree.home.map((item) => row(item, true))}</ul>
 
-      {tree.groups.map((group) => (
-        <DisclosureSection
-          key={group.label}
-          label={group.label}
-          icon={iconFor(group.icon)}
-          items={group.items}
-          open={openGroups.includes(group.label)}
-          active={group.items.some(isActive)}
-          onToggle={() =>
-            setOpenGroups((current) =>
-              current.includes(group.label)
-                ? current.filter((label) => label !== group.label)
-                : [...current, group.label],
-            )
-          }
-          onNavigate={onNavigate}
-        />
-      ))}
+      {pinned.length > 0 && (
+        <section aria-label="Pinned" className="portal-nav-pinned">
+          <p className="portal-nav-heading">Pinned</p>
+          <ul className="portal-nav-list">{pinned.map((item) => row(item, true))}</ul>
+        </section>
+      )}
 
-      {tree.settings.map((item) => (
-        <ul key={item.key} className="portal-agent-nav-settings">
-          <NavItemLink item={item} onNavigate={onNavigate} />
-        </ul>
-      ))}
-    </nav>
+      {areas.map((area) => {
+        const open = openGroups.includes(area.label);
+        const id = `agent-nav-${area.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+        const total = area.items.reduce((sum, item) => sum + (counts[item.key] ?? 0), 0);
+        return (
+          <section key={area.label} className="portal-nav-group" data-active={area.items.some(isActive) || undefined}>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={id}
+              onClick={() => setOpenGroups((current) => (open ? current.filter((label) => label !== area.label) : [...current, area.label]))}
+              className="portal-nav-group-head"
+            >
+              {createElement(iconFor(area.icon), { className: "portal-nav-icon", "aria-hidden": true })}
+              <span className="portal-nav-label">{area.label}</span>
+              {!open && <Count n={total} />}
+              <ChevronDown className={`portal-nav-chevron ${open ? "is-open" : ""}`} aria-hidden="true" />
+            </button>
+            {/* An area of two job groups keeps each group's name as a small heading over its pages. */}
+            {open && (
+              <ul id={id} className="portal-nav-sub">
+                {area.groups.map((group) => (
+                  <Fragment key={group.label}>
+                    {area.groups.length > 1 && <li className="portal-nav-subhead">{group.label}</li>}
+                    {group.items.map((item) => row(item, false))}
+                  </Fragment>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
@@ -354,20 +361,41 @@ const ICONS = {
   "scroll-text": ScrollText,
   "square-kanban": SquareKanban,
   undo: Undo2,
+  // The six areas' icons (NavB, 2026-10-28): Work, Money and Team; Leads, Book and Compliance reuse
+  // users, book-open and shield-check above.
+  phone: Phone,
+  "dollar-sign": DollarSign,
+  building: Building2,
 } as const;
+
+function workspaceInitials(name: string) {
+  const words = name.replace(/&/g, " ").trim().split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] ?? "?") + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
+}
 
 export function AgentSidebar({
   menu,
   footer,
   moduleAccess,
   plan,
+  userId,
+  workspaceName,
+  initialCollapsed = false,
 }: {
   menu: MenuSection[];
   footer?: ReactNode;
   moduleAccess?: AgentModuleAccess;
   plan?: AgentPlanSummary;
+  /** Keys this browser's pins to the person. */
+  userId?: string;
+  /** The workspace card at the top of the sidebar. */
+  workspaceName?: string;
+  /** From the cookie, so a collapsed sidebar draws collapsed on the first paint. */
+  initialCollapsed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const tree = buildSidebarTree(menu, moduleAccess);
+  const [pins, togglePin] = usePins(userId);
 
   // One mark everywhere the product names itself — the phone bar and drawer used a building icon.
   // The rail and drawer are always ink, so they take the on-dark mark; the white phone bar follows
@@ -405,7 +433,9 @@ export function AgentSidebar({
             className="absolute inset-0 bg-black/50"
           />
           <div className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto p-4 text-foreground">
-            <div className="min-h-0 flex-1">
+            {/* No min-h-0: the list keeps its height and the drawer scrolls, rather than the plan card
+                drawing over the last groups. */}
+            <div className="flex-1">
               <div className="portal-agent-sidebar-brand">
                 {brandMark("dark")}
                 <button
@@ -417,11 +447,19 @@ export function AgentSidebar({
                   <X className="size-5" aria-hidden="true" />
                 </button>
               </div>
-              <NavList
-                menu={menu}
-                moduleAccess={moduleAccess}
-                onNavigate={() => setOpen(false)}
-              />
+              <nav aria-label="Agent workspace navigation" className="portal-nav-drawer">
+                <NavTree tree={tree} pins={pins} togglePin={togglePin} onNavigate={() => setOpen(false)} />
+                <ul className="portal-nav-list">
+                  {tree.settings.map((item) => (
+                    <li key={item.key} className="portal-nav-row">
+                      <Link href={item.path} onClick={() => setOpen(false)} className="portal-nav-link">
+                        {createElement(iconFor(item.icon), { className: "portal-nav-icon", "aria-hidden": true })}
+                        <span className="portal-nav-label">{labelOf(item)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
             </div>
             {plan && <PlanCard plan={plan} />}
             {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
@@ -429,26 +467,40 @@ export function AgentSidebar({
         </div>
       )}
 
-      <NavRail menu={menu} moduleAccess={moduleAccess} />
+      <NavRail tree={tree} pins={pins} togglePin={togglePin} plan={plan} workspaceName={workspaceName} initialCollapsed={initialCollapsed} />
     </>
   );
 }
 
-type RailFlyout =
-  | { kind: "group"; key: string; label: string; items: MenuItem[]; top: number }
-  | { kind: "tip"; key: string; label: string; top: number };
+type RailFlyout = { key: string; area: SidebarArea; top: number };
 
 /**
- * The desktop rail (redesign 2026-10-25, owner's pick "Dashboard A"): one icon per job group, Home
- * at the top and Settings and your account at the foot (the plan is a line in the account menu). Pointing at a group, focusing it or clicking it
- * opens its pages beside the rail — every page in one move, no groups to expand and collapse.
+ * The desktop menu. Expanded (the default, Navigation A 2026-10-28): the labelled sidebar — your
+ * workspace, Home, pins, the six areas (NavB's names and icons) with their counts, Settings and your
+ * account at the foot. Collapsed (one click, remembered): the rail, each area an icon over its name,
+ * whose pages open beside it on hover, focus or click, with a badge counting what waits inside.
  * The phone keeps the full drawer above. The menu is the same server-filtered `buildSidebarTree()`.
  *
- * The panel is position: fixed so the rail's own scroll (short screens) never clips it.
+ * The flyout is position: fixed so the rail's own scroll (short screens) never clips it.
  */
-function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: AgentModuleAccess }) {
+function NavRail({
+  tree,
+  pins,
+  togglePin,
+  plan,
+  workspaceName,
+  initialCollapsed,
+}: {
+  tree: SidebarTree;
+  pins: string[];
+  togglePin: (key: string) => void;
+  plan?: AgentPlanSummary;
+  workspaceName?: string;
+  initialCollapsed: boolean;
+}) {
   const pathname = usePathname();
-  const tree = buildSidebarTree(menu, moduleAccess);
+  const { counts } = useNavStatus();
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [fly, setFly] = useState<RailFlyout | null>(null);
   const [seenPath, setSeenPath] = useState(pathname);
   const closeTimer = useRef<number | null>(null);
@@ -461,6 +513,13 @@ function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: A
   }
 
   useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); }, []);
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    setFly(null);
+    document.cookie = `${NAV_COLLAPSED_COOKIE}=${next ? "collapsed" : "open"}; path=/; max-age=31536000; SameSite=Lax`;
+  }
 
   const cancelClose = () => {
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
@@ -476,19 +535,16 @@ function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: A
     const height = 56 + rows * 40;
     return Math.max(8, Math.min(rect.top - 8, window.innerHeight - height - 12));
   };
-  const openGroup = (group: { label: string; items: MenuItem[] }, element: HTMLElement) => {
+  const areas = buildSidebarAreas(tree);
+  const openArea = (area: SidebarArea, element: HTMLElement) => {
     cancelClose();
-    setFly({ kind: "group", key: group.label, label: group.label, items: group.items, top: place(element, group.items.length) });
-  };
-  const openTip = (key: string, label: string, element: HTMLElement) => {
-    cancelClose();
-    const rect = element.getBoundingClientRect();
-    setFly((current) => (current?.kind === "group" && current.key === key ? current : { kind: "tip", key, label, top: rect.top + rect.height / 2 - 16 }));
+    const rows = area.items.length + (area.groups.length > 1 ? area.groups.length : 0);
+    setFly({ key: area.label, area, top: place(element, rows) });
   };
 
   function onKeyDown(event: React.KeyboardEvent) {
-    // Into the open panel from its group's button.
-    if ((event.key === "ArrowRight" || event.key === "ArrowDown") && fly?.kind === "group" && (event.target as HTMLElement).dataset.railKey === fly.key) {
+    // Into the open panel from its area's button.
+    if ((event.key === "ArrowRight" || event.key === "ArrowDown") && fly && (event.target as HTMLElement).dataset.railKey === fly.key) {
       const first = document.querySelector<HTMLElement>("#agent-rail-panel a");
       if (first) { event.preventDefault(); first.focus(); }
       return;
@@ -500,9 +556,9 @@ function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: A
   }
 
   const link = (item: MenuItem) => {
-    const Icon = iconFor(item.icon);
+    const Icon = itemIcon(item);
     const active = isActive(item);
-    const label = item.navLabel ?? item.label;
+    const label = labelOf(item);
     return (
       <li key={item.key}>
         <Link
@@ -511,56 +567,108 @@ function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: A
           aria-label={label}
           aria-current={active ? "page" : undefined}
           className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
-          onPointerEnter={(event) => openTip(item.key, label, event.currentTarget)}
-          onPointerLeave={closeSoon}
-          onFocus={(event) => openTip(item.key, label, event.currentTarget)}
-          onBlur={closeSoon}
         >
-          {createElement(Icon, { className: "size-5", "aria-hidden": true })}
+          <span className="portal-nav-rail-icon">
+            {createElement(Icon, { className: "size-5", "aria-hidden": true })}
+            {counts[item.key] ? <span className="portal-nav-dot" data-tone={countTone(counts[item.key])} aria-hidden="true">{counts[item.key] > 99 ? "99+" : counts[item.key]}</span> : null}
+          </span>
+          <span className="portal-nav-rail-label" aria-hidden="true">{label}</span>
         </Link>
       </li>
     );
   };
 
+  const toggle = (
+    <button
+      type="button"
+      onClick={toggleCollapsed}
+      aria-label={collapsed ? "Expand the menu" : "Collapse the menu"}
+      aria-expanded={!collapsed}
+      title={collapsed ? "Expand the menu" : "Collapse the menu"}
+      className="portal-nav-toggle"
+    >
+      {collapsed ? <PanelLeftOpen className="size-[18px]" aria-hidden="true" /> : <PanelLeftClose className="size-[18px]" aria-hidden="true" />}
+    </button>
+  );
+
   return (
-    <aside data-print-hide className="portal-agent-rail hidden md:flex" onKeyDown={onKeyDown}>
+    <aside data-print-hide data-collapsed={collapsed ? "true" : "false"} className="portal-agent-rail portal-nav hidden md:flex" onKeyDown={onKeyDown}>
       <div className="portal-agent-rail-brand">
         <Link href={tree.home[0]?.path ?? "/app/dashboard"} aria-label="Insurvas home">
-          <InsurvasLogo size="compact" variant="symbol" tone="dark" />
+          {collapsed ? <InsurvasLogo size="compact" variant="symbol" tone="dark" /> : <InsurvasLogo size="sidebar" tone="dark" />}
         </Link>
+        {!collapsed && toggle}
       </div>
+
+      {!collapsed && workspaceName && (
+        <button
+          type="button"
+          data-account-trigger
+          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_WORKSPACES_EVENT))}
+          className="portal-nav-workspace"
+          aria-label={`${workspaceName}: your account and workspaces`}
+        >
+          <span className="portal-nav-workspace-mark" aria-hidden="true">{workspaceInitials(workspaceName)}</span>
+          <span className="portal-nav-workspace-text">
+            <span className="portal-nav-workspace-name">{workspaceName}</span>
+            {plan && <span className="portal-nav-workspace-meta">{[plan.name, plan.roleLabel].filter(Boolean).join(" · ")}</span>}
+          </span>
+          <ChevronsUpDown className="size-3.5 shrink-0" aria-hidden="true" />
+        </button>
+      )}
+
       <nav className="portal-agent-rail-scroll" aria-label="Agent workspace navigation">
-        <ul className="portal-agent-rail-list">
-          {tree.home.map(link)}
-          {tree.groups.map((group) => {
-            const Icon = iconFor(group.icon);
-            const open = fly?.kind === "group" && fly.key === group.label;
-            const active = group.items.some(isActive);
-            return (
-              <li key={group.label}>
-                <button
-                  type="button"
-                  onClick={(event) => (open ? setFly(null) : openGroup(group, event.currentTarget))}
-                  data-rail-key={group.label}
-                  aria-label={group.label}
-                  aria-expanded={open}
-                  aria-controls={open ? "agent-rail-panel" : undefined}
-                  className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
-                  onPointerEnter={(event) => openGroup(group, event.currentTarget)}
-                  onPointerLeave={closeSoon}
-                  onFocus={(event) => openGroup(group, event.currentTarget)}
-                >
-                  <Icon className="size-5" aria-hidden="true" />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        {collapsed ? (
+          <ul className="portal-agent-rail-list">
+            <li>{toggle}</li>
+            {tree.home.map(link)}
+            {areas.map((area) => {
+              const Icon = iconFor(area.icon);
+              const open = fly?.key === area.label;
+              const active = area.items.some(isActive);
+              const total = area.items.reduce((sum, item) => sum + (counts[item.key] ?? 0), 0);
+              return (
+                <li key={area.label}>
+                  <button
+                    type="button"
+                    onClick={(event) => (open ? setFly(null) : openArea(area, event.currentTarget))}
+                    data-rail-key={area.label}
+                    aria-label={total ? `${area.label}, ${total} waiting` : area.label}
+                    aria-expanded={open}
+                    aria-controls={open ? "agent-rail-panel" : undefined}
+                    className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
+                    onPointerEnter={(event) => openArea(area, event.currentTarget)}
+                    onPointerLeave={closeSoon}
+                    onFocus={(event) => openArea(area, event.currentTarget)}
+                  >
+                    <span className="portal-nav-rail-icon">
+                      <Icon className="size-5" aria-hidden="true" />
+                      {total > 0 && <span className="portal-nav-dot" data-tone={countTone(total)} aria-hidden="true">{total > 99 ? "99+" : total}</span>}
+                    </span>
+                    <span className="portal-nav-rail-label" aria-hidden="true">{area.label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <NavTree tree={tree} pins={pins} togglePin={togglePin} />
+        )}
       </nav>
       <ul className="portal-agent-rail-foot">
-        {tree.settings.map(link)}
+        {collapsed
+          ? tree.settings.map(link)
+          : tree.settings.map((item) => (
+            <li key={item.key} className="portal-nav-row">
+              <Link href={item.path} aria-current={isActive(item) ? "page" : undefined} className="portal-nav-link">
+                {createElement(iconFor(item.icon), { className: "portal-nav-icon", "aria-hidden": true })}
+                <span className="portal-nav-label">{labelOf(item)}</span>
+              </Link>
+            </li>
+          ))}
         {/* The account (owner ask 2026-10-26): the top bar portals its account button and menu into
-            this slot (AppTopBar accountHostId). The plan is a line in that menu, not an icon here. */}
+            this slot (AppTopBar accountHostId). The plan is a line in that menu, not an icon here.
+            The slot stays mounted through a collapse, so the portal never loses its host. */}
         <li id="agent-rail-account" className="portal-agent-rail-account" />
       </ul>
 
@@ -568,33 +676,34 @@ function NavRail({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: A
         <div
           id="agent-rail-panel"
           className="portal-agent-rail-fly m-swap"
-          data-kind={fly.kind}
+          data-kind="group"
           style={{ top: fly.top }}
-          role={fly.kind === "tip" ? "tooltip" : "group"}
-          aria-label={fly.kind === "tip" ? undefined : fly.label}
+          role="group"
+          aria-label={fly.key}
           onPointerEnter={cancelClose}
           onPointerLeave={closeSoon}
         >
-          {fly.kind === "tip" && fly.label}
-          {fly.kind === "group" && (
-            <>
-              <p className="portal-agent-rail-fly-head">{fly.label}</p>
+          <p className="portal-agent-rail-fly-head">{fly.area.label}</p>
+          {fly.area.groups.map((group) => (
+            <Fragment key={group.label}>
+              {fly.area.groups.length > 1 && <p className="portal-nav-fly-subhead">{group.label}</p>}
               <ul>
-                {fly.items.map((item) => {
+                {group.items.map((item) => {
                   const Icon = iconFor(item.icon);
                   const active = isActive(item);
                   return (
                     <li key={item.key}>
                       <Link href={item.path} aria-current={active ? "page" : undefined} onClick={() => setFly(null)} onBlur={closeSoon} onFocus={cancelClose}>
                         {createElement(Icon, { className: "size-4 shrink-0", "aria-hidden": true })}
-                        <span>{item.navLabel ?? item.label}</span>
+                        <span>{labelOf(item)}</span>
+                        <Count n={counts[item.key]} />
                       </Link>
                     </li>
                   );
                 })}
               </ul>
-            </>
-          )}
+            </Fragment>
+          ))}
         </div>
       )}
     </aside>

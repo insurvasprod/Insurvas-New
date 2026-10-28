@@ -22,6 +22,7 @@ import { Plus } from "lucide-react";
 
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -208,8 +209,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const save = (path: string, payload: unknown, success: string, key: string) => send(path, { method: "POST", payload }, success, key);
 
   /** Checking a cell stages an appointment; unchecking one stages its termination (Settings' rule). */
-  async function saveGrid() {
-    if (!canEdit || !dirty) return;
+  async function saveGrid(): Promise<boolean> {
+    if (!canEdit || !dirty) return false;
     const rows = [
       ...additions.map((value) => {
         const [carrier_id, state] = value.split(":");
@@ -229,6 +230,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
       "appointments",
     );
     if (!result.ok) notify.block(result.error);
+    return result.ok;
   }
 
   const header = (
@@ -306,6 +308,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <LeaveGuard dirty={dirty} onSave={saveGrid} onDiscard={() => setSelected(new Set(saved))} what="the appointments grid" />
       {header}
       {readOnlyReason && <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{readOnlyReason}</p>}
 

@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parsePolicyCsv, policyCsvTemplate, type PolicyImportRow } from "@/lib/policies/csv";
 import { notify } from "@/lib/notify";
+import { inputControl } from "@/components/ui/field";
 
 type FormState = Omit<PolicyImportRow, "annual_premium_cents"> & { annual_premium: string };
 const blankForm: FormState = { policy_number: "", insured_name: "", carrier: "", product: "", effective_date: "", annual_premium: "", status: "active", renewal_date: "" };
 
-const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
+// The shared control (foundation v3), without the gap a stacked Field puts above it.
+const field = inputControl;
 const label = "text-sm font-semibold text-[var(--body)]";
 
 /**

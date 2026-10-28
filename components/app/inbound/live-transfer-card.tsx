@@ -112,7 +112,7 @@ export function LiveTransferCard() {
         const body = await response.json().catch(() => null);
         if (!response.ok) { setProblem(body?.error ?? "This handoff is no longer available."); void load(); return; }
         notify.arrive("Handoff accepted; verification is ready to resume");
-        router.push(`/app/inbound/${handoff.workItemId}/verification`);
+        router.push(`/app/inbound/call/${handoff.workItemId}`);
         return;
       }
       const response = await fetch("/api/app/inbound/claim-next", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
@@ -121,7 +121,7 @@ export function LiveTransferCard() {
       if (!response.ok) { setProblem(body?.error ?? "Could not claim the transfer."); void load(); return; }
       const workItemId = body?.claim?.work_item_id as string | undefined;
       notify.arrive(claimedMessage(body));
-      if (workItemId) router.push(`/app/inbound/${workItemId}/verification`);
+      if (workItemId) router.push(`/app/inbound/call/${workItemId}`);
     } catch {
       setProblem("Could not reach Insurvas. Check your connection and try again.");
     } finally {
@@ -186,7 +186,7 @@ export function LiveTransferCard() {
       {problem && <p role="alert" className="m-0 text-xs leading-[1.5] font-semibold text-[var(--error-ink)]">{problem}</p>}
 
       <Button type="button" onClick={() => void claim()} disabled={busy || data.readOnly} className="mt-1 w-full" aria-keyshortcuts="Enter">
-        {data.readOnly ? "Read-only account" : busy ? "Claiming…" : handoff ? "Accept handoff" : "Claim"}
+        {data.readOnly ? "Read-only account" : busy ? "Taking…" : handoff ? "Take over the call" : "Take call"}
         {!data.readOnly && !busy && <kbd className="rounded-[4px] border border-current px-1.5 font-sans text-xs leading-[1.4] opacity-70">Enter</kbd>}
       </Button>
       <div className="flex items-center justify-between gap-3 text-xs leading-[1.5] text-muted-foreground">

@@ -7,6 +7,7 @@
  */
 
 import type { ReactNode } from "react";
+import { Check } from "lucide-react";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import type { ValueSource } from "@/lib/applications/constants";
@@ -35,7 +36,7 @@ export const PREFILL_SURFACE = "border-[var(--border)] bg-[var(--brand-50)]";
 
 /**
  * The one-line hint under a carried-in value: where it came from, and — while nobody has confirmed it —
- * a "Looks right" that marks it checked without changing it.
+ * a "Confirm with the client" checkbox that marks it checked without changing it.
  */
 export function PrefillHint({ fv, fieldKey, readOnly, extra, confirmable = true }: {
   fv: FieldValue | undefined;
@@ -50,19 +51,23 @@ export function PrefillHint({ fv, fieldKey, readOnly, extra, confirmable = true 
   return (
     <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-xs leading-[1.5] text-[var(--accent-ink)]">
       {PREFILL_FROM[fv.source]}
-      {!confirmable ? null : fv.reviewed ? (
-        <span className="text-[var(--muted)]">· checked</span>
-      ) : !readOnly && (
-        <>
-          <span aria-hidden="true">·</span>
-          <button
-            type="button"
-            onClick={() => { for (const k of Array.isArray(fieldKey) ? fieldKey : [fieldKey]) markReviewed(k); }}
-            className="font-semibold underline-offset-2 outline-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-          >
-            Looks right
-          </button>
-        </>
+      {/* What the agent presses once the client confirms the value (owner 2026-10-28): a clear button, not a
+          small checkbox, so it is seen when it stands between the agent and the next section. Confirmed
+          stays confirmed: a confirmation is recorded, not taken back here. */}
+      {confirmable && fv.reviewed && (
+        <span className="ml-1 inline-flex h-6 items-center gap-1 rounded-full bg-[var(--primary-soft)] px-2 font-semibold text-[var(--accent-ink)]">
+          <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />Confirmed
+        </span>
+      )}
+      {confirmable && !fv.reviewed && !readOnly && (
+        <button
+          type="button"
+          onClick={() => { for (const k of Array.isArray(fieldKey) ? fieldKey : [fieldKey]) markReviewed(k); }}
+          className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-full border-[1.5px] border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-2.5 text-xs font-semibold text-[var(--accent-ink)] outline-none transition-colors hover:bg-[var(--primary)] hover:text-[var(--ink)] focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span aria-hidden="true" className="inline-block size-3.5 rounded-[4px] border-[1.5px] border-current" />
+          Confirm with client
+        </button>
       )}
       {extra && <span className="text-[var(--muted)]">· {extra}</span>}
     </span>

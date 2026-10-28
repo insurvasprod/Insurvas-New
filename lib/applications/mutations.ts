@@ -7,7 +7,7 @@ import { checkBeneficiaries, FULL_SHARE } from "./beneficiaries";
 import { CANONICAL_GROUPS, isSensitiveKey, OUTCOMES_NEEDING_REASON, type ApplicationOutcome, type InsuredRole, type PaymentMethod } from "./constants";
 import { decryptSensitive, encryptSensitive } from "./crypto";
 import { applicableDisclosures, disclosureChanges, type AttachedDisclosure, type DisclosureClause } from "./disclosureRules";
-import { cardBrand, cardExpiryInFuture, digitsOnly, isPlausibleSsn, isValidAbaRouting, isValidBankAccount, passesLuhn } from "./formats";
+import { cardBrand, cardExpiryInFuture, cardNumberProblem, digitsOnly, isPlausibleSsn, isValidAbaRouting, isValidBankAccount } from "./formats";
 import { INTERVIEW_MAY_REPLACE, prefillFromInterview, prefillFromQuote, QUOTE_MAY_REPLACE } from "./prefill";
 import { runQa, type QaVerdict } from "./qa";
 import { normaliseRevealReason, REVEAL_REASON_REQUIRED } from "./revealReason";
@@ -207,7 +207,10 @@ export async function savePayment(actor: Actor, applicationId: string, input: Pa
     row.name_on_account = input.nameOnAccount?.trim() || null;
   } else if (input.method === "direct_express" || input.method === "debit_card" || input.method === "credit_card") {
     if (input.card) {
-      if (!passesLuhn(input.card)) throw new ApplicationError("CARD_INVALID", "That card number fails its checksum — check the digits.");
+      const problem = cardNumberProblem(input.card);
+      if (problem === "brand") throw new ApplicationError("CARD_INVALID", "We accept Visa, Mastercard, Discover and American Express cards.");
+      if (problem === "length") throw new ApplicationError("CARD_INVALID", "A card number is 16 digits (15 for American Express).");
+      if (problem) throw new ApplicationError("CARD_INVALID", "That card number fails its checksum — check the digits.");
       const e = encryptSensitive(digitsOnly(input.card), scope("pay.card_number"));
       row.card_ciphertext = e.ciphertext; row.card_last4 = digitsOnly(input.card).slice(-4); row.card_brand = cardBrand(input.card); keyVersion = e.keyVersion;
     } else if (prev && ["direct_express", "debit_card", "credit_card"].includes(String(prev.method))) { row.card_ciphertext = prev.card_ciphertext; row.card_last4 = prev.card_last4; row.card_brand = prev.card_brand; }

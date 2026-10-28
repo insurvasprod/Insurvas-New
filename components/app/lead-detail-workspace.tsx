@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ChevronLeft, Hand, Loader2 } from "lucide-react";
 import { notify } from "@/lib/notify";
-import { claimedMessage, releaseConfirmation } from "@/lib/transferInbox/constants";
+import { claimedMessage, releaseDialog } from "@/lib/transferInbox/constants";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ import { LeadAttemptsTab, LeadCallbacksTab, LeadNurtureTab } from "@/components/
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
 import { LeadSignatureReadiness } from "@/components/app/lead-signature-readiness";
 import { LeadApplicationEntry } from "@/components/app/applications/lead-application-entry";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
 
 type Template = { product_name: string; definition_version?: number; fields: Array<{ field_key: string; label: string; type: string; is_required: boolean; options: string[]; help_text?: string | null }>; form_definition: { sections: Array<{ section_key: string; label: string; fields: Array<{ field_key: string; is_required: boolean; show_when: { field_key: string; equals: string } | null; conditional_on?: { field_key: string; equals: string } | null }> }> } };
 type Event = { id: string; label: string; at: string; actor: string; detail: string | null; immutable: boolean };
@@ -44,7 +46,7 @@ function stateTone(state: string) { return state === "outstanding" ? "danger" : 
 
 function VerificationTab({ data }: { data: Workspace }) {
   if (!data.verification) return <p className="text-sm text-muted-foreground">Verification has not started for this lead.</p>;
-  return <div className="space-y-5"><div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><div className="flex items-center gap-2"><StatusChip tone={data.verification.session.progress_percentage === 100 ? "good" : "info"}>{data.verification.session.status}</StatusChip>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/${data.queue.id}/verification`}>Open live verification</Link></Button>}</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></div><div><h3 className="text-sm font-semibold">Field confirmation</h3><div className="mt-2 divide-y rounded-md border">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><StatusChip tone={stateTone(field.state)}>{field.state}</StatusChip>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</div></div></div>;
+  return <div className="space-y-5"><div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><div className="flex items-center gap-2"><StatusChip tone={data.verification.session.progress_percentage === 100 ? "good" : "info"}>{data.verification.session.status}</StatusChip>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/call/${data.queue.id}`}>Open live verification</Link></Button>}</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></div><div><h3 className="text-sm font-semibold">Field confirmation</h3><div className="mt-2 divide-y rounded-md border">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><StatusChip tone={stateTone(field.state)}>{field.state}</StatusChip>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</div></div></div>;
 }
 
 // "18 Sep 4:19 pm", as the board stamps a note.
@@ -95,7 +97,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
     notify.done(editing ? "Note updated" : noteVisibility === "shared" ? "Shared with the partner" : "Note saved"); reset(); await refresh(); void loadPartner();
   }
   async function remove(note: Note) {
-    if (!window.confirm("Delete this note? It will remain as a tombstone in the timeline.")) return;
+    if (!(await confirmAction({ title: "Delete this note?", description: "It will remain as a tombstone in the timeline.", confirmLabel: "Delete note", cancelLabel: "Keep note" }))) return;
     setBusy(true); const response = await fetch(`/api/app/leads/${encodeURIComponent(data.lead.id)}/notes`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note_id: note.id }) }); const result = await response.json().catch(() => null); setBusy(false);
     if (!response.ok) { notify.block(result?.error ?? "Could not delete note"); return; } notify.done("Note deleted"); await refresh();
   }
@@ -147,10 +149,8 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
         )}
       </div>
       {!searchResults && (
-        <div role="tablist" aria-label="Show" className="flex flex-wrap items-center gap-1.5 border-t border-border px-5 py-3">
-          {([["all", "All"], ["internal", "Internal"], ["shared", hasPartner ? "Shared with partner" : "Shared"]] as const).map(([value, text]) => (
-            <button key={value} type="button" role="tab" aria-selected={view === value} onClick={() => { setView(value); setPage(1); }} className={`h-7 rounded-full px-3 text-xs font-semibold leading-normal transition-colors ${view === value ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-muted-foreground hover:text-foreground"}`}>{text}</button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border px-5 py-3">
+          <Segmented label="Show" options={[{ key: "all", label: "All" }, { key: "internal", label: "Internal" }, { key: "shared", label: hasPartner ? "Shared with partner" : "Shared" }]} value={view} onChange={(value) => { setView(value); setPage(1); }} />
           {readsPartner && partnerLines === null && <span className="text-xs text-muted-foreground">Reading the partner’s messages…</span>}
         </div>
       )}
@@ -168,7 +168,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
               <div className="flex items-baseline justify-between gap-3">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{line.system ? line.title ?? "Update" : line.author ?? "Someone"}</span>
-                  <Chip tone={line.fromPartner ? "accent" : "neutral"}>{line.system ? "Automatic update" : line.fromPartner ? `From ${data.partner?.name ?? "the partner"}` : "Partner channel"}</Chip>
+                  <StatusChip tone={line.fromPartner ? "action" : "neutral"}>{line.system ? "Automatic update" : line.fromPartner ? `From ${data.partner?.name ?? "the partner"}` : "Partner channel"}</StatusChip>
                 </span>
                 <span className="shrink-0 text-xs leading-normal tabular-nums text-muted-foreground">{noteTime(line.createdAt)}</span>
               </div>
@@ -186,7 +186,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
             <div className="flex items-baseline justify-between gap-3">
               <span className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{note.deletedAt ? "Note deleted" : note.author.name}</span>
-                {!note.deletedAt && <Chip tone={note.visibility === "shared" ? "accent" : "neutral"}>{note.visibility === "shared" ? "Shared" : "Internal"}</Chip>}
+                {!note.deletedAt && <StatusChip tone={note.visibility === "shared" ? "action" : "neutral"}>{note.visibility === "shared" ? "Shared" : "Internal"}</StatusChip>}
                 {note.editedAt && !note.deletedAt && <span className="text-xs leading-normal text-muted-foreground">edited</span>}
               </span>
               <span className="shrink-0 text-xs leading-normal tabular-nums text-muted-foreground">{noteTime(note.createdAt)}</span>
@@ -232,22 +232,6 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
       <p className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</p>
       <div className="mt-1 break-words text-sm font-semibold leading-normal tracking-[-0.02em] tabular-nums text-foreground">{children}</div>
     </div>
-  );
-}
-
-function Chip({ tone, dot, children }: { tone: "warning" | "danger" | "good" | "accent" | "neutral"; dot?: boolean; children: React.ReactNode }) {
-  const look = {
-    warning: ["bg-[var(--warning-surface)] text-[var(--warning-ink)]", "bg-[var(--warning)]"],
-    danger: ["bg-[var(--error-surface)] text-[var(--error-ink)]", "bg-[var(--error)]"],
-    good: ["bg-[var(--success-surface)] text-[var(--success-ink)]", "bg-[var(--success)]"],
-    accent: ["bg-[var(--primary-soft)] text-[var(--accent-ink)]", "bg-[var(--primary)]"],
-    neutral: ["bg-[var(--surface-alt)] text-[var(--body)]", "bg-[var(--muted-foreground)]"],
-  }[tone];
-  return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold leading-normal tracking-[-0.01em] ${look[0]}`}>
-      {dot && <span className={`size-1.5 shrink-0 rounded-full ${look[1]}`} aria-hidden="true" />}
-      {children}
-    </span>
   );
 }
 
@@ -320,13 +304,13 @@ function identityLine(data: Workspace) {
 }
 
 /** "On a call · 4:12", ticking; a record open past four hours says it was never closed. */
-function LiveCallChip({ startedAt, agentName }: { startedAt: string; agentName: string | null }) {
+function LiveCallStatus({ startedAt, agentName }: { startedAt: string; agentName: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const seconds = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
-  if (seconds > 4 * 3600) return <Chip tone="warning" dot>Call record open {Math.floor(seconds / 86400) ? `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h` : `${Math.floor(seconds / 3600)}h`}, never closed</Chip>;
+  if (seconds > 4 * 3600) return <StatusChip tone="warning" dot>Call record open {Math.floor(seconds / 86400) ? `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h` : `${Math.floor(seconds / 3600)}h`}, never closed</StatusChip>;
   const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-  return <Chip tone="good" dot>On a call · {clock}{agentName ? ` · ${agentName}` : ""}</Chip>;
+  return <StatusChip tone="good" dot>On a call · {clock}{agentName ? ` · ${agentName}` : ""}</StatusChip>;
 }
 
 type TabKey = "application" | "attempts" | "verification" | "notes" | "callbacks" | "nurture" | "timeline";
@@ -367,13 +351,13 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
     // Every one of the three asks first; the language cover prompt below is a second, separate question.
     const values = data.lead.values;
     const customer = [values.full_name, values.name, [values.first_name, values.last_name].filter(Boolean).join(" ")].find((part): part is string => typeof part === "string" && part.trim() !== "");
-    if (!acknowledgeLanguage && !window.confirm(releaseConfirmation(kind, { customer, bufferName: data.transfer?.buffer?.name, agentName: data.owner?.name }))) return;
+    if (!acknowledgeLanguage && !(await confirmAction(releaseDialog(kind, { customer, bufferName: data.transfer?.buffer?.name, agentName: data.owner?.name })))) return;
     setSaving(kind);
     const response = await fetch("/api/app/inbound/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: kind, work_item_id: data.queue.id, ...(acknowledgeLanguage ? { acknowledge_language: true } : {}) }) });
     const body = await response.json().catch(() => null);
     setSaving(null);
     if (response.status === 409 && body?.code === "language_cover_required" && !acknowledgeLanguage) {
-      if (window.confirm(body.error)) void release(kind, true);
+      if (await confirmAction({ title: "Continue without a language match?", description: body.error, confirmLabel: "Continue", cancelLabel: "Go back", destructive: false })) void release(kind, true);
       return;
     }
     if (!response.ok) { notify.block(body?.error ?? "The action could not be completed"); return; }
@@ -409,14 +393,13 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   const leadName = display(data.lead.values.full_name ?? data.lead.values.name ?? ([data.lead.values.first_name, data.lead.values.last_name].filter(Boolean).join(" ") || "Unnamed lead"));
   const screeningTone = data.screening.outcome === "blocked" ? "danger" : data.screening.warning ? "warning" : "good";
   const screeningLabel = data.screening.outcome === "blocked" ? "blocked" : data.screening.warning ? "needs review" : data.screening.outcome ?? "pending";
-  const stageTone = data.stage?.stage_type === "won" ? "good" : data.stage?.stage_type === "lost" ? "danger" : "accent";
+  const stageTone = data.stage?.stage_type === "won" ? "good" : data.stage?.stage_type === "lost" ? "danger" : "action";
   const lineage = data.lineage;
   const sourceName = data.partner?.name ?? lineage?.vendorName ?? null;
   const canDisposition = Boolean(data.queue && data.actions.canDisposition);
   const canVerify = Boolean(data.queue && data.queue.owner_user_id === data.currentUserId);
   const expired = data.queue?.status === "expired";
   const anyAction = data.actions.canClaim || data.actions.canAcceptHandoff || Boolean(data.queue) || canDisposition || canVerify || Boolean(data.stage && data.actions.canChangeStage);
-  const tabClass = (active: boolean) => `-mb-px inline-flex h-10 items-center gap-1 border-b-2 px-1 text-sm font-semibold leading-[1.43] tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
   const outline = "w-full";
 
   return (
@@ -436,11 +419,11 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <PageHeader title={leadName} description={identityLine(data) || undefined} />
           <div className="flex flex-wrap gap-2">
-            <Chip tone={screeningTone} dot>Screening: {screeningLabel}</Chip>
-            {data.stage && <Chip tone={stageTone} dot>{data.stage.name}</Chip>}
-            <Chip tone="neutral">{sourceName ?? "Direct lead"}</Chip>
-            <Chip tone="neutral">{data.template.product_name}</Chip>
-            {data.activeCall && <LiveCallChip startedAt={data.activeCall.startedAt} agentName={data.activeCall.agentName} />}
+            <StatusChip tone={screeningTone} dot>Screening: {screeningLabel}</StatusChip>
+            {data.stage && <StatusChip tone={stageTone} dot>{data.stage.name}</StatusChip>}
+            <StatusChip tone="neutral">{sourceName ?? "Direct lead"}</StatusChip>
+            <StatusChip tone="neutral">{data.template.product_name}</StatusChip>
+            {data.activeCall && <LiveCallStatus startedAt={data.activeCall.startedAt} agentName={data.activeCall.agentName} />}
           </div>
         </div>
       </section>
@@ -462,13 +445,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
 
       <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
         <section className="m-glass rounded-xl border border-border flex min-w-0 flex-grow flex-col">
-          <div className="flex flex-wrap gap-x-6 border-b border-border px-5" role="tablist" aria-label="Lead detail sections">
-            {tabs.map((item) => (
-              <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} onClick={() => setTab(item.key)} className={tabClass(tab === item.key)}>
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <UnderlineTabs label="Lead detail sections" tabs={tabs} value={tab} onChange={setTab} className="px-5" />
 
           {tab === "application" ? (
             <LeadDetailTab data={data} onAllNotes={() => setTab("notes")} />
@@ -530,7 +507,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {data.queue && data.actions.canUnassign && <Button variant="outline" className={outline} disabled={readOnly || saving === "unassign"} onClick={() => void release("unassign")}>{saving === "unassign" && <Loader2 className="size-4 animate-spin" />}Unassign</Button>}
               {data.queue && <Button variant="outline" className={outline} disabled={readOnly || saving === "nudge"} onClick={nudge}>Nudge team</Button>}
               {expired && <Button variant="outline" className={outline} disabled={readOnly || saving === "reopen"} onClick={reopen}>{saving === "reopen" && <Loader2 className="size-4 animate-spin" />}Reopen in queue</Button>}
-              {canVerify && data.queue && <Button asChild variant="outline" className={outline}><Link href={`/app/inbound/${data.queue.id}/verification`}>Verification</Link></Button>}
+              {canVerify && data.queue && <Button asChild variant="outline" className={outline}><Link href={`/app/inbound/call/${data.queue.id}`}>Verification</Link></Button>}
               <LeadApplicationEntry leadId={data.lead.id} workItemId={data.queue?.id ?? null} canStart={!readOnly && (data.role === "owner" || data.role === "producer")} className={outline} />
               {data.stage && data.actions.canChangeStage && (
                 <div className="mt-1">

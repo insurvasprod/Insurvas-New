@@ -11,7 +11,6 @@ import { ApplicationError } from "@/lib/applications/db";
 import { listApplicationRows } from "@/lib/applications/lists";
 import { ApplicationsHub } from "@/components/app/applications/applications-hub";
 import { applicationsTabs, hasCalculator } from "@/components/app/applications/applications-tabs";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { canWrite } from "@/lib/entitlements/types";
 
 /** The page's data, or null while its migration is not applied. */
@@ -30,7 +29,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Applications" detail="Owners and producers work applications." />;
   const query = await searchParams;
   // One page with Pending cases, Quotes and Draft dates (2026-10-26): this is its Cases tab.
-  const hub = (body: React.ReactNode) => <DashboardStage ribbon><ApplicationsHub view="cases" tabs={applicationsTabs(guard.entitlement)} calculator={hasCalculator(guard.entitlement)} readOnly={!canWrite(guard.entitlement)} calculatorOpen={query.calculator === "1" && hasCalculator(guard.entitlement)}>{body}</ApplicationsHub></DashboardStage>;
+  const hub = (body: React.ReactNode) => <><ApplicationsHub view="cases" tabs={applicationsTabs(guard.entitlement)} calculator={hasCalculator(guard.entitlement)} readOnly={!canWrite(guard.entitlement)} calculatorOpen={query.calculator === "1" && hasCalculator(guard.entitlement)}>{body}</ApplicationsHub></>;
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") return hub(<ApplicationsList rows={FIXTURE_APPLICATIONS} sample embedded />);
   const [rows, timeZone] = await Promise.all([orPending(scopeFor(guard.context).then((scope) => listApplicationRows(guard.context.tenantId, scope))), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
   if (!rows) return <SetupPending title="Applications" />;

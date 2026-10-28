@@ -69,6 +69,43 @@ export function buildSidebarTree(menu: MenuSection[], moduleAccess?: ModuleAcces
   };
 }
 
+/**
+ * The rail's seven areas (owner's pick 2026-10-28, board NavB's names and icons, Partners split out of
+ * Leads the same day): each area holds one or
+ * two of the job groups above, which stay as headings inside it. A group no area names (a new section)
+ * becomes an area of its own, so nothing leaves the menu by omission.
+ */
+export const NAV_AREAS: readonly { label: string; icon: string; sections: readonly string[] }[] = [
+  { label: "Work", icon: "phone", sections: ["Today", "Sales"] },
+  { label: "Leads", icon: "users", sections: ["Leads"] },
+  // Its own area (owner 2026-10-28): partners are not a kind of lead.
+  { label: "Partners", icon: "handshake", sections: ["Partners"] },
+  { label: "Book", icon: "book-open", sections: ["Book", "Data in"] },
+  { label: "Money", icon: "dollar-sign", sections: ["Commissions", "Accounting"] },
+  { label: "Team", icon: "building", sections: ["Team", "Reports"] },
+  { label: "Compliance", icon: "shield-check", sections: ["Compliance"] },
+];
+
+export type SidebarArea = { label: string; icon: string; groups: SidebarGroup[]; items: MenuItem[] };
+
+/** The tree's groups folded into areas, in NAV_AREAS order; empty areas are dropped. */
+export function buildSidebarAreas(tree: SidebarTree): SidebarArea[] {
+  const placed = new Set(NAV_AREAS.flatMap((area) => area.sections));
+  const areas = [
+    ...NAV_AREAS.map((area) => ({ label: area.label, icon: area.icon, groups: area.sections.flatMap((section) => tree.groups.filter((group) => group.label === section)) })),
+    ...tree.groups.filter((group) => !placed.has(group.label)).map((group) => ({ label: group.label, icon: group.icon, groups: [group] })),
+  ];
+  return areas
+    .filter((area) => area.groups.length > 0)
+    .map((area) => ({ ...area, items: area.groups.flatMap((group) => group.items) }));
+}
+
+/** The area a menu section sits in, for the breadcrumb ("Work › Dialer"); null for Home and Settings. */
+export function areaOfSection(section: string): string | null {
+  if (section === NAV_STANDALONE.home || section === NAV_STANDALONE.settings) return null;
+  return NAV_AREAS.find((area) => area.sections.includes(section))?.label ?? section;
+}
+
 /** The groups open on arrival: the one holding the page, else the first group with something in it. */
 export function initialOpenGroups(tree: SidebarTree, isActive: (item: MenuItem) => boolean): string[] {
   const active = tree.groups.filter((group) => group.items.some(isActive)).map((group) => group.label);

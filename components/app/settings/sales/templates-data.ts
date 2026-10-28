@@ -142,6 +142,11 @@ export function useSalesTemplates(kind: SalesTemplateKind) {
       if (sample) return local((list) => list.map((t) => (t.id === id ? { ...t, status: "retired" } : t)));
       await write<Created>(`${base}/${id}/retire`, "POST", undefined, `Retired — ${RETIRED_KEEPS[kind]}`);
     },
+    /** True when the version is gone; a version already used by interviews is refused and kept. */
+    async remove(id: string) {
+      if (sample) { local((list) => list.filter((t) => t.id !== id)); return true; }
+      return (await write<{ id: string }>(`${base}/${id}`, "DELETE", undefined, "Template deleted")) !== null;
+    },
     async copy(id: string, body: { product_code?: string; carrier_id?: string | null; name?: string }, done = "Copied to your agency as a draft") {
       if (sample) {
         const src = payload?.templates.find((t) => t.id === id);

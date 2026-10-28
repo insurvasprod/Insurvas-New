@@ -9,7 +9,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { OctagonAlert, StickyNote } from "lucide-react";
+import { Check, OctagonAlert, StickyNote } from "lucide-react";
 
 import { control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,15 @@ export type AnswerValue = Answer["value"];
 
 export const questionDomId = (key: string) => `health.${key}`;
 
+/** The medication question's answer when the client takes none (lib/applications/templates.ts reads it too). */
+export const NO_MEDICATIONS = "none";
+
+/** Answers typed out (not picked): they need a "Done", or the section would fold mid-word. */
+export const TYPED_TYPES = new Set<InterviewQuestion["type"]>(["text", "long_text", "number", "date"]);
+
 export function isAnswered(q: InterviewQuestion, answer: Answer | undefined, medications: MedicationRow[]) {
-  if (q.type === "medication_list") return medications.length > 0;
+  // "Takes none" is an answer too (owner 2026-10-28): the medication question is not left open.
+  if (q.type === "medication_list") return medications.length > 0 || answer?.value === NO_MEDICATIONS;
   const v = answer?.value;
   if (v === null || v === undefined || v === "") return false;
   return !(Array.isArray(v) && v.length === 0);
@@ -119,7 +126,9 @@ const INLINE = new Set<InterviewQuestion["type"]>(["boolean", "single_select", "
 
 const plainTone = (): ChipTone => "good";
 
-export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNotes, toneFor = plainTone, followUp = false, children, medications, onMedications }: {
+export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNotes, toneFor = plainTone, followUp = false, children, medications, onMedications, card }: {
+  /** The interview's own look (a rounded row, answers under the question); `isNext` marks "Ask now". */
+  card?: { isNext: boolean };
   q: InterviewQuestion;
   /** "Q4" for a top-level question; follow-ups are not numbered. */
   number?: number | null;
@@ -204,6 +213,81 @@ export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNo
   );
 
   if (followUp) return <div className={cn("flex flex-col", knocked && "-mx-3 rounded-[8px] bg-[var(--error-surface)] px-3 py-2")}>{body}</div>;
+  if (card) {
+    // The interview's own row (owner pick C, 2026-10-28): the number in a circle, the question in bold with
+    // "Ask now" beside it, why it is asked under it, and the answers under that.
+    return (
+      <div className={cn(
+        "flex h-full gap-3 rounded-[14px] border p-3",
+        knocked ? "border-[color-mix(in_srgb,var(--error)_60%,transparent)] bg-[var(--error-surface)]"
+          : card.isNext ? "border-[color-mix(in_srgb,var(--primary)_60%,transparent)] bg-[var(--primary-soft)]"
+          : "border-[var(--border)] bg-[var(--surface-alt)]",
+      )}>
+        <span aria-hidden="true" className="inline-grid size-[30px] shrink-0 place-items-center rounded-full bg-[var(--surface)] text-xs font-bold text-[var(--muted)]">{number ?? "·"}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="min-w-0">
+            <p id={labelId} className="text-card-title text-[var(--ink)]">
+              {number !== null && <span className="sr-only">Question {number}: </span>}
+              {q.label}
+              {q.required && <span className="text-[var(--error-ink)]"> *</span>}
+              {card.isNext && <span className="ml-2 inline-flex rounded-full bg-[var(--primary)] px-2 py-0.5 align-middle text-xs font-bold text-[var(--ink)]">Ask now</span>}
+            </p>
+            {q.help && <p className="mt-0.5 text-xs leading-[1.5] text-[var(--muted)]">{q.help}</p>}
+          </div>
+          {q.type !== "medication_list" && (TYPED_TYPES.has(q.type) ? (
+            // A typed answer says when it is finished (owner 2026-10-28): "Done" (or Enter; Ctrl+Enter in a
+            // long answer) leaves the field, and only then can its section fold. An optional one can be
+            // closed with "Nothing to add".
+            <div
+              className="flex flex-col gap-2"
+              onKeyDown={(e) => {
+                const t = e.target as HTMLElement;
+                if (e.key === "Enter" && (t.tagName === "INPUT" || (t.tagName === "TEXTAREA" && (e.ctrlKey || e.metaKey)))) { e.preventDefault(); t.blur(); }
+              }}
+            >
+              {control_}
+              {!readOnly && (
+                <span className="flex flex-wrap items-center gap-2">
+                  {isAnswered(q, answer, []) ? (
+                    <Button type="button" size="sm" onClick={(e) => e.currentTarget.blur()}>
+                      <Check aria-hidden="true" />Done
+                    </Button>
+                  ) : !q.required && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => onAnswer("Nothing to add")}>Nothing to add</Button>
+                  )}
+                  {noteButton}
+                  <span className="text-xs text-[var(--muted)]">{q.type === "long_text" ? "Ctrl+Enter when finished" : "Enter when finished"}</span>
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="flex flex-wrap items-center gap-2">
+              {control_}
+              {noteButton}
+            </span>
+          ))}
+          {knocked && q.knockout && (
+            <p role="alert" className="flex items-center gap-2 text-xs font-semibold text-[var(--error-ink)]">
+              <OctagonAlert className="size-3.5 shrink-0" aria-hidden="true" />
+              Knockout · {q.knockout.note?.trim() || "this answer rules this carrier out."}
+            </p>
+          )}
+          {showNote && (
+            <textarea
+              id={noteId}
+              aria-label={`Note on: ${q.label}`}
+              placeholder="Note"
+              className={cn(control, "h-auto min-h-16 py-2")}
+              value={answer?.notes ?? ""}
+              disabled={readOnly}
+              onChange={(e) => onNotes(e.target.value)}
+            />
+          )}
+          {children}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={cn("border-t border-[var(--border)] px-5 py-4", knocked ? "border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] pl-[17px]" : "bg-[var(--surface)]")}>
       {body}

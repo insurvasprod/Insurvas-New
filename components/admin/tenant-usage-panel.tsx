@@ -6,6 +6,7 @@ import type { TenantUsageSummary } from "@/lib/metering/queries";
 import { recordDate } from "@/lib/tenants/recordFormat";
 import { meterWarnThreshold } from "@/lib/settings/queries";
 import { cn } from "@/lib/utils";
+import { cardSurface } from "@/components/ui/card";
 
 /**
  * "Usage against plan limits" as board p-adm-tenant-detail draws it: one row per limit, a 14px
@@ -101,14 +102,15 @@ function Header() {
   );
 }
 
-const CARD = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
+// The shared card surface (foundation v3), with this page's padding.
+const card = `${cardSurface} min-w-0 p-5`;
 
 export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary }) {
   const warn = await meterWarnThreshold();
 
   if (!usage.planId) {
     return (
-      <section className={CARD} aria-label="Usage against plan limits">
+      <section className={card} aria-label="Usage against plan limits">
         <Header />
         <p className="m-0 border-t border-[var(--border)] pt-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
           No subscription, so nothing is metered.
@@ -122,7 +124,7 @@ export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary })
   const pubTone = pub ? ceilingTone(pub.used, pub.max, warn) : "unknown";
 
   return (
-    <section className={CARD} aria-label="Usage against plan limits">
+    <section className={card} aria-label="Usage against plan limits">
       <Header />
 
       <UsageRow

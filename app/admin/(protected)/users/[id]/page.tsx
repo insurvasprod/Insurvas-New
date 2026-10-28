@@ -14,9 +14,11 @@ import {
   UserLoginTab,
   UserSessionsTab,
 } from "@/components/admin/user-detail-tabs";
+import { cardSurface } from "@/components/ui/card";
 
-const CARD = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
-const CARD_TITLE = "m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
+// The shared card surface (foundation v3), with this page's padding.
+const card = `${cardSurface} min-w-0 p-5`;
+const cardTitle = "m-0 text-card-title text-[var(--ink)]";
 
 /**
  * The admin user record (board p-adm-user-detail): header, chips and facts, then the tabbed
@@ -66,8 +68,8 @@ export default async function UserDetailPage({
 
         <div className="flex min-w-0 flex-col gap-4">
           {suspended && (
-            <section className={CARD} aria-labelledby="user-suspension-title">
-              <h2 id="user-suspension-title" className={CARD_TITLE}>
+            <section className={card} aria-labelledby="user-suspension-title">
+              <h2 id="user-suspension-title" className={cardTitle}>
                 Suspension reason
               </h2>
               <p className="m-0 mt-3 text-sm leading-[1.5] tracking-[-0.02em] break-words text-[var(--body)]">
@@ -83,8 +85,8 @@ export default async function UserDetailPage({
             </section>
           )}
 
-          <section className={CARD} aria-labelledby="user-actions-title">
-            <h2 id="user-actions-title" className={CARD_TITLE}>
+          <section className={card} aria-labelledby="user-actions-title">
+            <h2 id="user-actions-title" className={cardTitle}>
               Actions
             </h2>
             <UserDetailActions

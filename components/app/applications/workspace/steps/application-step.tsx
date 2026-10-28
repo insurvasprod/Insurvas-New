@@ -7,10 +7,14 @@
  * and says where it came from until it is typed over or confirmed ("Looks right"). The SSN is saved
  * encrypted through its own path and revealed one field at a time; coverage is read from the
  * selected quote and changed only there.
+ *
+ * Owner 2026-10-28: drawn like Verify and the interview — each group a section that folds to
+ * "Complete" once its required fields are filled and nothing carried in is left unchecked, two fields
+ * to a line (FoldSection), and one "They all look right" for every value carried in from the call.
  */
 
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { control, Field } from "@/components/app/settings/primitives";
@@ -25,9 +29,9 @@ import { cn } from "@/lib/utils";
 import { face, money } from "@/components/app/applications/parts";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
 import { SharedWithPrimary } from "@/components/app/applications/household/shared-detail";
-import { StepCard } from "@/components/app/applications/workspace/step-card";
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
 import { RevealBox } from "@/components/app/applications/workspace/use-reveal";
-import { AutosaveChip, isPrefilled, PREFILL_SURFACE, PrefillHint, ssnMask, ValueBox } from "./step-bits";
+import { AutosaveChip, hasContent, isPrefilled, PREFILL_SURFACE, PrefillHint, ssnMask, ValueBox } from "./step-bits";
 
 const FIELD = new Map<string, CanonicalField>(CANONICAL_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, f] as const)));
 /**
@@ -37,21 +41,6 @@ const FIELD = new Map<string, CanonicalField>(CANONICAL_GROUPS.flatMap((g) => g.
 const EFFECTIVE_DATE_KEY = "cov.effective_date";
 
 const asText = (v: FieldValue["value"] | undefined) => (v === null || v === undefined ? "" : String(v));
-
-function Section({ title, description, children, cols = 3, aside }: { title: string; description?: string; children: ReactNode; cols?: 3 | 4; aside?: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-3 border-t border-[var(--border)] px-[22px] py-[18px] first:border-t-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold text-[var(--ink)]">{title}</h3>
-          {description && <p className="mt-0.5 text-sm text-[var(--muted)]">{description}</p>}
-        </div>
-        {aside}
-      </div>
-      <div className={cn("grid gap-4 sm:grid-cols-2", cols === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4")}>{children}</div>
-    </div>
-  );
-}
 
 /** One canonical input: warm while carried in, typed-over values become the agent's own. */
 function Input({ fieldKey, label, required, type }: { fieldKey: string; label?: string; required?: boolean; type?: "text" | "date" | "number" | "tel" | "email" | "state" | "select" }) {
@@ -199,7 +188,7 @@ function Coverage({ fieldKey, label, shown }: { fieldKey: string; label: string;
 }
 
 export function ApplicationStep() {
-  const { attempt, readOnly, setValue, goTo } = useWorkspace();
+  const { attempt, readOnly, setValue, goTo, markReviewed } = useWorkspace();
   const values = attempt.values;
   const required = new Set(attempt.requiredKeys);
   const req = (key: string) => required.has(key);
@@ -218,57 +207,77 @@ export function ApplicationStep() {
   const sharedAddress = linkedKeys("addr.");
   const sharedContact = linkedKeys("contact.");
 
+  // Each section's fields, for its count and whether it can fold.
+  const groupKeys = {
+    insured: ["insured.first_name", "insured.last_name", "insured.dob", "insured.gender", "insured.ssn", "insured.height_in", "insured.weight_lb", "insured.middle_initial", "insured.tobacco", "insured.birth_state"],
+    address: ["addr.line1", "addr.city", "addr.state", "addr.zip", "addr.line2", "addr.years_at", "contact.phone", "contact.email"],
+    owner: ["owner.same_as_insured", "cov.face_amount", "cov.monthly_premium", ...(sameAsInsured ? [] : ["owner.first_name", "owner.last_name", "owner.dob", "owner.relationship"])],
+  };
+  const filled = (key: string) => hasContent(values[key]) || (key === "owner.same_as_insured");
+  const unchecked = (key: string) => isPrefilled(values[key]) && !values[key]!.reviewed;
+  const progress = (keys: string[]) => {
+    const needed = keys.filter((k) => req(k) || (!sameAsInsured && ["owner.first_name", "owner.last_name", "owner.relationship"].includes(k)));
+    const done = needed.filter(filled).length;
+    return { done, total: needed.length, complete: done === needed.length && !keys.some(unchecked) && keys.some((k) => hasContent(values[k])) };
+  };
+  const pInsured = progress(groupKeys.insured);
+  const pAddress = progress(groupKeys.address);
+  const pOwner = progress(groupKeys.owner);
+  const toCheck = [...groupKeys.insured, ...groupKeys.address, ...groupKeys.owner].filter(unchecked);
+
   return (
-    <StepCard
-      title="Application record"
-      chips={<><StatusChip tone="neutral" dot={false}>{fieldSetChip}</StatusChip><AutosaveChip /></>}
-      bodyClassName="gap-0 p-0"
-      actions={<>
-        <Button type="button" variant="outline" onClick={() => goTo("quote")}><ArrowLeft aria-hidden="true" />Back to Quote</Button>
-        <Button type="button" onClick={() => goTo("beneficiaries")}>Continue to Beneficiaries<ArrowRight aria-hidden="true" /></Button>
-      </>}
-    >
-      <Section title="Insured">
+    <section aria-label="Application record" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="flex flex-wrap items-center gap-2">
+          <StatusChip tone="neutral" dot={false}>{fieldSetChip}</StatusChip>
+          <AutosaveChip />
+        </span>
+        {!readOnly && toCheck.length > 0 && (
+          <span className="flex flex-wrap items-center gap-2 text-sm text-[var(--body)]">
+            {toCheck.length} value{toCheck.length === 1 ? "" : "s"} from the call still to check
+            <Button type="button" size="sm" variant="outline" className="border-[color-mix(in_srgb,var(--primary)_55%,transparent)] text-[var(--accent-ink)]" onClick={() => { for (const k of toCheck) markReviewed(k); }}>
+              <Check aria-hidden="true" />They all look right
+            </Button>
+          </span>
+        )}
+      </div>
+
+      <FoldSection heading="Insured" done={pInsured.done} total={pInsured.total} complete={pInsured.complete} unit="required filled">
         <Input fieldKey="insured.first_name" label="Legal first name" required={req("insured.first_name")} />
         <Input fieldKey="insured.last_name" label="Legal last name" required={req("insured.last_name")} />
+        <Input fieldKey="insured.middle_initial" required={req("insured.middle_initial")} />
         <Input fieldKey="insured.dob" required={req("insured.dob")} />
         <Input fieldKey="insured.gender" required={req("insured.gender")} />
-        <SsnField required={req("insured.ssn")} />
-        <BuildField required={req("insured.height_in") || req("insured.weight_lb")} />
-        <Input fieldKey="insured.middle_initial" required={req("insured.middle_initial")} />
-        <Input fieldKey="insured.tobacco" required={req("insured.tobacco")} />
         <Input fieldKey="insured.birth_state" required={req("insured.birth_state")} />
-      </Section>
+        <SsnField required={req("insured.ssn")} />
+        <Input fieldKey="insured.tobacco" required={req("insured.tobacco")} />
+        <BuildField required={req("insured.height_in") || req("insured.weight_lb")} />
+      </FoldSection>
 
-      <Section
-        title="Address and contact"
-        cols={4}
-        aside={sharedAddress.length || sharedContact.length ? (
-          <span className="flex flex-wrap items-center gap-3">
+      <FoldSection heading="Address and contact" done={pAddress.done} total={pAddress.total} complete={pAddress.complete} unit="required filled">
+        {(sharedAddress.length > 0 || sharedContact.length > 0) && (
+          <span className="flex flex-wrap items-center gap-3 px-1">
             {sharedAddress.length > 0 && <span className="flex items-center gap-2 text-xs text-[var(--muted)]">Address <SharedWithPrimary keys={sharedAddress} what="address" /></span>}
             {sharedContact.length > 0 && <span className="flex items-center gap-2 text-xs text-[var(--muted)]">Contact <SharedWithPrimary keys={sharedContact} what="contact details" /></span>}
           </span>
-        ) : undefined}
-      >
+        )}
         <Input fieldKey="addr.line1" label="Street" required={req("addr.line1")} />
+        <Input fieldKey="addr.line2" required={req("addr.line2")} />
         <Input fieldKey="addr.city" required={req("addr.city")} />
         <Input fieldKey="addr.state" required={req("addr.state")} />
         <Input fieldKey="addr.zip" required={req("addr.zip")} />
-        <Input fieldKey="addr.line2" required={req("addr.line2")} />
         <Input fieldKey="addr.years_at" required={req("addr.years_at")} />
         <Input fieldKey="contact.phone" required={req("contact.phone")} />
         <Input fieldKey="contact.email" required={req("contact.email")} />
-      </Section>
+      </FoldSection>
 
-      <Section title="Owner and coverage" cols={4}>
+      <FoldSection heading="Owner and coverage" done={pOwner.done} total={pOwner.total} complete={pOwner.complete} unit="required filled">
         <Field label="Owner" htmlFor="owner.same_as_insured" required={req("owner.same_as_insured")} hint="Change only when the owner is not the insured.">
           <select id="owner.same_as_insured" className={control} value={sameAsInsured ? "same" : "other"} disabled={readOnly} onChange={(e) => setValue("owner.same_as_insured", e.target.value === "same")}>
             <option value="same">Same as insured</option>
             <option value="other">Someone else</option>
           </select>
         </Field>
-        <Coverage fieldKey="cov.face_amount" label="Face amount" shown={faceShown} />
-        <Coverage fieldKey="cov.monthly_premium" label="Monthly premium" shown={premiumShown ? `${premiumShown}${tierValue ? ` · ${TIER_LABEL[tierValue] ?? tierValue}` : ""}` : ""} />
         {effectiveDateStored ? (
           <Input fieldKey={EFFECTIVE_DATE_KEY} label="Effective date" type="date" required={req(EFFECTIVE_DATE_KEY)} />
         ) : (
@@ -276,15 +285,18 @@ export function ApplicationStep() {
             <input id="app.effective_date" type="date" className={control} disabled title="The requested effective date is not stored yet — the carrier sets it at issue." />
           </Field>
         )}
-        {!sameAsInsured && (
-          <>
-            <Input fieldKey="owner.first_name" required />
-            <Input fieldKey="owner.last_name" required />
-            <Input fieldKey="owner.dob" />
-            <Input fieldKey="owner.relationship" required />
-          </>
-        )}
-      </Section>
-    </StepCard>
+        <Coverage fieldKey="cov.face_amount" label="Face amount" shown={faceShown} />
+        <Coverage fieldKey="cov.monthly_premium" label="Monthly premium" shown={premiumShown ? `${premiumShown}${tierValue ? ` · ${TIER_LABEL[tierValue] ?? tierValue}` : ""}` : ""} />
+        {!sameAsInsured && <Input fieldKey="owner.first_name" required />}
+        {!sameAsInsured && <Input fieldKey="owner.last_name" required />}
+        {!sameAsInsured && <Input fieldKey="owner.dob" />}
+        {!sameAsInsured && <Input fieldKey="owner.relationship" required />}
+      </FoldSection>
+
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border)] pt-3">
+        <Button type="button" variant="outline" onClick={() => goTo("quote")}><ArrowLeft aria-hidden="true" />Back to Quote</Button>
+        <Button type="button" onClick={() => goTo("beneficiaries")}>Continue to Beneficiaries<ArrowRight aria-hidden="true" /></Button>
+      </div>
+    </section>
   );
 }

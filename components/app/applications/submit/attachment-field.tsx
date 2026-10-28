@@ -3,7 +3,7 @@
 /**
  * The confirmation screenshot or carrier letter (LA-3.15), attached three ways: Ctrl+V anywhere in
  * the box or the dialog that owns it (`onPaste`), drag and drop, or Choose a file. PNG, JPEG or PDF
- * up to 10 MB — the private bucket takes nothing else. The file stays in memory until the capture is
+ * up to 25 MB — the private bucket takes nothing else. The file stays in memory until the capture is
  * saved; then it uploads and is only ever shown again through a 60-second signed URL.
  */
 
@@ -13,7 +13,7 @@ import { FileText, ImageIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
-import { confirmationExtension, MAX_CONFIRMATION_BYTES } from "@/lib/applications/afterSubmitRules";
+import { confirmationExtension, MAX_CONFIRMATION_BYTES, MAX_CONFIRMATION_LABEL } from "@/lib/applications/afterSubmitRules";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +24,7 @@ export type Attachment = { file: File; previewUrl: string | null; addedAt: numbe
 /** Why a file can't be attached, or null when it can. */
 export function attachmentProblem(file: File): string | null {
   if (!confirmationExtension(file.type)) return "Attach a PNG or JPEG screenshot, or a PDF.";
-  if (file.size > MAX_CONFIRMATION_BYTES) return "The confirmation must be 10 MB or smaller.";
+  if (file.size > MAX_CONFIRMATION_BYTES) return `The confirmation must be ${MAX_CONFIRMATION_LABEL} or smaller.`;
   if (file.size === 0) return "That file is empty.";
   return null;
 }
@@ -121,7 +121,7 @@ export function PasteBox({ id, onFile, disabled, disabledReason = "Saving…", c
     >
       <span className="flex size-[34px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]" aria-hidden="true"><ImageIcon className="size-4" /></span>
       <div className="text-lg font-semibold text-[var(--ink)]">{title}</div>
-      <p className="text-sm text-[var(--muted)]">Ctrl+V anywhere in this box, drop a file, or choose one. PNG, JPEG or PDF, up to 10 MB.</p>
+      <p className="text-sm text-[var(--muted)]">Ctrl+V anywhere in this box, drop a file, or choose one. PNG, JPEG or PDF, up to {MAX_CONFIRMATION_LABEL}.</p>
       <input
         ref={input}
         id={id}

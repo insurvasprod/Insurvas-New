@@ -5,12 +5,13 @@ import { useEffect, useState } from "react";
 import { Unlock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { btn, st, pillTone } from "@/components/app/settings/primitives";
+import { st, pillTone } from "@/components/app/settings/primitives";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
+import { Button } from "@/components/ui/button";
 
 type Lockout = {
   scope_key: string;
@@ -126,15 +127,15 @@ export function LoginProtectionPanel() {
                   )}
                 </td>
                 <td className={`${st.td} text-right`}>
-                  <button
+                  <Button
                     type="button"
-                    className={btn("row")}
+                    variant="ghost" size="sm"
                     onClick={() => void unlock(entry.scope_key)}
                     disabled={busy === entry.scope_key}
                   >
                     <Unlock className="size-3.5" aria-hidden="true" />
                     {busy === entry.scope_key ? "Clearing…" : "Clear lockout"}
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}

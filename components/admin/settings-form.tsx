@@ -4,7 +4,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { notify } from "@/lib/notify";
 
-import { Callout, Field, btn, control, pillTone } from "@/components/app/settings/primitives";
+import { Callout, Field, control, pillTone } from "@/components/app/settings/primitives";
 import { LoginProtectionPanel } from "@/components/admin/login-protection-panel";
 import { SETTING_DEFS, settingRefusalReason, type SettingDef, type SettingValue } from "@/lib/settings/constants";
 import {
@@ -13,6 +13,7 @@ import {
   isLoginProtectionKey,
   isLoosenedAbuseControl,
 } from "@/lib/settings/restrictions";
+import { Button } from "@/components/ui/button";
 
 export type SettingState = {
   key: string;
@@ -140,22 +141,22 @@ export function SettingsForm({
     return (
       <>
         {isDirty(def) && (
-          <button type="button" className={btn("primary-sm")} onClick={() => void save(def)} disabled={saving}>
+          <Button type="button" size="sm" onClick={() => void save(def)} disabled={saving}>
             {saving ? "Saving…" : "Save"}
-          </button>
+          </Button>
         )}
         <StatusChip dot={false} tone={pillTone(overridden ? "brand" : "neutral")}>{overridden ? "Overridden" : "Default"}</StatusChip>
         {overridden && (
-          <button
+          <Button
             type="button"
-            className={btn("secondary")}
+            variant="outline" size="sm"
             onClick={() => reset(def)}
             disabled={saving}
             aria-label={`Reset ${def.key} to its default of ${String(def.default)}`}
             title={`Restore the default (${String(def.default)})`}
           >
             Reset
-          </button>
+          </Button>
         )}
       </>
     );

@@ -230,15 +230,14 @@ function QuoteStepFor() {
   if (cat.status === "loading") formCard = <StepCard title="Type the premium from the carrier’s own tool"><SectionLoading rows={2} columns={3} label="Loading the carriers" /></StepCard>;
   else if (cat.status === "error") formCard = <StepCard title="Type the premium from the carrier’s own tool"><ErrorState title="The carriers did not load" detail={cat.message} action={<Button type="button" variant="outline" onClick={retry}>Try again</Button>} /></StepCard>;
   else if (catalogue && catalogue.carriers.length === 0) formCard = <StepCard title="Type the premium from the carrier’s own tool"><EmptyState title="No carriers to quote" hint="Add the carriers you're contracted with, and their products, in Settings › Carriers." /></StepCard>;
-  else if (catalogue) formCard = <AddQuoteForm catalogue={catalogue} template={formTemplate} onTemplate={changeTemplate} onExtra={changeExtra} prefill={prefill} prefillExtra={prefillExtra} defaultCarrierId={attempt.carrierId} onAdd={addQuote} readOnly={readOnly} />;
+  else if (catalogue) formCard = <AddQuoteForm catalogue={catalogue} template={formTemplate} onTemplate={changeTemplate} onExtra={changeExtra} prefill={prefill} prefillExtra={prefillExtra} defaultCarrierId={attempt.carrierId} caseProductCode={attempt.productCode} onAdd={addQuote} readOnly={readOnly} />;
 
   const others = Math.max(attempt.quotes.length - 1, 0);
   const printHref = `/app/applications/${caseView.caseId}/quotes/print?attempt=${attempt.attemptNo}&insured=${attempt.insuredRole}${sample ? "&preview=sample" : ""}`;
 
   return (
     <div className="flex flex-col gap-5">
-      {formCard}
-
+      {/* The quotes first, each with "Use this quote" (owner pick C, 2026-10-28); typing a new one is under them. */}
       {expired.length > 0 && (
         <Callout tone="warning" title={expired.length === 1 ? "A quote has expired" : `${expired.length} quotes have expired`}>
           <ul className="flex flex-col gap-1.5">
@@ -254,7 +253,7 @@ function QuoteStepFor() {
 
       {attempt.quotes.length === 0 ? (
         <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-          <EmptyState title="No quotes yet" hint="Type each carrier's premium above to compare them side by side." />
+          <EmptyState title="No quotes yet" hint="Type each carrier's premium below, then use the one that goes on the application." />
         </div>
       ) : (
         <QuoteComparison
@@ -269,9 +268,11 @@ function QuoteStepFor() {
 
       <PayoutStrip quotes={attempt.quotes} />
 
+      {formCard}
+
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
         <span className="min-w-0 text-xs text-[var(--muted)]">
-          {others > 0 ? `Selecting a quote discards the ${others === 1 ? "other one" : `other ${others}`} from this attempt — every quote stays listed under Quotes.` : null}
+          {others > 0 ? `Using a quote discards the ${others === 1 ? "other one" : `other ${others}`} from this attempt — every quote stays listed under Quotes.` : null}
         </span>
         <span className="flex flex-wrap items-center gap-3">
           {attempt.quotes.some((q) => q.status !== "discarded") ? (

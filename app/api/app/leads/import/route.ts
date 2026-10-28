@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit, auditMany } from "@/lib/audit/log";
-import { importAgentLeads, getAgentTemplate, PRODUCT_CODE } from "@/lib/agentTemplates/service";
+import { importAgentLeads } from "@/lib/agentTemplates/service";
+import { importProductRefusal, importTemplateFor } from "@/lib/products/importProduct";
 import { recordImportFailure } from "@/lib/agentTemplates/errors";
 import { MAX_LEAD_IMPORT_ROWS } from "@/lib/agentTemplates/csv";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -23,19 +24,28 @@ type LooseQuery = PromiseLike<{ data: unknown; error: { message: string; code?: 
 // template does not (LA-8.5).
 // The read (the GET, `write` false) also takes the outbound limit snapshot, in the same round trip as the
 // reads below and from the entitlement the auth step already read, instead of after them with a second read.
-async function context(write = false) {
+// `productCode`: the product the list is for, one the agency sells (Settings › Products, 2026-10-28).
+// Not named: Term Life when sold (every import before), else the first product sold.
+async function context(write = false, productCode: string | null = null) {
   // prefetchScope: the refusal below asks scopeFor, which is then the read already made in the auth round trip.
   const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write, prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Lead import");
   if (refused) return refused;
   const db = getSupabaseServiceClient() as unknown as { from(table: string): LooseQuery };
-  // getAgentTemplate resolves the PRODUCT_CODE copy (its product_code is that code), so the saved maps
-  // need not wait for it.
-  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).eq("product_code", PRODUCT_CODE).order("updated_at", { ascending: false });
+  let picked: Awaited<ReturnType<typeof importTemplateFor>>;
+  try {
+    picked = await importTemplateFor(auth.context.tenantId, auth.context.userId, productCode);
+  } catch (error) {
+    const refusal = importProductRefusal(error);
+    if (refusal) return refusal;
+    throw error;
+  }
+  const template = picked.template;
+  // The saved column maps are per vendor AND product.
+  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).eq("product_code", template.template.product_code).order("updated_at", { ascending: false });
   // Independent tenant-scoped reads, so one round trip.
-  const [template, pipelines, campaigns, vendors, withDateOrder, limits] = await Promise.all([
-    getAgentTemplate(auth.context.tenantId, auth.context.userId),
+  const [pipelines, campaigns, vendors, withDateOrder, limits] = await Promise.all([
     listPipelines(auth.context.tenantId),
     // Drafts too: "New campaign" on Vendors & campaigns creates a draft, and a tenant who just made
     // one to import into must find it here. The screen says a draft is not dialled until activated.
@@ -52,15 +62,17 @@ async function context(write = false) {
   const pipeline = pipelines.find((item) => item.partner_type === null && item.is_default) ?? pipelines.find((item) => item.partner_type === "marketing" && item.is_default) ?? pipelines.find((item) => item.is_default) ?? pipelines[0];
   // `date_order` arrives with 20260924343000. Before it, the saved maps are read as they always were.
   const mappings = withDateOrder.error && isMissingColumn(withDateOrder.error) ? await readMappings("id, vendor_id, product_code, mapping, updated_at") : withDateOrder;
-  return { auth, template, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: mappings.error ? [] : mappings.data as MappingOption[], limits };
+  return { auth, template, products: picked.products, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: mappings.error ? [] : mappings.data as MappingOption[], limits };
 }
 
-export async function GET() {
-  const result = await context();
+export async function GET(request: NextRequest) {
+  const result = await context(false, new URL(request.url).searchParams.get("product") || null);
   if (result instanceof NextResponse) return result;
   return NextResponse.json({
     product: { code: result.template.template.product_code, name: result.template.template.product_name },
     productCode: result.template.template.product_code,
+    // The products the agency sells (Settings › Products): the screen's product choice.
+    products: result.products.map((product) => ({ code: product.code, name: product.name })),
     // Imports need the four identity fields for routing, dedupe, and screening; the remaining
     // application fields can be completed during review and calling.
     fields: result.template.template.fields.map((field) => ({ key: field.field_key, label: field.label, type: field.type, required: isRequiredLeadImportField(field), options: field.options, sort_order: field.sort_order })),
@@ -79,9 +91,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const result = await context(true);
+  const body = await request.json().catch(() => null) as { csv?: unknown; campaign_id?: unknown; vendor_id?: unknown; mapping?: unknown; date_order?: unknown; product_code?: unknown } | null;
+  const result = await context(true, typeof body?.product_code === "string" && body.product_code ? body.product_code : null);
   if (result instanceof NextResponse) return result;
-  const body = await request.json().catch(() => null) as { csv?: unknown; campaign_id?: unknown; vendor_id?: unknown; mapping?: unknown; date_order?: unknown } | null;
   if (typeof body?.csv !== "string") return NextResponse.json({ error: "Choose a CSV file to import" }, { status: 400 });
   // Passed through only when the caller says. Without one, slash dates are refused exactly as before.
   if (body.date_order !== undefined && body.date_order !== null && !isImportDateOrder(body.date_order))
@@ -89,7 +101,9 @@ export async function POST(request: NextRequest) {
   const dateOrder = isImportDateOrder(body.date_order) ? body.date_order : null;
   const suppliedKey = request.headers.get("Idempotency-Key")?.trim();
   if (suppliedKey && suppliedKey.length > 200) return NextResponse.json({ error: "Idempotency-Key is too long" }, { status: 400 });
-  const idempotencyKey = suppliedKey || createHash("sha256").update(body.csv, "utf8").digest("hex");
+  // The same file for another product is another import; Term Life keeps the file-only key it always had.
+  const productCode = result.template.template.product_code;
+  const idempotencyKey = suppliedKey || createHash("sha256").update(productCode === "term_life" ? body.csv : `${productCode}|${body.csv}`, "utf8").digest("hex");
   // Checked before the request key is claimed: a refusal here writes nothing, so the same file (whose
   // hash is the key) can be sent again once the campaign is active. Refused after the claim, the key
   // stayed "processing" and the file could never be imported again (E2E 2026-10-16).

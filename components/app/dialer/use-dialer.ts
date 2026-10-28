@@ -398,7 +398,15 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
       const response = await fetch("/api/app/dialer/attempt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: panel.lead.id, script_id: panel.script.id, script_version: panel.script.version || null, disclosure_state: panel.lead.state, disclosure_product_code: panel.lead.productCode, ...(inbound ? { inbound: true } : {}) }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(errorText(body, "Could not prepare call"));
-      setAttempt(body.attempt); notify.done("Call attempt prepared", { detail: "Read the required disclosure, then start the call." });
+      setAttempt(body.attempt);
+      // One click calls (owner, 2026-10-27): the state's wording is on screen beside the Call button,
+      // so the click is the agent's acknowledgement of it, recorded on the attempt, and then the dial.
+      // The server still refuses a dial without that record. A step the server refuses stops here, and
+      // the screen offers it again on its own (I read this disclosure / Start call).
+      const read = await fetch(`/api/app/dialer/attempt/${body.attempt.id}/disclosure`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: panel.disclosure.state, product_code: panel.disclosure.productCode }) });
+      if (!read.ok) { notify.fail("Could not record the disclosure", { detail: errorText(await read.json().catch(() => null), "Could not record disclosure confirmation") }); return; }
+      setConfirmed(true);
+      await dial(body.attempt.id);
     } catch (error) { notify.fail("Could not prepare the call", { detail: error instanceof Error ? error.message : undefined }); }
     finally { setWorking(false); }
   }
@@ -415,11 +423,13 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
     finally { setWorking(false); }
   }
 
-  async function dial() {
-    if (!attempt || !confirmed || !panel || working || dialled) return;
+  /** `attemptId`: the one-click call, straight after the attempt and its disclosure were recorded. */
+  async function dial(attemptId?: string) {
+    const id = attemptId ?? attempt?.id;
+    if (!id || (!attemptId && (!confirmed || working)) || !panel || dialled) return;
     setWorking(true);
     try {
-      const response = await fetch(`/api/app/dialer/attempt/${attempt.id}/click`, { method: "POST" });
+      const response = await fetch(`/api/app/dialer/attempt/${id}/click`, { method: "POST" });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(errorText(body, "Dialing was blocked by the compliance checks"));
       setDialled(true);

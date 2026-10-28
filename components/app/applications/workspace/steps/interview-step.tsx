@@ -1,6 +1,11 @@
 "use client";
 
 /**
+ * Owner pick C, 2026-10-28 (canvas M3 · Qualify): answered questions fold to one line and the next one is
+ * marked "Ask now", so the agent always knows where they are. The client card beside every step
+ * (../client-card.tsx) turns the answers into facts and lists the required questions still to ask; a click
+ * there opens the folded question here.
+ *
  * Step ② — the underwriting interview (LA-3.2 on LA-3.1 templates; board l3-ws-interview). One card
  * of numbered questions — the five persistency questions first — with follow-ups nested under the
  * answer that opened them, knockouts that cannot be missed, and the medication rows in their own
@@ -9,12 +14,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Plus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
-import { Meter } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { appliesToInsured, insuredFacts } from "@/lib/applications/templates";
 import type { MedicationRow } from "@/lib/applications/types";
@@ -23,14 +27,15 @@ import { useWorkspace } from "@/components/app/applications/workspace/context";
 import { StepCard } from "@/components/app/applications/workspace/step-card";
 import { InterviewQuestionList, interviewLayout, interviewProgress } from "@/components/app/applications/workspace/interview/interview-form";
 import { MedicationTable, newMedicationRow } from "@/components/app/applications/workspace/interview/medication-table";
-import { questionDomId } from "@/components/app/applications/workspace/interview/question-input";
+import { NO_MEDICATIONS, questionDomId } from "@/components/app/applications/workspace/interview/question-input";
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
 import { AutosaveChip, calendarDate } from "./step-bits";
-import { IncomeCapture } from "@/components/app/retention/income-capture";
-import { INTERVIEW_PROMPT } from "@/lib/retention/income";
 
 export function InterviewStep() {
   const { interview, attempt, readOnly, sample, updateInterview, actions, goTo } = useWorkspace();
   const [completing, setCompleting] = useState(false);
+  // The answered question opened again from its folded line (or from a fact on the client card).
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const questions = useMemo(() => interview?.questions ?? [], [interview]);
   const { medicationQuestion } = useMemo(() => interviewLayout(questions), [questions]);
   // "Applies to" (LA-3.1): a question for smokers, or for one age band, is asked only of that insured.
@@ -43,12 +48,47 @@ export function InterviewStep() {
   // Leaving the step any other way than Continue — a click on the step rail, the sidebar, Back —
   // completes the interview too, once every required question is answered. Without this the rail's
   // tick depended on which button the agent happened to use.
-  const leave = useRef<{ complete: boolean; run: () => Promise<boolean> }>({ complete: false, run: actions.completeInterview });
+  const leave = useRef<{ complete: boolean; sampleDone: boolean; run: () => Promise<boolean>; markDone: () => void; toQuote: () => void }>({ complete: false, sampleDone: false, run: actions.completeInterview, markDone: () => {}, toQuote: () => {} });
   useEffect(() => {
-    leave.current = { complete: Boolean(interview) && !interview?.completedAt && !readOnly && !sample && progress.allRequired && !completing, run: actions.completeInterview };
+    const open = Boolean(interview) && !interview?.completedAt && !readOnly && progress.allRequired && !completing;
+    leave.current = {
+      complete: open && !sample, sampleDone: open && sample, run: actions.completeInterview,
+      markDone: () => updateInterview({ completedAt: new Date().toISOString() }), toQuote: () => goTo("quote"),
+    };
   });
   useEffect(() => () => {
     if (leave.current.complete) void leave.current.run();
+  }, []);
+
+  // The client card's "Next: quote": with every required question answered it completes the interview
+  // (later changes are amendments), then moves on.
+  useEffect(() => {
+    const onContinue = async () => {
+      const l = leave.current;
+      if (l.complete || l.sampleDone) {
+        l.complete = false;
+        setCompleting(true);
+        try {
+          if (l.sampleDone) l.markDone();
+          else if (!(await l.run())) return;
+          notify.done("Interview complete");
+        } finally {
+          setCompleting(false);
+        }
+      }
+      l.toQuote();
+    };
+    window.addEventListener("workspace:interview-continue", onContinue);
+    return () => window.removeEventListener("workspace:interview-continue", onContinue);
+  }, []);
+
+  // A fact or a "still to ask" line on the client card, or a Review fix, opens its question here.
+  useEffect(() => {
+    const open = (id: string) => { if (id.startsWith("health.")) setOpenKey(id.slice("health.".length)); };
+    open(decodeURIComponent(window.location.hash.slice(1)));
+    const onField = (e: Event) => open(String((e as CustomEvent<string>).detail ?? ""));
+    window.addEventListener("workspace:field", onField);
+    return () => window.removeEventListener("workspace:field", onField);
   }, []);
 
   if (!interview) {
@@ -82,85 +122,78 @@ export function InterviewStep() {
 
   const { answers, medications } = interview;
   const notAsked = new Set(questions.filter((q) => !asked.includes(q)).map((q) => q.key));
-  const count = `${progress.answered} of ${progress.shown}`;
 
   const setMedications = (rows: MedicationRow[]) => updateInterview({ medications: rows });
+  const medKey = medicationQuestion?.key ?? null;
+  const takesNone = Boolean(medKey && answers[medKey]?.value === NO_MEDICATIONS);
+  /** "Takes none" is stored as the medication question's answer; adding a row clears it. */
+  const setTakesNone = (none: boolean) => {
+    if (!medKey) return;
+    updateInterview({ answers: { ...answers, [medKey]: { ...answers[medKey], value: none ? NO_MEDICATIONS : null } } });
+  };
   const addMedication = () => {
     const row = newMedicationRow();
+    if (takesNone) setTakesNone(false);
     setMedications([...medications, row]);
     requestAnimationFrame(() => document.getElementById(`med-${row.id}-name`)?.focus());
   };
+  const medsDone = medications.length > 0 || takesNone;
+  const medicationSection = medicationQuestion && asked.includes(medicationQuestion) ? (
+    <FoldSection
+      heading="Medications"
+      done={medsDone ? 1 : 0}
+      total={1}
+      complete={medsDone}
+      keepOpen={openKey === medKey}
+      progressLabel="None added yet"
+      completeLabel={takesNone ? "Complete · takes none" : `Complete · ${medications.length} medication${medications.length === 1 ? "" : "s"}`}
+    >
+      <div className="flex flex-col gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-card-title text-[var(--ink)]">{medicationQuestion.label || "What medications do you take?"}{medicationQuestion.required && <span className="text-[var(--error-ink)]"> *</span>}</p>
+          </div>
+          {!readOnly && (
+            <span className="flex flex-wrap items-center gap-2">
+              {medications.length === 0 && (
+                <Button type="button" size="sm" variant={takesNone ? "default" : "outline"} aria-pressed={takesNone} onClick={() => setTakesNone(!takesNone)}>
+                  {takesNone && <Check aria-hidden="true" />}Takes none
+                </Button>
+              )}
+              <Button type="button" size="sm" variant="outline" onClick={addMedication}><Plus aria-hidden="true" />Add medication</Button>
+            </span>
+          )}
+        </div>
+        {(medications.length > 0 || !takesNone) && (
+          <MedicationTable id={questionDomId(medicationQuestion.key)} rows={medications} onChange={setMedications} readOnly={readOnly} sample={sample} />
+        )}
+      </div>
+    </FoldSection>
+  ) : null;
 
-  // Continuing with every required question answered completes the interview; later changes are amendments.
-  const cont = async () => {
-    if (!readOnly && !interview.completedAt && progress.allRequired) {
-      leave.current.complete = false;
-      setCompleting(true);
-      try {
-        if (!(await actions.completeInterview())) return;
-        if (sample) updateInterview({ completedAt: new Date().toISOString() });
-        notify.done("Interview complete");
-      } finally {
-        setCompleting(false);
-      }
-    }
-    goTo("quote");
-  };
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
-        <StepCard
-          title={`${interview.templateName} · v${interview.templateRevision}`}
-          chips={<>
+      <div className="flex min-w-0 flex-col gap-5">
+        {/* Owner pick C, 2026-10-28: one card of questions, "Next: quote" at its bottom right. */}
+        <section aria-label={`${interview.templateName} · v${interview.templateRevision}`} className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
+          <InterviewQuestionList questions={asked} answers={answers} readOnly={readOnly} collapse={{ openKey, onOpen: setOpenKey }} beforeNotes={medicationSection} onAnswers={(next) => updateInterview({ answers: Object.fromEntries(Object.entries(next).filter(([key]) => !notAsked.has(key))) })} />
+          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted)]">
             <AutosaveChip />
-            {interview.completedAt
-              ? <StatusChip tone="good" title="Changes made after this are recorded with who and when.">Completed {calendarDate(interview.completedAt)}</StatusChip>
-              : <StatusChip tone="neutral" dot>{count}</StatusChip>}
-          </>}
-          bodyClassName="gap-0 p-0"
-          footerNote={progress.knockedOut ? "A knockout rules out this carrier, not the client — try another on the Quote step." : interview.completedAt && !readOnly ? "Changes after the call are recorded with who and when." : undefined}
-          actions={<>
-            <Button type="button" variant="outline" onClick={() => goTo("verify")}><ArrowLeft aria-hidden="true" />Back to Verify</Button>
-            <Button type="button" onClick={() => { void cont(); }} disabled={completing} title={completing ? "Saving the interview" : undefined}>
-              {completing ? "Completing…" : "Continue to Quote"}<ArrowRight aria-hidden="true" />
-            </Button>
-          </>}
-        >
-          <div className="flex flex-col gap-1.5 px-5 pt-3.5 pb-4">
-            <Meter value={progress.answered} max={progress.shown || 1} tone="primary" label={`${count} answered`} className="h-1.5" />
-            <span className="text-xs text-[var(--muted)]">
-              {count} answered
-              {!interview.completedAt && progress.missingRequired > 0 && ` · ${progress.missingRequired} required still to ask`}
-              {progress.knockedOut && <span className="font-semibold text-[var(--error-ink)]"> · knockout answered</span>}
+            {interview.completedAt && <StatusChip tone="good" title="Changes made after this are recorded with who and when.">Completed {calendarDate(interview.completedAt)}</StatusChip>}
+            <span>{interview.templateName} · v{interview.templateRevision}</span>
+            {progress.knockedOut && <span className="font-semibold text-[var(--error-ink)]">A knockout rules out this carrier, not the client: try another on the Quote step.</span>}
+            {/* The way on, bottom right of the questions (owner 2026-10-28): lit once every required question is answered. */}
+            <span className="ml-auto flex items-center gap-3">
+              {!progress.allRequired && !interview.completedAt && <span>{progress.missingRequired} required left</span>}
+              <Button type="button" variant={progress.allRequired || interview.completedAt ? "default" : "outline"} onClick={() => window.dispatchEvent(new Event("workspace:interview-continue"))} disabled={completing} title={progress.allRequired ? undefined : "You can move on and come back; the interview completes once every required question is answered."}>
+                {completing ? "Completing…" : "Next: quote"}<ArrowRight aria-hidden="true" />
+              </Button>
             </span>
           </div>
-          <InterviewQuestionList questions={asked} answers={answers} readOnly={readOnly} onAnswers={(next) => updateInterview({ answers: Object.fromEntries(Object.entries(next).filter(([key]) => !notAsked.has(key))) })} />
-        </StepCard>
+        </section>
 
-        {/* LA-5.10 · optional, asked as part of affordability; kept on the client, not the interview. */}
-        {!sample && (
-          <StepCard title="Monthly income" chips={<StatusChip tone="neutral">Optional</StatusChip>}>
-            <IncomeCapture
-              readUrl={`/api/app/applications/attempts/${attempt.id}/income?surface=interview`}
-              save={(income) => fetch(`/api/app/applications/attempts/${attempt.id}/income`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surface: "interview", income }) })}
-              prompt={INTERVIEW_PROMPT}
-              readOnly={readOnly}
-            />
-          </StepCard>
-        )}
-
-        {medicationQuestion && (
-          <StepCard
-            title={medicationQuestion.label || "Medications"}
-            chips={<>
-              <StatusChip tone="neutral" dot>{medications.length === 1 ? "1 row" : `${medications.length} rows`}</StatusChip>
-              {!readOnly && <Button type="button" variant="outline" onClick={addMedication}><Plus aria-hidden="true" />Add medication</Button>}
-            </>}
-            bodyClassName="gap-0 p-0"
-          >
-            <MedicationTable id={questionDomId(medicationQuestion.key)} rows={medications} onChange={setMedications} readOnly={readOnly} sample={sample} />
-          </StepCard>
-        )}
-    </div>
+        {/* Monthly income is no longer asked here (owner 2026-10-28): the template's financial justification
+            questions cover it, and the Payment step still captures it beside the draft date (LA-5.10). */}
+      </div>
   );
 }

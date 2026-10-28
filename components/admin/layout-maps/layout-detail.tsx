@@ -24,6 +24,7 @@ import { keptEntry, nextKeptField } from "@/lib/ingestion/layoutDraft";
 import { notify } from "@/lib/notify";
 
 import { KEPT, STATUS, TRANSFORM_LABEL, call, draftOf, enumValues, mergeColumns, payload, readPdfText, readSample, type Draft } from "./shared";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Tab = "columns" | "settings" | "carriers" | "versions";
 const select = `${toolbarControl} w-full`;
@@ -181,6 +182,8 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Saving and publishing check the whole map, so the guard offers Discard or Stay. */}
+      <LeaveGuard dirty={editable && dirty} onDiscard={() => setDraft(draftOf(open))} what={`the draft of ${open.name}`} />
       <AdminPageHeader title={open.name} subtitle={`${FILE_TYPE_LABELS[open.fileType]} · ${layoutKey}${removed ? " · deleted" : ""}`} backHref="/admin/layout-maps" backLabel="Layout maps" />
 
       <StatStrip label="This layout">

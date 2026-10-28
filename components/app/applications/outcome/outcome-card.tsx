@@ -9,11 +9,13 @@
  */
 
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, BadgeCheck, CircleX, Clock, Hourglass, Repeat, Undo2, UserX, type LucideIcon } from "lucide-react";
 
 import { Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { cn } from "@/lib/utils";
 import { APPLICATION_OUTCOME_LABEL, OUTCOME_REASONS, type ApplicationOutcome } from "@/lib/applications/constants";
 import { notify } from "@/lib/notify";
 
@@ -25,14 +27,17 @@ import { dateInput } from "./model";
 
 type Choice = "issued" | "counteroffer" | "declined" | "postponed" | "declined_by_client" | "offer_expired" | "withdrawn";
 
-const CHOICES: { value: Choice; label: string }[] = [
-  { value: "issued", label: "Issued" },
-  { value: "counteroffer", label: "Counteroffer" },
-  { value: "declined", label: "Declined by carrier" },
-  { value: "postponed", label: "Postponed" },
-  { value: "declined_by_client", label: "Declined by client" },
-  { value: "offer_expired", label: "Offer expired" },
-  { value: "withdrawn", label: "Withdrawn" },
+type Tone = "good" | "warning" | "danger" | "neutral";
+const TONE_INK: Record<Tone, string> = { good: "text-[var(--success-ink)]", warning: "text-[var(--warning-ink)]", danger: "text-[var(--error-ink)]", neutral: "text-[var(--muted)]" };
+
+const CHOICES: { value: Choice; label: string; hint: string; tone: Tone; icon: LucideIcon }[] = [
+  { value: "issued", label: "Issued", hint: "Approved — the policy is in force", tone: "good", icon: BadgeCheck },
+  { value: "counteroffer", label: "Counteroffer", hint: "Different coverage or price offered", tone: "warning", icon: Repeat },
+  { value: "declined", label: "Declined by carrier", hint: "The carrier said no", tone: "danger", icon: CircleX },
+  { value: "postponed", label: "Postponed", hint: "Apply again after a wait", tone: "warning", icon: Clock },
+  { value: "declined_by_client", label: "Declined by client", hint: "They turned the offer down", tone: "danger", icon: UserX },
+  { value: "offer_expired", label: "Offer expired", hint: "They never answered the offer", tone: "neutral", icon: Hourglass },
+  { value: "withdrawn", label: "Withdrawn", hint: "Pulled before a decision", tone: "neutral", icon: Undo2 },
 ];
 
 /** Outcomes that offer the next attempt (STATUS-MODEL §4, "After a transition"). */
@@ -165,40 +170,65 @@ export function OutcomeCard({ onRecordCounteroffer, onAnswerOffer, busy }: {
       actions={<>
         <Button type="button" variant="outline" onClick={() => goTo("submit")}><ArrowLeft aria-hidden="true" />Back to Submit</Button>
         <Button type="button" onClick={() => void record()} disabled={Boolean(why)} title={why}>
-          {choice === "counteroffer" ? "Record counteroffer" : saving ? "Saving…" : "Record outcome"}
+          {saving ? "Saving…" : choice ? `Record: ${CHOICES.find((c) => c.value === choice)?.label ?? "outcome"}` : "Record outcome"}
         </Button>
       </>}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Outcome" htmlFor="outcome-choice">
-          <select id="outcome-choice" className={control} value={choice} onChange={(e) => { setChoice(e.target.value as Choice); setReason(""); setTried(false); }} disabled={readOnly}>
-            <option value="">Choose the outcome</option>
-            {CHOICES.map((c) => <option key={c.value} value={c.value} disabled={!allowed(c.value)}>{c.label}</option>)}
-          </select>
-        </Field>
-        {choice === "issued" ? (
+      {/* Owner 2026-10-28: the outcome as one click on a tile (only the ones that can happen now), then
+          only what that outcome needs. */}
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-semibold text-[var(--ink)]">What did the carrier decide?</span>
+        <div id="outcome-choice" role="radiogroup" aria-label="Outcome" className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+          {CHOICES.filter((c) => allowed(c.value)).map((c) => {
+            const on = choice === c.value;
+            const Icon = c.icon;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                disabled={readOnly}
+                onClick={() => { setChoice(c.value); setReason(""); setTried(false); }}
+                className={cn(
+                  "flex items-start gap-2.5 rounded-[10px] border-[1.5px] px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+                  on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
+                )}
+              >
+                <Icon className={cn("mt-0.5 size-4 shrink-0", TONE_INK[c.tone])} aria-hidden="true" />
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <strong className={cn("text-sm font-semibold", on ? "text-[var(--ink)]" : "text-[var(--body)]")}>{c.label}</strong>
+                  <span className="text-xs text-[var(--muted)]">{c.hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {choice === "issued" && (
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Policy number" htmlFor="outcome-policy-number" hint={policy.trim() ? "From the carrier's issue notice." : "Without it, it stays on the Missing reference list."}>
-            <input id="outcome-policy-number" className={`${control} font-mono uppercase`} value={policy} onChange={(e) => setPolicy(e.target.value)} autoComplete="off" spellCheck={false} />
+            <input id="outcome-policy-number" className={`${control} font-mono uppercase`} placeholder="From the issue notice" value={policy} onChange={(e) => setPolicy(e.target.value)} autoComplete="off" spellCheck={false} />
           </Field>
-        ) : (
-          <Field label="Reason" htmlFor="outcome-reason" required={needsReason} error={tried ? reasonError : undefined} hint={!needsReason && choice ? "No reason needed for this outcome." : undefined}>
-            <select id="outcome-reason" className={control} value={reason} onChange={(e) => setReason(e.target.value)} disabled={!needsReason || readOnly}>
-              <option value="">{needsReason ? "Choose a reason" : "—"}</option>
-              {reasons.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
-            </select>
-          </Field>
-        )}
-        {choice === "issued" && (
           <Field label="Issued on" htmlFor="outcome-issued-on">
             <input id="outcome-issued-on" type="date" className={control} value={issuedOn} max={today} onChange={(e) => setIssuedOn(e.target.value)} />
           </Field>
-        )}
-        {needsReason && (
-          <Field label="Details" htmlFor="outcome-reason-text" required={reason === "other"} error={tried ? textError : undefined} hint="What the carrier's letter says, in its words." className="sm:col-span-2">
-            <textarea id="outcome-reason-text" rows={2} className={`${control} h-auto py-2`} value={text} onChange={(e) => setText(e.target.value)} />
+        </div>
+      )}
+
+      {needsReason && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-[var(--ink)]">Why? <span className="font-normal text-[var(--muted)]">· from the carrier&apos;s letter</span></span>
+          <span id="outcome-reason" role="radiogroup" aria-label="Reason" className="flex flex-wrap gap-1.5">
+            {reasons.map((r) => <ToggleChip key={r.code} role="radio" selected={reason === r.code} disabled={readOnly} onClick={() => setReason(r.code)}>{r.label}</ToggleChip>)}
+          </span>
+          {tried && reasonError && <p role="alert" className="text-xs text-[var(--error-ink)]">{reasonError}</p>}
+          <Field label="Details" htmlFor="outcome-reason-text" required={reason === "other"} error={tried ? textError : undefined}>
+            <textarea id="outcome-reason-text" rows={2} className={`${control} h-auto py-2`} placeholder="What the letter says, in its words" value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
-        )}
-      </div>
+        </div>
+      )}
       {(choice === "declined" || choice === "postponed" || choice === "declined_by_client" || choice === "offer_expired") && (
         <p className="text-xs text-[var(--muted)]">{CARRY_LINE}</p>
       )}

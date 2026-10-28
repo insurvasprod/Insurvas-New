@@ -12,6 +12,7 @@ import { notify } from "@/lib/notify";
 import { control } from "@/components/app/settings/primitives";
 import { WORKSPACE_TIMEZONES } from "@/lib/agencyProfile/types";
 import { Upload } from "lucide-react";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 /**
  * The profile form: identity on top, producer numbers below, one Save.
@@ -159,6 +160,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
 
   return (
     <form onSubmit={(event) => void save(event)} className="flex max-w-[720px] flex-col gap-6">
+      <LeaveGuard dirty={dirty} what="your profile" onDiscard={() => { setName(profile.name); setPhone(profile.phone ?? ""); setTimezone(profile.displayTimezone ?? ""); setNpn(profile.npn ?? ""); setNumbers(profile.licenceNumbers); setError(null); }} />
       <section aria-labelledby="profile-identity" className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
         <header className="border-b border-[var(--border)] px-5 py-4">
           <h2 id="profile-identity" className="text-base font-semibold text-[var(--ink)]">Name and contact</h2>

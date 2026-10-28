@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { NAV_COLLAPSED_COOKIE } from "@/lib/menu/navEvents";
 
 import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { prefetchTopBarIdentity, readTopBarIdentity } from "@/lib/tenantAuth/topBarIdentity";
@@ -24,6 +26,7 @@ import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboar
 import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
 import { LiveTransferCard } from "@/components/app/inbound/live-transfer-card";
 import { Suspense } from "react";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -138,6 +141,9 @@ export default async function AgentShellLayout({ children }: { children: React.R
         menu={menu}
         moduleAccess={moduleAccess}
         plan={plan}
+        userId={context.userId}
+        workspaceName={identity.workspaceName}
+        initialCollapsed={(await cookies()).get(NAV_COLLAPSED_COOKIE)?.value === "collapsed"}
       />
       {/* Opens the audio context on the first gesture. Mounted beside the bridge because the
           two together are the whole sound story on this plane: the bridge covers call sites
@@ -157,7 +163,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* No context strip under the bar (removed 2026-09-28): the workspace, plan and role are in
             the account menu and the plan card, and the read-only and maintenance states it echoed
             are the banners just below, which say what to do about them. */}
-        <AppTopBar user={identity} userId={context.userId} plan={{ name: plan.name, seats: plan.seats, isOwner: plan.isOwner }} />
+        <AppTopBar user={identity} userId={context.userId} plan={{ name: plan.name, seats: plan.seats, isOwner: plan.isOwner }} menu={menu} />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         {/* Louder than everything below it, and not dismissible (LA-6.4). */}
         {/* AG-0.5: complaints are the agency's, and their screen is refused to a narrowed session inside one. */}
@@ -167,7 +173,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
         <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
         {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
         <Suspense fallback={null}><SetupGuideBar /></Suspense>
-        <PortalPageTransition>{children}</PortalPageTransition>
+        {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
+        <DashboardStage ribbon className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
       </div>
       </main>
     </div>

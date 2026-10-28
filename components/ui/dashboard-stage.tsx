@@ -12,6 +12,9 @@ import { RibbonBackdrop } from "@/components/ui/ribbon-backdrop";
  * above pick both up through their frosted surfaces. It is one wrapper, used by the three homes (app,
  * admin, partner), so the look is set in one place rather than per page. `isolate` keeps the glow
  * layer above the page canvas without lifting it over the content.
+ *
+ * Foundation v3 (2026-10-27): the three shell layouts draw it once around every page, so a page
+ * never adds its own. One drawn inside it keeps its layout but no second ribbon (app/globals.css).
  */
 export function DashboardStage({ children, className, ribbon = false }: { children: ReactNode; className?: string; ribbon?: boolean }) {
   return (

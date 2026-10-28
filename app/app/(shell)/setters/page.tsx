@@ -5,7 +5,6 @@ import { SetterRanking } from "@/components/app/setters/setter-ranking";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -89,7 +88,7 @@ export default async function SettersPage() {
 
   // On the dashboard's moving ribbon, its cards frosted over it (owner ask 2026-10-26).
   return (
-    <DashboardStage ribbon>
+    <>
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Appointments & setters"
@@ -156,6 +155,6 @@ export default async function SettersPage() {
         )}
       </TableCard>
     </div>
-    </DashboardStage>
+    </>
   );
 }

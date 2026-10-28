@@ -4,7 +4,7 @@ import { LoadingRows } from "./page-states";
  * What a page shows between a click and its data: the one loading look for every page (2026-09-28).
  *
  * Rendered by each shell's `loading.tsx` on navigation, and by a workspace while its first read is
- * in flight. Shaped like the page that is coming — header with its actions, the stat strip, then the
+ * in flight. Shaped like the page that is coming — the header's actions, the stat strip, then the
  * table card with its toolbar — at the page's full width, so nothing jumps when the data arrives.
  * Inside an already-drawn page use `SectionLoading` (components/ui/page-states.tsx) instead.
  */
@@ -12,11 +12,8 @@ export function PageLoading({ strip = true, rows = 8 }: { strip?: boolean; rows?
   return (
     <div role="status" aria-live="polite" className="space-y-6">
       <span className="sr-only">Loading</span>
-      <div aria-hidden="true" className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-3">
-          <div className="h-8 w-56 m-skel rounded-md" />
-          <div className="h-4 w-80 max-w-full m-skel rounded-full" />
-        </div>
+      {/* No title placeholder: pages draw no visible title (owner 2026-10-28), only their actions. */}
+      <div aria-hidden="true" className="flex flex-wrap items-end justify-end gap-4">
         <div className="hidden gap-2 sm:flex">
           <div className="h-9 w-24 m-skel rounded-md" />
           <div className="h-9 w-28 m-skel rounded-md" />

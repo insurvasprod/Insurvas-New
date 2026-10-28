@@ -25,6 +25,7 @@ import type { ExpenseRow } from "@/lib/accounting/expenseStore";
 import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-7.3 · everything spent that is not a lead. Recurring ones arrive each month unconfirmed and
@@ -71,7 +72,8 @@ function NewExpense({ defaults, onClose, onSaved }: { defaults: Record<ExpenseCa
       setBusy(false);
     }
   };
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[640px]">

@@ -1,7 +1,6 @@
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PartnersWorkspace, type PartnerExtraTab } from "@/components/app/partners-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { PartnerQualityDetailWorkspace } from "@/components/app/partner-quality-detail";
 import { PayoutsBoard } from "@/components/app/accounting/payouts-board";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -81,7 +80,7 @@ export default async function PublisherDetailPage({
 
   // Partners A (2026-10-25): on the dashboard's moving ribbon.
   return (
-    <DashboardStage ribbon>
+    <>
     <PartnersWorkspace
       readOnly={guard.entitlement.access === "read_only"}
       canManageProductConfig={guard.role === "owner"}
@@ -91,6 +90,6 @@ export default async function PublisherDetailPage({
       initialTab={tab}
       messageHref={messageHref}
     />
-    </DashboardStage>
+    </>
   );
 }

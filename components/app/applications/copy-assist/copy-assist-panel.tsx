@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ClipboardX, ExternalLink, X } from "lucide-react";
+import { Check, ClipboardX, ExternalLink, Eye, EyeOff, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
@@ -181,19 +181,28 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }
     }, REVEAL_SECONDS * 1000);
   }
 
+  /** The value on screen, or a fresh audited reveal of it (no reason asked — owner 2026-10-28). */
+  async function revealOne(item: CopyItem): Promise<string | null> {
+    if (sample) { notify.warn("Sample data — nothing to reveal"); return null; }
+    const shown = revealed[item.key]?.value;
+    if (shown !== undefined) return shown;
+    const reason = await askReason(item.name);
+    if (reason === null) return null;
+    const secret = await revealValue(attempt.id, item.key, reason);
+    if (secret !== null) remember(item, secret);
+    return secret;
+  }
+
+  function hideOne(item: CopyItem) {
+    window.clearTimeout(timers.current[item.key]);
+    setRevealed((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== item.key)));
+  }
+
   async function copyOne(item: CopyItem) {
     if (item.sensitive) {
-      // Reveal (audited, one field), write, tick. Sample data has no number to fetch.
-      if (sample) { notify.warn("Sample data — nothing to reveal"); return; }
-      let secret: string | null = revealed[item.key]?.value ?? null;
-      if (secret === null) {
-        // A fresh reveal says why (the access record keeps it); a value still shown is reused.
-        const reason = await askReason(item.name);
-        if (reason === null) return;
-        secret = await revealValue(attempt.id, item.key, reason);
-      }
+      // Reveal (audited, one field), write, tick. A value still shown is reused.
+      const secret = await revealOne(item);
       if (secret === null) return;
-      if (!revealed[item.key]) remember(item, secret);
       if (!(await writeClipboard(secret))) return copyFailed();
       tick([item.key]);
       notify.done(`Copied ${item.name}`, { detail: CLIPBOARD_HONESTY_LINE });
@@ -290,6 +299,8 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }
                   format={format[item.key] ?? null}
                   onFormat={(v) => setFormat((prev) => ({ ...prev, [item.key]: v }))}
                   onCopy={() => void copyOne(item)}
+                  onReveal={() => void revealOne(item)}
+                  onHide={() => hideOne(item)}
                 />
               </li>
             ))}
@@ -315,8 +326,10 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }
   );
 }
 
-function CopyRow({ item, copied, revealed, now, format, onFormat, onCopy }: {
+function CopyRow({ item, copied, revealed, now, format, onFormat, onCopy, onReveal, onHide }: {
   item: CopyItem;
+  onReveal: () => void;
+  onHide: () => void;
   copied: boolean;
   revealed: { value: string; until: number } | null;
   now: number;
@@ -340,6 +353,9 @@ function CopyRow({ item, copied, revealed, now, format, onFormat, onCopy }: {
       </div>
       <div className="mt-1 flex items-center gap-2.5 pl-[27px]">
         <span className={cn("min-w-0 flex-1 truncate text-xs text-[var(--ink)] tabular-nums", item.sensitive && "font-mono")}>{shown}</span>
+        {item.sensitive && (revealed
+          ? <Button type="button" variant="ghost" size="sm" onClick={onHide} aria-label={`Hide ${item.name}`}><EyeOff aria-hidden="true" />Hide</Button>
+          : <Button type="button" variant="ghost" size="sm" onClick={onReveal} aria-label={`Reveal ${item.name}`}><Eye aria-hidden="true" />Reveal</Button>)}
         <Button type="button" variant="outline" size="sm" onClick={onCopy} aria-label={`Copy ${item.name}`}>Copy</Button>
       </div>
       {options && (

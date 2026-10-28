@@ -3,7 +3,6 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { DialerWorkspace } from "@/components/app/dialer-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,13 +20,13 @@ export default async function DialerPage({ searchParams }: { searchParams: Promi
   const requestedLead = typeof lead === "string" && UUID.test(lead) ? lead : null;
   // The moving ribbon behind the frosted cards, as on the home (redesign 2026-10-25, Dialer A).
   return (
-    <DashboardStage ribbon>
+    <>
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {/* The ad-hoc number check ("Check a number" in the Dialer header) opens a dialog now. Owners
           and producers only: /api/app/dial/preflight admits those two, and a setter dials what the
           queue serves. */}
       <DialerWorkspace readOnly={readOnly} role={guard.role} canCheckNumber={hasTenantPermission(guard.role, "sales.use")} requestedLeadId={requestedLead} />
     </div>
-    </DashboardStage>
+    </>
   );
 }

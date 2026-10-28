@@ -4,12 +4,13 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
-import { Callout, btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
+import { Callout, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { InfoTip } from "@/components/ui/info-tip";
 
 import { isImportDateField, slashDateReadings, type ImportDateOrder, type ImportDateScan } from "@/lib/agentTemplates/csv";
 import type { TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * Step 2 of a list import: which of the file's columns is which lead field.
@@ -263,10 +264,10 @@ export function ColumnMappingDialog({
                 {(blocked || continueNote) && <span id="column-mapping-continue-note" className={cn("mt-1 block font-semibold", blocked ? "text-[var(--warning-ink)]" : "text-[var(--body)]")}>{blocked ?? continueNote}</span>}
               </span>
               <span className="flex gap-2.5">
-                <button type="button" className={btn("secondary")} onClick={onBack}>Back</button>
-                <button type="button" className={btn("primary")} disabled={Boolean(blocked) || busy} aria-describedby={blocked || continueNote ? "column-mapping-continue-note" : undefined} onClick={onContinue}>
+                <Button type="button" variant="outline" size="sm" onClick={onBack}>Back</Button>
+                <Button type="button"  disabled={Boolean(blocked) || busy} aria-describedby={blocked || continueNote ? "column-mapping-continue-note" : undefined} onClick={onContinue}>
                   {busy ? "Checking…" : "Continue to scrub"}
-                </button>
+                </Button>
               </span>
             </div>
           </DialogPrimitive.Content>

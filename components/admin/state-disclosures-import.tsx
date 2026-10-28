@@ -2,11 +2,12 @@
 
 import { useState, type ChangeEvent } from "react";
 
-import { Callout, Field, KeyValues, btn, control } from "@/components/app/settings/primitives";
+import { Callout, Field, KeyValues, control } from "@/components/app/settings/primitives";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatEffectiveDate, PACK_COLUMNS, parsePack, type ParsedPack } from "@/lib/stateDisclosures/board";
 import { MAX_PACK_PROPOSALS } from "@/lib/stateDisclosures/schemas";
 import { notify } from "@/lib/notify";
+import { Button } from "@/components/ui/button";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const SHOWN_ERRORS = 12;
@@ -153,12 +154,12 @@ export function StateDisclosuresImport({
         {!error && blocker && pack && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blocker}</p>}
 
         <DialogFooter>
-          <button type="button" className={btn("ghost")} onClick={onClose} disabled={saving}>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
-          </button>
-          <button type="button" className={btn("primary")} onClick={submit} disabled={saving || !ready} title={blocker ?? undefined}>
+          </Button>
+          <Button type="button"  onClick={submit} disabled={saving || !ready} title={blocker ?? undefined}>
             {saving ? "Importing…" : pack?.proposals.length ? `Submit ${pack.proposals.length} for review` : "Submit for review"}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

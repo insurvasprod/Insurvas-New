@@ -1,6 +1,7 @@
 import "server-only";
 
 import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
+import { soldProductCodes } from "@/lib/products/agencyProducts";
 import type { Actor } from "@/lib/applications/http";
 import { ApplicationError, SchemaPendingError, db, isMissingSchema, rows, type DbError } from "@/lib/applications/db";
 import type { PaymentMethod } from "@/lib/applications/constants";
@@ -100,10 +101,17 @@ export async function listedCarrierIds(tenantId: string): Promise<string[]> {
   return [...new Set([...contracts, ...settings, ...products, ...portals].map((r) => r.carrier_id))];
 }
 
-export async function productLines(): Promise<ProductLine[]> {
-  const res = await db().from("products").select("code, name, sort_order").eq("is_active", true).order("sort_order").order("name");
+/**
+ * Every active catalogue line, so existing rows keep their names. With a tenant, each line says
+ * whether the agency sells it (Settings › Products, 2026-10-27); pickers offer only the sold ones.
+ */
+export async function productLines(tenantId?: string): Promise<ProductLine[]> {
+  const [res, sold] = await Promise.all([
+    db().from("products").select("code, name, sort_order").eq("is_active", true).order("sort_order").order("name"),
+    tenantId ? soldProductCodes(tenantId) : Promise.resolve(null),
+  ]);
   if (res.error) fail(res.error, "Product lines");
-  return rows<{ code: string; name: string }>(res.data).map((p) => ({ code: p.code, name: p.name }));
+  return rows<{ code: string; name: string }>(res.data).map((p) => ({ code: p.code, name: p.name, ...(sold ? { sold: sold.has(p.code) } : {}) }));
 }
 
 export async function namedCarriers(ids: string[]): Promise<NamedCarrier[]> {
@@ -156,7 +164,7 @@ export async function getCarriersView(tenantId: string): Promise<Omit<CarriersPa
   const ids = await listedCarrierIds(tenantId);
   const [platformList, lines] = await Promise.all([
     client.from("carriers").select("id, name").is("organization_id", null).eq("is_active", true).order("name"),
-    productLines(),
+    productLines(tenantId),
   ]);
   if (platformList.error) fail(platformList.error, "Carriers");
   const addable = rows<NamedCarrier>(platformList.data).filter((c) => !ids.includes(c.id));

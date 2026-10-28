@@ -25,6 +25,7 @@ import { useViewerTimeZone } from "@/components/app/use-viewer-time-zone";
 import { MemberAccountPanel } from "@/components/app/team-member-account";
 import { TeamAccessPanel, type AccessDraft } from "@/components/app/team-access-panel";
 import type { TeamAccessSnapshot } from "@/lib/tenantTeam/access";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type MemberStatus = "active" | "invited" | "expired" | "suspended" | "deactivated" | "other";
 const STATUS_FILTERS: { key: Exclude<MemberStatus, "other" | "expired">; label: string }[] = [
@@ -390,6 +391,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
         )}
       </PagedTableCard>
 
+      <LeaveGuard dirty={dirty} onDiscard={() => { setPending({}); setError(""); }} what="your teammates' roles" />
       <SettingsSaveBar visible={dirty} note={`${Object.keys(pending).length} ${Object.keys(pending).length === 1 ? "teammate" : "teammates"} changed`}>
         <Button type="button" variant="outline" onClick={() => { setPending({}); setError(""); }} disabled={saving}>Discard</Button>
         <Button type="button" onClick={() => void saveChanges()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>

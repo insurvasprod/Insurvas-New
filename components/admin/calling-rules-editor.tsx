@@ -29,6 +29,7 @@ import {
 } from "@/lib/callingWindow/rulesModel";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 /**
  * /admin/calling-rules · the state calling rules the dialer enforces on top of the federal window.
@@ -252,8 +253,8 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
                     holiday={holiday}
                     removable={!readOnly && holiday.date >= today}
                     disabled={busy}
-                    onRemove={() => {
-                      if (!window.confirm(`Remove ${holiday.name} on ${dayLabel(holiday.date)}? Calls will be allowed that day again.`)) return;
+                    onRemove={async () => {
+                      if (!(await confirmAction({ title: `Remove ${holiday.name} on ${dayLabel(holiday.date)}?`, description: "Calls will be allowed that day again.", confirmLabel: "Remove holiday", cancelLabel: "Keep holiday" }))) return;
                       void act(() => send(`/api/admin/calling-rules/holidays/${holiday.id}`, "DELETE"), "Holiday removed.");
                     }}
                   />
@@ -273,8 +274,8 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
           busy={busy}
           onClose={() => setOpenState(null)}
           onPublish={(input) => act(() => send("/api/admin/calling-rules", "POST", input), `${stateName(selected.state)} rule published.`)}
-          onWithdraw={(version) => {
-            if (!window.confirm(`Withdraw the ${stateName(version.state)} rule starting ${dayLabel(version.effectiveFrom)}?`)) return;
+          onWithdraw={async (version) => {
+            if (!(await confirmAction({ title: `Withdraw the ${stateName(version.state)} rule starting ${dayLabel(version.effectiveFrom)}?`, description: "The rule in force now stays; the scheduled change is dropped.", confirmLabel: "Withdraw rule", cancelLabel: "Keep scheduled" }))) return;
             void act(() => send(`/api/admin/calling-rules/${version.id}`, "DELETE"), "Scheduled rule withdrawn.");
           }}
         />

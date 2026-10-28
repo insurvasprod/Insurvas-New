@@ -32,6 +32,7 @@ import {
 import type { ComplaintRow, Respondent } from "@/lib/compliance/complaintStore";
 import { formatPhone } from "@/lib/compliance/evidenceGaps";
 import { notify } from "@/lib/notify";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-6.4 · the complaint list: days remaining first, amber at 10, red at 5, overdue loudest. Opening
@@ -81,7 +82,8 @@ function NewComplaint({ team, partners, onClose, onSaved }: { team: Person[]; pa
       setBusy(false);
     }
   };
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[620px]">

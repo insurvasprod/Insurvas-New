@@ -51,7 +51,7 @@ export function TableCard({
       {hasHeading && (
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div className="min-w-0">
-            {title && <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{title}</h2>}
+            {title && <h2 className="text-card-title text-[var(--ink)]">{title}</h2>}
             {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
           </div>
           {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
@@ -60,7 +60,7 @@ export function TableCard({
 
       {toolbar && (
         // A rule above and below: the filters read as their own band, apart from the column headers.
-        <div className="flex flex-wrap items-center gap-2 border-y border-border bg-[var(--surface-alt)] px-4 py-3">
+        <div className="m-glass-head flex flex-wrap items-center gap-2 border-y border-border px-4 py-3">
           {toolbar}
         </div>
       )}
@@ -74,7 +74,7 @@ export function TableCard({
       {footer && (
         /* The footer sits on the page grey, not the card white: it is the card's plinth, and a
            white strip under a white table is a row nobody can tell from the last one. */
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-2.5 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[color-mix(in_srgb,var(--canvas)_45%,transparent)] px-4 py-2.5 text-xs text-muted-foreground">
           {footer}
         </div>
       )}

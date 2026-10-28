@@ -46,6 +46,7 @@ import {
 } from "@/lib/appointments/tickModel";
 import type { CarriersPayload } from "@/lib/salesSettings/views";
 import type { FactReportView } from "@/lib/carriers/factReportConstants";
+import { cardSurface } from "@/components/ui/card";
 
 type Vault = {
   carriers: { id: string; name: string }[];
@@ -69,7 +70,6 @@ const SCROLL =
 /** The two panes fill the screen on desktop; on a phone they stack and the list scrolls in place. */
 const PANES = "grid gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-250px)] lg:grid-cols-[360px_minmax(0,1fr)]";
 /** Frosted glass over the page's ribbon: the border stays, the surface lets the ribbon through. */
-const CARD = "rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
 const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
 const CHIP = (on: boolean) =>
   cn("inline-flex h-8 items-center gap-2 whitespace-nowrap rounded-full border px-3 text-xs font-semibold tracking-[-0.01em] transition-colors disabled:cursor-not-allowed disabled:opacity-60",
@@ -187,7 +187,7 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        {loadError ? <Callout tone="error" title={loadError} /> : <div className={CARD}><SectionLoading label="Loading your carriers" /></div>}
+        {loadError ? <Callout tone="error" title={loadError} /> : <div className={cardSurface}><SectionLoading label="Loading your carriers" /></div>}
       </SettingsStack>
     );
   }
@@ -252,7 +252,7 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
   const search = (placeholder: string) => (
     <input className={cn(control, "mt-0")} aria-label={placeholder} placeholder={placeholder} value={query} onChange={(event) => setQuery(event.target.value)} />
   );
-  const listCard = (children: ReactNode) => <div className={cn(CARD, "flex min-h-0 flex-col gap-2.5 p-3.5")}>{children}</div>;
+  const listCard = (children: ReactNode) => <div className={cn(cardSurface, "flex min-h-0 flex-col gap-2.5 p-3.5")}>{children}</div>;
   const listBody = (children: ReactNode) => <div className={cn(SCROLL, "-mx-1.5 max-h-[420px] min-h-0 flex-1 px-1.5 lg:max-h-none")}>{children}</div>;
 
   const openStep = (next: Step) => { setStep(next); setQuery(""); setFilter("all"); };
@@ -307,7 +307,7 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
           {current ? (
             <CarrierCard
               key={current.id}
-              className={cn(CARD, SCROLL)}
+              className={cn(cardSurface, SCROLL)}
               carrier={current}
               dot={dotOf(current.id)}
               contract={vault.tenantCarriers.find((row) => row.carrier_id === current.id && row.is_active) ?? null}
@@ -323,7 +323,7 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
               onSaved={async () => { await Promise.all([loadVault(), loadSales(), loadReports()]); }}
             />
           ) : (
-            <div className={cn(CARD, "grid place-items-center p-6 text-sm text-[var(--muted)]")}>Add a carrier to set it up.</div>
+            <div className={cn(cardSurface, "grid place-items-center p-6 text-sm text-[var(--muted)]")}>Add a carrier to set it up.</div>
           )}
         </div>
       )}
@@ -343,7 +343,7 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
             onPick={setCarrierId}
             listCard={listCard}
             listBody={listBody}
-            cardClass={cn(CARD, SCROLL)}
+            cardClass={cn(cardSurface, SCROLL)}
           />
         </div>
       )}
@@ -373,14 +373,14 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
             }))}
           </>)}
           <div className="grid min-h-0 gap-3 lg:grid-rows-[auto_minmax(0,1fr)]">
-            <div className={cn(CARD, "flex flex-wrap gap-x-5 gap-y-2 px-4 py-3.5")}>
+            <div className={cn(cardSurface, "flex flex-wrap gap-x-5 gap-y-2 px-4 py-3.5")}>
               <span className="basis-full"><Kicker id="hint-by-carrier" text="By carrier" hint="How many states each carrier has appointed you in so far." /></span>
               {yours.map((carrier) => {
                 const n = statesFor(vault.appointments, carrier.id, today).length;
                 return <span key={carrier.id} className="flex items-center gap-1.5 text-xs text-[var(--body)]"><span className={cn("size-2 rounded-full", dotOf(carrier.id))} aria-hidden="true" /><strong className="font-semibold text-[var(--ink)]">{carrier.name}</strong>{n ? `${n} states` : "no states yet"}</span>;
               })}
             </div>
-            <div className={cn(CARD, SCROLL, "flex min-h-0 flex-col gap-3 p-5")}>
+            <div className={cn(cardSurface, SCROLL, "flex min-h-0 flex-col gap-3 p-5")}>
               {pickedStates.length === 0 ? (
                 <p className="m-0 text-sm text-[var(--muted)]">Pick a state on the left, or tick several to set them together.</p>
               ) : (<>

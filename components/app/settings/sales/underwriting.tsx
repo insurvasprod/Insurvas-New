@@ -12,14 +12,15 @@
  */
 
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
-import { Callout, Field, SettingsStack, control, st } from "@/components/app/settings/primitives";
+import { Callout, SettingsStack, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { notify } from "@/lib/notify";
 import { definitionFromDraft, draftFromDefinition, knockoutCount, newUnderwritingDefinition, questionCount, type UwDraft } from "@/lib/salesSettings/templateDefinition";
 import { definitionProblem } from "@/lib/salesSettings/templateSchemas";
@@ -27,13 +28,14 @@ import type { TemplateRowView } from "@/lib/salesSettings/views";
 import { cn } from "@/lib/utils";
 
 import {
-  DiscardSave, LifecyclePill, ReadOnlyNotice, RowAction, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, VersionPill, WithReason,
-  notRefreshed, shortDay, warnUnsaved,
+  LifecyclePill, ReadOnlyNotice, RowAction, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, VersionPill, WithReason,
+  notRefreshed, warnUnsaved,
 } from "./shared";
 import { QuestionBuilder } from "./templates-builder";
-import { lineageKey, liveOf, tableRows, useSalesTemplates } from "./templates-data";
+import { liveOf, tableRows, useSalesTemplates } from "./templates-data";
 import { PairDialog, PublishDialog, RetireDialog, type PairChoice } from "./templates-dialogs";
 import { TemplatePreview } from "./templates-preview";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Dialog =
   | { kind: "new" }
@@ -58,6 +60,7 @@ export function SalesUnderwritingTemplates() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [editorTab, setEditorTab] = useState<"questions" | "preview">("questions");
 
   const all = useMemo(() => payload?.templates ?? [], [payload]);
   const rowsShown = useMemo(() => tableRows(all), [all]);
@@ -76,12 +79,22 @@ export function SalesUnderwritingTemplates() {
     setQuestionKey(null);
     setSaveError(null);
   };
-  /** The row's Edit / View opens it; on the open row it closes it (unless there are unsaved edits). */
-  const toggle = (t: TemplateRowView) => {
-    if (t.id !== selectedId) return open(t);
-    if (dirty) return warnUnsaved(t.name);
+  /** Back to the list (unless there are unsaved edits). */
+  const close = () => {
+    if (dirty) return warnUnsaved(selected?.name ?? "This template");
     setSelectedId(null);
     setDraft(null);
+    setEditorTab("questions");
+  };
+  /** Delete a version, after a confirm. One already used by interviews is refused by the server and kept. */
+  const remove = async (t: TemplateRowView) => {
+    const ok = await confirmAction({
+      title: `Delete ${t.name} v${t.version}?`,
+      description: t.status === "draft" ? "The draft and its questions are removed." : "It is removed for good. A version interviews or quotes already used is kept; retire it instead.",
+      confirmLabel: "Delete template",
+    });
+    if (!ok) return;
+    if (await api.remove(t.id) && t.id === selectedId) { setSelectedId(null); setDraft(null); }
   };
   const discard = () => { if (selected) { setDraft(draftFromDefinition(selected.definition)); setName(selected.name); setSaveError(null); } };
 
@@ -93,33 +106,6 @@ export function SalesUnderwritingTemplates() {
     setSaveError(error);
     if (saved) { setSelectedId(saved.template.id); setDraft(draftFromDefinition(saved.template.definition)); setName(saved.template.name); }
   };
-
-  /** The carriers a general (carrier-less) template serves: every listed carrier without its own. */
-  const coverage = (t: TemplateRowView) => {
-    if (t.carrierName) return t.carrierName;
-    const own = new Set(all.filter((x) => x.tenantOwned && x.carrierId && x.productCode === t.productCode && x.status === "published").map((x) => x.carrierId));
-    const names = (payload?.carriers ?? []).filter((c) => !own.has(c.id)).map((c) => c.name);
-    if (!names.length) return "Every carrier";
-    return names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
-  };
-  const subLine = (t: TemplateRowView) => {
-    if (!t.tenantOwned) return "Shipped by Insurvas · read-only";
-    if (t.status === "published") return `${coverage(t)} · live since ${shortDay(t.publishedAt)}`;
-    if (t.status === "draft") return `${coverage(t)} · edited${t.editedBy ? ` by ${t.editedBy}` : ""}, ${shortDay(t.updatedAt)}`;
-    return `${coverage(t)} · retired`;
-  };
-  const statusLine = (t: TemplateRowView) => {
-    if (!t.tenantOwned) return "Insurvas default · copy it to your agency to change it";
-    if (dirty) return "unsaved edits";
-    if (t.status === "published") return `live · saving makes version ${Math.max(...all.filter((x) => lineageKey(x) === lineageKey(t)).map((x) => x.version)) + 1}, a draft`;
-    if (t.status === "draft") return `draft · saved ${shortDay(t.updatedAt)}`;
-    return "retired · saving makes a new draft version";
-  };
-
-  const nextVersion = selected ? Math.max(...all.filter((x) => lineageKey(x) === lineageKey(selected)).map((x) => x.version)) + 1 : 0;
-  const saveNote = !selected ? undefined
-    : selected.status === "draft" ? `Unsaved changes to ${selected.name}`
-    : `Unsaved changes — saving makes version ${nextVersion}, a draft`;
 
   const tenantLineageExists = (c: PairChoice) => all.some((x) => x.tenantOwned && x.productCode === c.productCode && (x.carrierId ?? null) === c.carrierId);
   const copyPlatform = async (t: TemplateRowView) => {
@@ -133,7 +119,52 @@ export function SalesUnderwritingTemplates() {
 
   return (
     <SettingsStack>
-      <SalesPanelTop sample={sample} />
+      {/* With a template open (owner 2026-10-28): the section title, then → the template's name, its
+          version and state, and every action on that one line; no box, no purpose line. */}
+      <SalesPanelTop
+        sample={sample}
+        trail={selected && draft ? (
+          <>
+            <Button type="button" variant="ghost" size="icon" aria-label="Back to templates" title="Back to templates" onClick={close}>
+              <ArrowLeft aria-hidden="true" />
+            </Button>
+            {readOnly ? (
+              <span className="min-w-0 truncate text-title-sm font-semibold text-[var(--ink)]">{selected.name}</span>
+            ) : (
+              <input
+                aria-label="Template name"
+                className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-title-sm font-semibold text-[var(--ink)] outline-none transition-colors hover:border-[var(--border)] focus:border-[var(--ring-color)]"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            )}
+            <VersionPill version={selected.version} live={selected.tenantOwned && selected.status === "published" && liveOf(all, selected)?.id === selected.id} />
+            <StatusPill t={selected} />
+          </>
+        ) : undefined}
+        actions={selected && draft ? (
+          !selected.tenantOwned ? (
+            <WithReason reason={ownerOnly}>
+              <Button type="button" disabled={!canEdit} onClick={() => { void copyPlatform(selected); }}>Copy to my agency</Button>
+            </WithReason>
+          ) : canEdit ? (
+            <>
+              <Button type="button" variant="outline" onClick={() => { void remove(selected); }}><Trash2 aria-hidden="true" />Delete</Button>
+              {dirty && <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>}
+              <WithReason reason={dirty ? problem : null}>
+                <Button type="button" variant={selected.status === "draft" && !dirty ? "outline" : "default"} onClick={() => { void save(); }} disabled={!dirty || saving || Boolean(problem)}>
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+              </WithReason>
+              {selected.status === "draft" && (
+                <WithReason reason={dirty ? "Save your changes before publishing." : null}>
+                  <Button type="button" onClick={() => setDialog({ kind: "publish", template: selected })} disabled={dirty}>Publish</Button>
+                </WithReason>
+              )}
+            </>
+          ) : undefined
+        ) : undefined}
+      />
 
       {api.schemaPending ? (
         <SalesSetupPending what="Underwriting templates" />
@@ -146,11 +177,39 @@ export function SalesUnderwritingTemplates() {
           {(saveError ?? (dirty ? problem : null)) && <Callout tone="error" title={(saveError ?? problem)!} />}
           {!canEdit && <ReadOnlyNotice what="underwriting templates" />}
 
+          {selected && draft ? (
+            /* ── The editor (owner 2026-10-28): the template on its own, its name and every action on
+                  one row, then the questions or the preview. The list comes back with Back. ── */
+            <section aria-label={`Edit ${selected.name}`} className="flex flex-col gap-4">
+              <ViewTabs
+                label="Template"
+                value={editorTab}
+                onChange={setEditorTab}
+                tabs={[
+                  { key: "questions", label: "Questions", count: questionCount(definition ?? selected.definition) },
+                  { key: "preview", label: "Preview" },
+                ]}
+              />
+
+              {editorTab === "questions" ? (
+                <QuestionBuilder
+                  title="Questions"
+                  bank={{ templateName: selected.name }}
+                  draft={draft}
+                  onChange={setDraft}
+                  readOnly={readOnly}
+                  selectedKey={questionKey}
+                  onSelect={setQuestionKey}
+                />
+              ) : (
+                definition && <TemplatePreview key={selected.id} definition={definition} sample={sample} name={name.trim() || selected.name} version={selected.version} />
+              )}
+            </section>
+          ) : (
           <PagedTableCard
             total={rowsShown.length}
             noun="templates"
             title="Templates"
-            description="One template per product and audience. Only a live version can be loaded by an interview."
             toolbar={
               <DataToolbar
                 actions={
@@ -167,7 +226,7 @@ export function SalesUnderwritingTemplates() {
             {rowsShown.length === 0 ? (
               <EmptyState title="No underwriting templates yet" hint="Create one, or copy the Insurvas default, so agents can run a health interview before they quote." />
             ) : (
-              <table className={cn(st.table, "min-w-[860px]")}>
+              <table className={cn(st.table, "min-w-[720px]")}>
                 <thead>
                   <tr className={st.headRow}>
                     <th scope="col" className={st.th}>Template</th>
@@ -175,7 +234,7 @@ export function SalesUnderwritingTemplates() {
                     <th scope="col" className={cn(st.th, st.num, "w-[96px]")}>Knockouts</th>
                     <th scope="col" className={cn(st.th, "w-[72px]")}>Version</th>
                     <th scope="col" className={cn(st.th, "w-[130px]")}>Status</th>
-                    <th scope="col" className={cn(st.th, "w-[240px] text-right")}><span className="sr-only">Actions</span></th>
+                    <th scope="col" className={cn(st.th, "w-[1%] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <PagedBody className="m-seq">
@@ -186,7 +245,6 @@ export function SalesUnderwritingTemplates() {
                       <tr key={t.id} className={cn("m-row", isOpen && "bg-[var(--brand-50)]")}>
                         <td className={st.td}>
                           <span className={cn(st.strong, "block")}>{t.name}</span>
-                          <span className={st.sub}>{subLine(t)}</span>
                         </td>
                         <td className={cn(st.td, st.num)}>{questionCount(t.definition)}</td>
                         <td className={cn(st.td, st.num)}>{knockoutCount(t.definition)}</td>
@@ -194,6 +252,9 @@ export function SalesUnderwritingTemplates() {
                         <td className={st.td}><StatusPill t={t} /></td>
                         <td className={cn(st.td, "whitespace-nowrap text-right")}>
                           <span className="inline-flex gap-2">
+                            <RowAction onClick={() => open(t)} label={`${canEdit && t.tenantOwned ? "Edit" : "View"} ${t.name} v${t.version}`}>
+                              {canEdit && t.tenantOwned ? "Edit" : "View"}
+                            </RowAction>
                             {!t.tenantOwned ? (
                               <RowAction onClick={() => { void copyPlatform(t); }} disabled={!canEdit} reason={ownerOnly}>Copy to my agency</RowAction>
                             ) : (
@@ -201,11 +262,9 @@ export function SalesUnderwritingTemplates() {
                                 {t.status === "published" && <RowAction onClick={() => setDialog({ kind: "retire", template: t })} disabled={!canEdit} reason={ownerOnly}>Retire</RowAction>}
                                 {t.status === "draft" && <RowAction onClick={() => setDialog({ kind: "publish", template: t })} disabled={!canEdit || (isOpen && dirty)} reason={isOpen && dirty ? "Save your changes before publishing." : ownerOnly}>Publish</RowAction>}
                                 <RowAction onClick={() => setDialog({ kind: "duplicate", source: t })} disabled={!canEdit} reason={ownerOnly}>Duplicate</RowAction>
+                                <RowAction onClick={() => { void remove(t); }} disabled={!canEdit} reason={ownerOnly} label={`Delete ${t.name} v${t.version}`}><Trash2 aria-hidden="true" /></RowAction>
                               </>
                             )}
-                            <RowAction onClick={() => toggle(t)} label={`${isOpen ? "Close" : canEdit && t.tenantOwned ? "Edit" : "View"} ${t.name} v${t.version}`}>
-                              {isOpen ? "Close" : canEdit && t.tenantOwned ? "Edit" : "View"}
-                            </RowAction>
                           </span>
                         </td>
                       </tr>
@@ -215,35 +274,9 @@ export function SalesUnderwritingTemplates() {
               </table>
             )}
           </PagedTableCard>
-
-          {selected && draft && (
-            <QuestionBuilder
-              title="The question builder"
-              sub={`${selected.name} · v${selected.version} · ${statusLine(selected)}`}
-              draft={draft}
-              onChange={setDraft}
-              readOnly={readOnly}
-              selectedKey={questionKey}
-              onSelect={setQuestionKey}
-            >
-              {!readOnly && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Template name" htmlFor="uw-name" required>
-                    <input id="uw-name" className={control} value={name} onChange={(e) => setName(e.target.value)} />
-                  </Field>
-                  <Field label="Product and carrier" htmlFor="uw-scope" hint="Duplicate the template to use it for another product or carrier.">
-                    <input id="uw-scope" className={control} disabled value={`${selected.productName} · ${selected.carrierName ?? "every carrier without its own"}`} />
-                  </Field>
-                </div>
-              )}
-            </QuestionBuilder>
           )}
 
-          {selected && definition && <TemplatePreview key={selected.id} definition={definition} sample={sample} />}
-
-          <SettingsSaveBar visible={Boolean(selected && !readOnly && dirty)} note={saveNote}>
-            <DiscardSave saving={saving} problem={problem} onDiscard={discard} onSave={() => { void save(); }} />
-          </SettingsSaveBar>
+          <LeaveGuard dirty={Boolean(selected && !readOnly && dirty)} onDiscard={discard} what="this underwriting template" />
         </>
       )}
 
@@ -255,7 +288,7 @@ export function SalesUnderwritingTemplates() {
           carriers={payload.carriers}
           productLines={payload.productLines}
           allowGeneral
-          initial={{ productCode: payload.productLines[0]?.code ?? "final_expense", carrierId: null, name: "" }}
+          initial={{ productCode: (payload.productLines.find((p) => p.sold !== false) ?? payload.productLines[0])?.code ?? "final_expense", carrierId: null, name: "" }}
           problem={(c) => (tenantLineageExists(c) ? "Your agency already has a template for this product and carrier. Edit or duplicate it instead." : null)}
           onClose={() => setDialog(null)}
           onSubmit={async (c) => {

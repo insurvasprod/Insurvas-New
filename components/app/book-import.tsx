@@ -55,7 +55,7 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
 
   async function upload(carrierId: string, file: File) {
     setBusy(carrierId);
-    try {
+    const send = async () => {
       const form = new FormData();
       form.set("file", file);
       form.set("carrier_id", carrierId);
@@ -63,10 +63,18 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
       const response = await fetch("/api/app/book-import", { method: "POST", body: form });
       const data = (await response.json().catch(() => ({}))) as { error?: string; outcome?: string };
       if (!response.ok) throw new Error(data.error ?? "That file did not upload.");
-      notify.done(data.outcome === "skipped" ? "That exact file was already here — using it." : "Uploaded. Reading it now…");
+      return data;
+    };
+    try {
+      // One toast from the upload to its outcome (2026-10-28); the row then shows the file being read.
+      await notify.promise(send, {
+        loading: `Uploading ${file.name}…`,
+        done: (data) => (data.outcome === "skipped" ? "That exact file was already here — using it." : "Uploaded. Reading it now…"),
+        fail: (error) => ({ title: error instanceof Error ? error.message : "That file did not upload.", treatment: "block" }),
+      });
       router.refresh();
-    } catch (error) {
-      notify.block(error instanceof Error ? error.message : "That file did not upload.");
+    } catch {
+      // Said in the toast.
     } finally {
       setBusy(null);
     }

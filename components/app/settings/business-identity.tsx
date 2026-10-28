@@ -23,6 +23,8 @@ import { notify } from "@/lib/notify";
 import { formatDay } from "@/lib/carriers/contracts";
 import { BUSINESS_DOCUMENTS, BUSINESS_FIELD_LABELS, DOCUMENT_REQUIREMENTS, missingFor } from "@/lib/agencyProfile/requirements";
 import { ENTITY_TYPE_LABELS, maskTaxId, normalizeTaxId, npnHint, WORKSPACE_TIMEZONES, type AgencyProfileResponse, type AgencyProfileView, type EntityType, type TaxIdType } from "@/lib/agencyProfile/types";
+import { glass } from "@/components/ui/card";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Draft = {
   legalName: string; dba: string; npn: string; entityType: string; taxIdType: TaxIdType; taxId: string;
@@ -36,7 +38,6 @@ const OWNERS_ONLY = "Only owners can see and change the business identity.";
 /** The page's views, one at a time (owner pick A, 2026-10-27). */
 type IdentityTab = "business" | "tax" | "address" | "brand" | "documents" | "support";
 /** Frosted glass, as on Settings › Carriers and Calendar & availability: the page's glow shows through. */
-const GLASS = "bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
 /**
  * Settings search links to one field ("#business-identity/identity-timezone"). Each field now lives on
  * a tab, so the link opens that tab first and revealAnchor then finds the field.
@@ -219,7 +220,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
       <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex flex-col gap-4">
         {tab === "business" && (
-          <SettingsCard title="Who the business is" className={GLASS}>
+          <SettingsCard title="Who the business is" className={glass}>
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Field label="Trading name" htmlFor="identity-trading-name" hint="The name clients and partners see: the welcome pack, statements and letters.">
                 <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
@@ -243,7 +244,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
         )}
 
         {tab === "tax" && (
-          <SettingsCard title="Tax ID" className={GLASS}>
+          <SettingsCard title="Tax ID" className={glass}>
             <div className="flex flex-col gap-4">
               <div>
                 <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Type</span>
@@ -274,7 +275,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
         )}
 
         {tab === "address" && (
-          <SettingsCard title="Address and contact" sub="Your agency's own details, as clients and carriers see them." className={GLASS}>
+          <SettingsCard title="Address and contact" sub="Your agency's own details, as clients and carriers see them." className={glass}>
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Field label="Address" htmlFor="identity-address-line1">
                 <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
@@ -311,9 +312,9 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "brand" && (
           <div className="grid gap-4 lg:grid-cols-2">
-            <SettingsCard title="Logo" sub="PNG or JPEG, up to 512 KB. On the welcome pack and statements." className={GLASS}>
+            <SettingsCard title="Logo" sub="PNG or JPEG, up to 512 KB. On the welcome pack and statements." className={glass}>
               <div className="mt-3 flex flex-wrap items-center gap-4">
-                <div id="identity-logo" className="flex h-16 min-w-40 items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[color-mix(in_srgb,var(--color-card)_40%,transparent)] px-4">
+                <div id="identity-logo" className="flex h-16 min-w-40 items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] m-glass-inset px-4">
                   {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL from private storage */}
                   {p.logoUrl ? <img src={p.logoUrl} alt="Business logo" className="max-h-12 max-w-48 object-contain" />
                     : <span className="text-base font-semibold">{tradingName || "Your trading name"}</span>}
@@ -324,7 +325,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
               </div>
               <p className="m-0 mt-3 text-sm text-[var(--muted)]">{p.updatedAt ? "Without a logo, documents print your trading name as text." : "Save the business identity first, then add a logo."}</p>
             </SettingsCard>
-            <SettingsCard title="Timezone" sub="How times show for your team and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state." className={GLASS}>
+            <SettingsCard title="Timezone" sub="How times show for your team and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state." className={glass}>
               <div id="identity-timezone" tabIndex={-1} className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Business timezone">
                 {timezoneOptions.map((zone) => (
                   <Chip key={zone} on={draft.timezone === zone} onClick={() => pick("timezone", draft.timezone === zone ? "" : zone)}>{ZONE_NAMES[zone] ?? zone}</Chip>
@@ -336,7 +337,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "documents" && (
           <div className="grid items-start gap-4 xl:grid-cols-[1fr_400px]">
-            <SettingsCard title="Documents that use it" sub="Each one checks these before it is generated, and says which field is missing." className={GLASS}>
+            <SettingsCard title="Documents that use it" sub="Each one checks these before it is generated, and says which field is missing." className={glass}>
               <ul className="m-0 mt-3 flex list-none flex-col p-0">
                 {docs.map(({ doc, missing, label }) => (
                   <li key={doc} className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] py-2.5 text-sm first:border-t-0">
@@ -350,7 +351,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
               </ul>
             </SettingsCard>
             {/* How a letter prints with what is on screen now (owner, 2026-10-27: keep the letterhead from B). */}
-            <SettingsCard title="How it prints" sub="Live preview of a letter's head and foot." className={GLASS}>
+            <SettingsCard title="How it prints" sub="Live preview of a letter's head and foot." className={glass}>
               <div className="mt-3 rounded-[8px] bg-white p-5 text-[rgb(16,32,27)] shadow-[0_10px_30px_rgba(0,0,0,.25)]">
                 <div className="flex items-start justify-between gap-4 border-b-2 border-[rgb(11,94,72)] pb-3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- the same signed logo URL as above */}
@@ -375,12 +376,13 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "support" && (
           <>
-            <PartnerSupportCard className={GLASS} />
-            <OwnershipCard team={team} workspace={workspace} className={GLASS} />
+            <PartnerSupportCard className={glass} />
+            <OwnershipCard team={team} workspace={workspace} className={glass} />
           </>
         )}
       </div>
 
+      <LeaveGuard dirty={dirty} onDiscard={() => { if (original) setDraft(original); setSaveError(null); }} what="the business identity" />
       <SettingsSaveBar visible={dirty} note="Unsaved changes to the business identity">
         <Button type="button" variant="outline" onClick={() => { if (original) setDraft(original); setSaveError(null); }} disabled={saving}>Discard</Button>
         <Button type="button" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>

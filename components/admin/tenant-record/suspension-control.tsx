@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { btn, Callout, control, Field } from "@/components/app/settings/primitives";
+import { Callout, control, Field } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -159,20 +159,16 @@ export function TenantSuspensionControl({
             )}
 
             <DialogFooter>
-              <button type="button" onClick={() => setOpen(false)} disabled={saving} className={btn("ghost")}>
+              <Button type="button" onClick={() => setOpen(false)} disabled={saving} variant="ghost">
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 disabled={saving || !reasonOk || !nameOk}
-                className={
-                  suspended
-                    ? btn("primary")
-                    : cn(btn("primary"), "bg-[var(--error)] text-[var(--on-error)] hover:bg-[var(--error-ink)]")
-                }
+                variant={suspended ? "default" : "destructive"}
               >
                 {saving ? (suspended ? "Unsuspending…" : "Suspending…") : suspended ? "Unsuspend agency" : "Suspend agency"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

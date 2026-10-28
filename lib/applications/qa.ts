@@ -38,7 +38,7 @@ const CHECKS: { label: string; codes: string[] }[] = [
   { label: "rate per $1,000", codes: ["QA_PER1000"] },
   { label: "knockout answers", codes: ["QA_KNOCKOUT"] },
   { label: "prefilled values checked", codes: ["QA_PREFILL_UNREVIEWED"] },
-  { label: "payment method accepted", codes: ["QA_PAYMENT_NOT_ACCEPTED", "QA_DIRECT_EXPRESS_BIN"] },
+  { label: "payment method accepted", codes: ["QA_PAYMENT_NOT_ACCEPTED"] },
   { label: "phone matches the address state", codes: ["QA_PHONE_STATE"] },
 ];
 
@@ -55,7 +55,6 @@ const DETAIL: Record<string, string> = {
   QA_CARD_EXPIRED: "An expired card declines on the first draft.",
   QA_CARD_EXPIRY_MISSING: "The carrier cannot charge a card without its expiry date.",
   QA_SSN_INVALID: "The Social Security Administration never issues this number — an area of 000, 666 or 900–999, a group of 00 or a serial of 0000. Check the nine digits with the client.",
-  QA_DIRECT_EXPRESS_BIN: "Direct Express cards are Mastercard. A different brand usually means a mistyped number.",
   QA_DRAFT_DAY: "Carriers take a draft day from the 1st to the 28th.",
   QA_DRAFT_DAY_UNSAFE: "Drafts taken before the money arrives bounce, and bounced drafts lapse. Record why this day is right, or use the recommendation.",
   QA_PAYMENT_NOT_ACCEPTED: "This carrier product does not list the method. Check the carrier's rules before submitting.",
@@ -168,7 +167,7 @@ export function runQa(input: {
       if (!pay.card?.hasValue) add(blocking, "QA_CARD", "Card number is missing.", "pay.card_number", "payment");
       else if (!pay.card.expMonth || !pay.card.expYear) add(blocking, "QA_CARD_EXPIRY_MISSING", "The card's expiry date is missing.", "pay.card_exp", "payment");
       else if (!cardExpiryInFuture(pay.card.expMonth, pay.card.expYear, today)) add(blocking, "QA_CARD_EXPIRED", "The card has expired.", "pay.card_exp", "payment");
-      if (pay.method === "direct_express" && pay.card?.brand && pay.card.brand !== "mastercard") add(warnings, "QA_DIRECT_EXPRESS_BIN", "Direct Express cards are Mastercard — check the number.", "pay.card_number", "payment");
+      // Owner 2026-10-28: no Direct Express brand check — the card number's own rules (brand, length, Luhn) are enough.
     }
     if (pay.method !== "direct_bill") {
       if (!pay.draftDay || pay.draftDay < 1 || pay.draftDay > 28) add(blocking, "QA_DRAFT_DAY", "Pick a draft day between the 1st and the 28th.", "pay.draft_day", "payment");

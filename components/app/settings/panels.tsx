@@ -5,6 +5,7 @@ import { CarriersSettings } from "@/components/app/settings/carriers-settings";
 import { PipelinesOutcomesSettings } from "@/components/app/settings/pipelines-outcomes";
 import { QueueSlaSettings } from "@/components/app/queue-sla-settings";
 import { CalendarAvailabilitySettings } from "@/components/app/calendar-availability-settings";
+import { ProductsSettings } from "@/components/app/settings/products-settings";
 import { CadenceSettings } from "@/components/app/cadence-settings";
 import { CallingWindowSettingsPanel } from "@/components/app/calling-window-settings";
 import { LeadPostKeysSettings } from "@/components/app/lead-post-keys-settings";
@@ -42,6 +43,7 @@ export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => 
   "business-identity": ({ team, workspace }) => <BusinessIdentitySettings team={team} workspace={workspace} />,
   // Carrier rules is a tab here that opens its own page; only offered where the agency has it.
   carriers: ({ granted }) => <CarriersSettings carrierRules={granted.includes("statement_ingestion")} />,
+  products: () => <ProductsSettings />,
   "team-access": ({ team, workspace }) => (team && workspace ? <TeamSettings initial={team} workspace={workspace} /> : null),
   calendar: () => <CalendarAvailabilitySettings />,
   cadence: () => <CadenceSettings />,

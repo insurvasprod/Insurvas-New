@@ -98,7 +98,7 @@ export async function loadRoleMap(input: {
   if (key === "assistant") {
     const needs = today?.needs;
     return pathMap("Your day", [
-      { label: "Inbound inbox", href: open(["leads.inbound"]), figure: needs?.transfersWaiting != null ? n(needs.transfersWaiting) : null, count: needs?.transfersWaiting ?? 0, urgent: (needs?.slaBreaching ?? 0) > 0, note: needs?.slaBreaching ? `${n(needs.slaBreaching)} past the SLA` : "waiting to be claimed", next: "claim, then" },
+      { label: "Inbound", href: open(["leads.inbound"]), figure: needs?.transfersWaiting != null ? n(needs.transfersWaiting) : null, count: needs?.transfersWaiting ?? 0, urgent: (needs?.slaBreaching ?? 0) > 0, note: needs?.slaBreaching ? `${n(needs.slaBreaching)} past the SLA` : "waiting to be claimed", next: "claim, then" },
       { label: "Callbacks", href: open(["sell.callbacks"]), figure: needs?.callbacksToday != null ? n((needs.callbacksToday ?? 0) + (needs.callbacksOverdue ?? 0)) : null, count: (needs?.callbacksToday ?? 0) + (needs?.callbacksOverdue ?? 0), urgent: (needs?.callbacksOverdue ?? 0) > 0, note: needs?.callbacksOverdue ? `${n(needs.callbacksOverdue)} late` : "due today", next: "call, then" },
       { label: "List import", href: open(["leads.import"]), figure: null, count: 0, urgent: false, note: "bring in new leads", next: "import, then" },
       { label: "Lead lists", href: open(["leads.lists"]), figure: null, count: 0, urgent: false, note: "check and tidy", next: "then" },

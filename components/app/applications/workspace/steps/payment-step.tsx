@@ -6,8 +6,8 @@
  *
  * Sensitive numbers are validated as typed, sent once, and cleared from the screen; a stored number
  * shows masked with Reveal (one audit row per reveal), and a replacement left blank keeps the stored
- * one. The routing checksum runs for ACH only, Luhn for cards, the Mastercard check for Direct
- * Express (a warning — it still saves). There is no card security code anywhere — we never ask.
+ * one. The routing checksum runs for ACH only; cards need a brand we take, its length and Luhn.
+ * There is no card security code anywhere — we never ask.
  *
  * The form saves itself when the agent leaves a field (and when the step goes away), except a method
  * switch that would clear stored bank or card numbers: that waits for "Continue", which saves
@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Callout, Field, control } from "@/components/app/settings/primitives";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, type IncomeType, type PaymentMethod } from "@/lib/applications/constants";
-import { cardBrand, cardExpiryInFuture, digitsOnly, isValidAbaRouting, isValidBankAccount, maskLast4, passesLuhn, type CardBrand } from "@/lib/applications/formats";
+import { cardBrand, cardDigitsFor, cardExpiryInFuture, cardNumberProblem, digitsOnly, isValidAbaRouting, isValidBankAccount, maskLast4, type CardBrand } from "@/lib/applications/formats";
 import type { PaymentView } from "@/lib/applications/types";
 import type { PayFrequency } from "@/lib/draftDates/optimiser";
 import { cn } from "@/lib/utils";
@@ -31,14 +31,24 @@ import { DraftDatePanel, inputFromInitial, type DraftDateCommit, type DraftDateI
 import { useDraftBuffer } from "@/components/app/applications/draft-dates/use-draft-buffer";
 import { useWorkspace, type PaymentSave } from "@/components/app/applications/workspace/context";
 import { SaveStatus } from "@/components/app/applications/workspace/save-status";
-import { StepCard } from "@/components/app/applications/workspace/step-card";
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
+import { ordinal } from "@/components/app/applications/parts";
 import { SharedWithPrimary } from "@/components/app/applications/household/shared-detail";
 import { useReveal } from "@/components/app/applications/workspace/use-reveal";
-import { IncomeCapture } from "@/components/app/retention/income-capture";
-import { incomeTypeFromDraft } from "@/lib/retention/income";
+import { AcceptedCards, CARD_BRAND_LABEL as BRAND_LABEL, CardBrandMark } from "@/components/app/applications/workspace/card-brand-mark";
 
 const METHOD_SHORT: Record<PaymentMethod, string> = { ach: "ACH", direct_express: "Direct Express", debit_card: "Debit card", credit_card: "Credit card", direct_bill: "Direct bill" };
-const BRAND_LABEL: Record<CardBrand, string> = { visa: "Visa", mastercard: "Mastercard", discover: "Discover", amex: "American Express" };
+
+/** A card number as it is read out: groups of four (American Express 4-6-5), spaces or not as typed, capped at the brand's length. */
+function formatCardNumber(value: string) {
+  const digits = digitsOnly(value);
+  const brand = cardBrand(digits);
+  const d = digits.slice(0, cardDigitsFor(brand));
+  if (brand === "amex") return [d.slice(0, 4), d.slice(4, 10), d.slice(10)].filter(Boolean).join(" ");
+  return d.replace(/(\d{4})(?=\d)/g, "$1 ");
+}
+/** The line under each method tile (owner pick C, 2026-10-28). */
+const METHOD_HINT: Record<PaymentMethod, string> = { ach: "Checking or savings", direct_express: "Federal benefits card", debit_card: "Drafted like a bank", credit_card: "Charged each month", direct_bill: "A bill in the mail" };
 const CARD_METHODS: PaymentMethod[] = ["direct_express", "debit_card", "credit_card"];
 const BILLING_FREQUENCIES = [
   { value: "monthly", label: "Monthly" },
@@ -99,8 +109,12 @@ function clearsStored(stored: PaymentView | null, next: PaymentMethod) {
  * for the stored value (shown for a minute, one audit row). Validation shows once the agent leaves
  * the field or tries to continue.
  */
-function NumberField({ id, label, fieldKey, stored, value, onChange, onLeave, error, hint, readOnly }: {
+function NumberField({ id, label, fieldKey, stored, value, onChange, onLeave, error, hint, readOnly, placeholder, format }: {
   id: string;
+  /** What a value looks like, shown while nothing is typed or stored. */
+  placeholder?: string;
+  /** Tidies what is typed (a card number's spacing). */
+  format?: (v: string) => string;
   label: string;
   fieldKey: string;
   stored: { masked: string; hasValue: boolean } | undefined;
@@ -143,11 +157,11 @@ function NumberField({ id, label, fieldKey, stored, value, onChange, onLeave, er
           inputMode="numeric"
           autoComplete="off"
           spellCheck={false}
-          placeholder={revealed ?? (has ? stored!.masked : undefined)}
+          placeholder={revealed ?? (has ? stored!.masked : placeholder)}
           aria-invalid={Boolean(error)}
           className={cn(control, "font-mono tabular-nums")}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(format ? format(e.target.value) : e.target.value)}
           onBlur={() => { if (value.trim()) onLeave(); }}
         />
         {revealButton && <span className="mt-1.5">{revealButton}</span>}
@@ -186,8 +200,6 @@ function PaymentStepFor() {
   const storedCardFor = keepFor(CARD_METHODS)?.card;
   const expExpired = form.expMonth && form.expYear ? !cardExpiryInFuture(form.expMonth, form.expYear) : false;
   const dob = attempt.values["insured.dob"]?.value;
-  const gender = attempt.values["insured.gender"]?.value;
-  const pronoun = gender === "female" ? "her" : gender === "male" ? "him" : "them";
   const depositAnswer = interview?.answers.ss_deposit_day?.value;
 
   // ── validation: as typed, shown once the agent has left the field or pressed Continue ──
@@ -196,10 +208,16 @@ function PaymentStepFor() {
   // otherwise the card reads "Not saved" with nothing marked in red.
   const routingWhole = digitsOnly(form.routing).length >= 9;
   const accountBad = form.account.trim() !== "" && !isValidBankAccount(form.account);
-  const cardBad = form.card.trim() !== "" && !passesLuhn(form.card);
-  const typedBrand = digitsOnly(form.card).length >= 4 ? cardBrand(form.card) : null;
-  const deBrand = form.card.trim() ? typedBrand : storedCardFor?.brand ?? null;
-  const deNotMastercard = method === "direct_express" && Boolean(form.card.trim() ? digitsOnly(form.card).length >= 4 : storedCardFor?.hasValue) && deBrand !== "mastercard";
+  // Owner 2026-10-28: spaces or not, a card number is 16 digits (15 for American Express) of a brand we take.
+  const cardProblem = form.card.trim() ? cardNumberProblem(form.card) : null;
+  const cardBad = cardProblem !== null;
+  const typedDigits = digitsOnly(form.card).length;
+  const typedBrand = typedDigits >= 1 ? cardBrand(form.card) : null;
+  const cardMessage = cardProblem === "brand"
+    ? "We accept Visa, Mastercard, Discover and American Express."
+    : cardProblem === "length"
+      ? `${typedBrand ? `${BRAND_LABEL[typedBrand]} numbers are` : "A card number is"} ${cardDigitsFor(typedBrand)} digits — ${typedDigits} typed.`
+      : "That card number doesn't check out — read it back to the client.";
   const invalid = (method === "ach" && (routingBad || accountBad)) || (isCard && (cardBad || expExpired));
   const typedAny = Boolean(form.routing.trim() || form.account.trim() || form.card.trim());
   const dirty = typedAny || settled(form) !== settled(formFrom(stored)) || (method === "direct_bill" && !form.billingSame);
@@ -332,6 +350,14 @@ function PaymentStepFor() {
     goTo("disclosures");
   }
 
+  /** The section's Save button: check the fields, then save what is on screen. */
+  async function savePaymentNow() {
+    if (inFlight.current) { await inFlight.current; return; }
+    setChecked(true);
+    if (invalid) { notify.block("Fix the payment details first", { detail: "The field with the problem says what is wrong." }); return; }
+    await savePayment(form);
+  }
+
   const pickMethod = (m: PaymentMethod) => {
     if (m === method) return;
     // Switching clears the fields the old method needed, and nothing else.
@@ -342,8 +368,10 @@ function PaymentStepFor() {
   const inputs = stored?.incomeInputs ?? {};
   const num = (v: unknown) => (typeof v === "number" ? v : null);
   const text = (v: unknown) => (typeof v === "string" ? v : null);
+  // An answer like "3rd Wednesday" in the interview is a Social Security pay date: start from it.
+  const saidSocialSecurity = typeof depositAnswer === "string" && /wednesday|social security|ssdi|\b3rd\b/i.test(depositAnswer);
   const draftInitial: DraftDateInitial = {
-    incomeType: (stored?.incomeType ?? null) as IncomeType | null,
+    incomeType: (stored?.incomeType ?? (saidSocialSecurity ? "ssa" : null)) as IncomeType | null,
     birthDay: num(inputs.birthDay),
     before1997: inputs.before1997 === true,
     pensionDay: num(inputs.pensionDay),
@@ -365,16 +393,13 @@ function PaymentStepFor() {
     if (form.routing.trim() && (!routingBad || checked || routingWhole)) check = routingBad ? <Callout tone="error" title="Routing checksum fails — read the 9 digits back to the client." /> : passed("Routing checksum passes");
     else if (storedRouting?.hasValue) check = passed("Routing checksum passed when it was saved");
   } else if (isCard) {
-    if (deNotMastercard && form.card.trim() && (!cardBad || !checked)) {
-      check = <Callout tone="warning" title={`${typedBrand ? `This looks like a ${BRAND_LABEL[typedBrand]}; ` : ""}Direct Express cards are Mastercard. Check the number with the client — it still saves.`} />;
-    } else if (form.card.trim() && (!cardBad || checked)) {
+    // Owner 2026-10-28: no Direct Express brand warning, typed or stored — the brand logo under the number says it.
+    if (form.card.trim() && (!cardBad || checked)) {
       check = cardBad
-        ? <Callout tone="error" title="Card number fails its checksum — read it back to the client." />
+        ? <Callout tone="error" title={cardProblem === "checksum" ? "Card number fails its checksum — read it back to the client." : cardMessage} />
         : passed(`Card checksum passes${typedBrand ? ` · ${BRAND_LABEL[typedBrand]}` : ""}`);
     } else if (storedCardFor?.hasValue) {
-      check = deNotMastercard
-        ? <Callout tone="warning" title="The stored card is not a Mastercard, and Direct Express cards are. Check the number with the client." />
-        : passed("Card checksum passed when it was saved");
+      check = passed("Card checksum passed when it was saved");
     }
   }
 
@@ -385,25 +410,27 @@ function PaymentStepFor() {
   }
   if (draftHeld && !pendingNote) pendingNote = "The draft day saves once the payment method is saved.";
 
+  // A section folds once what it holds is saved: the method with its numbers, the day with its reason.
+  const numbersOnFile = stored?.method === "ach" ? Boolean(stored.routing?.hasValue && stored.account?.hasValue) : isCardMethod(stored?.method) ? Boolean(stored?.card?.hasValue) : Boolean(stored);
+  const methodSaved = Boolean(stored) && stored!.method === method && !dirty && !invalid && numbersOnFile;
+  const draftSet = Boolean(stored?.draftDay) && (stored!.draftDay === stored!.draftDayRecommended || Boolean(stored!.draftOverrideReason) || stored!.draftDayRecommended === null) && !draftHeld;
+
   return (
-    <div className="flex flex-col items-stretch gap-5 2xl:flex-row 2xl:items-start">
-      <StepCard
-        title="How the premium is paid"
-        className="min-w-0 flex-1"
-        chips={<>
-          {!readOnly && <SaveStatus touched={touched} pendingNote={pendingNote} className="max-w-[280px]" />}
+    // Owner 2026-10-28: one card in sections like the other steps — how they pay, then the draft day —
+    // each folding once it is saved.
+    <section aria-label="Payment" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {!readOnly ? <SaveStatus touched={touched} pendingNote={pendingNote} className="max-w-[360px]" /> : <span />}
+        <span className="flex flex-wrap items-center gap-2">
           <StatusChip tone="neutral">CVV is never stored</StatusChip>
           {paymentShared && <SharedWithPrimary keys={["payment"]} what="payment method" />}
-        </>}
-        actions={<>
-          <Button type="button" variant="outline" onClick={() => goTo("beneficiaries")}><ArrowLeft aria-hidden="true" />Back to Beneficiaries</Button>
-          <Button type="button" onClick={() => { void continueToDisclosures(); }} disabled={busy} title={busy ? "Saving the payment details…" : undefined}>Continue to Disclosures<ArrowRight aria-hidden="true" /></Button>
-        </>}
-      >
+        </span>
+      </div>
+      <FoldSection heading="How they pay" done={methodSaved ? 1 : 0} total={1} complete={methodSaved} progressLabel={method ? `${METHOD_SHORT[method]} · not saved yet` : "Choose a method"} completeLabel={stored ? `Complete · ${METHOD_SHORT[stored.method]}` : "Complete"}>
         {/* Leaving a field saves what is on screen. */}
         <div className="flex flex-col gap-[18px]" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) autosave(); }}>
           <div className="flex flex-col gap-2">
-            <div id="pay.method" tabIndex={-1} role="radiogroup" aria-label="How the premium is paid" className="inline-flex w-fit max-w-full flex-wrap gap-[3px] rounded-[8px] bg-[var(--surface-alt)] p-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <div id="pay.method" tabIndex={-1} role="radiogroup" aria-label="How the premium is paid" className="grid grid-cols-2 gap-2 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-3 xl:grid-cols-5">
               {PAYMENT_METHODS.map((m) => {
                 const on = method === m;
                 const refused = accepted.length > 0 && !accepted.includes(m);
@@ -417,11 +444,13 @@ function PaymentStepFor() {
                     title={closed ? "Read-only — nothing on this attempt can change" : paymentShared ? "Shared with the primary insured — detach it to change it here." : refused ? `${attempt.carrierName ?? "This carrier"} does not list ${PAYMENT_METHOD_LABEL[m].toLowerCase()}` : PAYMENT_METHOD_LABEL[m]}
                     onClick={() => pickMethod(m)}
                     className={cn(
-                      "h-[30px] rounded-[6px] border px-3.5 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
-                      on ? "border-[var(--border)] bg-[var(--surface)] text-[var(--ink)]" : "border-transparent bg-transparent text-[var(--muted)] hover:text-[var(--ink)]",
+                      "flex flex-col items-start gap-0.5 rounded-[10px] border-[1.5px] px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
+                      on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
+                      refused && !on && "opacity-60",
                     )}
                   >
-                    {METHOD_SHORT[m]}
+                    <strong className={cn("text-sm font-semibold", on ? "text-[var(--ink)]" : "text-[var(--body)]")}>{METHOD_SHORT[m]}</strong>
+                    <span className="text-xs text-[var(--muted)]">{METHOD_HINT[m]}</span>
                   </button>
                 );
               })}
@@ -433,15 +462,17 @@ function PaymentStepFor() {
           {method === "ach" && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Bank name" htmlFor="pay.bank_name">
-                <input id="pay.bank_name" className={control} autoComplete="off" value={form.bankName} disabled={readOnly} onChange={(e) => set({ bankName: e.target.value })} />
+                <input id="pay.bank_name" className={control} autoComplete="off" placeholder="e.g. Wells Fargo" value={form.bankName} disabled={readOnly} onChange={(e) => set({ bankName: e.target.value })} />
               </Field>
               <NumberField
                 id="pay.routing_number" label="Routing number" fieldKey="pay.routing_number" stored={storedRouting}
+                placeholder="9 digits · bottom left of a check"
                 value={form.routing} onChange={(v) => set({ routing: v })} onLeave={() => setChecked(true)} readOnly={readOnly}
                 error={(checked || routingWhole) && routingBad ? "That is not a valid 9-digit routing number." : null}
               />
               <NumberField
                 id="pay.account_number" label="Account number" fieldKey="pay.account_number" stored={storedAccount}
+                placeholder="4 to 17 digits · after the routing number"
                 value={form.account} onChange={(v) => set({ account: v })} onLeave={() => setChecked(true)} readOnly={readOnly}
                 error={checked && accountBad ? "Account numbers are 4 to 17 digits." : null}
               />
@@ -453,18 +484,29 @@ function PaymentStepFor() {
                 </select>
               </Field>
               <Field label="Name on the account" htmlFor="pay.name_on_account">
-                <input id="pay.name_on_account" className={control} autoComplete="off" value={form.nameOnAccount} disabled={readOnly} onChange={(e) => set({ nameOnAccount: e.target.value })} />
+                <input id="pay.name_on_account" className={control} autoComplete="off" placeholder="As printed on their checks" value={form.nameOnAccount} disabled={readOnly} onChange={(e) => set({ nameOnAccount: e.target.value })} />
               </Field>
             </div>
           )}
 
           {isCard && (
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* Owner 2026-10-28: the cards we take, up front; the typed number's brand stays lit. */}
+              <div className="flex flex-wrap items-center gap-2.5 sm:col-span-2">
+                <span className="text-sm text-[var(--muted)]">We accept</span>
+                <AcceptedCards active={typedDigits >= 1 ? typedBrand : storedCardFor?.brand ? (storedCardFor.brand as CardBrand) : null} />
+              </div>
               <NumberField
                 id="pay.card_number" label="Card number" fieldKey="pay.card_number" stored={cardStoredLabel}
+                placeholder="1234 5678 9012 3456" format={formatCardNumber}
                 value={form.card} onChange={(v) => set({ card: v })} onLeave={() => setChecked(true)} readOnly={readOnly}
-                error={checked && cardBad ? "That card number doesn't check out — read it back to the client." : null}
-                hint={typedBrand && !cardBad ? `Looks like a ${BRAND_LABEL[typedBrand]} — confirm with the client.` : undefined}
+                error={checked && cardBad ? cardMessage : null}
+                hint={typedBrand && (!checked || !cardBad) ? (
+                  <span className="inline-flex items-center gap-2">
+                    <CardBrandMark brand={typedBrand} />
+                    <span>{BRAND_LABEL[typedBrand]} · {typedDigits < cardDigitsFor(typedBrand) ? `${typedDigits} of ${cardDigitsFor(typedBrand)} digits` : cardBad ? "check the digits" : "confirm with the client"}</span>
+                  </span>
+                ) : undefined}
               />
               <Field label="Expires" htmlFor="pay.card_exp" required error={expExpired ? "This card has expired." : null}>
                 <span className="flex gap-2">
@@ -479,7 +521,7 @@ function PaymentStepFor() {
                 </span>
               </Field>
               <Field label="Name on the card" htmlFor="pay.name_on_card">
-                <input id="pay.name_on_card" className={control} autoComplete="off" value={form.nameOnCard} disabled={readOnly} onChange={(e) => set({ nameOnCard: e.target.value })} />
+                <input id="pay.name_on_card" className={control} autoComplete="off" placeholder="As printed on the card" value={form.nameOnCard} disabled={readOnly} onChange={(e) => set({ nameOnCard: e.target.value })} />
               </Field>
             </div>
           )}
@@ -500,45 +542,49 @@ function PaymentStepFor() {
             </div>
           )}
 
-          {check}
+          {/* Owner 2026-10-28: a clear way to finish the section, beside the checksum line. */}
+          <div className="flex flex-wrap items-center gap-3">
+            {check && <div className="min-w-0 flex-1">{check}</div>}
+            {!readOnly && method && (
+              <Button type="button" className="ml-auto" disabled={busy || !dirty} onClick={() => { void savePaymentNow(); }} title={!dirty ? "Nothing new to save" : undefined}>
+                <Check aria-hidden="true" />{busy ? "Saving…" : methodSaved ? "Saved" : "Save payment"}
+              </Button>
+            )}
+          </div>
           {closed && stored && <p className="flex items-center gap-2 text-xs text-[var(--muted)]"><PenLine className="size-3.5" aria-hidden="true" />This attempt is closed; its payment details are kept as they were.</p>}
         </div>
-      </StepCard>
+      </FoldSection>
 
       {method === "direct_bill" ? (
-        <StepCard title="Draft date" chips={<StatusChip tone="neutral">Not drafted</StatusChip>} className="w-full shrink-0 2xl:w-[320px]">
+        <FoldSection heading="Draft day" done={0} total={0} complete={false} progressLabel="Not drafted">
           <p id="pay.draft_day" tabIndex={-1} className="text-sm text-[var(--muted)] outline-none">Direct bill isn&apos;t drafted, so there&apos;s no draft day to choose. The carrier bills the client.</p>
-        </StepCard>
+        </FoldSection>
       ) : (
-        <div className="flex w-full shrink-0 flex-col gap-4 2xl:w-[320px]">
+        <>
+        <FoldSection heading="Draft day" done={draftSet ? 1 : 0} total={1} complete={draftSet} progressLabel="Not set yet" completeLabel={stored?.draftDay ? `Complete · the ${ordinal(stored.draftDay)}` : "Complete"}>
         <DraftDatePanel
+          bare
           className="w-full"
           idPrefix="pay.dd"
           draftDayId="pay.draft_day"
           dob={dobText}
           buffer={buffer}
           readOnly={closed || draftShared}
-          pronoun={pronoun}
           incomeHint={typeof depositAnswer === "string" ? `They said: ${depositAnswer}.` : null}
           initial={draftInitial}
           onCommit={commitDraft}
           status={draftShared ? <SharedWithPrimary keys={["draft_day"]} what="draft day" /> : !closed && draftTouched ? <SaveStatus touched={draftTouched} /> : undefined}
         />
-        {/* LA-5.10 · the amount beside the income type, while the agent is already asking about it. Optional. */}
-        {!sample && (
-          <StepCard title="Monthly income" chips={<StatusChip tone="neutral">Optional</StatusChip>}>
-            <IncomeCapture
-              compact
-              readUrl={`/api/app/applications/attempts/${attempt.id}/income?surface=draft_date_setup`}
-              save={(income) => fetch(`/api/app/applications/attempts/${attempt.id}/income`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surface: "draft_date_setup", income }) })}
-              defaultType={incomeTypeFromDraft(draftInitial.incomeType)}
-              readOnly={closed}
-            />
-          </StepCard>
-        )}
-        </div>
+        </FoldSection>
+        {/* Monthly income is no longer asked here either (owner 2026-10-28): the interview's financial
+            questions cover it; the save queue still records it (LA-5.10). */}
+        </>
       )}
-    </div>
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border)] pt-3">
+        <Button type="button" variant="outline" onClick={() => goTo("beneficiaries")}><ArrowLeft aria-hidden="true" />Back to Beneficiaries</Button>
+        <Button type="button" onClick={() => { void continueToDisclosures(); }} disabled={busy} title={busy ? "Saving the payment details…" : undefined}>Continue to Disclosures<ArrowRight aria-hidden="true" /></Button>
+      </div>
+    </section>
   );
 }
 

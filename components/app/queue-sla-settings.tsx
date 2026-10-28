@@ -13,6 +13,7 @@ import { InboundSettingsCards, WaitingBar, useInboundSettings } from "@/componen
 import { formatDuration, ladderStepStates, parseDuration, type LadderValues } from "@/lib/queueSla/ladder";
 import { slaJobNotice, type SlaJobState } from "@/lib/queueSla/digestView";
 import { cn } from "@/lib/utils";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 /**
  * LA-1.23 · the unclaimed-lead response ladder.
@@ -291,6 +292,7 @@ export function QueueSlaSettings() {
 
       <InboundSettingsCards inbound={inbound} disabled={saving} />
 
+      <LeaveGuard dirty={dirty} onDiscard={() => { setTexts(textsFor(saved)); inbound.reset(); setError(""); }} what="the queue settings" />
       <SettingsSaveBar visible={dirty} note={ladderDirty ? "Unsaved changes to the ladder" : "Unsaved inbound settings"}>
         <Button type="button" variant="outline" onClick={() => { setTexts(textsFor(saved)); inbound.reset(); setError(""); }} disabled={saving}>Discard</Button>
         <Button data-guide="queue-sla-save" type="button" onClick={() => void save()} disabled={saving || (ladderDirty && Boolean(problem)) || Boolean(inbound.dirty && inbound.timeoutProblem)}>{saving ? "Saving…" : "Save changes"}</Button>

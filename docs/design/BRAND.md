@@ -27,8 +27,7 @@ authority for colour, type and the logo.
     and `/pricing`, through `.type-brand`) and in emails. See
     [UI-CONSISTENCY.md §0](UI-CONSISTENCY.md#0-foundation-v3-2026-10-27).
 - **Shape:** pill-shaped buttons, 12px cards, 8px inputs.
-  - **v3 (2026-10-27), Decided, lands in `foundation-components`:** buttons move to 8px corners
-    like inputs; cards stay 12px. See [UI-CONSISTENCY.md §5a](UI-CONSISTENCY.md#5a-control-shape-v3).
+  - **v3 (2026-10-27), Live:** buttons have 8px corners like inputs; cards stay 12px. See [UI-CONSISTENCY.md §5a](UI-CONSISTENCY.md#5a-control-shape-v3).
 
 ## Where it lives in code
 
@@ -76,7 +75,7 @@ and proportions are untouched.
    - mint text links (`#4fe3bb`).
    
    It needs designer sign-off.
-7. **Coolvetica** was not supplied and needs a licence. `--font-display` falls back to Montserrat
-   600 until the files are added with `next/font/local`.
+7. **Coolvetica** was not supplied and needs a licence. `--font-display` is Inter Tight (v3) in
+   the apps; the marketing pages use Montserrat until the files are added with `next/font/local`.
 8. **Eyebrows.** The guide styles uppercase "eyebrow" labels. App pages keep the no-eyebrow rule
    (UI-CONSISTENCY §2). Marketing and sign-in panels may use the label style.

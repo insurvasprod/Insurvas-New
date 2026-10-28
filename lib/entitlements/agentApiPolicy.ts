@@ -33,6 +33,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // No single feature: search spans several, and gates each result group on its own page's feature
   // and roles inside lib/search/service.ts.
   { sourceFile: "app/api/app/search/route.ts", featureKey: null },
+  // The same for the sidebar's counts: each count is gated on its own page's feature and roles
+  // inside lib/menu/navCounts.ts.
+  { sourceFile: "app/api/app/nav/counts/route.ts", featureKey: null },
   { sourceFile: "app/api/app/agency-profile/route.ts", featureKey: null, allowedRoles: ["owner"] },
   // LA-8.3: the audited tax-ID reveal and the logo documents print.
   { sourceFile: "app/api/app/agency-profile/tax-id/route.ts", featureKey: null, allowedRoles: ["owner"] },
@@ -357,6 +360,11 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // Your own profile: every role reads and edits their own record, so requireTenant() with no role
   // list; the ids come only from the verified session.
   { sourceFile: "app/api/app/profile/route.ts", featureKey: null },
+  // Settings › My profile › Languages I speak (2026-10-27): every member sets their own.
+  { sourceFile: "app/api/app/profile/languages/route.ts", featureKey: null },
+  // Settings › Products (2026-10-27): owner-only switch, and the sold list every picker reads.
+  { sourceFile: "app/api/app/settings/products/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/products/sold/route.ts", featureKey: null, allowedRoles: ["owner", "producer", "assistant"] },
   // The same person's own profile picture, the same rule: requireTenant() and the session's user only.
   { sourceFile: "app/api/app/profile/avatar/route.ts", featureKey: null },
   // LA-8.2: the caller's own sign-in and security. Every role; their own account only.

@@ -460,7 +460,9 @@ function FactsAndProducts({ carrier, productLines, canEdit, anchor, reports, rep
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const lineName = (code: string) => productLines.find((line) => line.code === code)?.name ?? code.replace(/_/g, " ");
-  const library = carrier.products.filter((p) => !(p.tenantOwned && !p.copiedFromId));
+  // Settings › Products (2026-10-27): only lines the agency sells are offered; a product already ticked stays.
+  const sells = (code: string) => productLines.find((line) => line.code === code)?.sold !== false;
+  const library = carrier.products.filter((p) => !(p.tenantOwned && !p.copiedFromId) && (p.isActive || sells(p.productCode)));
   const own = carrier.products.filter((p) => p.tenantOwned && !p.copiedFromId);
   const sold = carrier.products.filter((p) => p.isActive).length;
   const methods = [...new Set(carrier.products.flatMap((p) => p.acceptedPaymentMethods))];

@@ -5,7 +5,7 @@ import { useEffect, useState, useTransition, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { DetailPanel } from "@/components/ui/detail-panel";
+import { Sheet } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -16,6 +16,7 @@ import { DELETION_VIA, METHOD_LABELS, STATUS_LABELS, VIA_LABELS, holdRemaining, 
 import type { DeletionRequest } from "@/lib/compliance/dataSubjectStore";
 import { formatPhone } from "@/lib/compliance/evidenceGaps";
 import { notify } from "@/lib/notify";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-6.5 · deletion requests: log one, verify who it is, hold, perform, certify. Performing deletes
@@ -50,7 +51,8 @@ function NewRequest({ onClose, onSaved }: { onClose: () => void; onSaved: (id: s
       setBusy(false);
     }
   };
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[520px]">
@@ -115,7 +117,7 @@ function RequestPanel({ id, methods, holdDays, isOwner, readOnly, onClose, onCha
   const hold = r ? holdRemaining(r.scheduledPurgeAt, new Date()) : null;
   const canMove = isOwner && !readOnly;
   return (
-    <DetailPanel mode="overlay" title={r ? who(r) : "Deletion request"} subtitle={r ? `Received ${day(r.receivedAt)} by ${VIA_LABELS[r.receivedVia as keyof typeof VIA_LABELS] ?? r.receivedVia}` : undefined}
+    <Sheet title={r ? who(r) : "Deletion request"} subtitle={r ? `Received ${day(r.receivedAt)} by ${VIA_LABELS[r.receivedVia as keyof typeof VIA_LABELS] ?? r.receivedVia}` : undefined}
       status={r ? <StatusChip tone={TONE[r.status as DeletionStatus]}>{STATUS_LABELS[r.status as DeletionStatus] ?? r.status}</StatusChip> : undefined} onClose={onClose}>
       {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
       {!r ? null : (
@@ -173,7 +175,7 @@ function RequestPanel({ id, methods, holdDays, isOwner, readOnly, onClose, onCha
           ) : null}
         </>
       )}
-    </DetailPanel>
+    </Sheet>
   );
 }
 

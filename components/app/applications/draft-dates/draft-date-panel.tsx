@@ -10,12 +10,14 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
+import { CalendarCheck, CalendarDays, Check, MessageSquareQuote, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PagedBody } from "@/components/ui/paged";
 import { StatusChip } from "@/components/ui/status-chip";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Callout, Field, control } from "@/components/app/settings/primitives";
-import { INCOME_TYPES, INCOME_TYPE_LABEL, type IncomeType } from "@/lib/applications/constants";
+import { INCOME_TYPES, type IncomeType } from "@/lib/applications/constants";
 import { MAX_DRAFT_DAY, isSafeDraftDay, recommendDraftDay, type DraftDateInput, type DraftOption, type DraftRecommendation, type PayFrequency } from "@/lib/draftDates/optimiser";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +26,9 @@ import { StepCard } from "@/components/app/applications/workspace/step-card";
 
 export const PAY_FREQUENCY_LABEL: Record<PayFrequency, string> = { weekly: "Every week", biweekly: "Every two weeks", semimonthly: "Twice a month (1st and 15th)", monthly: "Once a month" };
 const WEEK_WORD: Record<number, string> = { 2: "Second", 3: "Third", 4: "Fourth" };
+/** The income tiles: a short name, and when that money usually lands. */
+const INCOME_TILE: Record<IncomeType, string> = { ssa: "Social Security", ssi: "SSI", ssa_ssi: "Social Security + SSI", pension: "Pension", payroll: "Paycheck", va: "VA benefits", none: "Not known" };
+const INCOME_LANDS: Record<IncomeType, string> = { ssa: "Incl. SSDI · a Wednesday", ssi: "Lands on the 1st", ssa_ssi: "Lands on the 3rd", pension: "A set day each month", payroll: "On their paydays", va: "Lands on the 1st", none: "We take a mid-month day" };
 
 export type DraftDateInitial = {
   incomeType?: IncomeType | null;
@@ -221,47 +226,74 @@ export function IncomeFields({ m, dob, readOnly, idPrefix, incomeHint, className
   const { state, apply } = m;
   const id = (k: string) => `${idPrefix}.${k}`;
   const birthDayShown = state.birthDayText ?? (dobDay(dob) ? String(dobDay(dob)) : "");
+  const small = cn(control, "mt-0 h-8 w-16 px-2 text-center tabular-nums");
+  // Owner 2026-10-28: one click for where the money comes from (tiles like the payment methods, each
+  // saying when that money lands), what the client said in the interview right under the question, and
+  // the one detail the choice needs as a short sentence below.
   return (
-    <div className={cn("grid gap-x-4 gap-y-4", className)}>
-      <Field label="Income type" htmlFor={id("income_type")} hint={incomeHint ?? undefined}>
-        <select id={id("income_type")} className={control} value={state.incomeType ?? ""} disabled={readOnly} onChange={(e) => apply({ incomeType: (e.target.value || null) as IncomeType | null })}>
-          <option value="">Choose</option>
-          {INCOME_TYPES.map((t) => <option key={t} value={t}>{INCOME_TYPE_LABEL[t]}</option>)}
-        </select>
-      </Field>
+    <div className={cn("flex flex-col gap-3", className)}>
+      <div className="flex flex-col gap-2">
+        {incomeHint && (
+          <p className="m-0 inline-flex items-center gap-2 self-start rounded-[8px] border border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] bg-[var(--primary-soft)] px-2.5 py-1.5 text-sm text-[var(--ink)]">
+            <MessageSquareQuote className="size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />
+            {incomeHint}
+          </p>
+        )}
+        <span id={id("income_type")} role="radiogroup" aria-label="Where their money comes from" className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2 outline-none">
+          {INCOME_TYPES.map((t) => {
+            const on = state.incomeType === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                disabled={readOnly}
+                onClick={() => apply({ incomeType: t })}
+                className={cn(
+                  "flex flex-col items-start gap-0.5 rounded-[10px] border-[1.5px] px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+                  on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
+                )}
+              >
+                <strong className={cn("text-sm font-semibold", on ? "text-[var(--ink)]" : "text-[var(--body)]")}>{INCOME_TILE[t]}</strong>
+                <span className="text-xs text-[var(--muted)]">{INCOME_LANDS[t]}</span>
+              </button>
+            );
+          })}
+        </span>
+      </div>
 
       {state.incomeType === "ssa" && (
-        <>
-          <Field label="Day of the month they were born" htmlFor={id("birth_day")} hint={state.birthDayText === null && dobDay(dob) ? "From the date of birth." : "Sets which Wednesday it arrives."}>
-            <input id={id("birth_day")} inputMode="numeric" autoComplete="off" className={cn(control, "tabular-nums")} value={birthDayShown} disabled={readOnly || state.before1997} onChange={(e) => apply({ birthDayText: e.target.value })} />
-          </Field>
-          <label htmlFor={id("before_1997")} className="flex min-h-9 items-center gap-2 self-end text-sm text-[var(--body)]">
-            <input id={id("before_1997")} type="checkbox" className="size-4 accent-[var(--primary)]" checked={state.before1997} disabled={readOnly} onChange={(e) => apply({ before1997: e.target.checked })} />
-            Getting Social Security since before May 1997
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[var(--body)]">
+          <label htmlFor={id("birth_day")} className="inline-flex items-center gap-2">
+            Born on the
+            <input id={id("birth_day")} inputMode="numeric" autoComplete="off" aria-label="Day of the month they were born" className={small} value={birthDayShown} disabled={readOnly || state.before1997} onChange={(e) => apply({ birthDayText: e.target.value })} />
+            <span className="text-xs text-[var(--muted)]">{state.birthDayText === null && dobDay(dob) ? "(from the date of birth)" : "(sets which Wednesday it lands)"}</span>
           </label>
-        </>
+          <ToggleChip selected={state.before1997} disabled={readOnly} onClick={() => apply({ before1997: !state.before1997 })}>On it since before May 1997</ToggleChip>
+        </div>
       )}
 
       {state.incomeType === "pension" && (
-        <Field label="Day the pension is paid" htmlFor={id("pension_day")}>
-          <input id={id("pension_day")} inputMode="numeric" autoComplete="off" placeholder="1" className={cn(control, "tabular-nums")} value={state.pensionDayText} disabled={readOnly} onChange={(e) => apply({ pensionDayText: e.target.value })} />
-        </Field>
+        <label htmlFor={id("pension_day")} className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
+          Paid on the
+          <input id={id("pension_day")} inputMode="numeric" autoComplete="off" placeholder="1" className={small} value={state.pensionDayText} disabled={readOnly} onChange={(e) => apply({ pensionDayText: e.target.value })} />
+          of the month
+        </label>
       )}
 
       {state.incomeType === "payroll" && (
-        <>
-          <Field label="How often they are paid" htmlFor={id("pay_frequency")}>
-            <select id={id("pay_frequency")} className={control} value={state.payFrequency ?? ""} disabled={readOnly} onChange={(e) => apply({ payFrequency: (e.target.value || null) as PayFrequency | null })}>
-              <option value="">Choose</option>
-              {(Object.keys(PAY_FREQUENCY_LABEL) as PayFrequency[]).map((f) => <option key={f} value={f}>{PAY_FREQUENCY_LABEL[f]}</option>)}
-            </select>
-          </Field>
-          {state.payFrequency !== "semimonthly" && (
-            <Field label="A recent payday" htmlFor={id("pay_anchor")}>
-              <input id={id("pay_anchor")} type="date" className={control} value={state.payAnchor} disabled={readOnly} onChange={(e) => apply({ payAnchor: e.target.value })} />
-            </Field>
+        <div className="flex flex-col gap-2">
+          <span id={id("pay_frequency")} role="radiogroup" aria-label="How often they are paid" className="flex flex-wrap gap-1.5">
+            {(Object.keys(PAY_FREQUENCY_LABEL) as PayFrequency[]).map((f) => <ToggleChip key={f} role="radio" selected={state.payFrequency === f} disabled={readOnly} onClick={() => apply({ payFrequency: f })}>{PAY_FREQUENCY_LABEL[f]}</ToggleChip>)}
+          </span>
+          {state.payFrequency && state.payFrequency !== "semimonthly" && (
+            <label htmlFor={id("pay_anchor")} className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
+              A recent payday
+              <input id={id("pay_anchor")} type="date" className={cn(control, "mt-0 h-8 w-auto")} value={state.payAnchor} disabled={readOnly} onChange={(e) => apply({ payAnchor: e.target.value })} />
+            </label>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -393,7 +425,7 @@ function DayChip({ m }: { m: DraftDateModel }) {
  * The Payment step's draft-date card (board l3-ws-payment, right): the income inputs, the day in
  * large type, what to say, the alternates, the next twelve arrivals, and the one-line rule.
  */
-export function DraftDatePanel({ initial, dob, buffer, onCommit, readOnly = false, incomeHint, pronoun = "them", idPrefix = "dd", draftDayId = "dd.draft_day", status, className }: {
+export function DraftDatePanel({ initial, dob, buffer, onCommit, readOnly = false, incomeHint, idPrefix = "dd", draftDayId = "dd.draft_day", status, className, bare = false }: {
   initial: DraftDateInitial;
   /** Insured's DOB; its day is the Social Security birth day unless the agent types another. */
   dob: string | null;
@@ -402,71 +434,118 @@ export function DraftDatePanel({ initial, dob, buffer, onCommit, readOnly = fals
   readOnly?: boolean;
   /** What the client said in the interview about when their money arrives. */
   incomeHint?: string | null;
-  /** "her", "him" or "them" — who the script is read to. */
-  pronoun?: string;
   idPrefix?: string;
   draftDayId?: string;
   /** The save state, shown beside the chip. */
   status?: ReactNode;
   className?: string;
+  /** Inside a section that already names it (the Payment step): no card of its own, the chips on top. */
+  bare?: boolean;
 }) {
   const m = useDraftDate({ initial, dob, buffer, onCommit });
   const [choosing, setChoosing] = useState(false);
   const { rec, state, recommended, options, shown } = m;
-  const aloud = readAloudFor(m, shown);
-  // Every option but the day that is set (with no day set yet, the recommendation too).
-  const others = options.filter((o) => o.day !== state.draftDay);
+  // The recommended day and its alternates in day order, plus a day typed in by hand.
+  const dayChips = [...new Set([...options.map((o) => o.day), ...(state.draftDay === null ? [] : [state.draftDay])])].sort((a, b) => a - b);
 
+  const schedule = rec && rec.kind !== "not_applicable" ? scheduleShort(m.input) : null;
+
+  // Owner 2026-10-28: two numbered questions side by side — where the money comes from, then the day it
+  // gives — with big tiles, and the two rules that matter as a line of their own instead of fine print.
   return (
-    <StepCard title="Draft date" chips={<>{status}<DayChip m={m} /></>} className={className}>
-      <IncomeFields m={m} dob={dob} readOnly={readOnly} idPrefix={idPrefix} incomeHint={incomeHint} />
+    <Frame bare={bare} status={bare ? status : <>{status}<DayChip m={m} /></>} className={className}>
+      <div className={cn("grid gap-6", bare && "lg:grid-cols-2")}>
+        <Part n={1} title="Where does their money come from?">
+          <IncomeFields m={m} dob={dob} readOnly={readOnly} idPrefix={idPrefix} incomeHint={incomeHint} />
+        </Part>
 
-      {!rec ? (
-        <p id={draftDayId} tabIndex={-1} className="text-sm text-[var(--muted)] outline-none">Choose how the client gets their money to see the safest draft day.</p>
-      ) : rec.kind === "not_applicable" ? (
-        <p id={draftDayId} tabIndex={-1} className="text-sm text-[var(--muted)] outline-none">{rec.why}</p>
+        <Part n={2} title="The draft day" aside={schedule ? <span className="text-xs text-[var(--muted)]">Money lands: <strong className="font-semibold text-[var(--ink)]">{schedule}</strong></span> : null}>
+      {!rec || rec.kind === "not_applicable" ? (
+        <div id={draftDayId} tabIndex={-1} className="flex min-h-[112px] flex-col items-center justify-center gap-1.5 rounded-[12px] border-[1.5px] border-dashed border-[var(--border)] px-4 py-5 text-center outline-none">
+          <CalendarDays className="size-5 text-[var(--muted)]" aria-hidden="true" />
+          <strong className="text-sm font-semibold text-[var(--ink)]">{rec ? "No draft day to work out" : "Waiting on step 1"}</strong>
+          <span className="text-sm text-[var(--muted)]">{rec ? rec.why : "Pick where their money comes from and the safest day shows here."}</span>
+        </div>
       ) : (
         <>
-          <div id={choosing ? undefined : draftDayId} tabIndex={-1} className="flex items-baseline gap-3.5 outline-none">
-            <span className="text-title-lg font-semibold leading-none tracking-[-0.025em] tabular-nums text-[var(--ink)]">{shown === null ? "—" : ordinal(shown)}</span>
-            <span className="text-sm text-[var(--muted)]">of each month</span>
+          <div className="flex flex-col gap-3">
+            {/* The day buttons are the answer (owner 2026-10-28): the set day lit, the recommended one marked. */}
+            <div id={choosing ? undefined : draftDayId} tabIndex={-1} role="radiogroup" aria-label="Draft day" className="flex flex-wrap gap-2 outline-none">
+              {dayChips.map((day) => {
+                const on = (state.draftDay ?? shown) === day;
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={readOnly}
+                    onClick={() => { setChoosing(false); m.apply({ draftDay: day }); }}
+                    className={cn(
+                      "inline-flex h-9 items-center gap-2 rounded-[10px] border-[1.5px] px-4 text-sm font-semibold tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+                      on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--ink)]" : "border-[var(--border)] text-[var(--body)] hover:border-[var(--border-strong)]",
+                    )}
+                  >
+                    {on && <Check className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />}
+                    The {ordinal(day)}
+                    {day === recommended && <span className="rounded-[6px] bg-[var(--primary)] px-1.5 py-px text-xs font-semibold text-primary-foreground">Suggested</span>}
+                  </button>
+                );
+              })}
+              {!readOnly && <button type="button" onClick={() => setChoosing((v) => !v)} aria-expanded={choosing} aria-controls={draftDayId} className="inline-flex h-9 items-center rounded-[10px] border-[1.5px] border-dashed border-[var(--border)] px-4 text-sm text-[var(--muted)] outline-none hover:text-[var(--ink)] focus-visible:ring-2 focus-visible:ring-ring">Another day…</button>}
+            </div>
+            {choosing && (
+              <Field label="Another day" htmlFor={draftDayId} className="w-[180px]">
+                <select id={draftDayId} className={cn(control, "tabular-nums")} value={state.draftDay ?? ""} onChange={(e) => m.apply({ draftDay: e.target.value ? Number(e.target.value) : null })}>
+                  <option value="">Choose</option>
+                  {Array.from({ length: MAX_DRAFT_DAY }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{ordinal(d)}{d === recommended ? " (recommended)" : ""}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
 
-          {aloud && <ReadAloud title={`Say this to ${pronoun}`} text={aloud} />}
-
-          {!readOnly && (
-            <div className="flex flex-col gap-2">
-              <div className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">Alternates</div>
-              <div className="flex flex-wrap gap-2">
-                {others.map((o) => (
-                  <div key={o.day} className="flex max-w-[220px] flex-col gap-1">
-                    <Button type="button" variant="outline" onClick={() => { setChoosing(false); m.apply({ draftDay: o.day }); }}>
-                      {ordinal(o.day)}{o.day === recommended ? " (recommended)" : ""}
-                    </Button>
-                    {o.reason && <span className="text-xs text-[var(--muted)]">{o.reason}</span>}
-                  </div>
-                ))}
-                <Button type="button" variant="ghost" onClick={() => setChoosing((v) => !v)} aria-expanded={choosing} aria-controls={draftDayId}>Override…</Button>
-              </div>
-              {choosing && (
-                <Field label="Draft day" htmlFor={draftDayId} className="w-[180px]">
-                  <select id={draftDayId} className={cn(control, "tabular-nums")} value={state.draftDay ?? ""} onChange={(e) => m.apply({ draftDay: e.target.value ? Number(e.target.value) : null })}>
-                    <option value="">Choose</option>
-                    {Array.from({ length: MAX_DRAFT_DAY }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{ordinal(d)}{d === recommended ? " (recommended)" : ""}</option>)}
-                  </select>
-                </Field>
-              )}
-            </div>
-          )}
-
           <OverridePrompt m={m} readOnly={readOnly} idPrefix={idPrefix} />
-          <ArrivalChips m={m} />
+          {/* The twelve deposits behind the suggestion, when someone asks how it was worked out. */}
+          {m.rec?.kind === "recommended" && m.rec.arrivals.length > 0 && (
+            <details className="group text-sm">
+              <summary className="cursor-pointer list-none text-xs font-semibold text-[var(--accent-ink)] hover:underline">See the next 12 deposits</summary>
+              <div className="mt-2"><ArrivalChips m={m} /></div>
+            </details>
+          )}
         </>
       )}
+        </Part>
+      </div>
 
-      <p className="text-xs text-[var(--muted)]">
-        {[scheduleShort(m.input), `never later than the ${ordinal(MAX_DRAFT_DAY)}`, "an override is allowed and is logged."].filter(Boolean).join(" · ")}
-      </p>
-    </StepCard>
+      {/* The two rules, said plainly where the agent will see them. */}
+      <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 border-t border-[var(--border)] p-0 pt-3 text-sm text-[var(--body)]">
+        <li className="inline-flex items-center gap-2"><CalendarCheck className="size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" /><span><strong className="font-semibold text-[var(--ink)]">Never later than the {ordinal(MAX_DRAFT_DAY)}</strong> of the month</span></li>
+        <li className="inline-flex items-center gap-2"><ShieldCheck className="size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" /><span><strong className="font-semibold text-[var(--ink)]">Another day needs a reason</strong> · it is logged with your name</span></li>
+      </ul>
+    </Frame>
+  );
+}
+
+/** A numbered question in the panel (like the quote form's parts). */
+function Part({ n, title, aside, children }: { n: number; title: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex min-w-0 flex-col gap-3" aria-label={title}>
+      <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <span aria-hidden="true" className="inline-grid size-6 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-xs font-bold text-[var(--accent-ink)]">{n}</span>
+        <h4 className="m-0 text-card-title text-[var(--ink)]">{title}</h4>
+        {aside && <span className="ml-auto">{aside}</span>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function Frame({ bare, status, className, children }: { bare: boolean; status: ReactNode; className?: string; children: ReactNode }) {
+  if (!bare) return <StepCard title="Draft date" chips={status} className={className}>{children}</StepCard>;
+  return (
+    <div className={cn("flex flex-col gap-5", className)}>
+      {status && <span className="flex flex-wrap items-center justify-end gap-2.5">{status}</span>}
+      {children}
+    </div>
   );
 }

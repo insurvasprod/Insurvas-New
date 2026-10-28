@@ -83,10 +83,9 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
-      // The system's `label` style: 12px, 600, 0.02em, uppercase. The board draws 10.5px, but 12px
-      // is the smallest text the type scale allows, and a column name is read on every row below it.
+      // Foundation v3 (2026-10-27): a 40px head in sentence case at the label step, 13/500.
       className={cn(
-        "h-8 px-2.5 text-left align-middle text-xs font-semibold uppercase tracking-[0.02em] whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "h-10 px-2.5 text-left align-middle text-label whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}
@@ -95,6 +94,9 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
 }
 
 /**
+ * 44px rows (owner pick, 2026-10-27): v3 draws 52px, which fits too few rows on a queue; the old
+ * 38px was too tight beside the 40px head. The note below is why it is not taller.
+ *
  * 8px vertical padding, not 12.
  *
  * The roomier cell measured 46.7px a row against 38.7px, which is three fewer rows in a 900px
@@ -106,7 +108,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "px-2.5 py-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "h-11 px-2.5 py-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}

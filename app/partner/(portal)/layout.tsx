@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { PartnerSidebar } from "@/components/partner/partner-sidebar";
 import { PartnerTopBar } from "@/components/partner/partner-top-bar";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { getPartnerSession, resolvePartnerContext } from "@/lib/partnerAuth/requirePartner";
 import { partnerRoleLabel } from "@/lib/partnerAuth/roles";
 import { readPartnerTopBarIdentity } from "@/lib/partnerAuth/topBarIdentity";
@@ -50,7 +51,8 @@ export default async function PartnerPortalLayout({ children }: { children: Reac
             Your organization is {statusLabel.toLowerCase()}, so submissions are restricted.
           </div>
         )}
-        <PortalPageTransition>{children}</PortalPageTransition>
+        {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
+        <DashboardStage ribbon className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
       </div>
       </main>
     </div>

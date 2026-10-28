@@ -44,10 +44,16 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | Numbers and money | §14 | Live |
 | Inter in the apps and auth pages | [BRAND.md](BRAND.md) | Live (`lib/design/typeface.test.mjs`) |
 | Gloss surface tokens (`--gloss-*`, `--stat-icon-*`) | `app/globals.css` | Live as tokens; used from `foundation-components` |
+| One look on every page: the ribbon stage and the glass surface | §5b | Live (consistency pass 2026-10-27) |
+| One kit for cards, chips, dialogs, menus, popovers, fields and the leave guard | §5b | Live; ratchets count the old copies down |
+| No visible page title; the breadcrumb names the page; actions on the tabs or step-bar row | §2 | Live (owner 2026-10-28) |
+| Tables: 40px sentence-case head, 44px rows | §6 | Live |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
 rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx]`, eyebrows,
-"Loading…" text, hand-rolled pagers, `btn()`), against today's counts in
+"Loading…" text, hand-rolled pagers, `btn()`, and from the 2026-10-27 consistency pass: local card
+surfaces, `window.confirm`, hand-made tablists, local chips, raw `<h1>`, click-outside popovers,
+drafts without a leave guard, the console's radix select), against today's counts in
 `lib/design/uiOffenders.json`. A new offender fails the build; a fix must lower the baseline (see the
 top of the test). The numbers only go down.
 
@@ -58,12 +64,24 @@ top of the test). The numbers only go down.
 
 ## 2. One header per page — `components/ui/page-header.tsx`
 ```tsx
-<PageHeader title="Partners" description="One short sentence." actions={<>…buttons…</>} />
+<PageHeader title="Partners" actions={<>…buttons…</>} />
+<ViewTabs …/>   {/* the actions join this row */}
 ```
-- The title appears **once**. No eyebrow (the prop is ignored now — remove it when you touch a file),
-  no breadcrumb row on list pages, no second heading repeating the title, no "section" label above it.
-- Detail pages may keep a single back link ("← Partners") instead of a breadcrumb trail.
-- Description: one sentence, optional. It must not list what the stat strip or table already shows.
+- **No visible title (owner 2026-10-28).** The top bar's breadcrumb says where you are (the agent
+  shell reads it from the menu, "Work › Dialer"; the admin and partner shells read the page's own
+  title). `PageHeader` still renders the title as the page's one `<h1>`, visually hidden
+  (`sr-only`, `data-page-title`), so screen readers land on it and the bar can read it. It is drawn
+  only by `PageHeader`; a page never writes its own `<h1>` (the `raw-h1` ratchet).
+- Pass a real title anyway: it is the page's name for assistive technology and for the admin and
+  partner breadcrumbs. No eyebrow (the prop is ignored), no second heading repeating the title.
+- **Actions** are what the header shows. When the page's tabs or step bar come straight after the
+  header — `ViewTabs`, `UnderlineTabs`, a step bar marked `data-page-lead`, or a row whose first
+  child is one of those — the actions sit on that row, on the right (md and up). Nothing may sit
+  between the header and that row, not even a hidden status span. Otherwise the actions are one row
+  at the top, on the right. A header with no actions takes no space.
+- Detail pages may keep a single back link ("← Partners") above the actions.
+- Description: one sentence, optional; it is hidden with the title, so put anything a user must see
+  in the page itself.
 - Actions: `<Button>` at the default size only (see §5), primary action last.
 
 ## 3. No explanatory, design-note or insight cards
@@ -137,8 +155,41 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 ### 5a. Control shape (v3)
 **Status:** Live. `Button` is 8px at every size; the `pill-button` ratchet keeps it that way.
 
-- Buttons and inputs: 8px corners. Cards, dialogs and sheets: 12px. Menus: 10px. Badges: 6px.
-- Heights do not change: 36px for buttons and inputs, 32px inside toolbars, `size="sm"` in rows.
+- Buttons and inputs: 8px corners. Cards, dialogs and sheets: 12px. Menus and popovers: 10px
+  (`rounded-menu`). Badges and chips: 6px (`rounded-badge`).
+- Heights do not change: 36px for buttons, inputs and toolbar controls (`toolbarControl`), and
+  `size="sm"` (32px) in rows. (An earlier draft said 32px inside toolbars; the code and §5 are 36px.)
+- Button labels are 14/500.
+
+### 5b. One kit, one look (v3)
+**Status:** Live. Set by the owner on 2026-10-27: "the same pagination and every other thing,
+pop-ups, edits, drop-down menus" on every page. The ratchets in
+`lib/design/uiConsistency.test.mjs` count the old copies down.
+
+- **The ground.** Every page of the agent app, the console and the partner portal sits on the one
+  stage: the moving ribbon and two soft glows (`DashboardStage`), drawn once by the shell layout.
+  A page never adds its own.
+- **The surface.** Every card is the glass: 55% of the card colour, blurred 20px, a hairline
+  border and 12px corners (`.m-glass`). Use `Card`, `TableCard`, `SettingsCard` or
+  `SettingsTableCard`; for a section that lays out its own inside, `cardSurface`, `cardHead`
+  (a header band) and `cardInset` (a tile inside a card) from `components/ui/card.tsx`. Never a
+  local `GLASS`/`CARD` constant or a hand-mixed `color-mix(…)`/`backdrop-blur` string
+  (`local-surface`).
+- **Type.** Page title hidden (§2; `text-page` 24/600 is kept for the day it returns), card title 15/600 (`text-card-title`), labels and column heads
+  13/500 (`text-label`), body 14, meta 12.
+- **Chips.** A state is `StatusChip`; a choice someone presses or removes is `ToggleChip`
+  (`components/ui/toggle-chip.tsx`). No local `Chip`/`Pill` (`local-chip`).
+- **Pop-ups.** By task (§11): `Dialog` at a size, `ConfirmDialog`/`confirmAction()` for a loss,
+  `Sheet` for a record, `Popover` for a picker, `DropdownMenu` for actions. Never
+  `window.confirm` (`window-confirm`) or a page's own click-outside listener (`hand-popover`).
+- **Edits.** Fields are `Field` + `control` (or `Input`), `textareaControl`, `checkboxControl` and
+  `Switch` from `components/ui/field.tsx`; dates are `DateTimePicker`
+  (`components/ui/date-time-picker.tsx`). A form that holds a draft has Discard and Save
+  (`DraftActions` or `SettingsSaveBar`) and a `LeaveGuard` (`components/ui/leave-guard.tsx`), so a
+  click away asks Save changes / Discard changes / Stay (`unguarded-dirty`).
+- **Tabs.** `ViewTabs` or `Segmented`; never a hand-made `role="tablist"` (`hand-tablist`).
+- **Dropdowns.** Native `<select>` with `toolbarControl` or `control`. The console's radix
+  `Select` moves to the same (`radix-select`).
 - Pill shapes remain only for toggle tracks, the count badge on the Filters button, and the
   marketing and pricing CTAs, which keep the brand's pill ([BRAND.md](BRAND.md)).
 
@@ -166,11 +217,14 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 - Pagination in the `footer` slot with `Pager` (and `paginate()` for client-side slicing) from
   `components/ui/pager.tsx` — never a hand-rolled Previous/Next. Empty states via `EmptyState` /
   `NoMatches` from `page-states`.
+- **Rows (v3, owner pick 2026-10-27):** the head is 40px, sentence case, 13/500; rows are 44px.
+  `components/ui/table.tsx`, the settings `st` classes and the shared `.portal-*-table` rules all
+  draw this.
 - `TableCard` does not clip its children (no `overflow-hidden`), so toolbar popovers and menus can
   hang below the toolbar; the table scrolls sideways inside its own wrapper.
 
 ### 6a. Filters open inline (v3)
-**Status:** Live for new and reworked lists. The 11 lists that already had their own filter panels
+**Status:** Live for new and reworked lists. The 10 lists that already had their own filter panels
 keep them until someone works on them; the `hand-filter-panel` ratchet only goes down.
 
 Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in that repo), built from
@@ -240,11 +294,12 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 
 | Task | Component | Size |
 |---|---|---|
-| Short edit that keeps context | `Dialog` (`components/ui/dialog.tsx`) | up to 440px wide |
-| A step that loses something (cancel, delete) | Alert dialog: `Dialog` with a destructive primary and a summary of what is lost | up to 400px |
-| Read or work on a record beside a list | `DetailPanel` (§8) | 420px |
+| Short edit that keeps context | `Dialog` (`components/ui/dialog.tsx`), `size="md"` (the default); `lg` 560 and `xl` 720 for two-column forms | 440px |
+| A step that loses something (cancel, delete) | `ConfirmDialog`, or `await confirmAction({…})` in a handler (`components/ui/confirm-dialog.tsx`) | 400px |
+| Read or work on a record beside a list | `DetailPanel` (§8); over the page, `Sheet` (`components/ui/sheet.tsx`) | 420px |
+| A picker or a short form anchored to a control | `Popover` (`components/ui/popover.tsx`) | — |
 | Row and record actions | `DropdownMenu` (`components/ui/dropdown-menu.tsx`) | 224px |
-| Confirm that something happened | Sonner toast (`components/ui/sonner.tsx`), with Undo when reversible | — |
+| Confirm that something happened | Toast via `notify` (`lib/notify`, drawn by Sileo in `components/ui/toaster.tsx`), with Undo when reversible | 350px |
 | Global search | `SearchCommand` (`components/ui/search-command.tsx`), ⌘K | up to 560px |
 
 - Never a modal for a confirmation; use a toast. Never a toast for an error the user must fix; show

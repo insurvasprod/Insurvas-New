@@ -3,8 +3,8 @@
 /**
  * Reveal one sensitive value for a minute (LA-3.7). The server writes the access record before the
  * value leaves; on screen it is shown for 60 seconds and then masked again — sooner if the window
- * loses focus or the field goes away. The revealed value lives only in this hook's state. Each
- * reveal first asks why (components/app/reveal-reason-dialog.tsx); render the returned `dialog`.
+ * loses focus or the field goes away. The revealed value lives only in this hook's state. Reveal
+ * no longer asks why (owner 2026-10-28); the fixed reason comes from components/app/reveal-reason-dialog.tsx.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

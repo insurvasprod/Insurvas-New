@@ -2,7 +2,6 @@ import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ActivityLogWorkspace } from "@/components/app/activity-log-workspace";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 
 /**
  * Enforcement point 2 of 3.
@@ -40,5 +39,5 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   const initialView = view === "integrity" ? "review" : view === "log" || view === "activity" ? "log" : view === "setters" ? "setters" : "agents";
   // The role decides only what the page offers (the zero-click review is owners' and producers');
   // /api/app/activity enforces the same rule on its own.
-  return <DashboardStage ribbon><ActivityLogWorkspace initialView={initialView} role={guard.role} /></DashboardStage>;
+  return <><ActivityLogWorkspace initialView={initialView} role={guard.role} /></>;
 }

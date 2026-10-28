@@ -1,6 +1,5 @@
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { AppointmentCalendar } from "@/components/app/appointment-calendar";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 
@@ -36,8 +35,8 @@ export default async function CalendarPage({
   // calendar's own state.
   // On the dashboard's moving ribbon, its cards frosted over it (owner ask 2026-10-26).
   return (
-    <DashboardStage ribbon>
+    <>
       <AppointmentCalendar highlightId={appointment} />
-    </DashboardStage>
+    </>
   );
 }

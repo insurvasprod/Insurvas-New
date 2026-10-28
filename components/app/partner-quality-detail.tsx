@@ -12,9 +12,9 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { defaultPartnerQualityPeriod, percentChange, percentOf, pointChange, screeningFlags } from "@/lib/partnerQuality/metrics";
 import type { PartnerQualityDetail, PartnerQualityDetailLead, PartnerQualityMember, PartnerQualityMetric, PartnerQualityPeriodMetrics } from "@/lib/partnerQuality/types";
-import { cn } from "@/lib/utils";
 import { count, dateText, dispositionText, downloadCsv, humanize, MetricCell, metricLabel, paginate, Pager, partnerTypeLabel, percent, PeriodInputs, periodQuery, periodText, Prior, productText, useDrilldown, type Period } from "./partner-quality-parts";
 import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
 /** The partner's sections, one at a time (2026-10-06 redesign: five stacked tables became tabs). */
 type DetailTab = "leads" | "outcomes" | "team" | "agents" | "daily";
@@ -169,14 +169,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
 
     {/* Sections as tabs on the left, the period (which every tab reads) on the right. */}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="tablist" aria-label="Partner sections" className="inline-flex h-9 w-fit flex-wrap gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
-        {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" id={`partner-tab-${item.key}`} aria-controls="partner-view" aria-selected={tab === item.key} onClick={() => setTab(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", tab === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
-            {item.label}
-            {item.count !== undefined && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count(item.count)}</span>}
-          </button>
-        ))}
-      </div>
+      <ViewTabs label="Partner sections" tabs={tabs} value={tab} onChange={setTab} idPrefix="partner-tab" controls="partner-view" />
       <div className="flex flex-wrap items-center gap-2">
         <PeriodInputs value={active} onChange={changePeriod} />
         <RefreshButton onClick={() => void load(period)} refreshing={loading} />

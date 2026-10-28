@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, CircleAlert, UserRound, UserX, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { RefreshButton } from "@/components/ui/data-toolbar";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { SectionLoading } from "@/components/ui/page-states";
@@ -58,7 +59,7 @@ export function AppointmentCloseOutStrip({ hideWhenEmpty = false }: { hideWhenEm
 
   async function record(appointment: Appointment, outcome: typeof outcomes[number]["value"]) {
     const label = outcomes.find((item) => item.value === outcome)?.label ?? outcome;
-    if (!window.confirm(`Record ${label.toLowerCase()} for ${appointment.customerName}?`)) return;
+    if (!(await confirmAction({ title: `Record ${label.toLowerCase()} for ${appointment.customerName}?`, description: "This closes the appointment with that outcome.", confirmLabel: `Record ${label.toLowerCase()}`, cancelLabel: "Not yet", destructive: false }))) return;
     setSaving(appointment.appointmentId);
     setError("");
     try {

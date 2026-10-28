@@ -3,7 +3,7 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Download, X } from "lucide-react";
+import { ChevronLeft, Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -13,10 +13,11 @@ import { SamePersonPrompt, type SamePersonCheck } from "@/components/app/same-pe
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/components/ui/bulk-bar";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
-import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
-import { TransfersViews } from "@/components/app/inbound/transfers-views";
+import { TeamViews } from "@/components/app/inbound/transfers-views";
+import { callHref } from "@/components/app/inbound/use-floor";
 import { WaitBar } from "@/components/app/inbound/stream-parts";
 import { LeadFlowMap } from "@/components/ui/lead-flow-map";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -27,10 +28,13 @@ import { TableCard } from "@/components/ui/table-card";
 import { productLineLabel } from "@/lib/format/productLine";
 import { notify } from "@/lib/notify";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { claimedMessage, isWithAgent, releaseConfirmation, SCREENING_FILTER_OPTIONS, screeningSignal, type InboxSummary, type ScreeningSignal } from "@/lib/transferInbox/constants";
+import { claimedMessage, isWithAgent, releaseDialog, SCREENING_FILTER_OPTIONS, screeningSignal, type InboxSummary, type ScreeningSignal } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
 import { Pager } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
 type Item = {
   id: string;
@@ -185,17 +189,6 @@ function screeningNote(item: Item) {
 const selectFull = cn(toolbarControl, "w-full");
 const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
-function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] py-1 pr-2 pl-3 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--body)]">
-      {label}
-      <button type="button" onClick={onRemove} aria-label={`Remove filter ${label}`} className="inline-flex size-4 cursor-pointer items-center justify-center rounded-full border-0 bg-[var(--surface-alt)] text-[var(--body)] hover:bg-[var(--surface-sunken)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
-        <X aria-hidden className="size-3" />
-      </button>
-    </span>
-  );
-}
-
 const PILL_TONE: Record<ScreeningSignal["tone"], PillTone> = { error: "error", warning: "warning", success: "success", neutral: "neutral" };
 
 /** Inbound A: the callers in three groups, in this order. */
@@ -224,7 +217,6 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   // partner chosen it would offer only that partner; keeping the union lets the agent switch
   // directly instead of going back through "All partners".
   const [options, setOptions] = useState<{ partners: Map<string, string>; products: Set<string>; states: Set<string>; users: Map<string, string> }>(() => ({ partners: new Map(), products: new Set(), states: new Set(), users: new Map() }));
-  const filtersRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [extras, setExtras] = useState<Extras | null>(null);
   const [recovering, setRecovering] = useState(false);
@@ -336,16 +328,6 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     return () => { if (pending !== null) window.clearTimeout(pending); if (channel) void supabase.removeChannel(channel); channel = null; };
   }, [data?.realtimeTopic, load]);
 
-  // The Filters popover closes on Escape and on a click outside it.
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const onDown = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setFiltersOpen(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [filtersOpen]);
-
   function change(next: Partial<Filters>) { setFilters((current) => ({ ...current, ...next })); setPage(1); }
   /** "Clear filters" removes every chip, including the status one (that is All transfers), and the search. */
   function clearFilters() { setFilters(CLEARED_FILTERS); setSearch(""); setPage(1); }
@@ -353,7 +335,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
 
   // LA-1.10-8 / LA-1.14-9: give a transfer back, or put a dropped call back in the queue. Both ask first.
   async function release(item: Item, action: "unassign" | "requeue") {
-    if (!window.confirm(releaseConfirmation(action, { customer: item.customer }))) return;
+    if (!(await confirmAction(releaseDialog(action, { customer: item.customer })))) return;
     setClaiming(item.id);
     const response = await fetch("/api/app/inbound/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, work_item_id: item.id }) });
     const body = await response.json().catch(() => null);
@@ -371,7 +353,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     if (response.status === 409) { notify.block(body?.error ?? "This transfer was already claimed"); void load(); return; }
     if (!response.ok) { notify.block(body?.error ?? "Could not claim this transfer"); return; }
     notify.arrive(claimedMessage(body));
-    router.push(`/app/inbound/${id}/verification`);
+    router.push(callHref(id));
   }
 
   async function claimNext() {
@@ -387,7 +369,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     if (!response.ok) { notify.block(body?.error ?? "Could not claim the next transfer"); void load(); return; }
     const workItemId = body?.claim?.work_item_id as string | undefined;
     notify.arrive(claimedMessage(body));
-    if (workItemId) router.push(`/app/inbound/${workItemId}/verification`);
+    if (workItemId) router.push(callHref(workItemId));
   }
 
   async function accept(handoffId: string, workItemId: string) {
@@ -396,8 +378,8 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     const body = await response.json().catch(() => null);
     setAccepting(null);
     if (!response.ok) { notify.block(body?.error ?? "This handoff is no longer available"); void load(); return; }
-    notify.arrive("Handoff accepted; verification is ready to resume");
-    router.push(`/app/inbound/${workItemId}/verification`);
+    notify.arrive("You have the call. Verification picks up where it was");
+    router.push(callHref(workItemId));
   }
 
   const currentUserId = data?.currentUserId;
@@ -411,14 +393,17 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   // on a realtime refresh or a filter change drops out of the selection.
   const selection = useRowSelection(shown.map((item) => item.id));
 
-  // Inbound A · Stream (2026-10-25): one Inbound page with two views; this is its Queue view. Take
-  // next sits beside the switch, as on the Floor.
+  // Team › All callers (Inbound A, 2026-10-27; was the Queue view at /app/inbound): every transfer
+  // today with its filters, Today by partner and lost-transfer recovery. Agents take callers on Inbound.
   const header = (
-    <PageHeader
-      title="Inbound"
-      description="Live transfers from your partners: who is waiting, who has them, how it ended."
-      actions={<><TransfersViews current="queue" /><Button data-guide="inbound-claim" type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Take next"}</Button></>}
-    />
+    <div className="flex flex-col gap-3">
+      <Link href="/app/inbound" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground hover:text-foreground"><ChevronLeft className="size-4" aria-hidden="true" />Inbound</Link>
+      <PageHeader
+        title="Team"
+        actions={<Button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Taking…" : "Take the next caller"}</Button>}
+      />
+      <TeamViews current="all" />
+    </div>
   );
 
   if (!data) {
@@ -490,23 +475,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
 
       {/* Views on the left, the one action on the right — the same line as the Agent Floor's. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="tablist" aria-label="Inbound views" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
-        {([["transfers", "Callers", data.items.length], ["partners", "Today by partner", extras?.byPartner.length ?? 0]] as const).map(([key, label, count]) => (
-          <button
-            key={key}
-            id={`inbound-tab-${key}`}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            aria-controls="inbound-tabpanel"
-            onClick={() => setTab(key)}
-            className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", tab === key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
-          >
-            {label}
-            <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count}</span>
-          </button>
-        ))}
-      </div>
+      <ViewTabs label="Inbound views" tabs={[{ key: "transfers", label: "Callers", count: data.items.length }, { key: "partners", label: "Today by partner", count: extras?.byPartner.length ?? 0 }]} value={tab} onChange={setTab} idPrefix="inbound-tab" controls="inbound-tabpanel" />
       </div>
 
       <div key={tab} id="inbound-tabpanel" role="tabpanel" aria-labelledby={`inbound-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
@@ -596,9 +565,9 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
       )}
 
       <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-stretch">
-      {/* overflow-visible: the Filters popover must paint outside the card, over the rows below. */}
+      {/* The filters open inline under the toolbar (UI-CONSISTENCY §6a), not as a popover over the rows. */}
       <TableCard
-        className="relative z-20 min-w-0 flex-1 overflow-visible [&>div:first-child]:rounded-t-lg [&>div:last-child]:rounded-b-lg"
+        className="min-w-0 flex-1"
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search loaded transfers" />
@@ -606,23 +575,20 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
               <option value="">All partners</option>
               {[...options.partners.entries()].sort((x, y) => x[1].localeCompare(y[1])).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </select>
-            <div ref={filtersRef} className="relative">
-              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={popoverCount} />
-              {filtersOpen && (
-                <div id="inbound-filters" role="dialog" aria-label="Filter transfers" className="absolute top-[calc(100%+6px)] left-0 z-20 grid w-[320px] gap-3 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[var(--shadow-overlay)]">
-                  <FilterField id="inbox-status" label="Show"><select id="inbox-status" className={selectFull} value={filters.status} onChange={(event) => change({ status: event.target.value as Status })}><option value="unclaimed">Waiting</option><option value="claimed">Claimed</option><option value="all">All transfers</option></select></FilterField>
-                  <FilterField id="inbox-product" label="Product"><select id="inbox-product" className={selectFull} value={filters.productLine} onChange={(event) => change({ productLine: event.target.value })}><option value="">All products</option>{[...options.products].sort().map((product) => <option key={product} value={product}>{productLineLabel(product)}</option>)}</select></FilterField>
-                  <FilterField id="inbox-state" label="State"><select id="inbox-state" className={selectFull} value={filters.state} onChange={(event) => change({ state: event.target.value })}><option value="">All states</option>{[...options.states].sort().map((value) => <option key={value} value={value}>{value}</option>)}</select></FilterField>
-                  <FilterField id="inbox-screening" label="Screening"><select id="inbox-screening" className={selectFull} value={filters.screeningOutcome} onChange={(event) => change({ screeningOutcome: event.target.value })}><option value="">Any result</option>{SCREENING_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></FilterField>
-                  <FilterField id="inbox-claimed" label="Claimed by"><select id="inbox-claimed" className={selectFull} value={filters.claimedBy} onChange={(event) => change({ claimedBy: event.target.value })}><option value="">Anyone</option><option value="me">Me</option>{[...options.users.entries()].filter(([id]) => id !== currentUserId).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></FilterField>
-                  <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setFiltersOpen(false)}>Done</Button></div>
-                </div>
-              )}
-            </div>
+            <FilterButton open={filtersOpen} controls="inbound-filters" onClick={() => setFiltersOpen((open) => !open)} count={popoverCount} />
             <SavedViews storageKey="inbound.transfers" current={viewState} builtIns={builtInViews} onApply={applyView} />
-            {chips.map((chip) => <Chip key={chip.label} label={chip.label} onRemove={() => change(chip.clear)} />)}
+            {chips.map((chip) => <ToggleChip key={chip.label} onRemove={() => change(chip.clear)}>{chip.label}</ToggleChip>)}
             {filtered && <ClearFiltersButton onClick={clearFilters} />}
           </DataToolbar>
+        }
+        filters={
+          <FilterPanel id="inbound-filters" open={filtersOpen}>
+            <FilterField id="inbox-status" label="Show"><select id="inbox-status" className={selectFull} value={filters.status} onChange={(event) => change({ status: event.target.value as Status })}><option value="unclaimed">Waiting</option><option value="claimed">Claimed</option><option value="all">All transfers</option></select></FilterField>
+            <FilterField id="inbox-product" label="Product"><select id="inbox-product" className={selectFull} value={filters.productLine} onChange={(event) => change({ productLine: event.target.value })}><option value="">All products</option>{[...options.products].sort().map((product) => <option key={product} value={product}>{productLineLabel(product)}</option>)}</select></FilterField>
+            <FilterField id="inbox-state" label="State"><select id="inbox-state" className={selectFull} value={filters.state} onChange={(event) => change({ state: event.target.value })}><option value="">All states</option>{[...options.states].sort().map((value) => <option key={value} value={value}>{value}</option>)}</select></FilterField>
+            <FilterField id="inbox-screening" label="Screening"><select id="inbox-screening" className={selectFull} value={filters.screeningOutcome} onChange={(event) => change({ screeningOutcome: event.target.value })}><option value="">Any result</option>{SCREENING_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></FilterField>
+            <FilterField id="inbox-claimed" label="Claimed by"><select id="inbox-claimed" className={selectFull} value={filters.claimedBy} onChange={(event) => change({ claimedBy: event.target.value })}><option value="">Anyone</option><option value="me">Me</option>{[...options.users.entries()].filter(([id]) => id !== currentUserId).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></FilterField>
+          </FilterPanel>
         }
         footer={
           <>

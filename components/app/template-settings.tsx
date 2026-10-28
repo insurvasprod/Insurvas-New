@@ -43,6 +43,7 @@ import { BANK_ACCOUNT_MAX_DIGITS, BANK_ACCOUNT_MIN_DIGITS } from "@/lib/template
 import { PartnerLeadForm, type PartnerFormPreviewSource } from "@/components/partner/partner-portal-workspace";
 import { countWord, diffTemplateDraft, eligibilityFieldKey, type TemplateDraft } from "@/lib/agentTemplates/draftChanges";
 import { defaultStageColor } from "@/lib/design/tokenColor";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Current = { tenant_template_id: string; assignment: { template_id: string; template_version: number; definition_version: number; product_code: string }; template: { name: string; description: string | null; product_name: string; version: number; definition_version: number; fields: TemplateField[]; stages: TemplateStage[]; form_definition: TemplateFormDefinition }; latest: { id: string; version: number; name: string } | null };
 type Available = { id: string; name: string; product_code: string; product_name: string; version: number; description: string | null };
@@ -537,6 +538,7 @@ export function TemplateSettings() {
 
       {previewSource && <PartnerViewPreview source={previewSource} productCode={current.assignment.product_code} productName={current.template.product_name} agencyName={agencyName} />}
 
+      <LeaveGuard dirty={dirty} onDiscard={discard} what="the form draft" />
       <SettingsSaveBar visible={dirty} note="Commits a new form version; forms already in progress keep theirs">
         <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>
         <Button type="button" onClick={() => void commit()} disabled={saving}>{saving ? "Committing…" : commitLabel}</Button>

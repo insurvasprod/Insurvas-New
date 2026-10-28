@@ -14,10 +14,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { endOfUtcDay, planLabel, type CouponPlanRef } from "@/lib/coupons/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { inputControl } from "@/components/ui/field";
 
 const HINT = "text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
@@ -135,15 +135,10 @@ export function CouponCreateDialog({ plans }: { plans: CouponPlanRef[] | null })
             <div className="flex gap-3">
               <div className="flex-1 space-y-1.5">
                 <Label htmlFor={`${id}-type`}>Type</Label>
-                <Select value={form.discount_type} onValueChange={(v) => set("discount_type", v as "percent")}>
-                  <SelectTrigger id={`${id}-type`} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="percent">Percentage</SelectItem>
-                    <SelectItem value="fixed">Fixed amount</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select id={`${id}-type`} className={inputControl} value={form.discount_type} onChange={(event) => { const v = event.target.value; set("discount_type", v as "percent"); }}>
+                    <option value="percent">Percentage</option>
+                    <option value="fixed">Fixed amount</option>
+                  </select>
               </div>
 
               <div className="flex-1 space-y-1.5">
@@ -165,16 +160,11 @@ export function CouponCreateDialog({ plans }: { plans: CouponPlanRef[] | null })
             <div className="flex gap-3">
               <div className="flex-1 space-y-1.5">
                 <Label htmlFor={`${id}-duration`}>Duration</Label>
-                <Select value={form.duration} onValueChange={(v) => set("duration", v as "once")}>
-                  <SelectTrigger id={`${id}-duration`} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="once">One billing period</SelectItem>
-                    <SelectItem value="n_periods">A number of periods</SelectItem>
-                    <SelectItem value="forever">Forever</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select id={`${id}-duration`} className={inputControl} value={form.duration} onChange={(event) => { const v = event.target.value; set("duration", v as "once"); }}>
+                    <option value="once">One billing period</option>
+                    <option value="n_periods">A number of periods</option>
+                    <option value="forever">Forever</option>
+                  </select>
               </div>
 
               {form.duration === "n_periods" && (
@@ -193,17 +183,12 @@ export function CouponCreateDialog({ plans }: { plans: CouponPlanRef[] | null })
             <div className="flex gap-3">
               <div className="flex-1 space-y-1.5">
                 <Label htmlFor={`${id}-cycle`}>Billing cycle</Label>
-                <Select value={form.billing_cycle} onValueChange={(v) => set("billing_cycle", v as Cycle)}>
-                  <SelectTrigger id={`${id}-cycle`} className="w-full" aria-describedby={`${id}-cycle-hint`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Any cycle</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="quarterly">Quarterly</SelectItem>
-                    <SelectItem value="yearly">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select id={`${id}-cycle`} aria-describedby={`${id}-cycle-hint`} className={inputControl} value={form.billing_cycle} onChange={(event) => { const v = event.target.value; set("billing_cycle", v as Cycle); }}>
+                    <option value="any">Any cycle</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
                 <p id={`${id}-cycle-hint`} className={cn(HINT, periodsNeedCycle && "text-[var(--error-ink)]")}>
                   {form.billing_cycle === "any"
                     ? periodsNeedCycle

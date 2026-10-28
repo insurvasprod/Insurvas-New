@@ -6,7 +6,6 @@ import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadListClaimButton } from "@/components/app/lead-list-claim-button";
 import { TabbedPanels } from "@/components/app/lead-ops-view-tabs";
 import { Button } from "@/components/ui/button";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { InfoTip } from "@/components/ui/info-tip";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,6 +15,7 @@ import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import type { LeadListDetail, PoolBlocker, PoolBlockers, RemovalReason } from "@/lib/leadLists/detail";
 import { cn } from "@/lib/utils";
+import { StatusChip } from "@/components/ui/status-chip";
 
 /**
  * One bought list, from the file that was committed to the policies it turned into — the board's
@@ -26,14 +26,14 @@ import { cn } from "@/lib/utils";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const REMOVAL: Record<RemovalReason, { label: string; chip: string; tone: "error" | "neutral" }> = {
-  tcpa_litigator: { label: "TCPA litigator", chip: "litigator", tone: "error" },
+const REMOVAL: Record<RemovalReason, { label: string; chip: string; tone: "danger" | "neutral" }> = {
+  tcpa_litigator: { label: "TCPA litigator", chip: "litigator", tone: "danger" },
   // The scrub answers "on a do-not-call list", not which one, so federal and state stay one row.
-  dnc: { label: "Federal or state DNC", chip: "suppressed", tone: "error" },
-  internal_dnc: { label: "Your own internal DNC", chip: "suppressed", tone: "error" },
-  invalid: { label: "Invalid or disconnected", chip: "invalid", tone: "error" },
+  dnc: { label: "Federal or state DNC", chip: "suppressed", tone: "danger" },
+  internal_dnc: { label: "Your own internal DNC", chip: "suppressed", tone: "danger" },
+  invalid: { label: "Invalid or disconnected", chip: "invalid", tone: "danger" },
   duplicate_in_file: { label: "Repeated inside the file", chip: "duplicate", tone: "neutral" },
-  suppressed: { label: "Suppressed", chip: "suppressed", tone: "error" },
+  suppressed: { label: "Suppressed", chip: "suppressed", tone: "danger" },
 };
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -58,20 +58,6 @@ function longDay(iso: string, timeZone: string | null) {
 function fullDay(iso: string, timeZone: string | null) {
   const p = parts(iso, timeZone);
   return p ? `${Number(p.day)} ${MONTHS[p.month].slice(0, 3)} ${p.year}` : "—";
-}
-
-function Chip({ tone, dot, children }: { tone: "error" | "neutral" | "good"; dot?: boolean; children: ReactNode }) {
-  const look = {
-    error: { chip: "bg-[var(--error-surface)] text-[var(--error-ink)]", dot: "bg-[var(--error)]" },
-    neutral: { chip: "bg-[var(--surface-alt)] text-[var(--body)]", dot: "bg-[var(--muted-foreground)]" },
-    good: { chip: "bg-[var(--success-surface)] text-[var(--success-ink)]", dot: "bg-[var(--success)]" },
-  }[tone];
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold leading-normal tracking-[-0.01em]", look.chip)}>
-      {dot && <span className={cn("size-1.5 shrink-0 rounded-full", look.dot)} aria-hidden="true" />}
-      {children}
-    </span>
-  );
 }
 
 function HealthRow({ label, value, of, tone }: { label: string; value: number | null; of: number; tone: MeterTone }) {
@@ -192,7 +178,7 @@ function PoolBlockersCard({ pool }: { pool: PoolBlockers }) {
   return (
     <TableCard
       title="Why these aren't being served"
-      action={<Chip tone={held > 0 ? "error" : "good"}>{count(pool.total)} in the pool{held > 0 ? ` · ${count(held)} held` : ""}</Chip>}
+      action={<StatusChip tone={held > 0 ? "danger" : "good"}>{count(pool.total)} in the pool{held > 0 ? ` · ${count(held)} held` : ""}</StatusChip>}
     >
       <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
         <thead>
@@ -276,10 +262,10 @@ export function LeadListDetailView({
       title={`Where the ${count(removed)} went`}
       action={
         claimableCents > 0 ? (
-          <Chip tone={windowOpen ? "good" : "neutral"}>
+          <StatusChip tone={windowOpen ? "good" : "neutral"}>
             {money(claimableCents)} claimable
             {d.returnDaysLeft != null && ` · ${windowOpen ? `${d.returnDaysLeft} ${d.returnDaysLeft === 1 ? "day" : "days"} left` : "window closed"}`}
-          </Chip>
+          </StatusChip>
         ) : undefined
       }
       footer={
@@ -317,7 +303,7 @@ export function LeadListDetailView({
             return (
               <tr key={row.reason} className="m-row">
                 <td>{ui.label}{row.rescrubRows > 0 && <span className="block text-xs text-[var(--muted)]">{count(row.rescrubRows)} found by a later re-scrub · not claimable</span>}</td>
-                <td><Chip tone={ui.tone}>{ui.chip}</Chip></td>
+                <td><StatusChip tone={ui.tone}>{ui.chip}</StatusChip></td>
                 <td className="text-right tabular-nums">{count(row.rows)}</td>
                 <td className="text-right tabular-nums">{row.claimableCents == null ? "—" : money(row.claimableCents)}</td>
                 <td className="text-right">
@@ -350,7 +336,7 @@ export function LeadListDetailView({
       title="Column mapping"
       action={
         <>
-          {d.mapping.saved && <Chip tone="good">Saved for {d.vendorName}</Chip>}
+          {d.mapping.saved && <StatusChip tone="good">Saved for {d.vendorName}</StatusChip>}
           <Button asChild type="button" variant="outline">
             <Link href="/app/import">Edit mapping</Link>
           </Button>
@@ -373,7 +359,7 @@ export function LeadListDetailView({
                 <td>{row.header}</td>
                 <td>{row.fieldLabel ?? "— not mapped"}</td>
                 <td className="max-w-[200px] truncate" title={row.sample || undefined}>{row.sample || <span className="text-muted-foreground">—</span>}</td>
-                <td>{row.field ? <Chip tone="good" dot>Remembered</Chip> : <Chip tone="neutral" dot>Ignored</Chip>}</td>
+                <td>{row.field ? <StatusChip tone="good" dot>Remembered</StatusChip> : <StatusChip tone="neutral" dot>Ignored</StatusChip>}</td>
               </tr>
             ))}
           </PagedBody>
@@ -386,7 +372,7 @@ export function LeadListDetailView({
 
   return (
     // 2026-10-26: a list's page on the moving ribbon, like Lead sources it opens from.
-    <DashboardStage ribbon>
+    <>
     <div className="m-stagger flex flex-col gap-6">
       <Link
         href="/app/lead-sources"
@@ -515,6 +501,6 @@ export function LeadListDetailView({
         </div>
       </div>
     </div>
-    </DashboardStage>
+    </>
   );
 }
