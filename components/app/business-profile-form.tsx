@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelActions } from "@/components/portal/funnel-actions";
+import { LogoutButton } from "@/components/app/logout-button";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { MultiPicker } from "@/components/app/multi-picker";
 import { StatePicker } from "@/components/app/state-picker";
@@ -99,7 +100,7 @@ export type AboutYouInitial = { firstName: string; lastName: string; phone: stri
  * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
  * The name starts empty otherwise: guessing it from the email domain is gone (owner, 2026-10-27).
  */
-export function BusinessProfileForm({ initial = null, person, audience = "agency", back, skipHref }: {
+export function BusinessProfileForm({ initial = null, person, audience = "agency", back, skipHref, gate = false }: {
   initial?: BusinessProfileInitial | null;
   person: AboutYouInitial;
   audience?: "individual" | "agency";
@@ -107,6 +108,8 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
   back?: string;
   /** "Skip for now", after payment: into the app without the profile (asked again at the next login). */
   skipHref?: string;
+  /** The first-login gate: "Finish setting up", no Skip, and Sign out under the form. */
+  gate?: boolean;
 }) {
   const router = useRouter();
   const solo = audience === "individual";
@@ -172,8 +175,8 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
   return (
     <div>
       {/* One line saying why (copy table, owner 2026-10-27); the NPN is asked later in Settings. */}
-      <FunnelHeading title={solo ? "Tell us about you" : "Tell us about your agency"}>
-        We use this to set up your workspace.
+      <FunnelHeading title={gate ? "Finish setting up your workspace" : solo ? "Tell us about you" : "Tell us about your agency"}>
+        {gate ? "One last step before you start. It takes a minute." : "We use this to set up your workspace."}
       </FunnelHeading>
       <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-5">
         {/* Two to a row on a wide screen, so the step fits without scrolling (2026-10-26). */}
@@ -272,6 +275,12 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
           </div>
         </FunnelActions>
       </form>
+      {/* The gate blocks the app, not the person: they can still sign out (owner, 2026-10-28). */}
+      {gate && (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Not now? <LogoutButton variant="link" className="text-sm font-semibold text-foreground hover:text-[var(--accent-ink)]" />
+        </p>
+      )}
     </div>
   );
 }

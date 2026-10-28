@@ -29,6 +29,7 @@ const VARIANTS = [
   { key: "step-2-review", label: "Sign-up · step 2 seen again" },
   { key: "step-3", label: "Sign-up · step 5 About you (agent)" },
   { key: "step-3-agency", label: "Sign-up · step 5 About you (agency)" },
+  { key: "profile-gate", label: "First-login gate" },
   { key: "step-4", label: "Sign-up · step 3 (plan)" },
   { key: "step-4-chosen", label: "Sign-up · step 3 (picked on Pricing)" },
   { key: "done", label: "Sign-up · all done" },
@@ -94,6 +95,14 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
       story: <StoryPanel mode="sign-up" step={5} noPayment />,
       steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <BusinessProfileForm key="agency" person={{ firstName: "Avery", lastName: "Collins", phone: "+12015550123" }} audience="agency" skipHref="#skip" />,
+    },
+    // The first-login gate (?finish=1): a skipped profile, asked before the app opens.
+    "profile-gate": {
+      plane: "agent",
+      width: "wide",
+      story: <StoryPanel mode="sign-up" step={5} />,
+      steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      node: <BusinessProfileForm key="gate" person={{ firstName: "Avery", lastName: "Collins", phone: "" }} audience="agency" gate />,
     },
     // The real screens with Google switched on, before it is on in Supabase (2026-10-27).
     "sign-in-google": { plane: "agent", story: <StoryPanel mode="sign-in" />, node: null },

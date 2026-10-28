@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
@@ -9,6 +10,9 @@ import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
+import { PROFILE_GATE_PATH, needsProfileGate, sessionKey } from "@/lib/signup/profileGate";
+import { readProfileGateFacts } from "@/lib/signup/profileGateQueries";
+import { PROFILE_SKIPPED_COOKIE } from "@/lib/signup/profileSkip";
 import { outstandingDocuments } from "@/lib/legal/acceptance";
 import { MaintenanceMessage } from "@/components/app/maintenance-message";
 import { AnnouncementStrip } from "@/components/app/announcement-strip";
@@ -54,7 +58,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
     return result.value;
   };
 
-  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , , overdueComplaints, setupStamps] =
+  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , , overdueComplaints, setupStamps, profileGateFacts] =
     await Promise.all([
       resolveSignupContext(),
       resolveTenantContext(),
@@ -72,6 +76,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
       overdueRegulatorComplaintCount(session.tenantId),
       // The walkthrough's two finished stamps, for the "Get set up" item (never throws; a failure reads as finished).
       readSetupStamps(session.tenantId, session.sub),
+      // The first-login gate's two facts (never throws; a failure reads as "not gated").
+      readProfileGateFacts(session.tenantId),
     ]);
 
   // Self-serve users must finish the gated signup states before the normal entitlement shell.
@@ -91,6 +97,18 @@ export default async function AgentShellLayout({ children }: { children: React.R
 
   const entitlement = unwrap(entitlementSettled);
   if (maintenance.level === "locked") redirect("/maintenance");
+
+  // The first-login gate (manager review, 2026-10-28; owner: block until filled): a self-serve owner
+  // whose agency has no business profile fills it before anything else, on every page, deep links
+  // included. "Skip for now" lets the current login through (lib/signup/profileGate.ts).
+  if (signupContext && needsProfileGate({
+    role: signupContext.role,
+    userStatus: signupContext.userStatus,
+    onboardingState: signupContext.onboardingState,
+    ...profileGateFacts,
+    skippedSession: (await cookies()).get(PROFILE_SKIPPED_COOKIE)?.value ?? null,
+    currentSession: sessionKey(session),
+  })) redirect(PROFILE_GATE_PATH);
   const announcements = unwrap(announcementsSettled);
 
   // The menu is built from EFFECTIVE features — what the plan grants, minus anything switched off

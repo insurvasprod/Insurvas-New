@@ -3,9 +3,9 @@
  * information … we can get that information later on, when he logs in: first thing, complete your
  * onboarding").
  *
- * Skipping ends sign-up for this visit: a browser-session cookie lets the owner into the app now.
- * The first-login gate (Task 7) asks for the profile while the cookie is absent, and sign-in clears
- * it, so the next login asks. Nothing is written to the database.
+ * Skipping ends sign-up for this login: a browser-session cookie holding this login's key lets the
+ * owner into the app now. The first-login gate (lib/signup/profileGate.ts) lets that key through; a
+ * new sign-in has a new key, so the next login asks. Nothing is written to the database.
  */
 export const PROFILE_SKIPPED_COOKIE = "insurvas_profile_skipped";
 

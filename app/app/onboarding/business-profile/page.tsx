@@ -21,7 +21,7 @@ async function signupAudience(tenantId: string): Promise<"individual" | "agency"
   return audienceForPlanType(plan?.plan_type) ?? "agency";
 }
 
-export default async function BusinessProfilePage() {
+export default async function BusinessProfilePage({ searchParams }: { searchParams: Promise<{ finish?: string }> }) {
   const context = await resolveSignupContext();
   if (!context) redirect("/app/login");
   const editable = context.userStatus === "active" && EDITABLE.has(context.onboardingState);
@@ -40,6 +40,8 @@ export default async function BusinessProfilePage() {
     signupAudience(context.tenantId),
   ]);
   // After payment this is the last step; an owner who already filled it goes straight to the app.
+  // Sent here by the shell's first-login gate: the owner skipped this at sign-up.
+  const gate = (await searchParams).finish === "1" && context.onboardingState === "completed";
   const paid = context.onboardingState === "completed";
   if (paid && data) redirect("/app/dashboard");
 
@@ -70,7 +72,9 @@ export default async function BusinessProfilePage() {
         audience={audience}
         back={paid ? undefined : "/app/onboarding/plan"}
         // After payment the owner may skip it for now; it is asked again at the next login.
-        skipHref={paid ? PROFILE_SKIP_PATH : undefined}
+        // The first-login gate (?finish=1, lib/signup/profileGate.ts) blocks: no Skip there.
+        skipHref={paid && !gate ? PROFILE_SKIP_PATH : undefined}
+        gate={gate}
       />
     </FunnelFrame>
   );
