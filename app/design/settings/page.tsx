@@ -15,9 +15,9 @@ const ROLES: TenantRole[] = ["owner", "producer", "bookkeeper"];
  * components; a 280px sidebar and the 56px top bar are stood in so the content is as wide as in the
  * app. Development only.   ?role=owner|producer|bookkeeper   then pick a section, or open #carriers.
  */
-export default async function SettingsDesignPage({ searchParams }: { searchParams: Promise<{ role?: string }> }) {
+export default async function SettingsDesignPage({ searchParams }: { searchParams: Promise<{ role?: string; route?: string }> }) {
   if (process.env.NODE_ENV === "production") notFound();
-  const requested = (await searchParams).role;
+  const { role: requested, route } = await searchParams;
   const role = ROLES.find((item) => item === requested) ?? "owner";
   return (
     <div className="portal-agent flex min-h-screen bg-[var(--color-page-bg)]">
@@ -33,7 +33,7 @@ export default async function SettingsDesignPage({ searchParams }: { searchParam
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
           <DashboardStage className="flex min-w-0 flex-1 flex-col">
             <div className="portal-settings-page flex flex-col gap-6">
-              <SettingsPreview key={role} role={role} />
+              <SettingsPreview key={`${role}-${route ?? ""}`} role={role} routeSection={route} />
             </div>
           </DashboardStage>
         </div>

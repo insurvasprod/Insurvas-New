@@ -94,15 +94,19 @@ function GenericSample() {
   );
 }
 
-export function SettingsPreview({ role }: { role: TenantRole }) {
+/** `routeSection`: a section with its own route (Accounting…), drawn in the frame with a sample board. */
+export function SettingsPreview({ role, routeSection }: { role: TenantRole; routeSection?: string }) {
   return (
     <AgentSettingsTabs
+      routeSection={routeSection}
       tabs={SETTINGS_SECTIONS}
       team={null}
       workspace={null}
       granted={ALL_FEATURES}
       role={role}
       renderPanel={(id) => (id === "business-identity" ? <BusinessIdentitySample /> : id === "carriers" ? <CarriersSample /> : <GenericSample />)}
-    />
+    >
+      {routeSection ? <SettingsCard title="Sample board" sub="The module's own board renders here on :3000, inside the same frame." /> : null}
+    </AgentSettingsTabs>
   );
 }

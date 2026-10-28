@@ -4,8 +4,7 @@ import { LOCKED, loadAccountingSettings, recentChanges, SettingsError } from "@/
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AccountingSettingsBoard } from "@/components/app/accounting/accounting-settings-board";
-import { PageHeader } from "@/components/ui/page-header";
-import { SettingsTrail } from "@/components/app/settings/settings-trail";
+import { SettingsRouteFrame } from "@/components/app/settings/settings-route-frame";
 import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
@@ -33,18 +32,18 @@ export default async function AccountingSettingsPage() {
     problem = error.message;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <SettingsTrail label="Accounting" />
-      {/* LA-8.8: who last changed a setting here, beside the values — the owner reads the log it links into. */}
-      <div>
-        <PageHeader title="Accounting settings" description="Thresholds, categories, periods and split rules." />
-        {guard.role === "owner" && <SectionLastChanged sectionKey="accounting" />}
-      </div>
+    // The one Settings layout: header, breadcrumb and menu come from the frame (settings-shell plan,
+    // Task 6); this page keeps its gates above and draws only its board.
+    <SettingsRouteFrame sectionId="accounting">
+      <div className="flex min-h-0 flex-grow flex-col gap-4">
+      {/* LA-8.8: who last changed a setting here, beside the values. */}
+      {guard.role === "owner" && <SectionLastChanged sectionKey="accounting" />}
       {loaded ? (
         <AccountingSettingsBoard initial={loaded.settings} locked={LOCKED} changes={loaded.changes} accounts={loaded.accounts} canEdit={guard.role === "owner" && guard.entitlement.access !== "read_only"} />
       ) : (
         <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>
       )}
-    </div>
+      </div>
+    </SettingsRouteFrame>
   );
 }

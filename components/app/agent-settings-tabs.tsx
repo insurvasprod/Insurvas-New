@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, ChevronDown, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
@@ -32,6 +32,8 @@ export function AgentSettingsTabs({
   readOnly = false,
   hidden,
   renderPanel,
+  routeSection,
+  children,
 }: {
   tabs: AgentSettingsTab[];
   /** Owner-only panel context; null for everyone else, whose sections do not need it. */
@@ -52,6 +54,13 @@ export function AgentSettingsTabs({
   hidden?: readonly string[];
   /** The /design/settings preview only: sample content in place of the live panels, which need a session. */
   renderPanel?: (id: string) => ReactNode;
+  /**
+   * A section with its own route (Accounting, Retention, Compliance): it is the active one, and
+   * `children` (the module's own board) is the content. Picking an in-page section from here opens it
+   * on /app/settings (settings-shell plan, Task 6).
+   */
+  routeSection?: string;
+  children?: ReactNode;
 }) {
   // In a Get set up step (?guide=…) the screen shows only that task: the settings menu steps aside,
   // and "Back to setup" on the guide bar is the way out (owner, 2026-10-28).
@@ -63,13 +72,15 @@ export function AgentSettingsTabs({
   // Only in-page sections are tabs; a section with a route is a link to its own module's screen.
   const inPage = useMemo(() => visible.filter((tab) => !tab.route), [visible]);
   const firstAvailable = inPage.find((tab) => tab.id === initialTab)?.id ?? inPage[0]?.id ?? initialTab;
+  const router = useRouter();
   const [activeId, setActiveId] = useState(firstAvailable);
   const [anchor, setAnchor] = useState<string | null>(null);
   // The page header's action slot: a section's Save / Add buttons are drawn there, on the title's line.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const active = useMemo(
-    () => inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
-    [activeId, firstAvailable, inPage]
+    () => (routeSection ? visible.find((tab) => tab.id === routeSection) : undefined)
+      ?? inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
+    [activeId, firstAvailable, inPage, routeSection, visible]
   );
 
   // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
@@ -165,11 +176,23 @@ export function AgentSettingsTabs({
     return () => window.removeEventListener("hashchange", syncFromHash);
   }, [inPage, revealGroupForSection]);
 
+  // The open section's menu item in view inside the menu (not the page), so a section low in the
+  // list, like Accounting on its own route, is visibly the current one.
+  useEffect(() => {
+    const nav = document.querySelector<HTMLElement>("[data-settings-rail] .portal-settings-nav");
+    const item = nav?.querySelector<HTMLElement>("[aria-current=page]");
+    if (!nav || !item) return;
+    const top = item.offsetTop - nav.offsetTop;
+    if (top < nav.scrollTop || top + item.offsetHeight > nav.scrollTop + nav.clientHeight) nav.scrollTop = top - nav.clientHeight / 3;
+  }, [active?.id]);
+
   // After the tab has rendered (its panel may still be loading), reveal the setting search named.
   useEffect(() => (anchor ? revealAnchor(anchor) : undefined), [anchor, activeId]);
 
   function selectTab(id: string) {
     if (!inPage.some((item) => item.id === id)) return;
+    // On a section's own route the in-page panels are not here: open the section on /app/settings.
+    if (routeSection) { router.push(`/app/settings#${id}`); return; }
     setActiveId(id);
     setAnchor(null);
     revealGroupForSection(id);
@@ -196,6 +219,7 @@ export function AgentSettingsTabs({
   // UX-4: the component for each section comes from the registry, keyed by the section's id.
   function renderActiveContent(): ReactNode {
     if (!active) return null;
+    if (routeSection) return children;
     if (renderPanel) return renderPanel(active.id);
     const panel = SETTINGS_PANELS[active.id];
     return panel ? panel({ team, workspace, granted }) : <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
@@ -294,20 +318,23 @@ export function AgentSettingsTabs({
               <div id={groupId} className="portal-settings-nav-subsections" hidden={!groupOpen}>
                 {items.map((tab) => {
                   if (tab.route) {
-                    // Another module's own screen: opened there, never copied here. It carries a trail
-                    // back to Settings (components/app/settings/settings-trail.tsx).
+                    // A section with its own route: a link to it, drawn in the same frame there
+                    // (components/app/settings/settings-route-frame.tsx), so it is one more menu item.
+                    const here = routeSection === tab.id;
                     return (
                       <Link
                         key={tab.id}
+                        id={tab.id}
                         href={sectionHref(tab)}
+                        aria-current={here ? "page" : undefined}
                         onClick={() => revealGroupForSection(tab.id)}
                         className={cn(
                           "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] no-underline transition-colors",
-                          "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+                          here ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]" : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
                         )}
                       >
                         <span className="min-w-0 flex-grow">{tab.label}</span>
-                        <ArrowUpRight aria-label="Opens its own screen" className="ml-auto size-3.5 shrink-0 text-[var(--muted)]" />
                       </Link>
                     );
                   }
@@ -369,7 +396,8 @@ export function AgentSettingsTabs({
             key={active.id}
           >
             <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner", framed: !guiding, actionsSlot }}>
-              {readOnly && !READ_ONLY_EXEMPT.has(active.id) ? (
+              {/* A routed section's board handles its own read-only state. */}
+              {readOnly && !routeSection && !READ_ONLY_EXEMPT.has(active.id) ? (
                 <>
                   <p role="status" className="m-0 mb-4 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">
                     Your account is read-only, so settings can be read but not changed. Reactivate the subscription in Billing to change them.
