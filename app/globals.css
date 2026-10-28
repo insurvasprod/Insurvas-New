@@ -1597,6 +1597,11 @@ a.portal-top-foot-action { text-decoration: none; }
 /* One auth layout (UI-CONSISTENCY §13): the logo at the top, the rest centred below it (see
    data-align further down), and the scrollbar's space always reserved. */
 html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
+/* The reserved gutter shows the page background; paint it the story's green so the right edge has no
+   white strip (owner, 2026-10-28). Desktop only: below 1024px the story is hidden. */
+@media (min-width: 1024px) {
+  html:has(.portal-tenant-auth-shell) { background: var(--brand-700); }
+}
 /* Short screens (a 1366×768 laptop, a zoomed 1080p screen): the same layout, tighter, so every auth
    screen fits without scrolling (owner, 2026-10-27). The order and widths do not change. */
 /* 900px, not 820px: a 1080p or 1200p screen at 125% Windows scaling gives the browser about 826px
