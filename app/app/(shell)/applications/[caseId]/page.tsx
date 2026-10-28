@@ -27,7 +27,7 @@ export default async function ApplicationWorkspacePage({ params, searchParams }:
   const [{ caseId }, query] = await Promise.all([params, searchParams]);
 
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") {
-    return <DashboardStage ribbon><Suspense><ApplicationWorkspace initial={FIXTURE_CASE} sample /></Suspense></DashboardStage>;
+    return <DashboardStage><Suspense><ApplicationWorkspace initial={FIXTURE_CASE} sample /></Suspense></DashboardStage>;
   }
   if (!isUuid(caseId)) notFound();
   // AG-0.5: another producer's case is not found, not forbidden — its existence isn't confirmed.
@@ -44,5 +44,5 @@ export default async function ApplicationWorkspacePage({ params, searchParams }:
     throw error;
   }
   const timeZone = (await zone) ?? undefined;
-  return <DashboardStage ribbon><Suspense><ApplicationWorkspace initial={view} sample={false} timeZone={timeZone} seatReadOnly={!canWrite(guard.entitlement)} /></Suspense></DashboardStage>;
+  return <DashboardStage><Suspense><ApplicationWorkspace initial={view} sample={false} timeZone={timeZone} seatReadOnly={!canWrite(guard.entitlement)} /></Suspense></DashboardStage>;
 }

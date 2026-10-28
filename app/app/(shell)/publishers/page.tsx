@@ -8,6 +8,6 @@ export default async function PublishersPage() {
   const guard = await guardPage("publisher_records");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Partners" description="Manage publishers, marketing companies and affiliates." />;
   if (!actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Partners" detail="Partner records are managed by the account owner or bookkeeper." />;
-  // Partners A (2026-10-25): on the dashboard's moving ribbon.
-  return <DashboardStage ribbon><PartnersWorkspace readOnly={guard.entitlement.access === "read_only"} canManageProductConfig={guard.role === "owner"} /></DashboardStage>;
+  // Partners A (2026-10-25): on the dashboard's static stage backdrop.
+  return <DashboardStage><PartnersWorkspace readOnly={guard.entitlement.access === "read_only"} canManageProductConfig={guard.role === "owner"} /></DashboardStage>;
 }

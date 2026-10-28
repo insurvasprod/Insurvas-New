@@ -17,6 +17,6 @@ export default async function PartnerQualityPage({ searchParams }: { searchParam
   const [query, records] = await Promise.all([searchParams, guardPage("publisher_records")]);
   // A row opens the partner record's Quality tab for someone who may open partner records.
   const recordLinks = records.entitled && actAsPage(records, ["owner", "bookkeeper"]);
-  // Partners A (2026-10-25): on the dashboard's moving ribbon.
-  return <DashboardStage ribbon><PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} /></DashboardStage>;
+  // Partners A (2026-10-25): on the dashboard's static stage backdrop.
+  return <DashboardStage><PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} /></DashboardStage>;
 }

@@ -38,7 +38,7 @@ export default async function PendingCasesPage({ searchParams }: { searchParams:
   const initialTab = TABS.find((key) => key === tab) ?? "requirements";
   const readOnly = !canWrite(guard.entitlement);
   // The Waiting on the carrier tab of Applications (2026-10-26); ?tab= still opens one of its lists.
-  const hub = (body: React.ReactNode) => <DashboardStage ribbon><ApplicationsHub view="waiting" tabs={applicationsTabs(guard.entitlement)} calculator={hasCalculator(guard.entitlement)} readOnly={!canWrite(guard.entitlement)}>{body}</ApplicationsHub></DashboardStage>;
+  const hub = (body: React.ReactNode) => <DashboardStage><ApplicationsHub view="waiting" tabs={applicationsTabs(guard.entitlement)} calculator={hasCalculator(guard.entitlement)} readOnly={!canWrite(guard.entitlement)}>{body}</ApplicationsHub></DashboardStage>;
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") {
     return hub(<PendingCases requirements={FIXTURE_PENDING_ALL} counteroffers={FIXTURE_COUNTEROFFERS} awaiting={FIXTURE_AWAITING_NUMBER} ageingDays={DEFAULT_SALES_SETTINGS.requirementAgeingDays} initialTab={initialTab} readOnly={readOnly} sample embedded />);
   }

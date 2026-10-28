@@ -385,8 +385,8 @@ export function LeadListDetailView({
   );
 
   return (
-    // 2026-10-26: a list's page on the moving ribbon, like Lead sources it opens from.
-    <DashboardStage ribbon>
+    // 2026-10-26: a list's page on the static stage backdrop, like Lead sources it opens from.
+    <DashboardStage>
     <div className="m-stagger flex flex-col gap-6">
       <Link
         href="/app/lead-sources"

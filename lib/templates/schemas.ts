@@ -42,6 +42,7 @@ const formFieldSchema = z.object({
     .nullable()
     .default(null),
   conditional_on: z.object({ field_key: key, equals: z.string().trim().max(120) }).nullable().optional(),
+  width: z.enum(["half", "full"]).optional(),
 });
 
 const formSectionSchema = z.object({

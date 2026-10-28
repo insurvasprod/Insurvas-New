@@ -12,7 +12,6 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { TransfersViews } from "@/components/app/inbound/transfers-views";
 import { Ring, type RingTone } from "@/components/app/inbound/stream-parts";
-import { LeadFlowMap } from "@/components/ui/lead-flow-map";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -1154,21 +1153,6 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
         <StatTile label="Waiting transfers" value={waitingCount} valueTone={k.longest >= thresholds.redSeconds ? "danger" : k.longest >= thresholds.amberSeconds ? "warning" : undefined} footnote={waitingCount ? `longest ${waitLabel(k.longest)} · escalates at ${thresholdLabel(thresholds.redSeconds)}` : "nobody waiting"} />
         <StatTile label="Callbacks due today" value={k.dueToday} valueTone={k.overdue ? "danger" : undefined} footnote={k.overdue ? `${k.overdue} overdue` : "none overdue"} />
       </StatStrip>
-
-      {/* The floor as the dashboard's stream: waiting, on a call, closed this hour. */}
-      <LeadFlowMap
-        mode="path"
-        label="The floor right now"
-        hot={waitingCount ? 0 : null}
-        drops={[]}
-        worst={null}
-        aside={liveStatus}
-        stages={[
-          { label: "Waiting", value: String(waitingCount), count: waitingCount, note: waitingCount ? `longest ${waitLabel(k.longest)}` : "nobody waiting" },
-          { label: "On a call", value: String(floor.onCalls.length), count: floor.onCalls.length, note: `${k.available} of ${k.onFloor} free` },
-          { label: "Closed this hour", value: floor.closedTransfers?.thisHour == null ? "—" : String(floor.closedTransfers.thisHour), count: floor.closedTransfers?.thisHour ?? 0, note: floor.closedTransfers?.previousHour == null ? undefined : `${floor.closedTransfers.previousHour} the hour before` },
-        ]}
-      />
 
       <AgentPods
         members={floor.members}

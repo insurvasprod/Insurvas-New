@@ -1762,6 +1762,35 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 }
 
 .portal-settings-page { color: var(--portal-ink); }
+.portal-settings-nav { max-height: min(55dvh, 480px); }
+.portal-settings-nav-group { min-width: 0; }
+.portal-settings-group-toggle {
+  display: flex; width: 100%; min-height: 38px; align-items: center; justify-content: space-between; gap: .5rem;
+  padding: .5rem .625rem; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+  font-size: .6875rem; font-weight: 700; line-height: 1.35; letter-spacing: .045em; text-align: left; text-transform: uppercase;
+  cursor: pointer; transition: background-color 140ms ease, color 140ms ease;
+}
+.portal-settings-group-toggle:hover { background: var(--surface-alt); color: var(--ink); }
+.portal-settings-group-toggle:focus-visible { outline: 2px solid var(--ring-color); outline-offset: -2px; }
+.portal-settings-group-chevron { width: 14px; height: 14px; flex: 0 0 auto; transition: transform 140ms ease; }
+.portal-settings-group-chevron.is-open { transform: rotate(180deg); }
+.portal-settings-nav-subsections {
+  display: flex; min-width: 0; flex-direction: column; gap: 0; margin: .125rem 0 .375rem .5rem; padding-left: .5rem;
+  border-left: 1px solid var(--settings-nav-guide, var(--border));
+}
+.portal-settings-nav-subsections[hidden] { display: none; }
+.portal-settings-subsection { position: relative; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.portal-settings-subsection::before {
+  position: absolute; top: 50%; left: -9px; width: 9px; height: 1px; background: var(--settings-nav-guide, var(--border));
+  content: ""; pointer-events: none; transform: translateY(-.5px);
+}
+.dark .portal-settings-nav-subsections { --settings-nav-guide: var(--border-strong); }
+@media (min-width: 1024px) {
+  .portal-settings-nav { max-height: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-settings-group-toggle, .portal-settings-group-chevron { transition: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
@@ -3020,20 +3049,15 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 /* The halo behind a figure, dark mode only: on a light ground a glow reads as a smudge. */
 .dark .m-figure { text-shadow: 0 0 22px color-mix(in srgb, var(--primary) 34%, transparent); }
 
-/* The two glows behind a role home. They drift slowly; reduced motion stills them (the global rule). */
+/* The still brand glows behind a role home. */
 .m-ambient-orb {
   position: absolute;
   border-radius: 9999px;
   filter: blur(64px);
   opacity: var(--ambient-opacity);
-  animation: m-ambient-drift 22s ease-in-out infinite alternate;
 }
 .m-ambient-orb--a { left: 4%; top: -40px; width: 46%; height: 320px; background: radial-gradient(closest-side, var(--primary), transparent); }
-.m-ambient-orb--b { right: 2%; top: 80px; width: 38%; height: 280px; background: radial-gradient(closest-side, color-mix(in srgb, var(--primary) 55%, var(--info)), transparent); animation-delay: -11s; }
-@keyframes m-ambient-drift {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(4%, 18px, 0) scale(1.08); }
-}
+.m-ambient-orb--b { right: 2%; top: 80px; width: 38%; height: 280px; background: radial-gradient(closest-side, color-mix(in srgb, var(--primary) 55%, var(--info)), transparent); }
 
 /* LiveStamp's dot (components/ui/live-stamp.tsx): a ring that breathes out while the data is fresh. */
 .m-live-dot { width: 7px; height: 7px; border-radius: 9999px; background: var(--primary); animation: m-live-pulse 1.8s ease-out infinite; }
@@ -3148,7 +3172,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent-rail-fly a[aria-current="page"] svg { color: var(--nav-active-icon); }
 .portal-agent-rail-fly .portal-agent-plan-card { margin: 0; }
 @media (min-width: 768px) {
-  :has(> .portal-agent-rail) > main { width: calc(100% - 72px); margin-left: 72px; }
+  :has(> .portal-agent-desktop-nav) > main { width: calc(100% - 264px); margin-left: 264px; }
 }
 @media (prefers-reduced-motion: reduce) { .portal-agent-rail-item { transition: none; } }
 
@@ -3172,11 +3196,62 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-rail-account[aria-expanded="true"] .portal-top-avatar { box-shadow: 0 0 0 2px var(--nav-success); }
 /* With the account in the rail, the bar drops its own button (the phone keeps it: no rail there). */
 @media (min-width: 768px) {
-  :has(> .portal-agent-rail) .portal-top-account,
-  :has(> .portal-agent-rail) .portal-top-divider { display: none; }
+  :has(> .portal-agent-desktop-nav) .portal-top-account,
+  :has(> .portal-agent-desktop-nav) .portal-top-divider { display: none; }
 }
 /* Its menu opens beside the rail, from the bottom. */
 .portal-top-panel.portal-top-panel-rail { position: fixed; top: auto; right: auto; left: 80px; bottom: 12px; z-index: 45; }
+/* The account menu opens next to the wider desktop sidebar. */
+.portal-top-panel.portal-top-panel-rail { left: 272px; }
+@media (max-width: 1100px) and (min-width: 768px) {
+  .portal-agent-desktop-nav { width: 250px; }
+  :has(> .portal-agent-desktop-nav) > main { width: calc(100% - 250px); margin-left: 250px; }
+  .portal-top-panel.portal-top-panel-rail { left: 258px; }
+}
+
+/* Accordion navigation stays in the sidebar instead of opening a detached flyout. */
+.portal-agent-desktop-nav { border-right: 1px solid var(--nav-line); }
+.portal-agent-desktop-nav .portal-agent-sidebar-brand {
+  display: flex; height: var(--top-bar-h, 56px); min-height: var(--top-bar-h, 56px); align-items: center;
+  justify-content: space-between; gap: .5rem; padding: 0 1.125rem; border-bottom: 1px solid var(--nav-line);
+}
+.portal-agent-desktop-nav .portal-agent-desktop-brand-link { display: flex; min-width: 0; align-items: center; height: 44px; }
+.portal-agent-desktop-brand-compact { display: none; }
+.portal-agent-desktop-nav .portal-agent-sidebar-collapse { width: 32px; height: 32px; color: var(--nav-muted); }
+.portal-agent-desktop-nav .portal-agent-sidebar-collapse:hover { background: color-mix(in srgb, var(--nav-ink), transparent 90%); color: var(--nav-ink); }
+.portal-agent-desktop-nav .portal-agent-sidebar-scroll { flex: 1 1 auto; padding: .625rem .625rem .75rem; }
+.portal-agent-desktop-nav .portal-agent-nav-disclosure {
+  display: flex; height: 40px; min-height: 40px; align-items: center; justify-content: flex-start;
+  gap: .5rem; margin: .25rem 0 0; padding: 0 .625rem; border: 0; border-radius: 8px;
+  color: var(--nav-ink); font-size: .875rem; font-weight: 550; letter-spacing: -.02em;
+  text-align: left; text-transform: none;
+}
+.portal-agent-desktop-nav .portal-agent-nav-disclosure:hover { background: rgba(255, 255, 255, .06); }
+.portal-agent-desktop-nav .portal-agent-nav-section.is-active > .portal-agent-nav-disclosure { color: var(--nav-ink); }
+.portal-agent-desktop-nav .portal-agent-nav-disclosure-copy { align-items: center; gap: .625rem; }
+.portal-agent-desktop-nav .portal-agent-nav-chevron { order: 0; width: 1rem; height: 1rem; }
+.portal-agent-desktop-nav .portal-agent-nav-sublist {
+  margin: .125rem 0 .25rem .9rem !important; padding-left: .4rem !important;
+  border-left: 1px solid var(--nav-line);
+}
+.portal-agent-desktop-nav .portal-agent-nav [hidden] { display: none !important; }
+.portal-agent-desktop-nav .portal-agent-nav-link-nested { padding-left: .625rem; }
+.portal-agent-desktop-nav .portal-agent-nav-link.is-active { border-radius: 7px; }
+.portal-agent-sidebar-account { display: flex; flex: none; justify-content: flex-start; padding: .5rem .625rem .75rem; border-top: 1px solid var(--nav-line); }
+.portal-agent-sidebar-account #agent-rail-account { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: flex-start; }
+.portal-agent-sidebar-account .portal-rail-account { display: flex; width: 100%; min-width: 0; height: 44px; align-items: center; justify-content: flex-start; gap: .625rem; padding: 0 .375rem; border-radius: 10px; }
+.portal-agent-sidebar-account .portal-rail-account-name { overflow: hidden; color: var(--nav-ink); font-size: .8125rem; font-weight: 600; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-brand { height: auto; min-height: 0; flex-direction: column; justify-content: center; gap: .375rem; padding: .5rem 0; }
+.portal-agent-sidebar-desktop.is-collapsed .portal-agent-desktop-brand-full { display: none; }
+.portal-agent-sidebar-desktop.is-collapsed .portal-agent-desktop-brand-compact { display: inline-block; }
+.portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-account { padding: .5rem .625rem .75rem; }
+.portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-account .portal-rail-account { justify-content: center; padding: 0; }
+.portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-account .portal-rail-account-name { display: none; }
+@media (min-width: 768px) {
+  .portal-agent:has(.portal-agent-desktop-nav.is-collapsed) > main { width: calc(100% - 76px); margin-left: 76px; }
+  .portal-agent-sidebar-desktop.is-collapsed .portal-top-panel.portal-top-panel-rail { left: 84px; }
+}
+
 /* The plan, a line in the account menu. */
 .portal-top-account-extra { border-bottom: 1px solid var(--border); }
 .portal-top-plan { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .625rem .875rem; }
@@ -3185,38 +3260,24 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-top-plan-link { flex-shrink: 0; font-size: .75rem; line-height: 1.5; font-weight: 600; color: var(--accent-ink); text-decoration: none; }
 .portal-top-plan-link:hover { text-decoration: underline; }
 
-/* The top bar, as A: one wide command field in the middle, the bell and the account on the right. */
+/* The top bar, as A: one wide command field and the remaining actions on the right. */
 @media (min-width: 768px) {
-  :has(> .portal-agent-rail) .portal-top-bar { gap: 1rem; }
-  :has(> .portal-agent-rail) .portal-top-search { width: min(360px, 100%); flex: 0 1 auto; margin-inline: 0 auto; }
-  :has(> .portal-agent-rail) .portal-top-search-input {
+  :has(> .portal-agent-desktop-nav) .portal-top-bar { gap: 1rem; }
+  :has(> .portal-agent-desktop-nav) .portal-top-search { width: min(360px, 100%); flex: 0 1 auto; margin-inline: 0 auto; }
+  :has(> .portal-agent-desktop-nav) .portal-top-search-input {
     height: 36px; padding-left: 36px; border-radius: 10px; font-size: .875rem;
     background: color-mix(in srgb, var(--nav-ink), transparent 93%);
   }
-  :has(> .portal-agent-rail) .portal-top-search-input:focus {
+  :has(> .portal-agent-desktop-nav) .portal-top-search-input:focus {
     border-color: color-mix(in srgb, var(--nav-success), transparent 40%);
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--nav-success), transparent 86%);
   }
-  :has(> .portal-agent-rail) .portal-top-search-icon { left: 12px; top: 10px; }
-  :has(> .portal-agent-rail) .portal-top-search-keys { top: 9px; right: 10px; }
-  :has(> .portal-agent-rail) .portal-top-panel-search { top: 44px; width: min(520px, calc(100vw - 2rem)); }
+  :has(> .portal-agent-desktop-nav) .portal-top-search-icon { left: 12px; top: 10px; }
+  :has(> .portal-agent-desktop-nav) .portal-top-search-keys { top: 9px; right: 10px; }
+  :has(> .portal-agent-desktop-nav) .portal-top-panel-search { top: 44px; width: min(520px, calc(100vw - 2rem)); }
 }
 
-/* The ribbon behind a role home (components/ui/ribbon-backdrop.tsx). The layer spans the page's
-   padding too, so the lines reach the edges; the canvas sticks under the top bar while the cards
-   scroll over it. The glass is a little clearer here so the lines read through it. */
-:root { --ribbon-ink: 10, 135, 105; }
-.dark { --ribbon-ink: 7, 214, 160; }
-.m-ribbon-layer { position: absolute; inset: -1rem -1rem -1rem; z-index: -10; pointer-events: none; }
-@media (min-width: 640px) { .m-ribbon-layer { inset: -1.5rem; } }
-@media (min-width: 1024px) { .m-ribbon-layer { inset: -1.5rem -2rem -2rem; } }
-.m-ribbon { position: sticky; top: var(--top-bar-h, 56px); display: block; width: 100%; height: calc(100vh - var(--top-bar-h, 56px)); }
-.m-stage--ribbon { --glass-alpha: 78%; }
-.dark .m-stage--ribbon { --glass-alpha: 62%; }
-
-/* Launchpad tiles and the lead-to-money map (components/ui/launch-tile*, lead-flow-map; 2026-10-25). */
-:root { --leak-ink: 214, 129, 18; }
-.dark { --leak-ink: 242, 165, 65; }
+/* Launchpad tiles (components/ui/launch-tile*; 2026-10-25). */
 .m-tile-grid { counter-reset: launch-tile; }
 .m-tile-grid > .m-tile { counter-increment: launch-tile; }
 .m-tile-key { display: none; }
@@ -3227,10 +3288,6 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   font: inherit; font-size: .75rem; font-weight: 700; line-height: 1;
 }
 .m-tile-grid--keys > .m-tile:nth-child(-n + 9) .m-tile-key::before { content: counter(launch-tile); }
-@keyframes m-leak-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--leak-ink), .45); } 50% { box-shadow: 0 0 0 6px rgba(var(--leak-ink), 0); } }
-.m-leak-pulse { animation: m-leak-pulse 1.9s ease-in-out infinite; }
-.m-leak-tile { background-image: linear-gradient(160deg, rgba(var(--leak-ink), .12), transparent 60%); }
-@media (prefers-reduced-motion: reduce) { .m-leak-pulse { animation: none; } }
 /* Dashboard C's launchpad (components/ui/launchpad.tsx, redesign 2026-10-25): tiles lift on hover,
    wiggle while being arranged, and their week bars rise into place. Reduced motion stills all three. */
 .m-dash-tile { transition: border-color var(--t-micro) var(--e), box-shadow var(--t-micro) var(--e), transform var(--t-micro) var(--e); }

@@ -759,6 +759,7 @@ export function TopBarShell({
             title={`${user.name} · ${user.roleLabel}`}
           >
             <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
+            <span className="portal-rail-account-name">{user.name}</span>
           </button>,
           accountHost,
         )}

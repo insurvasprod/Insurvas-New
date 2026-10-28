@@ -3,8 +3,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Inbound A · Stream (chosen 2026-10-25): the small pieces the Queue, the Floor and the call page share
- * with the dashboard's look. The stream itself is the dashboard's LeadFlowMap in "path" mode.
+ * Small shared visual pieces for the Queue, Floor, and call pages.
  */
 
 /**

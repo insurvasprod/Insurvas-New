@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowUpRight, ChevronDown, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
-import { groupSections, parseSettingsHash, sectionHref, visibleSections } from "@/lib/settings/registry";
+import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
@@ -64,6 +64,76 @@ export function AgentSettingsTabs({
 
   // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
   const grouped = useMemo(() => groupSections(visible), [visible]);
+  // A new Settings visit starts with every group open. Users may collapse groups independently.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+
+  const revealGroupForSection = useCallback((id: string) => {
+    const parent = grouped.find((entry) => entry.items.some((item) => item.id === id));
+    if (!parent) return;
+    setCollapsedGroups((current) => {
+      if (!current.has(parent.group)) return current;
+      const next = new Set(current);
+      next.delete(parent.group);
+      return next;
+    });
+  }, [grouped]);
+
+  function toggleGroup(group: string) {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }
+
+  // Search only the settings this person can open. Results may point to a section or to one of its
+  // controls; the existing hash/reveal path handles in-page destinations.
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const searching = query.trim().length >= 2;
+  const hits = useMemo(() => (searching ? searchSettings(tabs, granted, role, query, 12) : []), [searching, tabs, granted, role, query]);
+
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function onSearchKey(event: KeyboardEvent<HTMLInputElement>) {
+    const first = resultsRef.current?.querySelector<HTMLElement>("[data-hit]");
+    if (event.key === "Escape" && query) {
+      event.preventDefault();
+      setQuery("");
+    } else if (event.key === "ArrowDown" && first) {
+      event.preventDefault();
+      first.focus();
+    } else if (event.key === "Enter" && first) {
+      event.preventDefault();
+      first.click();
+    }
+  }
+
+  function onResultsKey(event: KeyboardEvent<HTMLDivElement>) {
+    const rows = [...(resultsRef.current?.querySelectorAll<HTMLElement>("[data-hit]") ?? [])];
+    const at = rows.indexOf(document.activeElement as HTMLElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next = event.key === "ArrowDown" ? at + 1 : at - 1;
+      if (next < 0) searchRef.current?.focus();
+      else rows[Math.min(next, rows.length - 1)]?.focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      searchRef.current?.focus();
+    }
+  }
 
   useEffect(() => {
     const syncFromHash = () => {
@@ -73,12 +143,13 @@ export function AgentSettingsTabs({
         // Hash deep-links are external browser state that should select the matching tab.
         setActiveId(tab);
         setAnchor(target);
+        revealGroupForSection(tab);
       }
     };
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
     return () => window.removeEventListener("hashchange", syncFromHash);
-  }, [inPage]);
+  }, [inPage, revealGroupForSection]);
 
   // After the tab has rendered (its panel may still be loading), reveal the setting search named.
   useEffect(() => (anchor ? revealAnchor(anchor) : undefined), [anchor, activeId]);
@@ -87,6 +158,7 @@ export function AgentSettingsTabs({
     if (!inPage.some((item) => item.id === id)) return;
     setActiveId(id);
     setAnchor(null);
+    revealGroupForSection(id);
     window.history.replaceState(null, "", `#${id}`);
     // The rail scrolls on its own (2026-10-15); a section picked low in it opens at the top of the page.
     if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: "smooth" });
@@ -118,92 +190,147 @@ export function AgentSettingsTabs({
     <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
       {/* Max height: the window less the top bar, the page title above the rail (84px) and the page's
           bottom padding (32px), so the rail ends at the window's bottom and never makes the page scroll. */}
+      <div className="box-border flex w-full min-h-0 shrink-0 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px]">
+        <div className="shrink-0 p-2 pb-1">
+          <label className="relative block">
+            <span className="sr-only">Search settings</span>
+            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--muted)]" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={onSearchKey}
+              placeholder="Search settings"
+              autoComplete="off"
+              spellCheck={false}
+              aria-controls="settings-search-results"
+              className="h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pr-9 pl-9 text-sm text-[var(--ink)] outline-none transition-colors placeholder:text-[var(--muted)] focus-visible:border-[var(--primary)] focus-visible:ring-2 focus-visible:ring-[var(--ring-color)] [&::-webkit-search-cancel-button]:hidden"
+            />
+            {query ? (
+              <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label="Clear the search" className="absolute top-1/2 right-1.5 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
+                <X aria-hidden="true" className="size-3.5" />
+              </button>
+            ) : (
+              <kbd aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-[4px] border border-[var(--border)] px-1.5 font-sans text-xs leading-[1.4] text-[var(--muted)] lg:block">/</kbd>
+            )}
+          </label>
+        </div>
+        {searching ? (
+          <div id="settings-search-results" ref={resultsRef} onKeyDown={onResultsKey} className="flex max-h-[60dvh] min-h-0 flex-col overflow-y-auto overscroll-contain px-2 pb-2.5 lg:max-h-none">
+            <p role="status" className="m-0 px-2.5 pt-2.5 pb-1.5 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
+              {hits.length ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}` : "No matches"}
+            </p>
+            {hits.length ? hits.map((hit) => (
+              <Link key={hit.href} data-hit href={hit.href} onClick={() => setQuery("")} className="mb-0.5 flex min-h-[44px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left no-underline transition-colors hover:bg-[var(--surface-alt)] focus-visible:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] lg:min-h-[40px]">
+                <span className="min-w-0 flex-grow">
+                  <span className="block text-sm leading-[1.4] text-[var(--ink)]">{hit.title.replace(/^Settings › [^›]+ › /, "")}</span>
+                  <span className="block truncate text-xs leading-[1.4] text-[var(--muted)]">{hit.meta}</span>
+                </span>
+                {hit.href.startsWith("/app/") && !hit.href.startsWith("/app/settings#") && <ArrowUpRight aria-label="Opens its own screen" className="size-3.5 shrink-0 text-[var(--muted)]" />}
+              </Link>
+            )) : (
+              <p className="m-0 px-2.5 pb-2 text-sm leading-[1.5] text-[var(--body)]">Nothing in Settings matches “{query.trim()}”. Try another word, like “invoice” or “alerts”.</p>
+            )}
+          </div>
+        ) : (
       <nav
-        aria-label="Settings sections"
-        role="tablist"
-        aria-orientation="vertical"
-        className="box-border flex w-full shrink-0 gap-1 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150 px-2 pt-1 pb-2.5 lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px] lg:flex-col lg:gap-0 lg:overflow-x-visible lg:overflow-y-auto lg:overscroll-contain"
+        aria-label="Settings navigation"
+        className="portal-settings-nav box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain px-2 pb-2.5"
       >
         {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
             caller's order, and the same name can legitimately open a second run — so the name is not
             an identity. Keying on it made React see duplicates, warn that children "may be duplicated
             and/or omitted", and then throw NotFoundError from insertBefore, which aborted hydration
             for the whole page: the settings rail stopped responding to clicks entirely. */}
-        {grouped.map(({ group, items }, index) => (
-          <div key={`${group ?? "ungrouped"}-${index}`} role="presentation" className="flex shrink-0 gap-1 lg:flex-col lg:gap-0">
-            {group && (
-              <p className="hidden px-2.5 pt-3.5 pb-1.5 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)] lg:block">
-                {group}
-              </p>
-            )}
-            {items.map((tab) => {
-              if (tab.route) {
-                // Another module's own screen: opened there, never copied here. It carries a trail
-                // back to Settings (components/app/settings/settings-trail.tsx).
-                return (
-                  <Link
-                    key={tab.id}
-                    href={sectionHref(tab)}
-                    className={cn(
-                      "mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] whitespace-nowrap no-underline transition-colors lg:whitespace-normal",
-                      "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-                    )}
-                  >
-                    <span className="min-w-0 flex-grow">{tab.label}</span>
-                    <ArrowUpRight aria-label="Opens its own screen" className="ml-auto size-3.5 shrink-0 text-[var(--muted)]" />
-                  </Link>
-                );
-              }
-              const isActive = active?.id === tab.id;
-              const badge = badgeFor(tab.id);
-              return (
-                <button
-                  key={tab.id}
-                  id={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`settings-panel-${tab.id}`}
-                  disabled={Boolean(tab.disabled)}
-                  onClick={() => selectTab(tab.id)}
-                  className={cn(
-                    "mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] whitespace-nowrap transition-colors lg:whitespace-normal",
-                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
-                    isActive
-                      ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]"
-                      : tab.managed
-                        ? "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-alt)]"
-                        : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
-                  )}
-                >
-                  <span className="min-w-0 flex-grow">{tab.label}</span>
-                  {badge && (
-                    <span
+        {grouped.map(({ group, items }, index) => {
+          const groupId = `settings-group-${index}`;
+          const groupOpen = !collapsedGroups.has(group);
+          return (
+            <section key={`${group}-${index}`} className="portal-settings-nav-group">
+              <button
+                type="button"
+                className="portal-settings-group-toggle"
+                aria-expanded={groupOpen}
+                aria-controls={groupId}
+                onClick={() => toggleGroup(group)}
+              >
+                <span>{group}</span>
+                <ChevronDown aria-hidden="true" className={cn("portal-settings-group-chevron", groupOpen && "is-open")} />
+              </button>
+              <div id={groupId} className="portal-settings-nav-subsections" hidden={!groupOpen}>
+                {items.map((tab) => {
+                  if (tab.route) {
+                    // Another module's own screen: opened there, never copied here. It carries a trail
+                    // back to Settings (components/app/settings/settings-trail.tsx).
+                    return (
+                      <Link
+                        key={tab.id}
+                        href={sectionHref(tab)}
+                        onClick={() => revealGroupForSection(tab.id)}
+                        className={cn(
+                          "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] no-underline transition-colors",
+                          "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                        )}
+                      >
+                        <span className="min-w-0 flex-grow">{tab.label}</span>
+                        <ArrowUpRight aria-label="Opens its own screen" className="ml-auto size-3.5 shrink-0 text-[var(--muted)]" />
+                      </Link>
+                    );
+                  }
+                  const isActive = active?.id === tab.id;
+                  const badge = badgeFor(tab.id);
+                  return (
+                    <button
+                      key={tab.id}
+                      id={tab.id}
+                      type="button"
+                      aria-current={isActive ? "page" : undefined}
+                      aria-controls={`settings-panel-${tab.id}`}
+                      disabled={Boolean(tab.disabled)}
+                      onClick={() => selectTab(tab.id)}
                       className={cn(
-                        "ml-auto shrink-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] tabular-nums",
-                        badge.warn ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"
+                        "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] transition-colors",
+                        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
+                        isActive
+                          ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]"
+                          : tab.managed
+                            ? "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-alt)]"
+                            : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
                       )}
                     >
-                      {badge.text}
-                    </span>
-                  )}
-                  {tab.managed && (
-                    <span className="ml-auto inline-flex shrink-0 text-[var(--muted)]" aria-label="Managed elsewhere">
-                      <LockIcon />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+                      <span className="min-w-0 flex-grow">{tab.label}</span>
+                      {badge && (
+                        <span
+                          className={cn(
+                            "ml-auto shrink-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] tabular-nums",
+                            badge.warn ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"
+                          )}
+                        >
+                          {badge.text}
+                        </span>
+                      )}
+                      {tab.managed && (
+                        <span className="ml-auto inline-flex shrink-0 text-[var(--muted)]" aria-label="Managed elsewhere">
+                          <LockIcon />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
       </nav>
+        )}
+      </div>
       <div className="min-w-0 flex-1">
         {active && (
           <section
             id={`settings-panel-${active.id}`}
             className="portal-settings-panel min-w-0"
-            role="tabpanel"
+            role="region"
             aria-labelledby={active.id}
             tabIndex={-1}
             key={active.id}

@@ -52,7 +52,6 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Pager } from "@/components/ui/pager";
 import { TrendTile } from "@/components/ui/trend-tile";
-import { LeadFlowMap } from "@/components/ui/lead-flow-map";
 
 type Data = DealFlowReport & { readOnly: boolean };
 type Filters = { from: string; to: string; partner_id: string; product_line: string; agent_id: string; stage_type: string; status: string };
@@ -490,21 +489,6 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
         <TrendTile label="In progress" value={kpis.in_progress} tone={kpis.in_progress ? "warning" : "neutral"} footnote={inProgressFoot} trend={series((k) => k.in_progress)} trendLabel="In progress, last 7 days" />
         <TrendTile label="Lost" value={kpis.lost} tone={kpis.lost ? "danger" : "neutral"} footnote="no longer active" trend={series((k) => k.lost)} trendLabel="Lost, last 7 days" />
       </section>
-
-      {/* The range as the dashboard's stream: worked, still in progress, won, lost. */}
-      <LeadFlowMap
-        mode="path"
-        label={isToday ? "Today's deals" : "These deals"}
-        hot={kpis.in_progress ? 1 : null}
-        drops={[]}
-        worst={null}
-        stages={[
-          { label: "Worked", value: String(kpis.deals_worked), count: kpis.deals_worked, note: isToday ? "today" : "in range" },
-          { label: "In progress", value: String(kpis.in_progress), count: kpis.in_progress, note: inProgressFoot },
-          { label: "Won", value: String(kpis.won), count: kpis.won, note: formatCentsAsCurrency(kpis.won_annualised_cents) },
-          { label: "Lost", value: String(kpis.lost), count: kpis.lost, note: "no longer active" },
-        ]}
-      />
 
       {/* One tab panel for the three views, so a switch fades like every other tab (2026-10-09). */}
       <div key={tab} id="deal-flow-panel" role="tabpanel" aria-labelledby={`deal-flow-panel-tab-${tab}`}>

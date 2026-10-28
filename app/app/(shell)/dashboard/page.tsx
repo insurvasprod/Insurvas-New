@@ -12,7 +12,6 @@ import { setupChecklistForState } from "@/lib/dashboard/checklist";
 import { loadSetupGuideState, loadSetupProfile, loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
 import { firstOpenable, HOME_MONEY, HOME_SECTIONS, moneyHref, resolveRoleHome, type HomeMoneyKey } from "@/lib/dashboard/roleHome";
-import { roleMapKey } from "@/lib/dashboard/roleFlow";
 import { greeting, longDate } from "@/lib/dashboard/todayMath";
 import { scopeFor } from "@/lib/agency/visibility";
 import { scopeWithSelf } from "@/lib/dashboard/scope";
@@ -22,7 +21,6 @@ import { getDashboardMoney, type DashboardMoney } from "@/lib/dashboard/money";
 import type { TileViewer } from "@/lib/dashboard/summaries";
 import { SetupCelebration } from "@/components/app/setup/setup-celebration";
 import { NextCallback } from "@/components/app/dashboard-today";
-import { loadRoleMap, RoleLeadTile, RoleMapLoading, RoleMapView, type FlowPeriod } from "@/components/app/home-map";
 import {
   AppointmentsTile, BestHourTile, CallbacksTile, CloseOutRateTile, DialerTile, FloorTile, LapseTile, LicencesTile, ModuleTile, MoneyTile, OutcomesTile,
   PremiumTile, SetterWeekTile, SetupTile, TeamTile, UpgradeTile, WeekTile,
@@ -38,17 +36,10 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/page-states";
 
 /**
- * The agent home (redesign 2026-10-25, owner: "the map to leads on top, not split; take dashboard C,
- * all of the tiles and the design that it is, copy the exact pattern; delete every other thing").
+ * The agent home: one role specific launchpad, with the live header and guided next step.
  *
  *   header      the greeting in the agency's clock, the live next callback, the role's actions
- *   map         this ROLE's map, full width (components/app/home-map, lib/dashboard/roleFlow): an
- *               owner's lead to money, a manager's team flow without money, a producer's own leads to
- *               their own premium, a setter's week, and a path for the assistant, bookkeeper and
- *               retention rep — every stop a link to where that step is done
- *   launchpad   Dashboard C (components/ui/launchpad): workspaces of tiles — Today, Money, Everything —
- *               numbered for 1–9, arranged per person. The first tile is the map's biggest leak or
- *               where to start.
+ *   launchpad   workspaces of tiles — Today, Money, Everything — numbered for 1–9, arranged per person.
  *
  * Nothing the old sections carried is lost; each is a tile now, under the same gates: what a role's
  * home shows is still `resolveRoleHome` (lib/dashboard/roleHome), section by section — the setup
@@ -57,8 +48,8 @@ import { EmptyState } from "@/components/ui/page-states";
  * and every module (LA-0.3's registry) in "Everything".
  *
  * AG-0.5 · producer isolation is unchanged: the session's producer scope (`scopeFor(context)`) goes to
- * every read — today (getDashboardToday), money (getDashboardMoney), callbacks (scope + self), the
- * map's funnel (loadDialFunnel), module figures (tileMetric's viewer); pending and close-out tiles
+ * every read — today (getDashboardToday), money (getDashboardMoney), callbacks (scope + self),
+ * module figures (tileMetric's viewer); pending and close-out tiles
  * call routes that scope themselves.
  */
 
@@ -74,10 +65,9 @@ function streamed(title: string, node: ReactNode) {
   return <Suspense fallback={<DashTileLoading title={title} />}>{node}</Suspense>;
 }
 
-export default async function AgentDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const [context, params] = await Promise.all([resolveTenantContext(), searchParams]);
+export default async function AgentDashboardPage() {
+  const context = await resolveTenantContext();
   if (!context) redirect("/app/login");
-  const period: FlowPeriod = params.flow === "7d" || params.flow === "30d" ? params.flow : "today";
 
   // One round trip for everything the frame needs (as before): the plan, setup state, kill switches,
   // the agency's zone, the reader's first name and the producer scope.
@@ -103,17 +93,21 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
 
   const shown = new Set(home.sections);
   const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role);
-  const mapKey = roleMapKey(context.role, context.memberRole);
+  const dashboardRole = context.memberRole === "manager"
+    ? "manager"
+    : context.memberRole === "admin" || context.role === "owner"
+      ? "owner"
+      : context.role;
   // A manager leads a team and sees no money (owner, 2026-10-25: "they will not see all the money"):
   // no premium tile and no Money workspace, whatever the underlying role's home lists.
-  const noMoney = mapKey === "manager";
+  const noMoney = dashboardRole === "manager";
   // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
   const serverNow = Date.now();
   const zone = workspaceZone ?? "America/New_York";
 
-  // The money figures: the role's own line, plus what a retention rep's map reads (lapse, persistency).
+  // The money figures: the role's own line, plus the retention workspace's lapse and persistency.
   const wanted: Array<{ key: HomeMoneyKey; href: string }> = [...home.money];
-  if (mapKey === "retention") {
+  if (dashboardRole === "retention") {
     for (const key of ["lapse", "persistency"] as const) {
       const href = moneyHref(key, available, context.role);
       if (href && !wanted.some((item) => item.key === key)) wanted.push({ key, href });
@@ -123,10 +117,8 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
     ? getDashboardMoney({ context, wanted, upgrade: Boolean(home.upgrade), scope }).catch(() => null)
     : null;
 
-  // One "today" read for the tiles, the header chip and the map: only the groups this home uses.
+  // One "today" read for the tiles and header chip: only the groups this home uses.
   const today: Promise<DashboardToday | null> = getDashboardToday({ tenantId: context.tenantId, userId: context.userId, role: context.role, available: [...available], now: serverNow, reads: home.reads, scope }).catch(() => null);
-
-  const map = loadRoleMap({ key: mapKey, tenantId: context.tenantId, scope, zone, serverNow, period, open, today, money }).catch(() => null);
 
   // ── The launchpad: Today, Money, Everything ────────────────────────────────────────────────────
   const todayCells: LaunchCell[] = [];
@@ -141,7 +133,6 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   const dialerHref = open(["leads.dialer"]);
   const callbacksHref = home.nextCallbackHref;
 
-  add({ id: "lead", title: "Start here", w: 1, h: 1, href: open(HOME_SECTIONS.flow.opens) ?? "/app/dashboard", node: streamed("Your next step", <RoleLeadTile map={map} />) });
   const setupOpen = shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null;
   if (setupOpen) add({ id: "setup", title: "Get set up", w: 2, h: 1, href: "/app/setup", node: <SetupTile checklist={checklist} /> });
   if (shown.has("upgrade") && home.upgrade && money) add({ id: "upgrade", title: "Chargeback radar", w: 1, h: 1, href: home.upgrade.featureHref, node: streamed("Chargeback radar", <UpgradeTile money={money} featureHref={home.upgrade.featureHref} rowsHref={home.upgrade.rowsHref} />) });
@@ -207,7 +198,7 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   const name = firstName ? `, ${firstName}` : "";
 
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
       <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
         {/* The finish moment, when the last step was done somewhere other than the guide bar: this render stamps it. */}
         {shown.has("setup") && checklist.total > 0 && checklist.complete && !setupProgress.finished ? <SetupCelebration steps={checklist.total} done={checklist.completed} audience="owner" /> : null}
@@ -231,12 +222,8 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
           }
         />
 
-        <Suspense fallback={<RoleMapLoading />}>
-          <RoleMapView map={map} period={mapKey === "owner" || mapKey === "manager" || mapKey === "producer" ? period : null} />
-        </Suspense>
-
         {spaces.some((space) => space.cells.length > 0) ? (
-          <Launchpad storageKey={`insurvas:home:${context.userId}:${mapKey}`} spaces={spaces.filter((space) => space.cells.length > 0)} />
+          <Launchpad storageKey={`insurvas:home:${context.userId}:${dashboardRole}`} spaces={spaces.filter((space) => space.cells.length > 0)} />
         ) : (
           // Two causes, two answers: a plan granting nothing is the owner's to fix; a role with no tile is ours.
           <Card>

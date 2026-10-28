@@ -65,7 +65,7 @@ export async function LeadSourcesPage({ tab, importOpen = false, guards }: {
   if (canCampaigns) tabs.push({ key: "campaigns", label: "Vendors & campaigns", panel: <CampaignWorkspace embedded /> });
 
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
       <div className="m-stagger flex flex-col gap-6">
         <PageHeader
           title="Lead sources"
@@ -126,7 +126,7 @@ export async function VendorBillsPage({ tab, open, vendor, guards }: { tab: Vend
   const readOnly = (canInvoices ? money : returns).entitlement.access === "read_only";
 
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
       <div className="m-stagger flex flex-col gap-6">
         <PageHeader title="Vendor bills" description="What you paid for leads, and what vendors owe you back." />
         {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}

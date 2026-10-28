@@ -79,9 +79,9 @@ export default async function PublisherDetailPage({
     }
   }
 
-  // Partners A (2026-10-25): on the dashboard's moving ribbon.
+  // Partners A (2026-10-25): on the dashboard's static stage backdrop.
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
     <PartnersWorkspace
       readOnly={guard.entitlement.access === "read_only"}
       canManageProductConfig={guard.role === "owner"}

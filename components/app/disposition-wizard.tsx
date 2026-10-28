@@ -238,7 +238,7 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
   );
 
   if (loading && !wizard) return <PageLoading strip={false} rows={6} />;
-  if (!wizard || !view) return <DashboardStage ribbon><div className="flex w-full min-w-0 flex-col gap-6">{header}<Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "The call outcome wizard is unavailable."}<Button type="button" variant="outline" onClick={() => void walk.load()}>Try again</Button></span>} /></div></DashboardStage>;
+  if (!wizard || !view) return <DashboardStage><div className="flex w-full min-w-0 flex-col gap-6">{header}<Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "The call outcome wizard is unavailable."}<Button type="button" variant="outline" onClick={() => void walk.load()}>Try again</Button></span>} /></div></DashboardStage>;
 
   const { node, multi, selected, completed, chosen, isCallback, orderedSteps, firstSequence, nodesById, walking, callbackAt, customerZone } = view;
   const verification = wizard.verification ?? null;
@@ -262,7 +262,7 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
 
   if (completed) {
     return (
-      <DashboardStage ribbon>
+      <DashboardStage>
         <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
           {header}
           <div className="w-full max-w-[760px]">
@@ -286,7 +286,7 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
   }
 
   return (
-    <DashboardStage ribbon>
+    <DashboardStage>
       <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
         {header}
         {readOnly && <Callout tone="info" title="Your account is read-only: the outcome cannot be changed." />}

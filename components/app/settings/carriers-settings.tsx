@@ -45,7 +45,6 @@ import {
   type AppointmentChange,
 } from "@/lib/appointments/tickModel";
 import type { CarriersPayload } from "@/lib/salesSettings/views";
-import type { FactReportView } from "@/lib/carriers/factReportConstants";
 
 type Vault = {
   carriers: { id: string; name: string }[];
@@ -96,7 +95,6 @@ function Kicker({ id, text, hint }: { id: string; text: string; hint?: string })
 export function CarriersSettings({ carrierRules = false }: { carrierRules?: boolean } = {}) {
   const [vault, setVault] = useState<Vault | null>(null);
   const [sales, setSales] = useState<Sales>(null);
-  const [reports, setReports] = useState<{ reports: FactReportView[]; available: boolean }>({ reports: [], available: false });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("carriers");
   const [carrierId, setCarrierId] = useState<string | null>(null);
@@ -134,14 +132,8 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
     const response = await fetch("/api/app/settings/sales/carriers", { cache: "no-store" });
     setSales(response.ok ? ((await response.json().catch(() => null)) as Sales) : null);
   }, []);
-  // The agency's reports to Insurvas (20261027200000). Until that is applied, available stays false
-  // and Tell us writes an email instead.
-  const loadReports = useCallback(async () => {
-    const response = await fetch("/api/app/carrier-fact-reports", { cache: "no-store" });
-    if (response.ok) setReports((await response.json()) as { reports: FactReportView[]; available: boolean });
-  }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the section's external data, loaded once
-  useEffect(() => { void loadVault(); void loadSales(); void loadReports(); }, [loadVault, loadSales, loadReports]);
+  useEffect(() => { void loadVault(); void loadSales(); }, [loadVault, loadSales]);
   const loaded = vault !== null;
   useEffect(() => {
     if (!loaded) return;
@@ -217,7 +209,7 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
   }
 
   // One step (2026-10-27): the carrier is switched on and, where Applications is on, put on the
-  // applications list too, so its card opens with its products and facts and the three things to finish.
+  // applications list too, so its card opens with its products and the three things to finish.
   async function addCarrier(id: string, name: string) {
     setBusy(true);
     const result = await send("/api/app/carrier-library/tenant-carriers", "PATCH", { carrier_id: id, contracted: true });
@@ -317,10 +309,8 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
               salesAvailable={sales !== null}
               productLines={sales?.productLines ?? []}
               canEdit={sales?.canEdit ?? true}
-              reports={reports.reports.filter((report) => report.carrierId === current.id)}
-              reportsAvailable={reports.available}
               onSetStates={() => { setStep("states"); setQuery(""); setFilter("all"); }}
-              onSaved={async () => { await Promise.all([loadVault(), loadSales(), loadReports()]); }}
+              onSaved={async () => { await Promise.all([loadVault(), loadSales()]); }}
             />
           ) : (
             <div className={cn(CARD, "grid place-items-center p-6 text-sm text-[var(--muted)]")}>Add a carrier to set it up.</div>

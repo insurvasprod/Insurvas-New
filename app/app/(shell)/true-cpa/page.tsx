@@ -16,5 +16,5 @@ export default async function TrueCpaPage() {
   // first paint instead of after the shell, hydration and a second request. A failure here is not a
   // failed page: the workspace fetches it itself and shows its own error.
   const initialReport = await getVendorScorecard(guard.context.tenantId, {}, guard.entitlement.access === "read_only").catch(() => null);
-  return <DashboardStage ribbon><TrueCpaWorkspace initialReport={initialReport} /></DashboardStage>;
+  return <DashboardStage><TrueCpaWorkspace initialReport={initialReport} /></DashboardStage>;
 }
