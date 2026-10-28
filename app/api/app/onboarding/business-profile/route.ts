@@ -3,15 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { deriveRecommendedSetupSteps } from "@/lib/signup/constants";
 import { resolveSignupContext } from "@/lib/signup/context";
+import { PROFILE_EDITABLE_STATES, signupDestination } from "@/lib/signup/destination";
 import { businessProfileSchema } from "@/lib/signup/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  // awaiting_payment too: the owner may correct the profile while checkout is pending. The RPC keeps
-  // that state (migration 20261015580000), so the open checkout is not lost.
-  if (context.userStatus !== "active" || !["business_profile", "ready_for_checkout", "awaiting_payment"].includes(context.onboardingState)) {
+  // Before, during and after payment (migration 20261028200000): the profile is asked after checkout
+  // and at first login, and the RPC never moves a tenant backwards.
+  if (context.userStatus !== "active" || !(PROFILE_EDITABLE_STATES as readonly string[]).includes(context.onboardingState)) {
     return NextResponse.json({ error: "Verify your email before completing the business profile" }, { status: 409 });
   }
 
@@ -68,6 +69,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not save your business profile" }, { status: 500 });
   }
 
-  // Step 4 of 5 is the plan (owner, 2026-10-26), then Payment.
-  return NextResponse.json({ ok: true, redirectTo: "/app/onboarding/plan", setupSteps });
+  // Wherever the sign-up stands after saving: the plan or checkout if payment is still to come, the
+  // app once the plan has started (payment comes first since migration 20261028200000).
+  const savedState = String(data[0].onboarding_state ?? context.onboardingState);
+  return NextResponse.json({ ok: true, redirectTo: signupDestination({ userStatus: "active", onboardingState: savedState }) ?? "/app/dashboard", setupSteps });
 }

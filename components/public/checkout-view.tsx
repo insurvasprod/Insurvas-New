@@ -28,7 +28,7 @@ export type CheckoutViewProps = {
   failed?: boolean;
   /** CHECKOUT_PAYMENT_MODE=none: the button starts the plan at once; no card, no provider. */
   noPayment?: boolean;
-  /** Add-ons ticked on Step 4 of 5. They are attached when the plan starts and billed on the Insurvas invoice. */
+  /** Add-ons ticked on Step 3 of 5. They are attached when the plan starts and billed on the Insurvas invoice. */
   addons?: { name: string; price: string; cycle: BillingCycle }[];
   /** Prefills the email field in Whop's form. */
   email?: string;
@@ -91,7 +91,7 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
           <h2 className={cn("mt-1 text-2xl font-semibold leading-tight tracking-[-0.02em]", strong)}>{planName ?? "Your plan"}</h2>
           {planLine && <p className={cn("text-sm", muted)}>{planLine}</p>}
         </div>
-        {/* Back to Step 4 of 5: a buyer who picked the wrong plan must not be stuck paying for it. */}
+        {/* Back to Step 3 of 5: a buyer who picked the wrong plan must not be stuck paying for it. */}
         <Link href="/app/onboarding/plan" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
       </div>
 
@@ -123,7 +123,7 @@ export function CheckoutView(props: CheckoutViewProps) {
   const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production" } = props;
 
   const body = (
-    <FunnelFrame step={5} wide back={{ href: "/app/onboarding/plan", label: "Back to your plan" }} aside={<Receipt props={props} dark />}>
+    <FunnelFrame step={4} wide back={{ href: "/app/onboarding/plan", label: "Back to your plan" }} aside={<Receipt props={props} dark />}>
       <FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day free trial` : "Start your plan"}>
         {noPayment
           ? "No card needed. Nothing is charged."

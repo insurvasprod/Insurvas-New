@@ -6,6 +6,7 @@ import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { fetchPlans } from "@/lib/plans/queries";
 import { availableBillingCycles, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { audienceForPlanType } from "@/lib/agency/constants";
+import { markPlanChosen } from "@/lib/signup/planChoiceQueries";
 import { nameFromEmail, publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
   const acceptance = verifySignupAcceptance(input.acceptedDocumentIds, required.documents);
   if (!acceptance.ok) return NextResponse.json({ error: acceptance.error }, { status: 400 });
 
-  // The plan is chosen on Step 4 of 5 (owner, 2026-10-26). Until then the workspace holds the plan
+  // The plan is chosen on Step 3 of 5 (owner, 2026-10-26). Until then the workspace holds the plan
   // picked on the pricing page, or the default one, so signup_selections is never empty.
   const publicPlans = (await fetchPlans({ includeArchived: false })).filter((candidate) => candidate.is_public);
   const plan = input.planCode
@@ -131,6 +132,8 @@ export async function POST(request: NextRequest) {
 
   const created = data?.[0];
   if (!created) return NextResponse.json({ error: "Could not create your account" }, { status: 500 });
+  // A plan picked on the pricing page is not asked for again (manager review, 2026-10-28).
+  if (input.planCode) await markPlanChosen(created.tenant_id);
 
   // After the user exists and before they are let in. Throws rather than logs: an acceptance we
   // failed to record is one we cannot prove, and the account has just been created on the strength

@@ -89,7 +89,7 @@ export type BusinessProfileInitial = {
 export type AboutYouInitial = { firstName: string; lastName: string; phone: string };
 
 /**
- * Step 3 of 5, About you. The person (name, phone) and the business. The answers decide the setup
+ * Step 5 of 5, About you (after payment). The person (name, phone) and the business. The answers decide the setup
  * checklist shown after checkout; the server derives it when it saves the profile.
  *
  * `audience` is who signed up, from the plan picked on the pricing page: one independent agent reads

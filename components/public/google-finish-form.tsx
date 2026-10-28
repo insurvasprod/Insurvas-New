@@ -60,7 +60,7 @@ export function GoogleFinishForm({ email, name }: { email: string; name: string 
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not create your account. Try again."); return; }
-      router.replace(body?.redirectTo ?? "/app/onboarding/business-profile");
+      router.replace(body?.redirectTo ?? "/app/onboarding/plan");
     } catch {
       setError("Could not reach Insurvas. Check your connection and press the button again.");
     } finally {

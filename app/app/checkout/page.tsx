@@ -58,7 +58,7 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
         supabase.from("plan_prices").select("*").eq("plan_id", selection.plan_id).maybeSingle<PlanPrices>(),
         supabase.from("plan_features").select("feature_key").eq("plan_id", selection.plan_id),
         supabase.from("plan_limits").select("max_seats").eq("plan_id", selection.plan_id).maybeSingle<{ max_seats: number | null }>(),
-        // The seats and add-ons from Step 4 of 5 (kept once 20261026300000 is applied).
+        // The seats and add-ons from Step 3 of 5 (kept once 20261026300000 is applied).
         readPlanChoice(context.tenantId),
       ])
     : [{ data: null }, { data: null }, { data: null }, { data: null }, null];

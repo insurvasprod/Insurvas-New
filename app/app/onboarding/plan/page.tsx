@@ -4,13 +4,14 @@ import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
 import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary } from "@/components/app/plan-choice";
 import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
+import { PLAN_CHOOSABLE_STATES } from "@/lib/signup/destination";
 import { fetchPlanChoices, readPlanChoice } from "@/lib/signup/planChoiceQueries";
 
 /** The plan can be chosen after Your agency, and changed again from Payment until the plan starts. */
-const CHOOSABLE = new Set(["ready_for_checkout", "awaiting_payment"]);
+const CHOOSABLE = new Set<string>(PLAN_CHOOSABLE_STATES);
 
 /**
- * Step 4 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, and seats. No
+ * Step 3 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, and seats. No
  * add-on modules at sign-up (owner, 2026-10-27). The brand story makes way for a live summary of the choice.
  */
 export default async function PlanStepPage() {
@@ -21,7 +22,7 @@ export default async function PlanStepPage() {
   const [{ plans, modules }, saved] = await Promise.all([fetchPlanChoices(), readPlanChoice(context.tenantId)]);
   if (plans.length === 0) {
     return (
-      <FunnelFrame step={4}>
+      <FunnelFrame step={3}>
         <FunnelHeading title="Choose your plan">No plan is open for sign-up right now. Write to support@insurvas.com and we will set you up.</FunnelHeading>
       </FunnelFrame>
     );
@@ -35,7 +36,7 @@ export default async function PlanStepPage() {
       now={new Date().toISOString()}
       noPayment={checkoutPaymentMode() === "none"}
     >
-      <FunnelFrame step={4} wide aside={<PlanChoiceSummary />}>
+      <FunnelFrame step={3} wide aside={<PlanChoiceSummary />}>
         <PlanChoiceForm />
       </FunnelFrame>
     </PlanChoiceProvider>

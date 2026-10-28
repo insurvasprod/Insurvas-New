@@ -5,6 +5,7 @@ import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds,
 import { fetchPlans } from "@/lib/plans/queries";
 import { availableBillingCycles, BILLING_CYCLES, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { createEmailVerification } from "@/lib/signup/verification";
+import { markPlanChosen } from "@/lib/signup/planChoiceQueries";
 import { nameFromEmail, phoneField } from "@/lib/signup/schemas";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
 import { recordLastLogin } from "@/lib/loginEvents/record";
@@ -100,6 +101,8 @@ export async function POST(request: NextRequest) {
   }
   const created = data?.[0];
   if (!created) return NextResponse.json({ error: "Could not create your account" }, { status: 500 });
+  // A plan picked on the pricing page rode through Google in the signed cookie: not asked for again.
+  if (google.plan && plan.code === google.plan) await markPlanChosen(created.tenant_id);
 
   // An acceptance we failed to record is one we cannot prove (as in the email sign-up).
   try {
@@ -120,7 +123,7 @@ export async function POST(request: NextRequest) {
     recordSecurityEvent({ userId: created.user_id, tenantId: created.tenant_id, type: "signed_in_with_google", request }),
   ]);
   const { token } = await issueTenantSession({ userId: created.user_id, tenantId: created.tenant_id, sessionVersion: 0, request });
-  const response = NextResponse.json({ ok: true, redirectTo: confirmed?.[0] ? "/app/onboarding/business-profile" : "/app/verify-email" });
+  const response = NextResponse.json({ ok: true, redirectTo: confirmed?.[0] ? "/app/onboarding/plan" : "/app/verify-email" });
   response.cookies.set(TENANT_SESSION_COOKIE, token, tenantSessionCookieOptions);
   response.cookies.set(GOOGLE_SIGNUP_COOKIE, "", { ...googleSignupCookieOptions, maxAge: 0 });
   return response;

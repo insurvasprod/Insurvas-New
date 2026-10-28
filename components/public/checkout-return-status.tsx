@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AFTER_PAYMENT } from "@/lib/signup/destination";
 import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -40,12 +41,13 @@ export function CheckoutReturnStatus() {
           if (cancelled) return;
           if (response.ok && body?.status === "confirmed") {
             setPhase("activating");
-            // Straight into the workspace (owner, 2026-10-26: not the upload-a-statement welcome step).
-            router.replace("/app/dashboard");
+            // On to "About you", the last step; it forwards to the workspace when already filled
+            // (manager review, 2026-10-28: payment before the business questions).
+            router.replace(AFTER_PAYMENT);
             return;
           }
           if (response.ok && body?.status === "done") {
-            router.replace("/app/dashboard");
+            router.replace(AFTER_PAYMENT);
             return;
           }
           if (response.status === 401) {

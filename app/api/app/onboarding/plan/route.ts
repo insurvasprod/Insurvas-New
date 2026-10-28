@@ -1,16 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { resolveSignupContext } from "@/lib/signup/context";
+import { PLAN_CHOOSABLE_STATES } from "@/lib/signup/destination";
 import { checkPlanChoice } from "@/lib/signup/planChoice";
 import { fetchPlanChoices, savePlanChoice } from "@/lib/signup/planChoiceQueries";
 import { planChoiceSchema } from "@/lib/signup/schemas";
 
-/** Step 4 of 5: saves the plan, billing cycle, seats and add-ons, then sends the owner to Payment. */
+/** Step 3 of 5: saves the plan, billing cycle, seats and add-ons, then sends the owner to Payment. */
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  // After Your agency and before the plan starts; awaiting_payment too, so "Change plan" on Payment works.
-  if (context.userStatus !== "active" || !["ready_for_checkout", "awaiting_payment"].includes(context.onboardingState)) {
+  // Verified and not yet paid (payment comes before the business profile since 20261028200000);
+  // awaiting_payment too, so "Change plan" on Payment works.
+  if (context.userStatus !== "active" || !(PLAN_CHOOSABLE_STATES as readonly string[]).includes(context.onboardingState)) {
     return NextResponse.json({ error: "Finish the earlier sign-up steps first" }, { status: 409 });
   }
 

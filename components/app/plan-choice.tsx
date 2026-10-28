@@ -61,7 +61,7 @@ const seatsFor = (plan: PlanChoiceOption, wanted: number | null) => {
 };
 
 /**
- * Step 4 of 5, Your plan (owner pick B, 2026-10-26). One state shared by the form on the left and the
+ * Step 3 of 5, Your plan (owner pick B, 2026-10-26). One state shared by the form on the left and the
  * summary that replaces the brand story on the right, so the total moves as the owner chooses.
  */
 export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, children }: {
@@ -362,7 +362,7 @@ function TrialLine({ className }: { className?: string }) {
 function ContinueButton() {
   const { saving, save } = useChoice();
   return (
-    <FunnelActions back="/app/onboarding/business-profile">
+    <FunnelActions back="/app/verify-email">
       <Button type="button" className="h-11" disabled={saving} onClick={save}>
         {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
         {saving ? "Saving…" : "Continue to payment"}

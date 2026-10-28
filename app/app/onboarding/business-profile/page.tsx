@@ -4,11 +4,12 @@ import { FunnelFrame } from "@/components/app/funnel-frame";
 import { BusinessProfileForm, type AboutYouInitial, type BusinessProfileInitial } from "@/components/app/business-profile-form";
 import { audienceForPlanType } from "@/lib/agency/constants";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
+import { PROFILE_EDITABLE_STATES } from "@/lib/signup/destination";
 import { nameFromEmail } from "@/lib/signup/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-/** States in which the profile may be (re)written: before checkout, and while checkout is pending. */
-const EDITABLE = new Set(["business_profile", "ready_for_checkout", "awaiting_payment"]);
+/** States in which the profile may be (re)written: before, during and after payment (migration 20261028200000). */
+const EDITABLE = new Set<string>(PROFILE_EDITABLE_STATES);
 
 /** Who is signing up, from the plan picked on the pricing page (or the default one): one agent or an agency. */
 async function signupAudience(tenantId: string): Promise<"individual" | "agency"> {
@@ -37,6 +38,10 @@ export default async function BusinessProfilePage() {
     supabase.from("users").select("phone").eq("id", context.userId).maybeSingle(),
     signupAudience(context.tenantId),
   ]);
+  // After payment this is the last step; an owner who already filled it goes straight to the app.
+  const paid = context.onboardingState === "completed";
+  if (paid && data) redirect("/app/dashboard");
+
   const initial: BusinessProfileInitial | null = data
     ? {
         businessName: data.business_name,
@@ -53,11 +58,12 @@ export default async function BusinessProfilePage() {
   const [firstName = "", ...rest] = realName ? realName.split(/\s+/) : [];
   const person: AboutYouInitial = { firstName, lastName: rest.join(" "), phone: user?.phone ?? "" };
 
-  // Back is a button beside Continue, at the bottom (manager review, 2026-10-28); no link above the
-  // heading and no Sign out under the form.
+  // Step 5 of 5, after payment (manager review, 2026-10-28). Back is a button beside Continue; once the
+  // plan is paid there is no step to go back to, so it is left out. Before payment (someone who opened
+  // this page directly) it goes to the plan.
   return (
-    <FunnelFrame step={3} wide>
-      <BusinessProfileForm initial={initial} person={person} audience={audience} back="/app/verify-email" />
+    <FunnelFrame step={5} wide>
+      <BusinessProfileForm initial={initial} person={person} audience={audience} back={paid ? undefined : "/app/onboarding/plan"} />
     </FunnelFrame>
   );
 }
