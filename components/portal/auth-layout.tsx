@@ -187,7 +187,8 @@ export type AuthStoryRow = {
  */
 export function AuthStory({ label, title, rowsTitle, rows }: { label?: string; title: string; rowsTitle?: string; rows: AuthStoryRow[] }) {
   return (
-    <div className="m-stagger mx-auto w-full max-w-[38rem]">
+    // lg:pl-10: the rows are narrower than the block, so a centred block read as sitting left (owner, 2026-10-28).
+    <div className="m-stagger mx-auto w-full max-w-[38rem] lg:pl-10">
       {label && <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--nav-muted)]">{label}</div>}
       <h2 className={cn("max-w-[520px] font-[family-name:var(--font-display)] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--on-dark)] lg:text-[clamp(2.75rem,4.2vw,3.75rem)]", label && "mt-3.5")}>
         {title}
