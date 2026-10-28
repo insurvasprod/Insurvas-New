@@ -34,6 +34,7 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | v3 rule | Section | Status |
 |---|---|---|
 | Glossy stat card (`StatRow` / `StatCard`) | §4a | Live for new and reworked pages |
+| Home dashboard layout | §4b | Live (`/app/dashboard`, preview on `/design/home`) |
 | 8px corners on buttons and inputs | §5a | Live |
 | Inline filter panel under the toolbar | §6a | Live for new and reworked lists |
 | No avatars for clients, leads or carriers | §10 | Live |
@@ -124,6 +125,32 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
   composition card (for example Active policies). Both use the same glossy surface.
 - Surface: soft top-lit gradient, brand sheen in the top-left, bright top rim, layered shadow, 2px
   hover lift (none under reduced motion). Text always sits on opaque colour.
+
+### 4b. Home dashboard (v3)
+**Status:** Live.
+
+The agent home (`app/app/(shell)/dashboard/page.tsx`, redesign 2026-10-28) replaces the launchpad's
+grid of look-alike tiles. Every role sees the same order, narrowed by `resolveRoleHome`:
+
+1. `PageHeader`: greeting, date, the next-callback chip, at most three actions (one primary).
+2. Setup, while unfinished: one slim row (`HomeSetup`), never a tile.
+3. **Needs you** (`HomeAttention`): one row of small links, counts above zero only, red before amber.
+   Nothing waiting is one line ("All caught up"), not an empty card.
+4. Four stat cards (`HomeKpis`, picked per role in `lib/dashboard/homeView.ts`). On the money
+   profile the money figures take this row (`HomeMoneyCards`).
+5. A 12-column row: the 14-day calls chart (8) beside today's appointments and callbacks (4); 7 + 5
+   when the content area is under 1152px. Container queries, not viewport breakpoints, because
+   the sidebar takes its share.
+6. A 12-column row: money and retention as one ledger (8) beside top dialers (4).
+7. **Jump to**: every module as a one-line link with its figure (`HomeShortcuts`).
+
+- Panels use `HomePanel`: the stat card's glossy surface, a 15px title with its period, one
+  "View ›" link, an optional footer of facts. Panels do not lift on hover.
+- No tile numbers, no "Open →" on every block, no tabs, no green button inside a panel.
+- Every number comes from a read the page already makes; nothing new is queried for the layout.
+  A figure that was not read is left out, never drawn as 0.
+- Check a change on `/design/home` (every role, busy, quiet and new) at 1536×826, 1366×657 and
+  375 wide before calling it done.
 
 ## 5. Buttons and controls — one height
 - `<Button>` default size (h-9 / 36px) for every page and toolbar action. Do not pass `h-10`, `h-11`,

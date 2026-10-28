@@ -1,33 +1,34 @@
 import { redirect } from "next/navigation";
 import { after as afterResponse } from "next/server";
 import Link from "next/link";
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
 
 import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
-import { tileFigureShown, visibleDashboardTiles } from "@/lib/dashboard/tiles";
+import { tileFigureShown, visibleDashboardTiles, type DashboardTile } from "@/lib/dashboard/tiles";
 import { setupChecklistForState } from "@/lib/dashboard/checklist";
 import { loadSetupGuideState, loadSetupProfile, loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
-import { firstOpenable, HOME_MONEY, HOME_SECTIONS, moneyHref, resolveRoleHome, type HomeMoneyKey } from "@/lib/dashboard/roleHome";
+import { firstOpenable, HOME_SECTIONS, resolveRoleHome, type HomeMoneyKey } from "@/lib/dashboard/roleHome";
 import { greeting, longDate } from "@/lib/dashboard/todayMath";
+import { attentionItems, homeRole, kpiCards, type AttentionLinks, type HomeRole } from "@/lib/dashboard/homeView";
 import { scopeFor } from "@/lib/agency/visibility";
 import { scopeWithSelf } from "@/lib/dashboard/scope";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { getDashboardToday, readFirstName, type DashboardToday } from "@/lib/dashboard/today";
 import { getDashboardMoney, type DashboardMoney } from "@/lib/dashboard/money";
-import type { TileViewer } from "@/lib/dashboard/summaries";
+import { tileMetric, type TileViewer } from "@/lib/dashboard/summaries";
+import { listDueCallbacks } from "@/lib/callbacks/service";
 import { SetupCelebration } from "@/components/app/setup/setup-celebration";
 import { NextCallback } from "@/components/app/dashboard-today";
-import {
-  AppointmentsTile, BestHourTile, CallbacksTile, CloseOutRateTile, DialerTile, FloorTile, LapseTile, LicencesTile, ModuleTile, MoneyTile, OutcomesTile,
-  PremiumTile, SetterWeekTile, SetupTile, TeamTile, UpgradeTile, WeekTile,
-} from "@/components/app/home-tiles";
-import { CloseOutTile, PendingTile } from "@/components/app/home-client-tiles";
-import { DashTileLoading } from "@/components/ui/dash-tile";
-import { Launchpad, type LaunchCell, type LaunchSpace } from "@/components/ui/launchpad";
+import { HomeAttention } from "@/components/app/home/home-attention";
+import { HomeSetup, HomeShortcuts, ShortcutLink, moduleIcon } from "@/components/app/home/home-extras";
+import { HomeKpis } from "@/components/app/home/home-kpis";
+import { HomeMoneyCards } from "@/components/app/home/home-money-cards";
+import { HomePanelLoading, KpiRowLoading } from "@/components/app/home/home-panel";
+import { HomeLowerRow, HomeMainRow, type MainRowLinks } from "@/components/app/home/home-rows";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { Button } from "@/components/ui/button";
@@ -36,41 +37,29 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/page-states";
 
 /**
- * The agent home: one role specific launchpad, with the live header and guided next step.
+ * The agent home (redesign 2026-10-28, tasks/home-dashboard-plan.md): what needs a person, the
+ * role's four figures, then the day in two rows — calls beside today's schedule, money beside the
+ * team — and every module as a compact link. It replaces the launchpad's grid of look-alike tiles.
  *
- *   header      the greeting in the agency's clock, the live next callback, the role's actions
- *   launchpad   workspaces of tiles — Today, Money, Everything — numbered for 1–9, arranged per person.
+ *   header       greeting in the agency's clock, the live next callback, the role's actions
+ *   setup        the checklist as one slim row, pinned until complete (LA-0.3)
+ *   needs you    transfers, callbacks, licences, lapse signals, close-outs, pending cases: counts > 0
+ *   stat row     four glossy cards per role (UI-CONSISTENCY §4a); the money profile's money figures
+ *   main row     calls over 14 days (8 of 12 columns) · today's appointments and callbacks (4)
+ *   lower row    money and retention (LA-4.18) with the one upgrade line · top dialers (owner)
+ *   jump to      the module registry (LA-0.3) with each figure this reader may see
  *
- * Nothing the old sections carried is lost; each is a tile now, under the same gates: what a role's
- * home shows is still `resolveRoleHome` (lib/dashboard/roleHome), section by section — the setup
- * checklist pinned until complete (LA-0.3), the close-out list (decision 12), pending cases (LA-3.15 /
- * 3.18 / 3.26), the upgrade tile (Sixteen #15), callbacks, the money and retention figures (LA-4.18),
- * and every module (LA-0.3's registry) in "Everything".
- *
- * AG-0.5 · producer isolation is unchanged: the session's producer scope (`scopeFor(context)`) goes to
- * every read — today (getDashboardToday), money (getDashboardMoney), callbacks (scope + self),
- * module figures (tileMetric's viewer); pending and close-out tiles
- * call routes that scope themselves.
+ * What a role's home shows is still `resolveRoleHome` (lib/dashboard/roleHome), section by section,
+ * so nothing appears that the reader cannot open. AG-0.5 producer isolation is unchanged: the
+ * session's scope (`scopeFor(context)`) goes to every read — today, money, callbacks (scope + self),
+ * module figures (tileMetric's viewer); close-out and pending counts call routes that scope themselves.
  */
-
-/** The live next-callback chip in the header: waits on the same "today" read as the tiles. */
-async function NextCallbackSlot({ today, href, serverNow }: { today: Promise<DashboardToday | null>; href: string; serverNow: number }) {
-  const data = await today;
-  if (!data?.nextCallback) return null;
-  return <NextCallback callback={data.nextCallback} serverNow={serverNow} href={href} />;
-}
-
-/** A tile that reads: streamed in its own Suspense, a skeleton tile while it does. */
-function streamed(title: string, node: ReactNode) {
-  return <Suspense fallback={<DashTileLoading title={title} />}>{node}</Suspense>;
-}
-
 export default async function AgentDashboardPage() {
   const context = await resolveTenantContext();
   if (!context) redirect("/app/login");
 
-  // One round trip for everything the frame needs (as before): the plan, setup state, kill switches,
-  // the agency's zone, the reader's first name and the producer scope.
+  // One round trip for everything the frame needs: the plan, setup state, kill switches, the
+  // agency's zone, the reader's first name and the producer scope.
   const [entitlement, onboardingState, switches, setupProgress, setupProfile, setupGuide, workspaceZone, firstName, scope] = await Promise.all([
     getEntitlement(context.tenantId),
     getDashboardOnboardingState(context.tenantId),
@@ -93,109 +82,41 @@ export default async function AgentDashboardPage() {
 
   const shown = new Set(home.sections);
   const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role);
-  const dashboardRole = context.memberRole === "manager"
-    ? "manager"
-    : context.memberRole === "admin" || context.role === "owner"
-      ? "owner"
-      : context.role;
-  // A manager leads a team and sees no money (owner, 2026-10-25: "they will not see all the money"):
-  // no premium tile and no Money workspace, whatever the underlying role's home lists.
-  const noMoney = dashboardRole === "manager";
+  const role = homeRole(context.role, context.memberRole);
+  // A manager leads a team and sees no money (owner, 2026-10-25: "they will not see all the money").
+  const noMoney = role === "manager";
   // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
   const serverNow = Date.now();
   const zone = workspaceZone ?? "America/New_York";
 
-  // The money figures: the role's own line, plus the retention workspace's lapse and persistency.
-  const wanted: Array<{ key: HomeMoneyKey; href: string }> = [...home.money];
-  if (dashboardRole === "retention") {
-    for (const key of ["lapse", "persistency"] as const) {
-      const href = moneyHref(key, available, context.role);
-      if (href && !wanted.some((item) => item.key === key)) wanted.push({ key, href });
-    }
-  }
+  const wanted: Array<{ key: HomeMoneyKey; href: string }> = noMoney ? [] : [...home.money];
   const money: Promise<DashboardMoney | null> | null = wanted.length > 0 || home.upgrade
     ? getDashboardMoney({ context, wanted, upgrade: Boolean(home.upgrade), scope }).catch(() => null)
     : null;
-
-  // One "today" read for the tiles and header chip: only the groups this home uses.
+  // One "today" read for every section and the header chip: only the groups this home uses.
   const today: Promise<DashboardToday | null> = getDashboardToday({ tenantId: context.tenantId, userId: context.userId, role: context.role, available: [...available], now: serverNow, reads: home.reads, scope }).catch(() => null);
 
-  // ── The launchpad: Today, Money, Everything ────────────────────────────────────────────────────
-  const todayCells: LaunchCell[] = [];
-  const seen = new Set<string>();
-  const add = (cell: LaunchCell | null) => {
-    if (!cell || seen.has(cell.id)) return;
-    seen.add(cell.id);
-    todayCells.push(cell);
-  };
   const needHref = (key: string) => home.needs.find((need) => need.key === key)?.href ?? null;
   const activityHref = open(HOME_SECTIONS.activity.opens);
-  const dialerHref = open(["leads.dialer"]);
+  const calendarHref = open(HOME_SECTIONS.appointments.opens);
   const callbacksHref = home.nextCallbackHref;
-
-  const setupOpen = shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null;
-  if (setupOpen) add({ id: "setup", title: "Get set up", w: 2, h: 1, href: "/app/setup", node: <SetupTile checklist={checklist} /> });
-  if (shown.has("upgrade") && home.upgrade && money) add({ id: "upgrade", title: "Chargeback radar", w: 1, h: 1, href: home.upgrade.featureHref, node: streamed("Chargeback radar", <UpgradeTile money={money} featureHref={home.upgrade.featureHref} rowsHref={home.upgrade.rowsHref} />) });
-
-  for (const section of home.sections) {
-    if (section === "closeOut" && activityHref) add({ id: "closeOut", title: "Appointment close-out", w: 2, h: 1, href: activityHref, node: <CloseOutTile href={activityHref} /> });
-    if (section === "needs") {
-      const transfers = needHref("transfers");
-      if (transfers) add({ id: "floor", title: "Agent floor", w: 2, h: 1, href: transfers, node: streamed("Agent floor", <FloorTile today={today} href={transfers} />) });
-      const callbacks = needHref("callbacks");
-      if (callbacks && callbacksHref) add({ id: "callbacks", title: "Callbacks", w: 1, h: 2, href: callbacks, node: streamed("Callbacks", <CallbacksTile tenantId={context.tenantId} assigned={scopeWithSelf(scope, context.userId)} href={callbacks} />) });
-      const lapse = needHref("lapse");
-      if (lapse) add({ id: "lapse", title: "Lapse risk", w: 1, h: 1, href: lapse, node: streamed("Lapse risk", <LapseTile today={today} href={lapse} />) });
-      const licences = needHref("licences");
-      if (licences) add({ id: "licences", title: "Licences", w: 1, h: 1, href: licences, node: streamed("Licences", <LicencesTile today={today} href={licences} />) });
-    }
-    if (section === "figures") {
-      for (const figure of home.figures) {
-        if (["queue", "dials", "reached", "rate"].includes(figure.key)) add({ id: "dialer", title: "Dialer", w: 1, h: 1, href: dialerHref ?? figure.href, node: streamed("Dialer", <DialerTile today={today} href={dialerHref ?? figure.href} activityHref={activityHref} />) });
-        if (figure.key === "appointments") add({ id: "appointments", title: "Appointments", w: 1, h: 1, href: figure.href, node: streamed("Appointments", <AppointmentsTile today={today} href={figure.href} />) });
-        if (figure.key === "premium" && !noMoney) add({ id: "premium", title: "Premium · 30 days", w: 1, h: 1, href: figure.href, node: streamed("Premium · 30 days", <PremiumTile today={today} href={figure.href} />) });
-        if (["booked", "shown", "showRate"].includes(figure.key)) add({ id: "setterWeek", title: "Your week", w: 1, h: 1, href: figure.href, node: streamed("Your week", <SetterWeekTile today={today} href={figure.href} />) });
-        if (figure.key === "closeOut") add({ id: "closeOutRate", title: "Your close-out", w: 1, h: 1, href: figure.href, node: streamed("Your close-out · 30 days", <CloseOutRateTile today={today} href={figure.href} />) });
-        if (figure.key === "dials7") add({ id: "week", title: "This week", w: 2, h: 1, href: figure.href, node: streamed("This week", <WeekTile today={today} href={figure.href} />) });
-      }
-    }
-    if (section === "callbacks" && callbacksHref) add({ id: "callbacks", title: "Callbacks", w: 1, h: 2, href: callbacksHref, node: streamed("Callbacks", <CallbacksTile tenantId={context.tenantId} assigned={scopeWithSelf(scope, context.userId)} href={callbacksHref} />) });
-    if (section === "appointments") {
-      const href = open(HOME_SECTIONS.appointments.opens);
-      if (href) add({ id: "appointments", title: "Appointments", w: 1, h: 1, href, node: streamed("Appointments", <AppointmentsTile today={today} href={href} />) });
-    }
-    if (section === "activity" && activityHref) {
-      add({ id: "week", title: "This week", w: 2, h: 1, href: activityHref, node: streamed("This week", <WeekTile today={today} href={activityHref} />) });
-      add({ id: "outcomes", title: "Call outcomes", w: 1, h: 1, href: activityHref, node: streamed("Call outcomes · 7 days", <OutcomesTile today={today} href={activityHref} />) });
-      add({ id: "bestHour", title: "Best hour to call", w: 1, h: 1, href: activityHref, node: streamed("Best hour to call", <BestHourTile today={today} href={activityHref} />) });
-    }
-    if (section === "team" && activityHref) add({ id: "team", title: "Top dialers", w: 1, h: 1, href: activityHref, node: streamed("Top dialers · 7 days", <TeamTile today={today} href={activityHref} />) });
-    if (section === "pending") add({ id: "pending", title: "Pending cases", w: 1, h: 1, href: "/app/pending", node: <PendingTile /> });
-  }
-
-  const moneyCells: LaunchCell[] = money && !noMoney ? home.money.map((item) => ({ id: `money-${item.key}`, title: HOME_MONEY[item.key].label, w: item.key === "owed" ? 2 : 1, h: 1, href: item.href, node: streamed(HOME_MONEY[item.key].label, <MoneyTile money={money} figureKey={item.key} />) })) : [];
-  // On a money profile (the bookkeeper, a money-only plan) the money tiles ARE the day's work.
-  if (home.moneyAs === "strip") moneyCells.forEach((cell) => add(cell));
-
+  const attentionLinks: AttentionLinks = { transfers: needHref("transfers"), callbacks: needHref("callbacks"), lapse: needHref("lapse"), licences: needHref("licences") };
+  const mainLinks: MainRowLinks = {
+    activity: shown.has("activity") ? activityHref : null,
+    appointments: shown.has("appointments") || home.figures.some((figure) => figure.key === "appointments") ? calendarHref : null,
+    callbacks: (shown.has("callbacks") || needHref("callbacks")) && callbacksHref ? callbacksHref : null,
+    calendar: calendarHref,
+  };
+  const assigned = scopeWithSelf(scope, context.userId);
+  const callbacks = mainLinks.callbacks ? listDueCallbacks(context.tenantId, assigned).catch(() => null) : Promise.resolve(null);
+  const upgrade = shown.has("upgrade") ? home.upgrade : null;
   const viewer: TileViewer | undefined = scope !== null ? { userId: context.userId, scope } : undefined;
-  const everything: LaunchCell[] = modules.map((tile) => ({
-    id: `module-${tile.key}`,
-    title: tile.label,
-    w: 1,
-    h: 1,
-    href: tile.path,
-    // A scope with no reader to scope by fails closed: the way in, without a number.
-    node: streamed(tile.label, <ModuleTile tile={tile} tenantId={context.tenantId} viewer={viewer} figure={tileFigureShown(tile, context.role) && (scope === null || viewer !== undefined)} />),
-  }));
-
-  const spaces: LaunchSpace[] = [
-    { key: "today", label: "Today", cells: todayCells },
-    ...(home.moneyAs === "list" && moneyCells.length ? [{ key: "money", label: "Money", cells: moneyCells }] : []),
-    ...(everything.length ? [{ key: "everything", label: "Everything", cells: everything }] : []),
-  ];
+  const setupOpen = shown.has("setup") && !checklist.complete && setupGuide.hiddenAt === null;
+  const moneyProfile = home.moneyAs === "strip";
 
   const [primary, ...secondary] = home.actions;
   const name = firstName ? `, ${firstName}` : "";
+  const nothing = !moneyProfile && home.figures.length === 0 && home.needs.length === 0 && !mainLinks.activity && !mainLinks.appointments && !mainLinks.callbacks && modules.length === 0 && !money;
 
   return (
     <DashboardStage>
@@ -222,17 +143,119 @@ export default async function AgentDashboardPage() {
           }
         />
 
-        {spaces.some((space) => space.cells.length > 0) ? (
-          <Launchpad storageKey={`insurvas:home:${context.userId}:${dashboardRole}`} spaces={spaces.filter((space) => space.cells.length > 0)} />
+        {setupOpen && <HomeSetup checklist={checklist} />}
+
+        {moneyProfile ? (
+          money && <Suspense fallback={<KpiRowLoading />}><MoneyCardsSlot money={money} /></Suspense>
         ) : (
-          // Two causes, two answers: a plan granting nothing is the owner's to fix; a role with no tile is ours.
+          <>
+            <Suspense fallback={<div aria-hidden="true" className="h-9" />}>
+              <AttentionSlot today={today} links={attentionLinks} pendingHref={shown.has("pending") ? "/app/pending" : null} closeOutHref={shown.has("closeOut") ? activityHref : null} />
+            </Suspense>
+            {home.figures.length > 0 && (
+              <Suspense fallback={<KpiRowLoading count={Math.min(4, home.figures.length)} />}>
+                <KpiSlot today={today} figures={home.figures} role={role} />
+              </Suspense>
+            )}
+          </>
+        )}
+
+        {(mainLinks.activity || mainLinks.appointments || mainLinks.callbacks) && (
+          <Suspense fallback={<MainRowLoading activity={Boolean(mainLinks.activity)} />}>
+            <MainRowSlot today={today} callbacks={callbacks} links={mainLinks} agencyView={role === "owner"} />
+          </Suspense>
+        )}
+
+        {!moneyProfile && (money || shown.has("team")) && (
+          <Suspense fallback={null}>
+            <LowerRowSlot money={noMoney ? null : money} today={today} team={shown.has("team")} teamHref={activityHref} upgrade={upgrade} />
+          </Suspense>
+        )}
+
+        {modules.length > 0 && (
+          <HomeShortcuts>
+            {modules.map((tile) => {
+              const figure = tileFigureShown(tile, context.role) && (scope === null || viewer !== undefined);
+              const link = <ShortcutLink icon={moduleIcon(tile.icon)} label={tile.label} href={tile.path} />;
+              return figure ? <Suspense key={tile.key} fallback={link}><ShortcutSlot tile={tile} tenantId={context.tenantId} viewer={viewer} /></Suspense> : <ShortcutLink key={tile.key} icon={moduleIcon(tile.icon)} label={tile.label} href={tile.path} />;
+            })}
+          </HomeShortcuts>
+        )}
+
+        {nothing && (
+          // Two causes, two answers: a plan granting nothing is the owner's to fix; a role with nothing is ours.
           <Card>
             {available.length === 0
               ? <EmptyState title="No workspace feature is active yet" hint="Ask your account owner to activate one." />
-              : <EmptyState title="No dashboard shortcuts for your role yet" hint="Use the sidebar to reach your screens." />}
+              : <EmptyState title="No dashboard figures for your role yet" hint="Use the sidebar to reach your screens." />}
           </Card>
         )}
       </div>
     </DashboardStage>
+  );
+}
+
+/* ── Streamed slots: each waits on its own read, so the header never waits ────────────────────── */
+
+/** The live next-callback chip in the header: waits on the same "today" read as the sections. */
+async function NextCallbackSlot({ today, href, serverNow }: { today: Promise<DashboardToday | null>; href: string; serverNow: number }) {
+  const data = await today;
+  if (!data?.nextCallback) return null;
+  return <NextCallback callback={data.nextCallback} serverNow={serverNow} href={href} />;
+}
+
+async function AttentionSlot({ today, links, pendingHref, closeOutHref }: { today: Promise<DashboardToday | null>; links: AttentionLinks; pendingHref: string | null; closeOutHref: string | null }) {
+  const data = await today;
+  return <HomeAttention items={attentionItems(data, links)} pendingHref={pendingHref} closeOutHref={closeOutHref} />;
+}
+
+async function KpiSlot({ today, figures, role }: { today: Promise<DashboardToday | null>; figures: Parameters<typeof kpiCards>[1]; role: HomeRole }) {
+  return <HomeKpis cards={kpiCards(await today, figures, role)} />;
+}
+
+async function MoneyCardsSlot({ money }: { money: Promise<DashboardMoney | null> }) {
+  const data = await money;
+  return <HomeMoneyCards figures={data?.figures ?? []} />;
+}
+
+async function MainRowSlot({ today, callbacks, links, agencyView }: { today: Promise<DashboardToday | null>; callbacks: Promise<Awaited<ReturnType<typeof listDueCallbacks>> | null>; links: MainRowLinks; agencyView: boolean }) {
+  const [data, due] = await Promise.all([today, callbacks]);
+  return <HomeMainRow today={data} callbacks={due} links={links} showActivity={Boolean(links.activity)} agencyView={agencyView} />;
+}
+
+async function LowerRowSlot({ money, today, team, teamHref, upgrade }: {
+  money: Promise<DashboardMoney | null> | null;
+  today: Promise<DashboardToday | null>;
+  team: boolean;
+  teamHref: string | null;
+  upgrade: { featureHref: string; rowsHref: string } | null;
+}) {
+  const [moneyData, data] = await Promise.all([money ?? Promise.resolve(null), team ? today : Promise.resolve(null)]);
+  // Sixteen #15's one upgrade line: only when the agency's own data makes the case (a count above zero).
+  const exposed = upgrade && moneyData?.exposurePolicies ? { policies: moneyData.exposurePolicies, ...upgrade } : null;
+  return <HomeLowerRow money={moneyData?.figures ?? null} upgrade={exposed} leaders={data?.insights?.leaders ?? null} teamHref={teamHref} />;
+}
+
+/** One module link with its live figure, where this reader may read it at that scope. */
+async function ShortcutSlot({ tile, tenantId, viewer }: { tile: DashboardTile; tenantId: string; viewer: TileViewer | undefined }) {
+  const metric = await tileMetric(tile.key, tenantId, viewer).catch(() => null);
+  return (
+    <ShortcutLink
+      icon={moduleIcon(tile.icon)}
+      label={tile.label}
+      href={tile.path}
+      figure={metric ? metric.display ?? metric.value.toLocaleString("en-US") : undefined}
+      caption={metric?.caption}
+      tone={metric?.tone}
+    />
+  );
+}
+
+function MainRowLoading({ activity }: { activity: boolean }) {
+  return (
+    <div className="@container"><div className="grid grid-cols-1 gap-3 @3xl:grid-cols-12">
+      {activity && <HomePanelLoading title="Calls" tall className="@3xl:col-span-7 @6xl:col-span-8" />}
+      <HomePanelLoading title="Today" lines={5} className={activity ? "@3xl:col-span-5 @6xl:col-span-4" : "@3xl:col-span-12"} />
+    </div></div>
   );
 }
