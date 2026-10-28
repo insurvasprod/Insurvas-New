@@ -101,7 +101,7 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
       plane: "agent",
       width: "wide",
       story: <StoryPanel mode="sign-up" step={5} />,
-      steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Not now? <a href="#" className="font-semibold text-[var(--accent-ink)]">Sign out</a></> },
       node: <BusinessProfileForm key="gate" person={{ firstName: "Avery", lastName: "Collins", phone: "" }} audience="agency" gate />,
     },
     // The real screens with Google switched on, before it is on in Supabase (2026-10-27).

@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelActions } from "@/components/portal/funnel-actions";
-import { LogoutButton } from "@/components/app/logout-button";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { MultiPicker } from "@/components/app/multi-picker";
 import { StatePicker } from "@/components/app/state-picker";
@@ -108,7 +107,7 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
   back?: string;
   /** "Skip for now", after payment: into the app without the profile (asked again at the next login). */
   skipHref?: string;
-  /** The first-login gate: "Finish setting up", no Skip, and Sign out under the form. */
+  /** The first-login gate: "Finish setting up" and no Skip (the page puts Sign out on the step line). */
   gate?: boolean;
 }) {
   const router = useRouter();
@@ -237,21 +236,24 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
           </div>
         </div>
 
-        <div>
-          {label("sources", "Where your leads come from")}
-          <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
-        </div>
-
-        <fieldset>
-          <legend className="contents">{label("volume", "Applications a month")}</legend>
-          <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Applications a month">
-            {VOLUME_OPTIONS.map((option) => (
-              <button key={option.value} type="button" role="radio" aria-checked={volume === option.value} className={chip(volume === option.value)} onClick={() => setVolume(option.value)}>
-                {option.label.replace(/\s*applications\s*\/\s*month$/, "")}
-              </button>
-            ))}
+        {/* Lead sources beside the monthly volume (2026-10-28: the step fits a 1366×657 laptop window).
+            The five volume chips fill the column, each as wide as its words, at the field height. */}
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+          <div>
+            {label("sources", "Where your leads come from")}
+            <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
           </div>
-        </fieldset>
+          <fieldset className="min-w-0">
+            <legend className="contents">{label("volume", "Applications a month", true)}</legend>
+            <div className="mt-1.5 flex gap-1" role="radiogroup" aria-label="Applications a month">
+              {VOLUME_OPTIONS.map((option) => (
+                <button key={option.value} type="button" role="radio" aria-checked={volume === option.value} className={cn(chip(volume === option.value), "min-h-11 flex-auto whitespace-nowrap px-1 text-xs tabular-nums")} onClick={() => setVolume(option.value)}>
+                  {option.label.replace(/\s*applications\s*\/\s*month$/, "")}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        </div>
 
         {leadSources.includes("other") && (
           <label className="block">
@@ -275,12 +277,6 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
           </div>
         </FunnelActions>
       </form>
-      {/* The gate blocks the app, not the person: they can still sign out (owner, 2026-10-28). */}
-      {gate && (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Not now? <LogoutButton variant="link" className="text-sm font-semibold text-foreground hover:text-[var(--accent-ink)]" />
-        </p>
-      )}
     </div>
   );
 }

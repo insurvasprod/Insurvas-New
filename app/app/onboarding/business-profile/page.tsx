@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { FunnelFrame } from "@/components/app/funnel-frame";
+import { LogoutButton } from "@/components/app/logout-button";
 import { BusinessProfileForm, type AboutYouInitial, type BusinessProfileInitial } from "@/components/app/business-profile-form";
 import { audienceForPlanType } from "@/lib/agency/constants";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
@@ -65,7 +66,12 @@ export default async function BusinessProfilePage({ searchParams }: { searchPara
   // plan is paid there is no step to go back to, so it is left out. Before payment (someone who opened
   // this page directly) it goes to the plan.
   return (
-    <FunnelFrame step={5} wide>
+    // The gate blocks the app, not the person: Sign out sits on the step line (owner, 2026-10-28).
+    <FunnelFrame
+      step={5}
+      wide
+      stepsAside={gate ? <>Not now? <LogoutButton variant="link" className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground" /></> : undefined}
+    >
       <BusinessProfileForm
         initial={initial}
         person={person}
