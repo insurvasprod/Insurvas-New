@@ -39,6 +39,7 @@ import { parseSettingsHash } from "@/lib/settings/registry";
 import { cn } from "@/lib/utils";
 import { US_STATES } from "@/lib/appointments/constants";
 import type { AppointmentRow, LicenseRow } from "@/lib/appointments/service-types";
+import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
 import type { TenantCarrierRow } from "@/lib/carriers/service";
 import {
   appointmentChange, bpToLevel, carriersIn, coverage, currentAppointment, statesFor, todayIso,
@@ -207,6 +208,39 @@ export function CarriersSettings() {
     void saveAppointments(yours.flatMap((carrier) => pickedStates.flatMap((state) => appointmentChange(vault.appointments, carrier.id, state, on, today))));
   }
 
+  // Licences in the same pass as the carriers (owner, 2026-10-28: "both in one pass"). A tick is
+  // enough: the number and expiry are optional (the endpoint stores placeholders when they are blank).
+  async function setLicensed(on: boolean) {
+    const targets = pickedStates.filter((code) => licences.has(code) !== on);
+    if (!targets.length) return;
+    if (!on) {
+      const withDetails = targets.filter((code) => licenceNumberValue(licences.get(code)?.license_number) || licenceExpiryValue(licences.get(code)?.expires_at));
+      if (withDetails.length && !window.confirm(`Remove the licence${withDetails.length === 1 ? "" : "s"} for ${withDetails.join(", ")}, with the number and expiry on file?`)) return;
+    }
+    setBusy(true);
+    for (const code of targets) {
+      const result = on
+        ? await send("/api/app/appointment-vault/licenses", "POST", { state: code })
+        : await send(`/api/app/appointment-vault/licenses?state=${code}`, "DELETE");
+      if (!result.ok) { notify.block(result.error); break; }
+    }
+    setBusy(false);
+    await loadVault();
+  }
+
+  async function saveLicenceDetails(row: LicenseRow, number: string, expires: string) {
+    if (number === licenceNumberValue(row.license_number) && expires === licenceExpiryValue(row.expires_at)) return;
+    setBusy(true);
+    const result = await send("/api/app/appointment-vault/licenses", "POST", {
+      state: row.state, license_number: number, expires_at: expires,
+      ...(row.licence_type !== undefined ? { licence_type: row.licence_type ?? null } : {}),
+      ...(row.lines_of_authority ? { lines_of_authority: row.lines_of_authority } : {}),
+    });
+    setBusy(false);
+    if (!result.ok) { notify.block(result.error); return; }
+    await loadVault();
+  }
+
   // One step (2026-10-27): each carrier is switched on and, where Applications is on, put on the
   // applications list too, so its card opens with its products and the three things to finish.
   // Several at once (owner, 2026-10-28), one after another; returns the ids that failed so the
@@ -363,7 +397,7 @@ export function CarriersSettings() {
       {step === "states" && (
         <div ref={panes} className={PANES} style={paneHeight ? { height: paneHeight } : undefined}>
           {listCard(<>
-            <Kicker id="hint-pick-state" text="Pick a state" hint="Click a state to set its carriers. Tick the boxes to pick several states and set them all at once." />
+            <Kicker id="hint-pick-state" text="Your states" hint="Tick every state you work in, then mark them all at once on the right. Or click one state to open just that one." />
             {search("Find a state: Arkansas, AR…")}
             {filters("Appointed", "Not yet", nAppointed)}
             {listBody(states.map(([code, name]) => {
@@ -371,83 +405,104 @@ export function CarriersSettings() {
               const here = carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id));
               return (
                 <div key={code} className={cn("flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-[var(--surface-alt)]", on && "bg-[var(--primary-soft)] hover:bg-[var(--primary-soft)]")}>
-                  <button type="button" onClick={() => setSelected(on ? selected.filter((s) => s !== code) : [...selected, code])} role="checkbox" aria-checked={on && selected.length > 1} aria-label={`Select ${name} with others`} className={BOX(on && selected.length > 1 ? "all" : "none")}>✓</button>
+                  {/* One look for a picked state (owner, 2026-10-28, S1): the box shows it ticked whether one or several are picked. */}
+                  <button type="button" onClick={() => setSelected(on ? selected.filter((s) => s !== code) : [...selected, code])} role="checkbox" aria-checked={on} aria-label={`Pick ${name}`} className={BOX(on ? "all" : "none")}>✓</button>
                   <button type="button" onClick={() => setSelected([code])} className="flex min-w-0 flex-1 items-center gap-2.5 py-0.5 text-left">
                     <span className="w-7 text-sm font-semibold text-[var(--ink)]">{code}</span>
                     <span className="min-w-0 flex-1 truncate text-sm text-[var(--body)]">{name}</span>
+                    {licences.has(code) && <span className="text-xs text-[var(--muted)]">Licensed</span>}
                     <span className="flex gap-1" aria-hidden="true">{here.map((id) => <span key={id} className={cn("size-2 rounded-full", dotOf(id))} />)}</span>
-                    <span className={cn("min-w-12 text-right text-xs font-semibold", here.length ? "text-[var(--accent-ink)]" : "text-[var(--warning-ink)]")}>
-                      {here.length ? `${here.length} of ${yours.length}` : licences.has(code) ? "none" : ""}
-                    </span>
+                    {yours.length > 1 && here.length > 0 && <span className="min-w-10 text-right text-xs font-semibold text-[var(--accent-ink)]">{here.length} of {yours.length}</span>}
                   </button>
                 </div>
               );
             }))}
           </>)}
-          <div className="grid min-h-0 gap-3 lg:grid-rows-[auto_minmax(0,1fr)]">
-            <div className={cn(CARD, "flex flex-wrap gap-x-5 gap-y-2 px-4 py-3.5")}>
-              <span className="basis-full"><Kicker id="hint-by-carrier" text="By carrier" hint="How many states each carrier has appointed you in so far." /></span>
-              {yours.map((carrier) => {
-                const n = statesFor(vault.appointments, carrier.id, today).length;
-                return <span key={carrier.id} className="flex items-center gap-1.5 text-xs text-[var(--body)]"><span className={cn("size-2 rounded-full", dotOf(carrier.id))} aria-hidden="true" /><strong className="font-semibold text-[var(--ink)]">{carrier.name}</strong>{n ? `${n} states` : "no states yet"}</span>;
-              })}
-            </div>
-            <div className={cn(CARD, SCROLL, "flex min-h-0 flex-col gap-3 p-5")}>
-              {pickedStates.length === 0 ? (
-                <p className="m-0 text-sm text-[var(--muted)]">Pick a state on the left, or tick several to set them together.</p>
-              ) : (<>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="m-0 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]">{pickedStates.length === 1 ? STATE_NAME.get(pickedStates[0]) : `${pickedStates.length} states selected`}</h3>
-                    <StateLicenceLine states={pickedStates} licences={licences} />
-                  </div>
+          {/* One panel (S5): each carrier's state count sits beside its tick, not in a card of its own. */}
+          <div className={cn(CARD, SCROLL, "flex min-h-0 flex-col gap-3 p-5")}>
+            {pickedStates.length === 0 ? (
+              <p className="m-0 text-sm text-[var(--muted)]">Tick the states you work in on the left, or click one, then mark them here.</p>
+            ) : (<>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h3 className="m-0 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]">{pickedStates.length === 1 ? STATE_NAME.get(pickedStates[0]) : `${pickedStates.length} states: ${pickedStates.join(", ")}`}</h3>
+                {/* S3: only worth showing with more than one carrier. */}
+                {yours.length > 1 && (
                   <span className="flex gap-1.5">
-                    <button type="button" onClick={() => tickAll(true)} disabled={busy || !yours.length} className={CHIP(false)}>All carriers</button>
+                    <button type="button" onClick={() => tickAll(true)} disabled={busy} className={CHIP(false)}>All carriers</button>
                     <button type="button" onClick={() => tickAll(false)} disabled={busy} className={CHIP(false)}>None</button>
                   </span>
-                </div>
-                <Label id="hint-which-carriers" text="Which of your carriers appointed you here?" hint="Tick a carrier once it has approved you to sell in this state. Quotes in a state you are not appointed in are flagged." />
-                {yours.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">Add your carriers first, on step 1.</p>}
-                {yours.map((carrier) => {
-                  const state = coverage(vault.appointments, carrier.id, pickedStates, today);
-                  const some = state === "some" ? pickedStates.filter((code) => currentAppointment(vault.appointments, carrier.id, code, today)).join(", ") : "";
-                  const pending = pickedStates.length === 1 && currentAppointment(vault.appointments, carrier.id, pickedStates[0], today)?.status === "pending";
-                  return (
+                )}
+              </div>
+
+              {(() => {
+                const held = pickedStates.filter((code) => licences.has(code)).length;
+                const licensed = held === 0 ? "none" : held === pickedStates.length ? "all" : "some";
+                const row = pickedStates.length === 1 ? licences.get(pickedStates[0]) ?? null : null;
+                return (
+                  <div className="flex flex-col gap-2">
+                    <Label id="hint-licensed" text="Your licence" hint="Tick it if you hold a licence in this state. The number and expiry are optional; add them when you have them." />
                     <button
-                      key={carrier.id}
                       type="button"
-                      onClick={() => tick(carrier.id, state !== "all")}
+                      onClick={() => void setLicensed(licensed !== "all")}
                       role="checkbox"
-                      aria-checked={state === "all" ? true : state === "some" ? "mixed" : false}
+                      aria-checked={licensed === "all" ? true : licensed === "some" ? "mixed" : false}
                       disabled={busy}
-                      className={cn("flex w-full items-center gap-3.5 rounded-[12px] border border-[var(--border)] p-3.5 text-left disabled:cursor-wait", state !== "none" && "bg-[var(--primary-soft)]")}
+                      className={cn("flex w-full items-center gap-3.5 rounded-[12px] border border-[var(--border)] p-3.5 text-left disabled:cursor-wait", licensed !== "none" && "bg-[var(--primary-soft)]")}
                     >
-                      <span className={BOX(state)} aria-hidden="true">{state === "some" ? "–" : "✓"}</span>
-                      <span className={cn("size-2.5 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
-                      <span className="flex-1 text-sm font-semibold text-[var(--ink)]">{carrier.name}</span>
-                      {some && <span className="text-xs text-[var(--accent-ink)]">in {some} only</span>}
-                      {pending && <StatusChip tone="info">Pending</StatusChip>}
+                      <span className={BOX(licensed)} aria-hidden="true">{licensed === "some" ? "–" : "✓"}</span>
+                      <span className="flex-1 text-sm font-semibold text-[var(--ink)]">I&apos;m licensed {pickedStates.length === 1 ? "here" : "in these states"}</span>
+                      {licensed === "some" && <span className="text-xs text-[var(--accent-ink)]">in {pickedStates.filter((code) => licences.has(code)).join(", ")} only</span>}
                     </button>
-                  );
-                })}
-                <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
-                  <span className="text-xs text-[var(--muted)]">{busy ? "Saving…" : "Saved as you tick"}</span>
-                  <Button
+                    {row && <LicenceDetails key={`${row.id}-${row.license_number}-${row.expires_at}`} row={row} disabled={busy} onSave={(number, expires) => void saveLicenceDetails(row, number, expires)} />}
+                  </div>
+                );
+              })()}
+
+              <Label id="hint-which-carriers" text="Which of your carriers appointed you here?" hint="Tick a carrier once it has approved you to sell in this state. Quotes in a state you are not appointed in are flagged." />
+              {yours.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">Add your carriers first, on the Your carriers tab.</p>}
+              {yours.map((carrier) => {
+                const state = coverage(vault.appointments, carrier.id, pickedStates, today);
+                const some = state === "some" ? pickedStates.filter((code) => currentAppointment(vault.appointments, carrier.id, code, today)).join(", ") : "";
+                const pending = pickedStates.length === 1 && currentAppointment(vault.appointments, carrier.id, pickedStates[0], today)?.status === "pending";
+                const total = statesFor(vault.appointments, carrier.id, today).length;
+                return (
+                  <button
+                    key={carrier.id}
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const order = US_STATES.map(([code]) => code as string);
-                      const from = order.indexOf(pickedStates[pickedStates.length - 1]);
-                      const next = order.slice(from + 1).find((code) => !appointedStates.has(code)) ?? order.find((code) => !appointedStates.has(code));
-                      if (next) setSelected([next]);
-                    }}
+                    onClick={() => tick(carrier.id, state !== "all")}
+                    role="checkbox"
+                    aria-checked={state === "all" ? true : state === "some" ? "mixed" : false}
+                    disabled={busy}
+                    className={cn("flex w-full items-center gap-3.5 rounded-[12px] border border-[var(--border)] p-3.5 text-left disabled:cursor-wait", state !== "none" && "bg-[var(--primary-soft)]")}
                   >
-                    Next state without carriers →
-                  </Button>
-                </div>
-              </>)}
-            </div>
+                    <span className={BOX(state)} aria-hidden="true">{state === "some" ? "–" : "✓"}</span>
+                    <span className={cn("size-2.5 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
+                    <span className="flex-1 text-sm font-semibold text-[var(--ink)]">{carrier.name}</span>
+                    {some && <span className="text-xs text-[var(--accent-ink)]">in {some} only</span>}
+                    {pending && <StatusChip tone="info">Pending</StatusChip>}
+                    <span className="text-xs tabular-nums text-[var(--muted)]">{total ? `${total} state${total === 1 ? "" : "s"} in all` : "no states yet"}</span>
+                  </button>
+                );
+              })}
+              <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+                <span className="text-xs text-[var(--muted)]">{busy ? "Saving…" : "Saved as you tick"}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // An empty state: no licence and no carrier yet.
+                    const empty = (code: string) => !appointedStates.has(code) && !licences.has(code);
+                    const order = US_STATES.map(([code]) => code as string);
+                    const from = order.indexOf(pickedStates[pickedStates.length - 1]);
+                    const next = order.slice(from + 1).find(empty) ?? order.find(empty);
+                    if (next) setSelected([next]);
+                  }}
+                >
+                  Next empty state →
+                </Button>
+              </div>
+            </>)}
           </div>
         </div>
       )}
@@ -464,12 +519,23 @@ export function CarriersSettings() {
   );
 }
 
-function StateLicenceLine({ states, licences }: { states: string[]; licences: Map<string, LicenseRow> }) {
-  const missing = states.filter((code) => !licences.has(code));
-  const text = states.length === 1
-    ? missing.length ? `No ${STATE_NAME.get(states[0])} licence on file. You can still record the appointment; add the licence before selling there.` : `You hold a ${STATE_NAME.get(states[0])} licence.`
-    : `${states.join(", ")}${missing.length ? ` · no licence on file for ${missing.join(", ")}` : ""}`;
-  return <p className={cn("m-0 mt-1 text-xs", missing.length ? "text-[var(--warning-ink)]" : "text-[var(--muted)]")}>{text}</p>;
+/** A licence's optional number and expiry, under its tick; saved when a field is left (owner, 2026-10-28). */
+function LicenceDetails({ row, disabled, onSave }: { row: LicenseRow; disabled: boolean; onSave: (number: string, expires: string) => void }) {
+  const [number, setNumber] = useState(licenceNumberValue(row.license_number));
+  const [expires, setExpires] = useState(licenceExpiryValue(row.expires_at));
+  const save = () => onSave(number.trim(), expires);
+  return (
+    <div className="grid gap-3 pl-1 sm:grid-cols-2">
+      <label className="flex flex-col gap-1.5 text-xs font-semibold text-[var(--muted)]">
+        Licence number · optional
+        <input className={cn(control, "mt-0")} value={number} disabled={disabled} maxLength={120} autoComplete="off" spellCheck={false} placeholder="e.g. 18834920" onChange={(event) => setNumber(event.target.value)} onBlur={save} />
+      </label>
+      <label className="flex flex-col gap-1.5 text-xs font-semibold text-[var(--muted)]">
+        Expires · optional
+        <input className={cn(control, "mt-0")} type="date" value={expires} disabled={disabled} onChange={(event) => setExpires(event.target.value)} onBlur={save} />
+      </label>
+    </div>
+  );
 }
 
 /* ── add a carrier ───────────────────────────────────────────────────────────────────────────── */

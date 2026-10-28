@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { licenseSchema } from "@/lib/appointments/schemas";
-import { saveLicense } from "@/lib/appointments/service";
+import { removeLicense, saveLicense } from "@/lib/appointments/service";
+import { STATE_CODES } from "@/lib/appointments/constants";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { SchemaPendingError, schemaPendingBody } from "@/lib/appointments/pendingSchema";
 
@@ -18,4 +19,20 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof SchemaPendingError) return NextResponse.json(schemaPendingBody(), { status: 503 });
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save licence" }, { status: 400 }); }
+}
+
+/** Untick "Licensed" for a state (owner, 2026-10-28). `?state=AR`. Owner only, like saving one. */
+export async function DELETE(request: NextRequest) {
+  const auth = await requireFeatureRole("appointment_vault", ["owner"], { write: true });
+  if (auth instanceof NextResponse) return auth;
+  const state = (request.nextUrl.searchParams.get("state") ?? "").trim().toUpperCase();
+  if (!(STATE_CODES as readonly string[]).includes(state)) return NextResponse.json({ error: "Choose a valid US state" }, { status: 400 });
+  try {
+    const removed = await removeLicense(auth.context.tenantId, state);
+    if (removed) await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.license_removed", targetType: "license", targetId: state, metadata: { state }, request });
+    return NextResponse.json({ ok: true, removed });
+  } catch (error) {
+    if (error instanceof SchemaPendingError) return NextResponse.json(schemaPendingBody(), { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not remove licence" }, { status: 400 });
+  }
 }

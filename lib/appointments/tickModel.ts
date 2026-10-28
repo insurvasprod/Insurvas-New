@@ -71,6 +71,25 @@ export function statesFor(rows: AppointmentRow[], carrierId: string, today: stri
   return [...new Set(rows.filter((row) => row.carrier_id === carrierId && isOpenAppointment(row, today)).map((row) => row.state))].sort();
 }
 
+/**
+ * A licence the agent ticked without its details (owner, 2026-10-28: "it will work even without
+ * those"). The table needs a number and an expiry, and every check (dialer, routing, eligibility,
+ * expiry warnings) reads a licence by its expiry, so a tick is stored with these two placeholders:
+ * a licence that is valid and never due. Screens show them as "No number yet" and "No expiry".
+ */
+export const LICENCE_NUMBER_NOT_ENTERED = "Not entered";
+export const LICENCE_NO_EXPIRY = "9999-12-31";
+
+/** The licence number to show: blank for a placeholder. */
+export function licenceNumberValue(number: string | null | undefined): string {
+  return !number || number === LICENCE_NUMBER_NOT_ENTERED ? "" : number;
+}
+
+/** The expiry to show in a date field: blank for a placeholder. */
+export function licenceExpiryValue(expiresAt: string | null | undefined): string {
+  return !expiresAt || expiresAt === LICENCE_NO_EXPIRY ? "" : expiresAt;
+}
+
 /** A licence's state: on file and valid, due for renewal inside 60 days, or expired. */
 export function licenceStatus(row: Pick<LicenseRow, "expires_at"> | null | undefined, today: string): { label: string; tone: "good" | "warning" | "danger" } | null {
   if (!row) return null;

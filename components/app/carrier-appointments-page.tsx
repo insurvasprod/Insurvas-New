@@ -69,6 +69,7 @@ import {
 } from "@/lib/appointments/readiness";
 import { daysUntilExpiry } from "@/lib/appointments/warnings";
 import { cn } from "@/lib/utils";
+import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
 import type {
   AppointmentRow,
   AppointmentStatus,
@@ -503,9 +504,9 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                   return (
                     <tr key={row.id}>
                       <td className={cn(st.td, "whitespace-nowrap pl-4")}>{stateName(row.state)}</td>
-                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{row.license_number}</td>
+                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{licenceNumberValue(row.license_number) || <span className="text-[var(--muted)]">No number yet</span>}</td>
                       <td className={cn(st.td, "max-w-[320px] truncate")} title={row.lines_of_authority?.join(", ") || undefined}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
-                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{shortDate(row.expires_at)}</td>
+                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{licenceExpiryValue(row.expires_at) ? shortDate(row.expires_at) : <span className="text-[var(--muted)]">No expiry</span>}</td>
                       <td className={cn(st.td, "pr-4")}><StatusChip tone={TONE[status.tone]}>{status.label}</StatusChip></td>
                     </tr>
                   );
