@@ -3,7 +3,6 @@ import { HubError, loadHub, type Hub } from "@/lib/retention/settingsHubStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionSettingsBoard } from "@/components/app/retention/retention-settings-board";
-import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { SettingsRouteFrame } from "@/components/app/settings/settings-route-frame";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
@@ -34,8 +33,6 @@ export default async function RetentionSettingsPage() {
     // Task 6); this page keeps its gates above and draws only its board.
     <SettingsRouteFrame sectionId="retention">
       <div className="flex min-h-0 flex-grow flex-col gap-4">
-      {/* LA-8.8: who last changed a setting here, beside the values. */}
-      <SectionLastChanged sectionKey="retention" />
       {hub ? (
         <RetentionSettingsBoard hub={hub} canEdit={guard.entitlement.access !== "read_only"} />
       ) : (

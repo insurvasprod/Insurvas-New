@@ -8,7 +8,7 @@ import { SettingsCard, SettingsSectionHeader, SettingsStack, SettingsTableCard }
 import { Button } from "@/components/ui/button";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
-import { PREVIEW_SECTIONS, type PreviewState } from "@/lib/settings/preview/fixtures";
+import { PREVIEW_SECTIONS, PREVIEW_TEAM, PREVIEW_WORKSPACE, type PreviewState } from "@/lib/settings/preview/fixtures";
 import { setPreviewState } from "@/components/design/preview-fetch";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
@@ -78,8 +78,9 @@ export function SettingsPreview({ role, routeSection, state = "loaded" }: { role
       routeSection={routeSection}
       readOnly={state === "readonly"}
       tabs={SETTINGS_SECTIONS}
-      team={null}
-      workspace={null}
+      // Team & access is handed its data by the server; the preview hands it a sample.
+      team={role === "owner" ? PREVIEW_TEAM : null}
+      workspace={role === "owner" ? PREVIEW_WORKSPACE : null}
       granted={ALL_FEATURES}
       role={role}
       // Sections with fixtures render their real panel; the rest keep a sample.

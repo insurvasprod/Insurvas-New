@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
@@ -244,6 +245,8 @@ export function AgentSettingsTabs({
           title={active.label}
           description={active.short ?? active.description}
           breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: active.label }]}
+          // Who last changed something here (LA-8.8), under the purpose line; owners only, like the log.
+          meta={role === "owner" ? <SectionLastChanged key={active.id} sectionKey={active.id} /> : undefined}
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
         />
       )}

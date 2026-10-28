@@ -64,7 +64,8 @@ export function SettingsSectionHeader({ actions, trail }: {
   if (!meta) return null;
   if (meta.framed) {
     // One title per page: the frame's. A record open in the section keeps its own line here, with
-    // its actions; otherwise the actions move up to the title's line and only the history note stays.
+    // its actions; otherwise the actions move up to the title's line. The history note is in the
+    // frame's header too, under the purpose line (it floated above the tabs here).
     if (trail) {
       return (
         <div className="flex flex-wrap items-center gap-3">
@@ -76,7 +77,6 @@ export function SettingsSectionHeader({ actions, trail }: {
     return (
       <>
         {actions && (meta.actionsSlot ? createPortal(actions, meta.actionsSlot) : <div className="flex justify-end gap-2.5">{actions}</div>)}
-        {meta.history && meta.id ? <SectionLastChanged sectionKey={meta.id} /> : null}
       </>
     );
   }

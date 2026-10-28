@@ -33,12 +33,15 @@ export function PageHeader({
   size = "page",
   visible = false,
   breadcrumbs,
+  meta,
   className,
 }: {
   /** Show the title, description and breadcrumb on the page (see above). */
   visible?: boolean;
   /** The trail above the title when `visible`: real pages only, the last one this page. */
   breadcrumbs?: Crumb[];
+  /** One quiet line under the description when `visible` (Settings: who last changed something here). */
+  meta?: ReactNode;
   /** Accepted and ignored (2026-09-28 review): one title per page, and now that one is hidden too. */
   eyebrow?: string;
   title: string;
@@ -57,6 +60,7 @@ export function PageHeader({
           <div className="min-w-0 max-w-[44rem]">
             <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
             {description && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
+            {meta}
           </div>
           {(titleInfo || actions) && <div className="flex shrink-0 flex-wrap items-center gap-2">{titleInfo}{actions}</div>}
         </div>

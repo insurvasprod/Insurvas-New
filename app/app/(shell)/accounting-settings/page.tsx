@@ -5,7 +5,6 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AccountingSettingsBoard } from "@/components/app/accounting/accounting-settings-board";
 import { SettingsRouteFrame } from "@/components/app/settings/settings-route-frame";
-import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -36,8 +35,6 @@ export default async function AccountingSettingsPage() {
     // Task 6); this page keeps its gates above and draws only its board.
     <SettingsRouteFrame sectionId="accounting">
       <div className="flex min-h-0 flex-grow flex-col gap-4">
-      {/* LA-8.8: who last changed a setting here, beside the values. */}
-      {guard.role === "owner" && <SectionLastChanged sectionKey="accounting" />}
       {loaded ? (
         <AccountingSettingsBoard initial={loaded.settings} locked={LOCKED} changes={loaded.changes} accounts={loaded.accounts} canEdit={guard.role === "owner" && guard.entitlement.access !== "read_only"} />
       ) : (

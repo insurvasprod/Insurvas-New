@@ -3,7 +3,6 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ComplianceSettingsBoard } from "@/components/app/compliance/compliance-settings";
 import { SettingsRouteFrame } from "@/components/app/settings/settings-route-frame";
-import { SectionLastChanged } from "@/components/app/settings/last-changed";
 
 /**
  * Compliance › Settings (LA-6.8, Notion sprint). Everything LA-6 reads, in one place; the tenant
@@ -23,8 +22,6 @@ export default async function ComplianceSettingsPage() {
     // Task 6); this page keeps its gates above and draws only its board.
     <SettingsRouteFrame sectionId="compliance">
       <div className="flex min-h-0 flex-grow flex-col gap-4">
-      {/* LA-8.8: who last changed a setting here, beside the values. */}
-      <SectionLastChanged sectionKey="compliance" />
       <ComplianceSettingsBoard readOnly={guard.entitlement.access === "read_only"} />
       </div>
     </SettingsRouteFrame>
