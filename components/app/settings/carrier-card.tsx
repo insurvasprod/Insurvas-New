@@ -65,7 +65,8 @@ export async function saveProduct(product: CarrierProductView, patch: Parameters
 
 /* ── what is left to set up ─────────────────────────────────────────────────────────────────── */
 
-export type CarrierProgress = { contract: boolean; products: boolean | null; states: boolean; done: number; total: number; ready: boolean };
+/** `states`: appointed (active) somewhere. `pending`: only applied for, in states it is not yet appointed in. */
+export type CarrierProgress = { contract: boolean; products: boolean | null; states: boolean; pending: boolean; done: number; total: number; ready: boolean };
 
 /**
  * The checks behind To finish and the list's "1 of 2 done". Products count only where Applications is
@@ -73,11 +74,11 @@ export type CarrierProgress = { contract: boolean; products: boolean | null; sta
  * keep the agency from selling it. The contract (level + writing number) is optional (owner,
  * 2026-10-28: "ready to sell even without filling up these"); it only feeds the commission figures.
  */
-export function carrierProgress(contract: TenantCarrierRow | null, sales: SalesCarrierView | null, salesAvailable: boolean, states: string[]): CarrierProgress {
+export function carrierProgress(contract: TenantCarrierRow | null, sales: SalesCarrierView | null, salesAvailable: boolean, states: string[], pendingStates: string[] = []): CarrierProgress {
   const products = salesAvailable && sales && sales.products.length > 0 ? sales.products.some((p) => p.isActive) : null;
   const checks = [products, states.length > 0].filter((value): value is boolean => value !== null);
   const done = checks.filter(Boolean).length;
-  return { contract: Boolean(contract), products, states: states.length > 0, done, total: checks.length, ready: done === checks.length };
+  return { contract: Boolean(contract), products, states: states.length > 0, pending: pendingStates.length > 0, done, total: checks.length, ready: done === checks.length };
 }
 
 /**
@@ -86,8 +87,10 @@ export function carrierProgress(contract: TenantCarrierRow | null, sales: SalesC
  */
 export function carrierNeeds(progress: CarrierProgress): string | null {
   if (progress.ready) return null;
-  const missing = [progress.products === false ? "products" : null, progress.states ? null : "your states"].filter(Boolean);
-  return `Needs ${missing.join(" and ")}`;
+  // Waiting on the carrier is not something to do here: say so instead of "Needs your states".
+  const waiting = !progress.states && progress.pending;
+  const missing = [progress.products === false ? "products" : null, progress.states || waiting ? null : "your states"].filter(Boolean);
+  return [missing.length ? `Needs ${missing.join(" and ")}` : null, waiting ? "Appointment pending" : null].filter(Boolean).join(" · ");
 }
 
 export function ProgressLine({ progress, switchedOff }: { progress: CarrierProgress; switchedOff: boolean }) {
@@ -152,12 +155,15 @@ function ToFinish({ name, progress, ids }: { name: string; progress: CarrierProg
 
 /* ── the card ───────────────────────────────────────────────────────────────────────────────── */
 
-export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales, salesAvailable, productLines, canEdit, onSetStates, onSaved, className }: {
+export function CarrierCard({ carrier, dot, contract, switchedOff, states, pendingStates = [], sales, salesAvailable, productLines, canEdit, onSetStates, onSaved, className }: {
   carrier: { id: string; name: string };
   dot: string;
   contract: TenantCarrierRow | null;
   switchedOff: boolean;
+  /** Appointed (active) states: the ones it can sell in. */
   states: string[];
+  /** Applied for, not granted yet: shown, never counted as appointed. */
+  pendingStates?: string[];
   sales: SalesCarrierView | null;
   salesAvailable: boolean;
   productLines: ProductLine[];
@@ -167,7 +173,12 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales
   className?: string;
 }) {
   const ids = { contract: `carrier-${carrier.id}-level`, products: `carrier-${carrier.id}-products`, states: `carrier-${carrier.id}-states` };
-  const progress = carrierProgress(contract, sales, salesAvailable, states);
+  const progress = carrierProgress(contract, sales, salesAvailable, states, pendingStates);
+  const list = (codes: string[]) => `${codes.slice(0, 6).join(", ")}${codes.length > 6 ? "…" : ""}`;
+  const where = [
+    states.length ? `Appointed in ${states.length} state${states.length === 1 ? "" : "s"} · ${list(states)}` : null,
+    pendingStates.length ? `pending in ${list(pendingStates)}` : null,
+  ].filter(Boolean).join(" · ");
 
   async function setSwitch(next: boolean) {
     const result = await send("/api/app/carrier-library/tenant-carriers", "PATCH", { carrier_id: carrier.id, contracted: next });
@@ -184,9 +195,9 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales
           <span className="flex items-center gap-2.5"><span className={cn("size-3 rounded-full", dot)} aria-hidden="true" /><h3 className="m-0 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]">{carrier.name}</h3></span>
           {/* Said once (owner, 2026-10-28): what is missing is the badge's job, so this line only says
               where it is appointed, or that it is switched off. */}
-          {(switchedOff || states.length > 0) && (
+          {(switchedOff || where) && (
             <p className="m-0 mt-1 text-xs text-[var(--muted)]">
-              {switchedOff ? "Switched off: no new quotes, applications or leads" : `Appointed in ${states.length} state${states.length === 1 ? "" : "s"} · ${states.slice(0, 6).join(", ")}${states.length > 6 ? "…" : ""}`}
+              {switchedOff ? "Switched off: no new quotes, applications or leads" : where.charAt(0).toUpperCase() + where.slice(1)}
             </p>
           )}
         </div>
@@ -206,9 +217,11 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales
 
       <div id={ids.states} className="flex flex-wrap items-center gap-1.5">
         <span className={cn(KICKER, "mr-1")}>Appointed states</span>
-        {states.length === 0 && <span className="mr-1 text-sm text-[var(--muted)]">None yet</span>}
+        {states.length === 0 && pendingStates.length === 0 && <span className="mr-1 text-sm text-[var(--muted)]">None yet</span>}
         {states.map((code) => <span key={code} className="inline-flex h-7 items-center rounded-full bg-[var(--primary-soft)] px-2.5 text-xs font-semibold text-[var(--accent-ink)]">{code}</span>)}
-        {states.length === 0 && !switchedOff
+        {/* Pending: outlined, with the word, so it never reads as appointed. */}
+        {pendingStates.map((code) => <span key={code} className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-[var(--border-strong)] px-2.5 text-xs font-semibold text-[var(--muted)]">{code}<span className="font-normal">pending</span></span>)}
+        {states.length === 0 && pendingStates.length === 0 && !switchedOff
           ? <Button type="button" size="sm" onClick={onSetStates}>Set your states →</Button>
           : <button type="button" onClick={onSetStates} className="inline-flex h-8 items-center rounded-full border border-[var(--border-strong)] px-3 text-xs font-semibold text-[var(--body)] hover:border-[var(--accent-ink)]">Change states →</button>}
       </div>

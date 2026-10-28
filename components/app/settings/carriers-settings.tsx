@@ -42,7 +42,7 @@ import type { AppointmentRow, LicenseRow } from "@/lib/appointments/service-type
 import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
 import type { TenantCarrierRow } from "@/lib/carriers/service";
 import {
-  appointmentChange, bpToLevel, carriersIn, coverage, currentAppointment, statesFor, todayIso,
+  appointedStatesFor, appointmentChange, bpToLevel, carriersIn, coverage, currentAppointment, pendingStatesFor, statesFor, todayIso,
   type AppointmentChange,
 } from "@/lib/appointments/tickModel";
 import type { CarriersPayload } from "@/lib/salesSettings/views";
@@ -185,7 +185,9 @@ export function CarriersSettings() {
   }
 
   const appointedStates = new Set(vault.appointments.filter((row) => carriersIn([row], row.state, today).length).map((row) => row.state));
-  const readyCount = yours.filter((carrier) => carrierProgress(vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active) ?? null, salesOf(carrier.id), sales !== null, statesFor(vault.appointments, carrier.id, today)).ready).length;
+  // Ready means appointed (active), not applied for: pending is shown but never counts (eligibility.ts).
+  const progressOf = (carrierId: string) => carrierProgress(vault.tenantCarriers.find((row) => row.carrier_id === carrierId && row.is_active) ?? null, salesOf(carrierId), sales !== null, appointedStatesFor(vault.appointments, carrierId, today), pendingStatesFor(vault.appointments, carrierId, today));
+  const readyCount = yours.filter((carrier) => progressOf(carrier.id).ready).length;
   const current = yours.find((carrier) => carrier.id === carrierId) ?? yours[0] ?? null;
   const pickedStates = selected.length ? selected : [];
 
@@ -346,7 +348,7 @@ export function CarriersSettings() {
                     <span className={cn("size-2.5 shrink-0 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
                     <span className="min-w-0 flex-1">
                       <span className={cn("block truncate text-sm font-semibold text-[var(--ink)]", off && "text-[var(--muted)]")}>{carrier.name}</span>
-                      <span className="mt-0.5 block"><ProgressLine progress={carrierProgress(contract ?? null, salesOf(carrier.id), sales !== null, statesFor(vault.appointments, carrier.id, today))} switchedOff={Boolean(off)} /></span>
+                      <span className="mt-0.5 block"><ProgressLine progress={progressOf(carrier.id)} switchedOff={Boolean(off)} /></span>
                     </span>
                     {contract && <span className="text-xs font-semibold text-[var(--muted)]">{bpToLevel(contract.contract_level_bp)}%</span>}
                   </button>
@@ -361,7 +363,8 @@ export function CarriersSettings() {
               dot={dotOf(current.id)}
               contract={vault.tenantCarriers.find((row) => row.carrier_id === current.id && row.is_active) ?? null}
               switchedOff={Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === current.id && row.contracted === false))}
-              states={statesFor(vault.appointments, current.id, today)}
+              states={appointedStatesFor(vault.appointments, current.id, today)}
+              pendingStates={pendingStatesFor(vault.appointments, current.id, today)}
               sales={salesOf(current.id)}
               salesAvailable={sales !== null}
               productLines={sales?.productLines ?? []}
@@ -383,7 +386,7 @@ export function CarriersSettings() {
               return {
                 id: carrier.id, name: carrier.name, dot: dotOf(carrier.id), level: contract ? String(bpToLevel(contract.contract_level_bp)) : null,
                 products: (salesOf(carrier.id)?.products ?? []).filter((product) => product.isActive).map((product) => product.name),
-                states: statesFor(vault.appointments, carrier.id, today).length,
+                states: appointedStatesFor(vault.appointments, carrier.id, today).length,
               };
             })}
             currentId={current?.id ?? null}

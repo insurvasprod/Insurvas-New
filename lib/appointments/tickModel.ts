@@ -66,7 +66,27 @@ export function carriersIn(rows: AppointmentRow[], state: string, today: string)
   return [...new Set(rows.filter((row) => row.state === state && isOpenAppointment(row, today)).map((row) => row.carrier_id))];
 }
 
-/** The states a carrier is appointed in today, A to Z. */
+/**
+ * Granted and in force: open and no longer pending. What "can sell here" means everywhere a carrier
+ * is called ready (eligibility.ts agrees: a pending appointment never counts). A pending one is
+ * still ticked on the States step, since it was applied for, but it does not make a carrier ready.
+ */
+export function isActiveAppointment(row: Pick<AppointmentRow, "status" | "terminated_at" | "expires_at">, today: string) {
+  return row.status === "active" && isOpenAppointment(row, today);
+}
+
+/** The states a carrier can sell in today (active appointments only), A to Z. */
+export function appointedStatesFor(rows: AppointmentRow[], carrierId: string, today: string) {
+  return [...new Set(rows.filter((row) => row.carrier_id === carrierId && isActiveAppointment(row, today)).map((row) => row.state))].sort();
+}
+
+/** The states where the carrier's appointment is applied for but not granted yet, A to Z. */
+export function pendingStatesFor(rows: AppointmentRow[], carrierId: string, today: string) {
+  const appointed = new Set(appointedStatesFor(rows, carrierId, today));
+  return [...new Set(rows.filter((row) => row.carrier_id === carrierId && row.status === "pending" && isOpenAppointment(row, today) && !appointed.has(row.state)).map((row) => row.state))].sort();
+}
+
+/** The states a carrier is ticked in today, pending included, A to Z (the States step's count). */
 export function statesFor(rows: AppointmentRow[], carrierId: string, today: string) {
   return [...new Set(rows.filter((row) => row.carrier_id === carrierId && isOpenAppointment(row, today)).map((row) => row.state))].sort();
 }
