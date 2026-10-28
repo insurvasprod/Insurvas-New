@@ -4,9 +4,9 @@
  * Settings › Carriers › one carrier (owner, 2026-10-27: "one carrier, one place"). Carrier details is
  * folded in here, so everything about a carrier sits on its card:
  *
- * - To finish: the three things a carrier needs before it can be sold (contract + writing number,
- *   at least one product, at least one appointed state). Shown until
- *   all three are done; the list on the left shows the same progress.
+ * - To finish: what a carrier needs before it can be sold (at least one product, at least one
+ *   appointed state), plus the optional contract + writing number. Shown until the required ones are
+ *   done; the list on the left shows the same progress.
  * - Contract: level, start date and writing number (tenant_carriers). The writing number moved here
  *   from the Rate card; a contract row cannot be saved without one, so the first save starts it.
  * - Products: tick the ones you sell. Products the agency made itself stay, under Your products.
@@ -68,13 +68,14 @@ export async function saveProduct(product: CarrierProductView, patch: Parameters
 export type CarrierProgress = { contract: boolean; products: boolean | null; states: boolean; done: number; total: number; ready: boolean };
 
 /**
- * The checks behind To finish and the list's "2 of 3 done". Products count only where Applications is
+ * The checks behind To finish and the list's "1 of 2 done". Products count only where Applications is
  * on and Insurvas has products for the carrier: a carrier with none yet is Insurvas's gap, and must not
- * keep the agency from selling it.
+ * keep the agency from selling it. The contract (level + writing number) is optional (owner,
+ * 2026-10-28: "ready to sell even without filling up these"); it only feeds the commission figures.
  */
 export function carrierProgress(contract: TenantCarrierRow | null, sales: SalesCarrierView | null, salesAvailable: boolean, states: string[]): CarrierProgress {
   const products = salesAvailable && sales && sales.products.length > 0 ? sales.products.some((p) => p.isActive) : null;
-  const checks = [Boolean(contract), products, states.length > 0].filter((value): value is boolean => value !== null);
+  const checks = [products, states.length > 0].filter((value): value is boolean => value !== null);
   const done = checks.filter(Boolean).length;
   return { contract: Boolean(contract), products, states: states.length > 0, done, total: checks.length, ready: done === checks.length };
 }
@@ -102,9 +103,10 @@ function jumpTo(id: string) {
 
 function ToFinish({ name, progress, ids }: { name: string; progress: CarrierProgress; ids: { contract: string; products: string; states: string } }) {
   const items: { key: string; title: string; why: string; done: boolean; optional?: boolean; target: string }[] = [
-    { key: "contract", title: "Contract level and writing number", why: "Every commission figure is worked out from these.", done: progress.contract, target: ids.contract },
     ...(progress.products === null ? [] : [{ key: "products", title: "Products you sell", why: "Tick at least one. Only ticked products show when you quote.", done: progress.products, target: ids.products }]),
     { key: "states", title: "States you’re appointed in", why: "An application in a state you didn’t tick gets a warning.", done: progress.states, target: ids.states },
+    // Optional, last: selling does not wait for it.
+    { key: "contract", title: "Contract level and writing number", why: "Optional. Fills in your commission figures.", done: progress.contract, optional: true, target: ids.contract },
   ];
   const next = items.find((item) => !item.done && !item.optional)?.key;
   let n = 0;
@@ -139,7 +141,7 @@ function ToFinish({ name, progress, ids }: { name: string; progress: CarrierProg
               <span className={cn("block text-sm font-semibold text-[var(--ink)]", item.done && "text-[var(--muted)] line-through")}>{item.title}</span>
               <span className="block text-xs text-[var(--muted)]">{item.done ? (item.optional ? "Saved." : "Done.") : item.why}</span>
             </span>
-            {!item.done && <span className={cn("shrink-0 text-xs font-semibold", now ? "text-[var(--accent-ink)]" : "text-[var(--body)]")}>{now ? "Fill in ↓" : "Go to it ↓"}</span>}
+            {!item.done && <span className={cn("shrink-0 text-xs font-semibold", now ? "text-[var(--accent-ink)]" : "text-[var(--body)]")}>{now ? "Fill in ↓" : item.optional ? "Add ↓" : "Go to it ↓"}</span>}
           </button>
         );
       })}
@@ -243,10 +245,13 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
   return (
     <section aria-label="Contract" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <span className={KICKER}>Contract</span>
+        <span className={KICKER}>Contract{!contract && <span className="font-medium normal-case tracking-normal">· optional</span>}</span>
         {state === "saving" ? <span className="text-xs text-[var(--muted)]">Saving…</span> : state === "saved" ? <StatusChip tone="good">Saved</StatusChip> : null}
       </div>
-      <div className="grid gap-3.5 sm:grid-cols-[150px_180px_200px]">
+      {/* The three fields share the card's width (one row when it fits, the level narrower) and stack
+          when it is narrow; fixed widths overflowed the card and made it scroll sideways (owner, 2026-10-28). */}
+      <div className="@container">
+      <div className="grid grid-cols-1 gap-3.5 @xs:grid-cols-2 @md:grid-cols-[minmax(0,0.75fr)_minmax(0,1.1fr)_minmax(0,1.1fr)] [&>label:last-child]:@xs:col-span-2 [&>label:last-child]:@md:col-span-1">
         <label className={FIELD}>
           Contract level
           <span className="relative">
@@ -263,11 +268,12 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
           <input className={cn(control, "mt-0")} disabled={!canEdit} value={writing} autoComplete="off" spellCheck={false} placeholder="e.g. TA-20914" onChange={(event) => setWriting(event.target.value)} onBlur={() => void save()} />
         </label>
       </div>
+      </div>
       {levelBad && <p className="m-0 text-xs text-[var(--error-ink)]">Write the level as a number, like 110.</p>}
       {error && <Callout tone="error" title={error} />}
       <p className="m-0 text-xs text-[var(--muted)]">
         {missing
-          ? `Type the level as ${carrierName} quotes it: 110 means 110%. The writing number is on your contracting letter or in the carrier’s portal. It saves once both are in.`
+          ? `You can sell ${carrierName} without these. Add them for commission figures: 110 means 110%, and the writing number is on your contracting letter. Saves once both are in.`
           : "The level every commission figure is worked out from. A new level from a later date keeps the earlier one for older policies."}
       </p>
     </section>

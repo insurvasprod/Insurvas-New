@@ -55,8 +55,7 @@ type Vault = {
   carrierRequirements: { carrier_id: string; contracted: boolean }[] | null;
 };
 type Sales = (Omit<CarriersPayload, "canEdit"> & { canEdit: boolean }) | null;
-/** "rules" is a link tab to /app/carrier-rules, never a step shown here. */
-type Step = "carriers" | "states" | "maps" | "rules";
+type Step = "carriers" | "states" | "maps";
 type Filter = "all" | "yes" | "no";
 
 const STATE_NAME = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
@@ -91,8 +90,8 @@ function Kicker({ id, text, hint }: { id: string; text: string; hint?: string })
   return <span className={KICKER}>{text}{hint && <HoverHint id={id} label={`About ${text.toLowerCase()}`}>{hint}</HoverHint>}</span>;
 }
 
-/** `carrierRules`: the agency has carrier rules (statement ingestion), so the Carrier rules tab is shown. */
-export function CarriersSettings({ carrierRules = false }: { carrierRules?: boolean } = {}) {
+// Owner, 2026-10-28: no Carrier rules tab here ("we don't need them"). The page itself stays for the money screens that link to it.
+export function CarriersSettings() {
   const [vault, setVault] = useState<Vault | null>(null);
   const [sales, setSales] = useState<Sales>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -284,8 +283,6 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
           { key: "states", label: "2 · States", count: nAppointed },
           // Field maps need the Applications feature (the extension reads them); without it the tab is absent.
           ...(sales !== null ? [{ key: "maps" as const, label: "3 · Field maps" }] : []),
-          // Owner, 2026-10-27: not a step of its own here, a link to the Carrier rules page.
-          ...(carrierRules ? [{ key: "rules" as const, label: "Carrier rules", href: "/app/carrier-rules" }] : []),
         ]}
         actions={<Button type="button" data-guide="carrier-library-add" onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add carrier</Button>}
       />

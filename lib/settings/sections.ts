@@ -122,7 +122,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   // Owner pick D, 2026-10-26: Carrier library and States & licences in one place, in three steps.
   // 2026-10-27: Carrier details (sales-carriers) folded into each carrier's card; old links land on Carriers.
   { group: "Carriers", id: "carriers", label: "Carriers", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Your carriers and the states each one appointed you in.", short: "Carriers, contract levels and appointed states.", search_keywords: ["carriers", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
-  // 2026-10-27 (owner): Carrier rules is a tab on Carriers that opens /app/carrier-rules, not a rail entry.
+  // 2026-10-28 (owner): Carrier rules is neither a rail entry nor a tab on Carriers.
   { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
 
   // ── Sales process ───────────────────────────────────────────────────────────────────────────────

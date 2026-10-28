@@ -69,8 +69,8 @@ type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped">;
  */
 const SETUP_STEPS = [
   { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers", action: "Open settings tab", target: "carrier-library-add",
-    instruction: "Tick the carriers you are contracted with and enter your contract level and writing number.",
-    why: "Every commission figure is worked out from your contract level, so this comes first." },
+    instruction: "Tick the carriers you are contracted with. Contract level and writing number are optional.",
+    why: "Every other step uses your carriers, so this comes first." },
   // LA-4.6: straight to the import, which is the activation step ("You appear to be owed $X").
   { key: "statement", module: "book", label: "Upload a carrier statement", path: "/app/statements?import=1", action: "Import a statement",
     instruction: "Drop in your latest carrier statement — PDF, Excel or CSV.",
@@ -103,10 +103,10 @@ const SETUP_STEPS = [
     instruction: "Set when an unclaimed transfer warns, escalates and expires.",
     why: "These times drive the Agent Floor alerts and when the partner is told." },
   // 2026-10-27: Carrier details folded into Settings › Carriers; the carrier facts are Insurvas's now,
-  // so this step is the carrier card's To finish list (contract + writing number, products, states).
+  // so this step is the carrier card's To finish list (products, states; the contract is optional).
   { key: "sales-carriers", module: "sell", label: "Finish a carrier so you can sell it", path: "/app/settings#carriers", action: "Open settings tab",
-    instruction: "Give a carrier its contract level and writing number, tick the products you sell and the states you're appointed in.",
-    why: "Each carrier on Carriers shows what is left; once all three are done it reads Ready to sell." },
+    instruction: "Tick the products you sell and the states you're appointed in. Contract level and writing number are optional.",
+    why: "Each carrier on Carriers shows what is left; once it is done it reads Ready to sell." },
   { key: "disclosures", module: "sell", label: "Publish your disclosures", path: "/app/settings#sales-disclosures", action: "Open settings tab",
     instruction: "Write or copy the disclosures your applications need, then publish them.",
     why: "A required disclosure must be read before an application can be submitted." },
