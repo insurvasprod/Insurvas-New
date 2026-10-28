@@ -125,7 +125,7 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
           </div>
           <ul className="text-sm">{accounts.length === 0 ? <li className="text-muted-foreground">No accounts yet — add one on <Link className="underline" href="/app/bank">Bank deposits</Link>.</li> : accounts.map((a) => <li key={a.id}>{a.nickname}{a.lastFour ? ` ••${a.lastFour}` : ""} — {a.columnMap ? `date “${a.columnMap.date}”, description “${a.columnMap.description}”, ${a.columnMap.amount ? `amount “${a.columnMap.amount}”` : `in/out “${a.columnMap.credit}”/“${a.columnMap.debit}”`}` : "mapping set on the first import"}</li>)}</ul>
         </>
-      ), <>Each carrier&apos;s expected payment lag is kept on <Link className="underline" href="/app/carrier-rules">Carrier rules</Link>.</>)}
+      ), <>Insurvas keeps each carrier&apos;s expected payment lag.</>)}
 
       {section("Tax", (
         <div className="grid gap-3 sm:grid-cols-3">

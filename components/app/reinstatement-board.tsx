@@ -100,7 +100,7 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
                 const out = [];
                 // The labelled group starts at the first case with no carrier window (they sort last).
                 if (view === "open" && r.urgency === "no_window" && (i === 0 || shown.rows[i - 1].urgency !== "no_window")) {
-                  out.push(<tr key="group-no-window"><td colSpan={5} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">No reinstatement window configured · <Link href="/app/carrier-rules" className="normal-case underline">set it in Carrier rules</Link></td></tr>);
+                  out.push(<tr key="group-no-window"><td colSpan={5} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">No reinstatement window yet · <span className="normal-case">Insurvas sets it per carrier</span></td></tr>);
                 }
                 const c = r.comparison.reinstate;
                 const next = FORWARD.find((s) => canMove(r.status, s));
