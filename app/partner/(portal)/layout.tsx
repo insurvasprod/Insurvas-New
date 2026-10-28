@@ -52,7 +52,7 @@ export default async function PartnerPortalLayout({ children }: { children: Reac
           </div>
         )}
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage ribbon className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
       </div>
       </main>
     </div>

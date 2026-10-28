@@ -86,7 +86,7 @@ export default async function SettersPage() {
   const booked = view.day.filter((row) => row.kind === "booked");
   const noShows = booked.filter((row) => row.detail?.status === "no_show");
 
-  // On the dashboard's moving ribbon, its cards frosted over it (owner ask 2026-10-26).
+  // On the dashboard's static stage backdrop, its cards frosted over it (owner ask 2026-10-26).
   return (
     <>
     <div className="m-stagger flex flex-col gap-6">

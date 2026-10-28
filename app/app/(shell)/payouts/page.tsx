@@ -28,7 +28,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
     if (!(error instanceof PayoutError)) throw error;
     problem = error.message;
   }
-  // Partners A (2026-10-25): on the dashboard's moving ribbon.
+  // Partners A (2026-10-25): on the dashboard's static stage backdrop.
   return (
     <>
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">

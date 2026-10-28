@@ -87,7 +87,7 @@ export async function mintGrant(actor: Actor, input: { applicationId: string; ca
   if (app.status !== "ready") throw new ApplicationError("APPLICATION_NOT_READY", "Mark the application ready on the Review step before filling the carrier's form.", 409);
   if (!app.carrier_id || app.carrier_id !== input.carrierId) throw new ApplicationError("CARRIER_MISMATCH", "That carrier is not the one this application is for.", 409);
   const origin = await carrierOriginFor(actor.tenantId, app.carrier_id);
-  if (!origin) throw new ApplicationError("CARRIER_ORIGIN_MISSING", "This carrier has no portal address yet. Add it in Settings › Sales › Carriers and products.", 409);
+  if (!origin) throw new ApplicationError("CARRIER_ORIGIN_MISSING", "Insurvas has not added a portal address for this carrier yet. Contact support to have it added.", 409);
 
   const client = db();
   // One live grant per person per application: opening a new one ends the old.

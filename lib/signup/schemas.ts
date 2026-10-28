@@ -9,7 +9,7 @@ const workEmail = z
   .string()
   .trim()
   .toLowerCase()
-  .email("Enter a valid work email")
+  .email("Enter a valid email address")
   .refine((email) => !isDisposableEmail(email), "Disposable email addresses are not allowed");
 
 export const publicSignupSchema = z.object({

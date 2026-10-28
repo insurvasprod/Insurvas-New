@@ -70,7 +70,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
       />
       {!found.available && <div role="status" className={pending}>{DISCREPANCIES_PENDING_MESSAGE}</div>}
       {list && !list.available && <div role="status" className={pending}>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</div>}
-      {untimed && untimed.length > 0 && <div role="status" className={pending}>Missing commission is not checked for {untimed.length === 1 ? "1 carrier" : `${untimed.length} carriers`} with no pay trigger or lag set: {payTimingGapText(untimed)}. <Link href="/app/carrier-rules" className="font-medium underline">Set them in Carrier rules</Link>.</div>}
+      {untimed && untimed.length > 0 && <div role="status" className={pending}>Missing commission is not checked for {untimed.length === 1 ? "1 carrier" : `${untimed.length} carriers`} with no pay trigger or lag set: {payTimingGapText(untimed)}. Insurvas sets these for each carrier.</div>}
       {found.available && found.truncated && <div role="status" className={pending}>Showing the first {found.items.length.toLocaleString("en-US")} findings, most serious first; the rest are not listed here.</div>}
       {view === "letters" ? (
         found.available && <DisputeLetters disputes={found.disputes} readOnly={readOnly} />

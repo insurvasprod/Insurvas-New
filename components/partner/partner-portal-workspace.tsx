@@ -52,6 +52,7 @@ import {
 } from "@/lib/templates/formats";
 import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
 import { StatusChip } from "@/components/ui/status-chip";
+import { placementWidth } from "@/lib/templates/placementWidth";
 
 type ApprovedProduct = { code: string; name: string; category: string };
 type PartnerMarket = {
@@ -83,7 +84,11 @@ function forgetSubmissionId(draftId: string | null) {
   try { window.localStorage.removeItem(`${SUBMISSION_KEY_PREFIX}${draftId}`); } catch { /* storage unavailable */ }
 }
 
-function PartnerField({
+/**
+ * One answer box, as partners get it. Exported for Settings › Form templates, which draws the form
+ * being edited with this same renderer so the owner sees exactly what partners see.
+ */
+export function PartnerField({
   field,
   value,
   error,
@@ -1221,7 +1226,7 @@ export function PartnerLeadForm({
     const isPhone = field.field_key === phoneField.field_key;
     return (
       <div
-        className={`portal-partner-submit-field${isGroup || field.type === "long_text" ? " is-wide" : ""}`}
+        className={`portal-partner-submit-field${placementWidth(field, formField) === "full" ? " is-wide" : ""}`}
         key={formField.field_key}
         onBlur={() => {
           blurField(field.field_key);

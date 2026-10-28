@@ -124,7 +124,7 @@ export function VerifyEmailPanel({ ttlHours }: { ttlHours: number; noPayment?: b
           {changing && (
             <form onSubmit={(event) => send("change_email", event)} className="mt-4 rounded-lg border border-border p-4">
               <label className="block">
-                <span className={authLabel}>Correct work email</span>
+                <span className={authLabel}>Correct email</span>
                 <input type="email" required autoComplete="email" className={authControl} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
               </label>
               <div className="mt-3 flex flex-wrap gap-2">

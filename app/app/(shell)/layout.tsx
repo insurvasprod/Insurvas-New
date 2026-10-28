@@ -174,7 +174,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
         <Suspense fallback={null}><SetupGuideBar /></Suspense>
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage ribbon className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
       </div>
       </main>
     </div>

@@ -1,134 +1,71 @@
 "use client";
 
 /**
- * Settings → Form templates, drawn from p-set-form-templates.
+ * Settings › Form templates, layout C (docs/design/specs/form-templates.md, revision 3): the form
+ * partners fill in is the page. Click a question to change it in the panel beside it; one line at the
+ * top says whether partners see what is drawn, and Publish changes is the only green button.
  *
- * The whole form is one draft. Every edit — a field, a section, an age limit, a stage, the name — is
- * held in this browser and listed under "Changes before commit"; the save bar writes it as one new
- * immutable form version. Partner drafts already in
- * progress stay pinned to the version they started on (the RPC's contract, unchanged).
+ * The whole form is one draft. Every edit — a question, a part, an age limit, the name — is held in
+ * this browser until it is published as one new immutable form version. Partner drafts already in
+ * progress stay pinned to the version they started on (the RPC's contract, unchanged). Stages are
+ * edited in Pipelines & outcomes only (owner, 2026-10-27); the draft still sends the template's own
+ * stages unchanged.
+ *
+ * This file owns loading, the draft and publishing; the parts it draws live in components/app/form-templates.
  */
 
-import { StatusChip } from "@/components/ui/status-chip";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
-import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SectionLoading } from "@/components/ui/page-states";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { TableCard } from "@/components/ui/table-card";
-import { Callout, Field, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, Timeline, ToggleRow, control, st } from "@/components/app/settings/primitives";
-import {
-  TEMPLATE_FIELD_TYPES,
-  TEMPLATE_FIELD_TYPE_LABELS,
-  TEMPLATE_FIELD_TYPE_TABLE_LABELS,
-  TEMPLATE_SECTION_GROUPS,
-  TEMPLATE_STAGE_TYPES,
-  TEMPLATE_STAGE_TYPE_LABELS,
-  type TemplateField,
-  type TemplateFormDefinition,
-  type TemplateFormField,
-  type TemplateRow,
-  type TemplateSectionGroup,
-  type TemplateStage,
-  type TemplateStageType,
-  type TemplateValidation,
-} from "@/lib/templates/constants";
-import { TEMPLATE_SECTION_GROUP_LABELS, sectionAvailability, sectionAvailabilityError, sectionsByGroup } from "@/lib/templates/sectionAvailability";
-import { BANK_ACCOUNT_MAX_DIGITS, BANK_ACCOUNT_MIN_DIGITS } from "@/lib/templates/formats";
+import { Callout, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
+import { StatusTabs, type StatusTab } from "@/components/app/form-templates/status-tabs";
 import { PartnerLeadForm, type PartnerFormPreviewSource } from "@/components/partner/partner-portal-workspace";
-import { countWord, diffTemplateDraft, eligibilityFieldKey, type TemplateDraft } from "@/lib/agentTemplates/draftChanges";
-import { defaultStageColor } from "@/lib/design/tokenColor";
+import type { TemplateField, TemplateFieldType, TemplateFormDefinition, TemplateFormField, TemplateRow, TemplateValidation } from "@/lib/templates/constants";
+import { moveFieldWithinSection, moveSection } from "@/lib/templates/formMoves";
+import { applyRequiredChoice, type RequiredChoice } from "@/lib/templates/plainLabels";
+import { sectionAvailability, sectionsByGroup } from "@/lib/templates/sectionAvailability";
+import { diffTemplateDraft, eligibilityFieldKey, type TemplateDraft } from "@/lib/agentTemplates/draftChanges";
+import { parseSettingsHash } from "@/lib/settings/registry";
+import { draftFrom, uniqueKey, type Available, type Current, type DraftState, type Preview, type Product } from "@/components/app/form-templates/draft";
+import { FormCanvas, type Picked } from "@/components/app/form-templates/form-canvas";
+import { QuestionPanel } from "@/components/app/form-templates/question-panel";
+import { FormSettingsPanel } from "@/components/app/form-templates/form-settings";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-
-type Current = { tenant_template_id: string; assignment: { template_id: string; template_version: number; definition_version: number; product_code: string }; template: { name: string; description: string | null; product_name: string; version: number; definition_version: number; fields: TemplateField[]; stages: TemplateStage[]; form_definition: TemplateFormDefinition }; latest: { id: string; version: number; name: string } | null };
-type Available = { id: string; name: string; product_code: string; product_name: string; version: number; description: string | null };
-type Product = { code: string; name: string };
-type Preview = { fieldsToAdd: string[]; stagesToAdd: string[]; sectionsToAdd: string[]; alreadyApplied: boolean };
-type DraftState = { draft: TemplateDraft; seen: Record<string, number> };
-type Editing = { kind: "field"; fieldKey: string; sectionKey: string | null } | { kind: "section"; sectionKey: string } | null;
-
-function cloneForm(form: TemplateFormDefinition): TemplateFormDefinition { return { sections: form.sections.map((section) => ({ ...section, fields: section.fields.map((field) => ({ ...field, show_when: field.show_when ? { ...field.show_when } : null, conditional_on: field.conditional_on ? { ...field.conditional_on } : undefined })) })), ...(form.section_availability ? { section_availability: { ...form.section_availability } } : {}) }; }
-
-function draftFrom(current: Current): TemplateDraft {
-  return {
-    name: current.template.name,
-    fields: current.template.fields.map((field) => ({ ...field, options: [...field.options], validation: { ...(field.validation ?? {}) } })),
-    stages: current.template.stages.map((stage) => ({ ...stage })),
-    form: cloneForm(current.template.form_definition),
-  };
-}
-
-const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-const small = "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]";
-
-function numberOrUndefined(value: string) { return value === "" ? undefined : Number(value); }
-
-function uniqueKey(base: string, used: Set<string>) {
-  let index = used.size + 1;
-  while (used.has(`${base}_${index}`)) index += 1;
-  return `${base}_${index}`;
-}
-
-/* ── partner preview: the partner's own form component, fed this draft (LA-1.4-5) ── */
+import { PublishBar, SETTINGS_TABS, StatusLine, type SettingsTab } from "@/components/app/form-templates/status-line";
 
 const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
 
-function PartnerViewPreview({ source, productCode, productName, agencyName }: { source: PartnerFormPreviewSource; productCode: string; productName: string; agencyName: string | null }) {
+/** "Got it" on the three-step guide, kept in this browser only; storage can be missing or blocked. */
+const GUIDE_KEY = "insurvas.formTemplates.guideDismissed";
+function guideDismissed() { try { return typeof window !== "undefined" && window.localStorage.getItem(GUIDE_KEY) === "1"; } catch { return false; } }
+
+/** How the page works, in three steps, for someone who has never seen it. */
+function Guide({ onDismiss }: { onDismiss: () => void }) {
+  const steps = ["Click a question on the form", "Change it in the panel that opens", "Press Publish changes when you’re ready"];
   return (
-    <SettingsCard title="Partner view preview" sub="Drawn from this draft. Nothing is saved or submitted.">
-      <div className="portal-partner-submit-page">
-        <PartnerLeadForm productCode={productCode} productName={productName} partnerStatus="active" market={PREVIEW_MARKET} preview={source} agencyName={agencyName} />
-      </div>
-    </SettingsCard>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-1">
+      <ol className="m-0 flex list-none flex-wrap items-center gap-x-5 gap-y-1.5 p-0">
+        {steps.map((step, index) => (
+          <li key={step} className="flex items-center gap-2 text-sm text-[var(--body)]">
+            <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--ink)]">{index + 1}</span>
+            {step}
+          </li>
+        ))}
+      </ol>
+      <Button onClick={onDismiss} type="button" variant="ghost" className="ml-auto">Got it</Button>
+    </div>
   );
 }
 
-/* ── LA-1.4-3: which section groups this product's form offers ─────────── */
-
-function SectionAvailabilityCard({ form, fields, onChange }: { form: TemplateFormDefinition; fields: TemplateField[]; onChange: (group: TemplateSectionGroup, on: boolean) => void }) {
-  const availability = sectionAvailability(form);
-  const governed = sectionsByGroup(form);
-  const problem = sectionAvailabilityError(form, fields);
-  return (
-    <SettingsCard title="Form sections" sub="Switch a whole group of sections off for this product.">
-      <div className="flex flex-col gap-3.5">
-        {TEMPLATE_SECTION_GROUPS.map((group) => {
-          const sections = governed[group];
-          return (
-            <ToggleRow
-              key={group}
-              id={`section-group-${group}`}
-              title={TEMPLATE_SECTION_GROUP_LABELS[group]}
-              help={sections.length ? `On this form: ${sections.map((section) => section.label).join(", ")}` : "No section on this form belongs to this group."}
-              checked={availability[group]}
-              onChange={(on) => onChange(group, on)}
-            />
-          );
-        })}
-        {problem && <Callout tone="error" title="This cannot be committed">{problem}</Callout>}
-      </div>
-    </SettingsCard>
-  );
+/** Every place a question sits, so "changed" can tell a moved or re-required question from an untouched one. */
+function placementsOf(form: TemplateFormDefinition, fieldKey: string) {
+  return form.sections.flatMap((section) => section.fields.map((field, index) => ({ section: section.section_key, index, field })).filter((item) => item.field.field_key === fieldKey));
 }
-
-function SettingsDialog({ open, onOpenChange, title, description, children }: { open: boolean; onOpenChange: (open: boolean) => void; title: ReactNode; description?: ReactNode; children: ReactNode }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-title-sm text-[var(--ink)]">{title}</DialogTitle>
-          {description && <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">{description}</DialogDescription>}
-        </DialogHeader>
-        {children}
-      </DialogContent>
-    </Dialog>
-  );
-}
+const withSections = (d: TemplateDraft, fn: (sections: TemplateFormDefinition["sections"]) => TemplateFormDefinition["sections"]): TemplateDraft => ({ ...d, form: { ...d.form, sections: fn(d.form.sections) } });
 
 /* ── the section ───────────────────────────────────────────────────────── */
 
@@ -146,33 +83,63 @@ export function TemplateSettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saveError, setSaveError] = useState("");
-  const [editing, setEditing] = useState<Editing>(null);
+  const [picked, setPicked] = useState<Picked>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const [trying, setTrying] = useState(false);
+  /** A product switch waiting on Publish / Discard / Stay. */
+  const [switchTo, setSwitchTo] = useState<string | null>(null);
+  /** A part with questions in it, waiting on its remove confirmation. */
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [guide, setGuide] = useState(() => !guideDismissed());
 
   async function load(product?: string) {
     setLoading(true);
     const url = product ? `/api/app/templates?product=${encodeURIComponent(product)}` : "/api/app/templates";
-    const response = await fetch(url, { cache: "no-store" });
-    const body = await response.json().catch(() => null);
+    const response = await fetch(url, { cache: "no-store" }).catch(() => null);
+    const body = response ? await response.json().catch(() => null) : null;
     setLoading(false);
-    if (!response.ok) { setError(body?.error ?? "Could not load template settings"); return; }
+    if (!response?.ok) { setError(body?.error ?? "Your form templates didn’t load."); return; }
     setError("");
     setCurrent(body.current);
     setAvailable(body.templates ?? []);
     setProducts(body.products ?? []);
     setAgencyName(typeof body.agencyName === "string" ? body.agencyName : null);
-    setState({ draft: draftFrom(body.current), seen: {} });
+    setState(body.current ? { draft: draftFrom(body.current), seen: {} } : null);
     setSaveError("");
     setSelected("");
     setPreview(null);
+    setPicked(null);
   }
   // Initial data is external server state; this effect hydrates the interactive editor.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, []);
 
+  // "#form-templates/form-lead-steps" (the settings search) opens Form settings on that tab.
+  useEffect(() => {
+    const fromHash = () => {
+      const { tab, anchor } = parseSettingsHash(window.location.hash);
+      const hit = tab === "form-templates" ? SETTINGS_TABS.find((item) => item.anchor === anchor) : null;
+      if (hit) setSettingsTab(hit.key);
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
+
   const saved = useMemo(() => (current ? draftFrom(current) : null), [current]);
   const draft = state?.draft ?? null;
   const changes = useMemo(() => (saved && draft ? diffTemplateDraft(saved, draft) : []), [saved, draft]);
   const dirty = changes.length > 0;
+  const changed = useMemo(() => {
+    const keys = new Set<string>();
+    if (!saved || !draft) return keys;
+    const before = new Map(saved.fields.map((field) => [field.field_key, field]));
+    for (const field of draft.fields) {
+      const was = before.get(field.field_key);
+      if (!was || JSON.stringify(was) !== JSON.stringify(field) || JSON.stringify(placementsOf(saved.form, field.field_key)) !== JSON.stringify(placementsOf(draft.form, field.field_key))) keys.add(field.field_key);
+    }
+    return keys;
+  }, [saved, draft]);
   // The partner form renders this draft as a partner would receive it (LA-1.4-5).
   const previewSource = useMemo<PartnerFormPreviewSource | null>(() => {
     if (!current || !draft) return null;
@@ -207,10 +174,10 @@ export function TemplateSettings() {
       return { draft: next, seen };
     });
   }
-  function discard() { if (current) setState({ draft: draftFrom(current), seen: {} }); setSaveError(""); setEditing(null); }
+  function discard() { if (current) setState({ draft: draftFrom(current), seen: {} }); setSaveError(""); setPicked(null); }
 
-  async function commit() {
-    if (!current || !draft) return;
+  async function publish(): Promise<boolean> {
+    if (!current || !draft) return false;
     setSaving(true);
     setSaveError("");
     const response = await fetch(`/api/app/templates/${current.tenant_template_id}`, {
@@ -223,12 +190,12 @@ export function TemplateSettings() {
         stages: draft.stages.map((stage, index) => ({ ...stage, sort_order: index })),
         form_definition: { sections: draft.form.sections.map((section, index) => ({ ...section, sort_order: index })), ...(draft.form.section_availability ? { section_availability: draft.form.section_availability } : {}) },
       }),
-    });
-    const body = await response.json().catch(() => null);
+    }).catch(() => null);
+    const body = response ? await response.json().catch(() => null) : null;
     setSaving(false);
-    if (!response.ok) { const message = body?.error ?? "Could not save template copy"; setSaveError(message); notify.block(message); return; }
-    notify.done("Committed as a new form version; forms already in progress stay on theirs");
-    await load(current.assignment.product_code);
+    if (!response?.ok) { const message = body?.error ?? "The form couldn’t be published"; setSaveError(message); notify.block(message); return false; }
+    notify.done("Published. Partners get the new form now", { detail: "Anyone who already started a form finishes it the old way." });
+    return true;
   }
 
   const chosen = available.find((template) => `${template.id}:${template.version}` === selected);
@@ -236,7 +203,7 @@ export function TemplateSettings() {
     if (!template) return;
     const response = await fetch("/api/app/templates/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ template_id: template.id, template_version: template.version }) });
     const body = await response.json().catch(() => null);
-    if (!response.ok) { notify.block(body?.error ?? "Could not preview template"); return; }
+    if (!response.ok) { notify.block(body?.error ?? "Couldn’t read that template"); return; }
     setPreview(body.preview);
   }
   async function apply() {
@@ -245,8 +212,8 @@ export function TemplateSettings() {
     const response = await fetch("/api/app/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ template_id: chosen.id, template_version: chosen.version }) });
     const body = await response.json().catch(() => null);
     setApplying(false);
-    if (!response.ok) { notify.block(body?.error ?? "Could not apply template"); return; }
-    notify.done("Template applied; new drafts use the new version");
+    if (!response.ok) { notify.block(body?.error ?? "Couldn’t add that template"); return; }
+    notify.done("Template added; new forms use the new version");
     await load(current.assignment.product_code);
   }
 
@@ -255,28 +222,31 @@ export function TemplateSettings() {
       <SettingsStack>
         <SettingsSectionHeader />
         {error ? (
-          <>
-            <Callout tone="error" title={error} />
-            <div><Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></div>
-          </>
+          <Callout tone="error" title={error}>
+            <Button onClick={() => void load()} type="button" variant="outline" className="mt-2">Try again</Button>
+          </Callout>
         ) : loading ? (
-          <TableCard><SectionLoading label="Loading form templates" /></TableCard>
+          <TableCard><SectionLoading label="Reading your form templates" /></TableCard>
         ) : (
-          <Callout tone="info" title="No form is configured." />
+          <Callout tone="info" title="No form is set up yet.">Every product needs a form before partners can send leads for it. Ask Insurvas support to add one.</Callout>
         )}
       </SettingsStack>
     );
   }
 
+  const productCode = current.assignment.product_code;
   const fieldMap = new Map(draft.fields.map((field) => [field.field_key, field]));
-  const placed = new Set(draft.form.sections.flatMap((section) => section.fields.map((field) => field.field_key)));
-  const unplaced = draft.fields.filter((field) => !placed.has(field.field_key));
   const eligibilityKey = eligibilityFieldKey(draft.fields);
   const eligibility = eligibilityKey ? fieldMap.get(eligibilityKey) ?? null : null;
-  const productTemplates = available.filter((template) => template.product_code === current.assignment.product_code);
-  const productOptions = products.some((product) => product.code === current.assignment.product_code)
-    ? products
-    : [{ code: current.assignment.product_code, name: current.template.product_name }, ...products];
+  const productOptions = products.some((product) => product.code === productCode) ? products : [{ code: productCode, name: current.template.product_name }, ...products];
+  const word = changes.length === 1 ? "change" : "changes";
+  const productTabs: StatusTab<string>[] = productOptions.map((product) => ({
+    key: product.code,
+    label: product.name,
+    status: product.code !== productCode ? { text: "Open its form", tone: "calm" }
+      : dirty ? { text: `${changes.length} ${word} not published`, tone: "warn" }
+      : { text: `Live · version ${current.assignment.definition_version}`, tone: "good" },
+  }));
 
   /* draft mutators */
   const setField = (fieldKey: string, patch: Partial<TemplateField>) => update((d) => ({ ...d, fields: d.fields.map((field) => (field.field_key === fieldKey ? { ...field, ...patch } : field)) }));
@@ -290,386 +260,250 @@ export function TemplateSettings() {
         return { ...field, validation: validation as TemplateValidation };
       }),
     }));
-  const setSection = (sectionKey: string, patch: Partial<TemplateFormDefinition["sections"][number]>) => update((d) => ({ ...d, form: { sections: d.form.sections.map((section) => (section.section_key === sectionKey ? { ...section, ...patch } : section)) } }));
   const setPlacement = (sectionKey: string, fieldKey: string, patch: Partial<TemplateFormField>) =>
-    update((d) => ({ ...d, form: { sections: d.form.sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: section.fields.map((field) => (field.field_key === fieldKey ? { ...field, ...patch } : field)) } : section)) } }));
-  function addSection() {
-    const key = uniqueKey("section", new Set(draft!.form.sections.map((section) => section.section_key)));
-    update((d) => ({ ...d, form: { sections: [...d.form.sections, { section_key: key, label: `Section ${d.form.sections.length + 1}`, fields: [], sort_order: d.form.sections.length }] } }));
-    setEditing({ kind: "section", sectionKey: key });
-  }
-  function addNewField(sectionKey: string | null) {
+    update((d) => withSections(d, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: section.fields.map((field) => (field.field_key === fieldKey ? { ...field, ...patch } : field)) } : section))));
+
+  function newField(type: TemplateFieldType): TemplateField {
     const key = uniqueKey("custom_field", new Set(draft!.fields.map((field) => field.field_key)));
-    update((d) => ({
-      ...d,
-      fields: [...d.fields, { field_key: key, label: "New field", type: "text", is_required: false, options: [], sort_order: d.fields.length, help_text: null, validation: {} }],
-      form: sectionKey ? { sections: d.form.sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: [...section.fields, { field_key: key, is_required: false, show_when: null }] } : section)) } : d.form,
-    }));
-    setEditing({ kind: "field", fieldKey: key, sectionKey });
+    return { field_key: key, label: "New question", type, is_required: false, options: ["single_select", "multi_select"].includes(type) ? ["First choice", "Second choice"] : [], sort_order: draft!.fields.length, help_text: null, validation: {} };
   }
-  function placeField(sectionKey: string, fieldKey: string) {
+  function addQuestion(sectionKey: string, type: TemplateFieldType) {
+    const field = newField(type);
+    update((d) => withSections({ ...d, fields: [...d.fields, field] }, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: [...section.fields, { field_key: field.field_key, is_required: false, show_when: null }] } : section))));
+    setPicked({ fieldKey: field.field_key, sectionKey });
+  }
+  function addAgentField() {
+    const field = newField("text");
+    update((d) => ({ ...d, fields: [...d.fields, field] }));
+    setPicked({ fieldKey: field.field_key, sectionKey: null });
+  }
+  function reuse(sectionKey: string, fieldKey: string) {
     const field = fieldMap.get(fieldKey);
     if (!field) return;
-    update((d) => ({ ...d, form: { sections: d.form.sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: [...section.fields, { field_key: fieldKey, is_required: field.is_required, show_when: null }] } : section)) } }));
+    update((d) => withSections(d, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: [...section.fields, { field_key: fieldKey, is_required: field.is_required, show_when: null }] } : section))));
+    setPicked({ fieldKey, sectionKey });
   }
-  function unplaceField(sectionKey: string, fieldKey: string) {
-    update((d) => ({ ...d, form: { sections: d.form.sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: section.fields.filter((field) => field.field_key !== fieldKey) } : section)) } }));
-  }
-  function moveField(sectionKey: string, fieldKey: string, by: -1 | 1) {
-    update((d) => ({
-      ...d,
-      form: {
-        sections: d.form.sections.map((section) => {
-          if (section.section_key !== sectionKey) return section;
-          const index = section.fields.findIndex((field) => field.field_key === fieldKey);
-          const target = index + by;
-          if (index < 0 || target < 0 || target >= section.fields.length) return section;
-          const fields = [...section.fields];
-          [fields[index], fields[target]] = [fields[target], fields[index]];
-          return { ...section, fields };
-        }),
-      },
+  function moveTo(fieldKey: string, from: string | null, to: string | null) {
+    if (from === to) return;
+    update((d) => withSections(d, (sections) => {
+      const kept = from ? sections.find((section) => section.section_key === from)?.fields.find((field) => field.field_key === fieldKey) : null;
+      return sections.map((section) => {
+        if (section.section_key === from) return { ...section, fields: section.fields.filter((field) => field.field_key !== fieldKey) };
+        if (section.section_key === to && !section.fields.some((field) => field.field_key === fieldKey)) return { ...section, fields: [...section.fields, kept ?? { field_key: fieldKey, is_required: false, show_when: null }] };
+        return section;
+      });
     }));
+    setPicked({ fieldKey, sectionKey: to });
   }
+  function setRequired(fieldKey: string, sectionKey: string | null, choice: RequiredChoice) {
+    const flags = applyRequiredChoice(choice, Boolean(sectionKey));
+    update((d) => {
+      const next = { ...d, fields: d.fields.map((field) => (field.field_key === fieldKey ? { ...field, is_required: flags.field } : field)) };
+      return sectionKey && flags.placement !== null
+        ? withSections(next, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: section.fields.map((field) => (field.field_key === fieldKey ? { ...field, is_required: flags.placement! } : field)) } : section)))
+        : next;
+    });
+  }
+  /** "Put back how it was": the question's own settings and, in this part, its required and show-when. */
+  function resetQuestion(fieldKey: string, sectionKey: string | null) {
+    const was = saved!.fields.find((field) => field.field_key === fieldKey);
+    if (!was) return;
+    const wasPlacement = sectionKey ? saved!.form.sections.find((section) => section.section_key === sectionKey)?.fields.find((field) => field.field_key === fieldKey) : null;
+    update((d) => {
+      const next = { ...d, fields: d.fields.map((field) => (field.field_key === fieldKey ? { ...was, options: [...was.options], validation: { ...(was.validation ?? {}) } } : field)) };
+      return wasPlacement && sectionKey ? withSections(next, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, fields: section.fields.map((field) => (field.field_key === fieldKey ? { ...wasPlacement } : field)) } : section))) : next;
+    });
+  }
+  /** Undo, not confirm: the draft before the delete is kept for the toast's Undo. */
   function deleteField(fieldKey: string) {
-    update((d) => ({ ...d, fields: d.fields.filter((field) => field.field_key !== fieldKey), form: { sections: d.form.sections.map((section) => ({ ...section, fields: section.fields.filter((field) => field.field_key !== fieldKey) })) } }));
-    setEditing(null);
+    const before = draft!;
+    const label = fieldMap.get(fieldKey)?.label || "the question";
+    update((d) => withSections({ ...d, fields: d.fields.filter((field) => field.field_key !== fieldKey) }, (sections) => sections.map((section) => ({ ...section, fields: section.fields.filter((field) => field.field_key !== fieldKey) }))));
+    setPicked(null);
+    notify.done(`Deleted “${label}”`, { action: { label: "Undo", onClick: () => update(() => before) }, durationMs: 6000 });
+  }
+  function addSection() {
+    const key = uniqueKey("section", new Set(draft!.form.sections.map((section) => section.section_key)));
+    update((d) => withSections(d, (sections) => [...sections, { section_key: key, label: `Part ${sections.length + 1}`, fields: [], sort_order: sections.length }]));
+    // The new part's name is ready to type over.
+    requestAnimationFrame(() => document.getElementById(`part-name-${key}`)?.focus());
   }
   function removeSection(sectionKey: string) {
-    update((d) => ({ ...d, form: { sections: d.form.sections.filter((section) => section.section_key !== sectionKey) } }));
-    setEditing(null);
+    const before = draft!;
+    const label = draft!.form.sections.find((section) => section.section_key === sectionKey)?.label || "the part";
+    update((d) => withSections(d, (sections) => sections.filter((section) => section.section_key !== sectionKey)));
+    if (picked?.sectionKey === sectionKey) setPicked(null);
+    setRemoving(null);
+    notify.done(`Removed “${label}”`, { action: { label: "Undo", onClick: () => update(() => before) }, durationMs: 6000 });
+  }
+  function askRemoveSection(sectionKey: string) {
+    const section = draft!.form.sections.find((item) => item.section_key === sectionKey);
+    if (section?.fields.length) setRemoving(sectionKey);
+    else removeSection(sectionKey);
+  }
+  function switchProduct(code: string) {
+    if (code === productCode || loading) return;
+    if (dirty) setSwitchTo(code);
+    else void load(code);
   }
 
-  const editingField = editing?.kind === "field" ? fieldMap.get(editing.fieldKey) ?? null : null;
-  const editingPlacementSection = editing?.kind === "field" && editing.sectionKey ? draft.form.sections.find((section) => section.section_key === editing.sectionKey) ?? null : null;
-  const editingPlacement = editingPlacementSection && editing?.kind === "field" ? editingPlacementSection.fields.find((field) => field.field_key === editing.fieldKey) ?? null : null;
-  const editingSection = editing?.kind === "section" ? draft.form.sections.find((section) => section.section_key === editing.sectionKey) ?? null : null;
-  const commitLabel = changes.length === 1 ? "Commit the change" : `Commit all ${countWord(changes.length)}`;
-
-  const fieldRow = (field: TemplateField | undefined, fieldKey: string, required: boolean, onEdit: () => void) => (
-    <tr key={fieldKey}>
-      <td className={st.td}>{field ? field.label : <span className="text-[var(--muted)]">{fieldKey} (no such field)</span>}</td>
-      <td className={st.td}>{field ? TEMPLATE_FIELD_TYPE_TABLE_LABELS[field.type] ?? field.type : "—"}</td>
-      <td className={st.td}>{required ? <StatusChip dot={false} tone="good">Yes</StatusChip> : <StatusChip dot={false} tone="neutral">No</StatusChip>}</td>
-      <td className={st.td}>{field?.help_text ? field.help_text : <span className="text-[var(--muted)]">—</span>}</td>
-      <td className={cn(st.td, st.num)}><Button type="button" variant="outline" size="sm" onClick={onEdit} aria-label={`Edit ${field?.label ?? fieldKey}`}>Edit</Button></td>
-    </tr>
-  );
-  const sectionRow = (key: string, label: ReactNode, onEdit?: () => void) => (
-    <tr key={`section-${key}`}>
-      <td className={st.td}><strong className="font-semibold text-[var(--muted)]">{label}</strong></td>
-      <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
-      <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
-      <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
-      <td className={cn(st.td, st.num)}>{onEdit ? <Button type="button" variant="outline" size="sm" onClick={onEdit} aria-label={`Edit section ${typeof label === "string" ? label : ""}`}>Edit</Button> : <span className="text-[var(--muted)]">—</span>}</td>
-    </tr>
-  );
+  const pickedField = picked ? fieldMap.get(picked.fieldKey) ?? null : null;
+  const pickedPlacement = picked?.sectionKey ? draft.form.sections.find((section) => section.section_key === picked.sectionKey)?.fields.find((field) => field.field_key === picked.fieldKey) ?? null : null;
+  const groups = sectionAvailability(draft.form);
+  const governed = sectionsByGroup(draft.form);
+  const topics = (Object.keys(governed) as Array<keyof typeof governed>).filter((group) => governed[group].length > 0);
+  const topicsOn = topics.filter((group) => groups[group]).length;
+  const ages = eligibility ? [eligibility.validation?.age_min, eligibility.validation?.age_max] : null;
+  const settingValues: Record<SettingsTab, string> = {
+    who: !ages ? "Anyone" : ages[0] != null && ages[1] != null ? `Ages ${ages[0]}–${ages[1]}` : ages[0] != null ? `Ages ${ages[0]}+` : ages[1] != null ? `Up to age ${ages[1]}` : "Any age",
+    parts: topics.length ? `${topicsOn} of ${topics.length} on` : "None on this form",
+    steps: "Set in Pipelines",
+    versions: current.latest ? `Update: version ${current.latest.version}` : `Live: version ${current.assignment.definition_version}`,
+  };
+  const removingSection = removing ? draft.form.sections.find((section) => section.section_key === removing) ?? null : null;
+  const switchName = switchTo ? productOptions.find((product) => product.code === switchTo)?.name ?? "the other product" : "";
 
   return (
     <SettingsStack>
       <SettingsSectionHeader />
-
-      <TableCard
-        title="Sections and fields"
-        toolbar={
-          <DataToolbar
-            actions={
-              <>
-                <Button type="button" variant="outline" onClick={() => addNewField(null)}><Plus aria-hidden="true" />Add a lead field</Button>
-                <Button type="button" onClick={addSection}><Plus aria-hidden="true" />Add a section</Button>
-              </>
-            }
-          >
-            <label htmlFor="template-product" className="sr-only">Template</label>
-            <select
-              id="template-product"
-              className={toolbarControl}
-              value={current.assignment.product_code}
-              disabled={dirty || loading}
-              title={dirty ? "Commit or discard the pending changes to switch product." : "Each product has its own form."}
-              onChange={(event) => void load(event.target.value)}
-            >
-              {productOptions.map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
-            </select>
-            {dirty && <StatusChip tone="warning" dot>{changes.length} {changes.length === 1 ? "change" : "changes"} before commit</StatusChip>}
-          </DataToolbar>
-        }
-      >
-        <table className={st.table}>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={st.th}>Field</th>
-              <th scope="col" className={cn(st.th, "w-[150px]")}>Type</th>
-              <th scope="col" className={cn(st.th, "w-[120px]")}>Required</th>
-              <th scope="col" className={cn(st.th, "w-[280px]")}>Help text</th>
-              <th scope="col" className={cn(st.th, "w-[100px]")}><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {draft.form.sections.map((section) => [
-              sectionRow(section.section_key, section.label, () => setEditing({ kind: "section", sectionKey: section.section_key })),
-              ...section.fields.map((formField) => {
-                const field = fieldMap.get(formField.field_key);
-                return fieldRow(field, `${section.section_key}:${formField.field_key}`, Boolean(field?.is_required || formField.is_required), () => setEditing({ kind: "field", fieldKey: formField.field_key, sectionKey: section.section_key }));
-              }),
-              section.fields.length === 0 ? (
-                <tr key={`${section.section_key}-empty`}><td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>No fields in this section yet. Edit the section to add one.</td></tr>
-              ) : null,
-            ])}
-            {unplaced.length > 0 && [
-              sectionRow("unplaced", "Lead fields not on the partner form"),
-              ...unplaced.map((field) => fieldRow(field, `unplaced:${field.field_key}`, field.is_required, () => setEditing({ kind: "field", fieldKey: field.field_key, sectionKey: null }))),
-            ]}
-          </tbody>
-        </table>
-      </TableCard>
-
-      <SettingsGrid>
-        <SettingsCard title="Eligibility limits" sub="Enforced when a lead is submitted, and again when leads are imported.">
-          {eligibility ? (
-            <div className="flex flex-col gap-3.5">
-              <Field label="Minimum age" htmlFor="eligibility-min" hint={`Read from ${eligibility.label}.`}>
-                <input id="eligibility-min" className={control} type="number" min={0} max={130} value={eligibility.validation?.age_min ?? ""} onChange={(event) => setValidation(eligibility.field_key, { age_min: numberOrUndefined(event.target.value) })} />
-              </Field>
-              <Field label="Maximum age" htmlFor="eligibility-max">
-                <input id="eligibility-max" className={control} type="number" min={0} max={130} value={eligibility.validation?.age_max ?? ""} onChange={(event) => setValidation(eligibility.field_key, { age_max: numberOrUndefined(event.target.value) })} />
-              </Field>
-            </div>
-          ) : (
-            <p className="m-0 text-sm leading-[1.5] text-[var(--muted)]">This form has no date-of-birth field, so it sets no age limits. Add a Date field for the date of birth to set them.</p>
-          )}
-        </SettingsCard>
-
-        <SettingsCard title="Changes before commit">
-          {dirty ? (
-            <div className="flex flex-col gap-4">
-              <Timeline
-                items={changes.map((change) => {
-                  const at = state?.seen[change.id];
-                  const by = at ? `by you, ${clock.format(at)}` : "by you";
-                  return { title: change.title, sub: change.sub ? `${change.sub} · ${by}` : `${by.charAt(0).toUpperCase()}${by.slice(1)}`, tone: "warning" as const };
-                })}
-              />
-              {saveError && <Callout tone="error" title={`Nothing was committed: ${saveError}`} />}
-            </div>
-          ) : (
-            <p className="m-0 text-sm leading-[1.5] text-[var(--muted)]">No pending changes. This is the live form, version {current.assignment.definition_version}.</p>
-          )}
-        </SettingsCard>
-      </SettingsGrid>
-
-      {/* Not on the board, and relied on: the live form's name and version, platform template
-          updates, the product's pipeline stages, and the partner preview. Kept below the board's
-          content in the same two-column rhythm. */}
-      <SettingsGrid>
-        <SettingsCard
-          title="Your active product form"
-          action={current.latest ? (
-            <Button type="button" variant="outline" onClick={() => { const latest = available.find((template) => template.id === current.latest?.id && template.version === current.latest?.version) ?? null; setSelected(`${current.latest!.id}:${current.latest!.version}`); void showPreview(latest); }}>Review platform update</Button>
-          ) : undefined}
-        >
-          <div className="flex flex-col gap-4">
-            <p className="m-0 text-sm leading-[1.5] text-[var(--body)]">
-              <strong className={st.strong}>{current.template.name}</strong>
-              <span className={st.sub}>{current.template.product_name} · {current.template.fields.length} fields · form version {current.assignment.definition_version}</span>
-            </p>
-            <Field label="Template name" htmlFor="copy-name">
-              <input id="copy-name" className={control} maxLength={120} value={draft.name} onChange={(event) => { const name = event.target.value; update((d) => ({ ...d, name })); }} />
-            </Field>
-          </div>
-        </SettingsCard>
-
-        <SettingsCard title="Platform templates" sub="Applying adds what is missing; your own fields and stages stay.">
-          <div className="flex flex-col gap-3">
-            <Field label="Template" htmlFor="platform-template">
-              <select id="platform-template" className={control} value={selected} onChange={(event) => { setSelected(event.target.value); setPreview(null); }}>
-                <option value="">Choose a template…</option>
-                {productTemplates.map((template) => <option key={`${template.id}-${template.version}`} value={`${template.id}:${template.version}`}>{template.name} · v{template.version}</option>)}
-              </select>
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" disabled={!chosen} onClick={() => void showPreview()}>Preview</Button>
-              <Button type="button" disabled={!chosen || !preview || applying || dirty} onClick={() => void apply()}>{applying ? "Applying…" : "Apply"}</Button>
-            </div>
-            {dirty && chosen && <p className="m-0 text-xs text-[var(--muted)]">Commit or discard the pending changes before applying a platform template.</p>}
-            {chosen && preview && (
-              <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-sm leading-[1.5] text-[var(--body)]">
-                <p className="m-0 font-semibold text-[var(--ink)]">{preview.alreadyApplied ? "Already applied" : "What applying adds"}</p>
-                <p className="m-0 mt-1.5">Fields: {preview.fieldsToAdd.length ? preview.fieldsToAdd.join(", ") : "none"}</p>
-                <p className="m-0">Form sections: {preview.sectionsToAdd.length ? preview.sectionsToAdd.join(", ") : "none"}</p>
-                <p className="m-0">Stages: {preview.stagesToAdd.length ? preview.stagesToAdd.join(", ") : "none"}</p>
-              </div>
-            )}
-          </div>
-        </SettingsCard>
-      </SettingsGrid>
-
-      <SettingsGrid>
-      <SettingsCard
-        title="Pipeline stages"
-        action={<Button type="button" variant="outline" onClick={() => update((d) => ({ ...d, stages: [...d.stages, { stage_key: uniqueKey("custom_stage", new Set(d.stages.map((stage) => stage.stage_key))), label: "New stage", stage_type: "open", color: defaultStageColor() ?? d.stages[d.stages.length - 1]?.color ?? "", sort_order: d.stages.length }] }))}><Plus aria-hidden="true" />Add a stage</Button>}
-      >
-        <div className="flex flex-col gap-4">
-          {draft.stages.map((stage) => (
-            <div key={stage.stage_key} className="flex flex-col gap-1">
-            <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_120px_104px_auto]">
-              <Field label="Label" htmlFor={`stage-label-${stage.stage_key}`}><input id={`stage-label-${stage.stage_key}`} className={small} maxLength={120} value={stage.label} onChange={(event) => { const label = event.target.value; update((d) => ({ ...d, stages: d.stages.map((item) => (item.stage_key === stage.stage_key ? { ...item, label } : item)) })); }} /></Field>
-              <Field label="Closes as" htmlFor={`stage-type-${stage.stage_key}`}>
-                <select id={`stage-type-${stage.stage_key}`} className={small} value={stage.stage_type} onChange={(event) => { const stage_type = event.target.value as TemplateStageType; update((d) => ({ ...d, stages: d.stages.map((item) => (item.stage_key === stage.stage_key ? { ...item, stage_type } : item)) })); }}>
-                  {TEMPLATE_STAGE_TYPES.map((type) => <option key={type} value={type}>{TEMPLATE_STAGE_TYPE_LABELS[type]}</option>)}
-                </select>
-              </Field>
-              <Field label="Colour" htmlFor={`stage-color-${stage.stage_key}`}><input id={`stage-color-${stage.stage_key}`} className={cn(small, "font-mono")} maxLength={7} value={stage.color} onChange={(event) => { const color = event.target.value; update((d) => ({ ...d, stages: d.stages.map((item) => (item.stage_key === stage.stage_key ? { ...item, color } : item)) })); }} /></Field>
-              <Button type="button" variant="ghost" className="mb-0.5 text-[var(--error-ink)]" onClick={() => update((d) => ({ ...d, stages: d.stages.filter((item) => item.stage_key !== stage.stage_key) }))} aria-label={`Remove stage ${stage.label}`}>Remove</Button>
-            </div>
-            {/* The key was a read-only input; it reads as what it is, a fact about the stage. */}
-            <span className="text-xs leading-[1.5] text-[var(--muted)]">Key <code className="font-mono text-xs">{stage.stage_key}</code></span>
-            </div>
-          ))}
-        </div>
-      </SettingsCard>
-
-      <SectionAvailabilityCard
-        form={draft.form}
-        fields={draft.fields}
-        onChange={(group, on) => update((d) => ({ ...d, form: { ...d.form, section_availability: { ...(d.form.section_availability ?? {}), [group]: on } } }))}
-      />
-      </SettingsGrid>
-
-      {previewSource && <PartnerViewPreview source={previewSource} productCode={current.assignment.product_code} productName={current.template.product_name} agencyName={agencyName} />}
-
       <LeaveGuard dirty={dirty} onDiscard={discard} what="the form draft" />
-      <SettingsSaveBar visible={dirty} note="Commits a new form version; forms already in progress keep theirs">
-        <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>
-        <Button type="button" onClick={() => void commit()} disabled={saving}>{saving ? "Committing…" : commitLabel}</Button>
-      </SettingsSaveBar>
 
-      <SettingsDialog open={Boolean(editingField)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingField ? `Edit “${editingField.label}”` : "Edit field"} description="Edits join the draft; commit to make them live.">
-        {editingField && (
-          <div className="flex flex-col gap-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Key" htmlFor="field-edit-key" hint="Stored with every lead, so it does not change.">
-                <input id="field-edit-key" className={cn(control, "font-mono")} value={editingField.field_key} readOnly />
-              </Field>
-              <Field label="Type" htmlFor="field-edit-type">
-                <select id="field-edit-type" className={control} value={editingField.type} onChange={(event) => { const type = event.target.value as TemplateField["type"]; setField(editingField.field_key, { type, options: ["single_select", "multi_select"].includes(type) ? editingField.options : [] }); }}>
-                  {TEMPLATE_FIELD_TYPES.map((type) => <option key={type} value={type}>{TEMPLATE_FIELD_TYPE_LABELS[type]}</option>)}
-                </select>
-              </Field>
-            </div>
-            <Field label="Label" htmlFor="field-edit-label" required>
-              <input id="field-edit-label" className={control} maxLength={120} value={editingField.label} onChange={(event) => setField(editingField.field_key, { label: event.target.value })} />
-            </Field>
-            <Field label="Help text" htmlFor="field-edit-help" hint="Shown to partners under the field.">
-              <input id="field-edit-help" className={control} maxLength={500} value={editingField.help_text ?? ""} onChange={(event) => setField(editingField.field_key, { help_text: event.target.value })} />
-            </Field>
-            <ToggleRow id="field-edit-required" title="Required on every form" help="A lead cannot be saved without it, from any source." checked={editingField.is_required} onChange={(is_required) => setField(editingField.field_key, { is_required })} />
-            {["single_select", "multi_select"].includes(editingField.type) && (
-              <Field label="Options" htmlFor="field-edit-options" hint="Separate options with commas.">
-                <input id="field-edit-options" className={control} value={editingField.options.join(", ")} onChange={(event) => setField(editingField.field_key, { options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean) })} placeholder="Yes, No" />
-              </Field>
-            )}
-            <fieldset className="m-0 flex flex-col gap-3 rounded-[12px] border border-[var(--border)] p-4">
-              <legend className="px-1 text-sm font-semibold text-[var(--ink)]">Validation rules</legend>
-              {["number", "currency"].includes(editingField.type) && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Minimum" htmlFor="field-edit-min"><input id="field-edit-min" className={small} type="number" value={editingField.validation?.min ?? ""} onChange={(event) => setValidation(editingField.field_key, { min: numberOrUndefined(event.target.value) })} /></Field>
-                  <Field label="Maximum" htmlFor="field-edit-max"><input id="field-edit-max" className={small} type="number" value={editingField.validation?.max ?? ""} onChange={(event) => setValidation(editingField.field_key, { max: numberOrUndefined(event.target.value) })} /></Field>
-                </div>
-              )}
-              {editingField.type === "date" && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Minimum age" htmlFor="field-edit-age-min"><input id="field-edit-age-min" className={small} type="number" value={editingField.validation?.age_min ?? ""} onChange={(event) => setValidation(editingField.field_key, { age_min: numberOrUndefined(event.target.value) })} /></Field>
-                  <Field label="Maximum age" htmlFor="field-edit-age-max"><input id="field-edit-age-max" className={small} type="number" value={editingField.validation?.age_max ?? ""} onChange={(event) => setValidation(editingField.field_key, { age_max: numberOrUndefined(event.target.value) })} /></Field>
-                </div>
-              )}
-              {["text", "long_text", "phone", "email", "ssn"].includes(editingField.type) && (
-                <>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Minimum length" htmlFor="field-edit-min-length"><input id="field-edit-min-length" className={small} type="number" value={editingField.validation?.min_length ?? ""} onChange={(event) => setValidation(editingField.field_key, { min_length: numberOrUndefined(event.target.value) })} /></Field>
-                    <Field label="Maximum length" htmlFor="field-edit-max-length"><input id="field-edit-max-length" className={small} type="number" value={editingField.validation?.max_length ?? ""} onChange={(event) => setValidation(editingField.field_key, { max_length: numberOrUndefined(event.target.value) })} /></Field>
-                  </div>
-                  <Field label="Pattern" htmlFor="field-edit-pattern" hint="Optional regular expression, e.g. ^[A-Z]">
-                    <input id="field-edit-pattern" className={small} maxLength={200} value={editingField.validation?.pattern ?? ""} onChange={(event) => setValidation(editingField.field_key, { pattern: event.target.value || undefined })} />
-                  </Field>
-                </>
-              )}
-              {["boolean", "single_select", "multi_select"].includes(editingField.type) && <p className="m-0 text-sm text-[var(--muted)]">This type has no validation rules; its options are the rule.</p>}
-              {editingField.type === "bank_routing" && <p className="m-0 text-sm text-[var(--muted)]">Always nine digits that pass the bank routing checksum. Stored as the digits alone.</p>}
-              {editingField.type === "bank_account" && <p className="m-0 text-sm text-[var(--muted)]">Always {BANK_ACCOUNT_MIN_DIGITS} to {BANK_ACCOUNT_MAX_DIGITS} digits. Stored as the digits alone.</p>}
-            </fieldset>
+      {productTabs.length > 1 && <StatusTabs label="Products" tabs={productTabs} value={productCode} onChange={switchProduct} idPrefix="form-product" panelIdPrefix="form-product-panel" />}
 
-            {editingPlacementSection && editingPlacement && (
-              <fieldset className="m-0 flex flex-col gap-3 rounded-[12px] border border-[var(--border)] p-4">
-                <legend className="px-1 text-sm font-semibold text-[var(--ink)]">On the partner form, in “{editingPlacementSection.label}”</legend>
-                <ToggleRow id="field-edit-form-required" title="Required on this form" help="Partners must answer it here even when the lead field itself is optional." checked={editingPlacement.is_required} onChange={(is_required) => setPlacement(editingPlacementSection.section_key, editingField.field_key, { is_required })} />
-                <ToggleRow
-                  id="field-edit-conditional"
-                  title="Show only when another field matches"
-                  checked={Boolean(editingPlacement.show_when ?? editingPlacement.conditional_on)}
-                  onChange={(on) => setPlacement(editingPlacementSection.section_key, editingField.field_key, { show_when: on ? { field_key: draft.fields.find((field) => field.field_key !== editingField.field_key)?.field_key ?? editingField.field_key, equals: "" } : null, conditional_on: null })}
-                />
-                {(editingPlacement.show_when ?? editingPlacement.conditional_on) && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="When" htmlFor="field-edit-when">
-                      <select id="field-edit-when" className={small} value={(editingPlacement.show_when ?? editingPlacement.conditional_on)?.field_key} onChange={(event) => setPlacement(editingPlacementSection.section_key, editingField.field_key, { show_when: { field_key: event.target.value, equals: (editingPlacement.show_when ?? editingPlacement.conditional_on)?.equals ?? "" }, conditional_on: null })}>
-                        {draft.fields.map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Equals" htmlFor="field-edit-equals">
-                      <input id="field-edit-equals" className={small} value={(editingPlacement.show_when ?? editingPlacement.conditional_on)?.equals ?? ""} onChange={(event) => setPlacement(editingPlacementSection.section_key, editingField.field_key, { show_when: { field_key: (editingPlacement.show_when ?? editingPlacement.conditional_on)?.field_key ?? editingField.field_key, equals: event.target.value }, conditional_on: null })} />
-                    </Field>
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => moveField(editingPlacementSection.section_key, editingField.field_key, -1)}>Move up</Button>
-                  <Button type="button" variant="outline" onClick={() => moveField(editingPlacementSection.section_key, editingField.field_key, 1)}>Move down</Button>
-                  <Button type="button" variant="ghost" className="text-[var(--error-ink)]" onClick={() => { unplaceField(editingPlacementSection.section_key, editingField.field_key); setEditing({ kind: "field", fieldKey: editingField.field_key, sectionKey: null }); }}>Remove from this section</Button>
-                </div>
-              </fieldset>
-            )}
+      <div id={`form-product-panel-${productCode}`} role={productTabs.length > 1 ? "tabpanel" : undefined} aria-labelledby={productTabs.length > 1 ? `form-product-${productCode}` : undefined} className="flex min-w-0 flex-col gap-5">
+        {guide && <Guide onDismiss={() => { setGuide(false); try { window.localStorage.setItem(GUIDE_KEY, "1"); } catch { /* the guide just comes back next time */ } }} />}
+        <StatusLine
+          changes={changes}
+          seen={state?.seen ?? {}}
+          liveVersion={current.assignment.definition_version}
+          saveError={saveError}
+          chips={[
+            { key: "who", label: "Who can apply", value: settingValues.who },
+            { key: "parts", label: "Topics", value: settingValues.parts },
+            { key: "steps", label: "Lead steps", value: settingValues.steps },
+            current.latest
+              ? { key: "versions", label: "New Insurvas version", value: `version ${current.latest.version}`, tone: "info" }
+              : { key: "versions", label: "Versions", value: settingValues.versions },
+          ]}
+          onSettings={setSettingsTab}
+        />
 
-            <div className="flex flex-wrap justify-between gap-2.5">
-              <Button type="button" variant="ghost" className="text-[var(--error-ink)]" onClick={() => deleteField(editingField.field_key)}>Delete the field</Button>
-              <Button type="button" onClick={() => setEditing(null)}>Done</Button>
-            </div>
+        <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
+          <div className="min-w-0 flex-1">
+            <FormCanvas
+              form={draft.form}
+              fields={draft.fields}
+              productName={current.template.product_name}
+              picked={picked}
+              changed={changed}
+              onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
+              onMoveField={(sectionKey, fieldKey, by) => update((d) => ({ ...d, form: moveFieldWithinSection(d.form, sectionKey, fieldKey, by) }))}
+              onWidth={(sectionKey, fieldKey, width) => setPlacement(sectionKey, fieldKey, { width })}
+              onDeleteField={deleteField}
+              onRenameSection={(sectionKey, label) => update((d) => withSections(d, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, label } : section))))}
+              onMoveSection={(sectionKey, by) => update((d) => ({ ...d, form: moveSection(d.form, sectionKey, by) }))}
+              onRemoveSection={askRemoveSection}
+              onAddQuestion={addQuestion}
+              onReuse={reuse}
+              onAddSection={addSection}
+              onAddAgentField={addAgentField}
+              onTry={() => setTrying(true)}
+            />
           </div>
-        )}
-      </SettingsDialog>
+          {picked && pickedField && (
+            <QuestionPanel
+              field={pickedField}
+              fields={draft.fields}
+              form={draft.form}
+              sectionKey={picked.sectionKey}
+              placement={pickedPlacement}
+              changed={changed.has(pickedField.field_key)}
+              setField={setField}
+              setValidation={setValidation}
+              setPlacement={setPlacement}
+              onRequired={(choice) => setRequired(pickedField.field_key, picked.sectionKey, choice)}
+              onMoveTo={(to) => moveTo(pickedField.field_key, picked.sectionKey, to)}
+              onReset={saved.fields.some((field) => field.field_key === pickedField.field_key) && changed.has(pickedField.field_key) ? () => resetQuestion(pickedField.field_key, picked.sectionKey) : null}
+              onDelete={() => deleteField(pickedField.field_key)}
+              onClose={() => setPicked(null)}
+            />
+          )}
+        </div>
+      </div>
 
-      <SettingsDialog open={Boolean(editingSection)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingSection ? `Edit section “${editingSection.label}”` : "Edit section"} description="Edits join the draft; commit to make them live.">
-        {editingSection && (
-          <div className="flex flex-col gap-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Key" htmlFor="section-edit-key"><input id="section-edit-key" className={cn(control, "font-mono")} value={editingSection.section_key} readOnly /></Field>
-              <Field label="Label" htmlFor="section-edit-label" required><input id="section-edit-label" className={control} maxLength={120} value={editingSection.label} onChange={(event) => setSection(editingSection.section_key, { label: event.target.value })} /></Field>
+      <PublishBar count={changes.length} saving={saving} onUndoAll={discard} onPublish={() => void publish().then((ok) => { if (ok) void load(productCode); })} />
+
+      {settingsTab && (
+        <FormSettingsPanel
+          tab={settingsTab}
+          values={settingValues}
+          onTab={setSettingsTab}
+          onClose={() => setSettingsTab(null)}
+          eligibility={eligibility}
+          onAges={(patch) => { if (eligibility) setValidation(eligibility.field_key, patch); }}
+          form={draft.form}
+          fields={draft.fields}
+          onGroup={(group, on) => update((d) => ({ ...d, form: { ...d.form, section_availability: { ...(d.form.section_availability ?? {}), [group]: on } } }))}
+          versions={{
+            current,
+            name: draft.name,
+            onName: (name) => update((d) => ({ ...d, name })),
+            templates: available.filter((template) => template.product_code === productCode),
+            selected,
+            chosen,
+            preview,
+            applying,
+            dirty,
+            onSelect: (value) => { setSelected(value); setPreview(null); },
+            onPreview: () => void showPreview(),
+            onApply: () => void apply(),
+          }}
+        />
+      )}
+
+      {/* "Try the form": the partner's own form component, fed this draft, so show-when runs for real (LA-1.4-5). */}
+      <Dialog open={trying} onOpenChange={setTrying}>
+        <DialogContent className="max-h-[88vh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-title-sm text-[var(--ink)]">Try the form</DialogTitle>
+            <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">Fill it in as a partner would. Nothing is saved or sent.</DialogDescription>
+          </DialogHeader>
+          {previewSource && (
+            <div className="portal-partner-submit-page">
+              <PartnerLeadForm productCode={productCode} productName={current.template.product_name} partnerStatus="active" market={PREVIEW_MARKET} preview={previewSource} agencyName={agencyName} />
             </div>
-            <div className="flex flex-col gap-2">
-              <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">Fields in this section</span>
-              {editingSection.fields.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">None yet.</p>}
-              {editingSection.fields.map((formField) => (
-                <div key={formField.field_key} className="flex items-center justify-between gap-3 rounded-[8px] bg-[var(--surface-alt)] px-3 py-2 text-sm">
-                  <span>{fieldMap.get(formField.field_key)?.label ?? formField.field_key}</span>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setEditing({ kind: "field", fieldKey: formField.field_key, sectionKey: editingSection.section_key })}>Edit</Button>
-                </div>
-              ))}
-            </div>
-            <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto]">
-              <Field label="Add an existing field" htmlFor="section-edit-existing">
-                <select id="section-edit-existing" className={small} defaultValue="" onChange={(event) => { if (event.target.value) { placeField(editingSection.section_key, event.target.value); event.target.value = ""; } }}>
-                  <option value="">Choose a field…</option>
-                  {draft.fields.filter((field) => !editingSection.fields.some((item) => item.field_key === field.field_key)).map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}
-                </select>
-              </Field>
-              <Button type="button" variant="outline" className="mb-0.5" onClick={() => addNewField(editingSection.section_key)}><Plus aria-hidden="true" />New field</Button>
-            </div>
-            <div className="flex flex-wrap justify-between gap-2.5">
-              <Button type="button" variant="ghost" className="text-[var(--error-ink)]" onClick={() => removeSection(editingSection.section_key)} disabled={draft.form.sections.length <= 1}>Remove the section</Button>
-              <Button type="button" onClick={() => setEditing(null)}>Done</Button>
-            </div>
-          </div>
-        )}
-      </SettingsDialog>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(switchTo)} onOpenChange={(open) => { if (!open) setSwitchTo(null); }}>
+        <DialogContent className="border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-title-sm text-[var(--ink)]">Publish your {changes.length} {word} first?</DialogTitle>
+            <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">They are on the {current.template.product_name} form and not live yet. Opening {switchName} drops them unless you publish.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button onClick={() => setSwitchTo(null)} type="button" variant="ghost">Stay here</Button>
+            <Button onClick={() => { const next = switchTo; setSwitchTo(null); if (next) void load(next); }} type="button" variant="outline">Drop them</Button>
+            <Button onClick={() => { const next = switchTo; setSwitchTo(null); void publish().then((ok) => { if (ok && next) void load(next); }); }} type="button" disabled={saving}>Publish, then open</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(removingSection)} onOpenChange={(open) => { if (!open) setRemoving(null); }}>
+        <DialogContent className="border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-title-sm text-[var(--ink)]">Remove “{removingSection?.label}”?</DialogTitle>
+            <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">
+              Partners stop seeing its {removingSection?.fields.length} {removingSection?.fields.length === 1 ? "question" : "questions"}. They stay saved on leads, under For your agents only.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button onClick={() => setRemoving(null)} type="button" variant="ghost">Keep it</Button>
+            <Button onClick={() => { if (removing) removeSection(removing); }} type="button" variant="destructive">Remove the part</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SettingsStack>
   );
 }

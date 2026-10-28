@@ -15,6 +15,6 @@ export default async function AgentPartnerChatPage({ searchParams }: { searchPar
   // ?partner= (the partner record's Message button) opens on that partner's latest conversation.
   const partner = (await searchParams).partner;
   const openPartnerId = typeof partner === "string" && UUID.test(partner) ? partner : undefined;
-  // Partners A (2026-10-25): on the dashboard's moving ribbon.
+  // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
   return <><AgentPartnerChatWorkspace recordLinks={records.entitled && actAsPage(records, ["owner", "bookkeeper"])} openPartnerId={openPartnerId} /></>;
 }

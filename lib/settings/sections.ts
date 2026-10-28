@@ -131,7 +131,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   // Owner pick D, 2026-10-26: Carrier library and States & licences in one place, in three steps.
   // 2026-10-27: Carrier details (sales-carriers) folded into each carrier's card; old links land on Carriers.
   { group: "Carriers", id: "carriers", label: "Carriers", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Your carriers and the states each one appointed you in.", short: "Carriers, contract levels and appointed states.", search_keywords: ["carriers", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
-  // 2026-10-27 (owner): Carrier rules is a tab on Carriers that opens /app/carrier-rules, not a rail entry.
+  // 2026-10-28 (owner): Carrier rules is neither a rail entry nor a tab on Carriers.
   { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
 
   // ── Sales process ───────────────────────────────────────────────────────────────────────────────
@@ -157,7 +157,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   // ── Leads & dialing ─────────────────────────────────────────────────────────────────────────────
   // Pipelines and Dispositions are one page (owner, 2026-10-27); old "#dispositions" links land here (registry.ts).
   { group: "Leads & dialing", id: "pipelines", label: "Pipelines & outcomes", sort_order: 10, owned_by_module: "LA-1.9 / LA-1.12", required_feature: "book_of_business", required_roles: OWNER, description: "Your pipelines' stages, the call outcomes agents pick, and where each outcome sends the lead.", short: "Stages, call outcomes, and the stage each outcome moves a lead to.", search_keywords: ["stages", "pipeline", "call outcome", "disposition", "dispositions", "outcomes"] },
-  { group: "Leads & dialing", id: "form-templates", label: "Form templates", sort_order: 30, owned_by_module: "LA-1.4", required_feature: "book_of_business", required_roles: OWNER, description: "The partner and agent forms that capture a complete lead, before anybody calls it.", search_keywords: ["lead fields", "forms", "application forms", "custom fields"] },
+  {
+    group: "Leads & dialing", id: "form-templates", label: "Form templates", sort_order: 30, owned_by_module: "LA-1.4", required_feature: "book_of_business", required_roles: OWNER,
+    description: "The partner and agent forms that capture a complete lead, before anybody calls it.", search_keywords: ["lead fields", "forms", "application forms", "custom fields", "questions", "partner form"],
+    items: [
+      { label: "Who can apply", anchor: "form-who-can-apply", keywords: ["age limit", "eligibility", "minimum age", "maximum age", "how old"] },
+      { label: "Parts of the form", anchor: "form-parts", keywords: ["section groups", "medical", "banking", "beneficiary", "signature"] },
+      { label: "Lead steps", anchor: "form-lead-steps", keywords: ["stages", "which pipeline"] },
+      { label: "Versions & updates", anchor: "form-versions", keywords: ["platform template", "Insurvas template", "form version", "form name"] },
+    ],
+  },
   { group: "Leads & dialing", id: "lead-posting", label: "Lead posting", sort_order: 40, owned_by_module: "LA-2.5", required_feature: "lead_import", required_roles: OWNER, description: "The keys your vendors post with, the URL they post to, and how their field names map onto yours.", short: "Vendor posting keys, the URL they post to and their field maps.", search_keywords: ["post key", "vendor key", "lead post", "posting url", "field map"] },
   { group: "Leads & dialing", id: "calendar", label: "Calendar & availability", sort_order: 50, owned_by_module: "LA-2.11", required_feature: "outbound_dialing", required_roles: OWNER, description: "Working hours, blocked time and how many appointments fit in a day. Every booking rule reads these.", search_keywords: ["working hours", "availability", "appointments per day", "blocked time"] },
   { group: "Leads & dialing", id: "cadence", label: "Dialing cadence", sort_order: 60, owned_by_module: "LA-2.7", required_feature: "outbound_dialing", required_roles: OWNER, description: "How long the dialer waits before each retry, and which part of the day it prefers.", search_keywords: ["retry", "redial", "cadence"] },

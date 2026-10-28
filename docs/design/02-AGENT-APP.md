@@ -38,6 +38,13 @@ spend — **do not merge those two pages.**
 
 ## 1. Dashboard — `/app/dashboard`
 
+> **Superseded in layout (2026-10-28).** The Home dashboard is now the v3 layout in
+> [UI-CONSISTENCY.md §4b](UI-CONSISTENCY.md#4b-home-dashboard-v3): needs-you row, four stat cards,
+> the calls chart beside today's schedule, money beside the team, then every module as a link. The
+> calls chart draws `getDashboardToday`'s fourteen days of dials, so "Add a chart" below no longer
+> applies; the schedule shows up to six appointments and callbacks together. The gates, data and
+> empty-state rules below still hold.
+
 **File:** `app/app/(shell)/dashboard/page.tsx` (66)
 **Components:** `SetupChecklist`, `DashboardTile`, inline callbacks card
 **Mockup:** `01-agent-dashboard.png` — authoritative

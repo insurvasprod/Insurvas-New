@@ -18,6 +18,6 @@ export default async function PartnerQualityDetailPage({ params, searchParams }:
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Partner quality" detail="In an agency, the owner and admins review partner quality." />;
   const [{ partnerId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(partnerId)) notFound();
-  // Partners A (2026-10-25): on the dashboard's moving ribbon.
+  // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
   return <><PartnerQualityDetailWorkspace partnerId={partnerId} initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} /></>;
 }

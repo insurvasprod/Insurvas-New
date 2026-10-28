@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelHeading } from "@/components/app/funnel-frame";
+import { MultiPicker } from "@/components/app/multi-picker";
 import { StatePicker } from "@/components/app/state-picker";
 import { Button } from "@/components/ui/button";
 import { LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, VOLUME_OPTIONS } from "@/lib/signup/constants";
@@ -17,17 +18,6 @@ const chip = (on: boolean) =>
     "min-h-10 rounded-full px-3.5 text-sm font-semibold tracking-[-0.02em] transition-colors duration-150",
     on ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] bg-card text-[var(--body)] hover:border-[var(--accent-ink)]",
   );
-
-/** Free mailboxes say nothing about the agency's name; a company domain usually does. */
-const PERSONAL_DOMAINS = new Set(["gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com", "live.com", "icloud.com", "me.com", "aol.com", "proton.me", "protonmail.com", "msn.com"]);
-
-/** "dana@northline-life.com" → "Northline Life". Empty for a personal mailbox. */
-export function nameFromEmail(email: string | null | undefined) {
-  const domain = (email ?? "").split("@")[1]?.toLowerCase() ?? "";
-  if (!domain || PERSONAL_DOMAINS.has(domain)) return "";
-  const label = domain.split(".")[0] ?? "";
-  return label.split(/[-_]+/).filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
-}
 
 /**
  * What each field needs, one short sentence (owner, 2026-10-26: "an informational icon that explains
@@ -43,11 +33,13 @@ const FIELD_INFO = {
 type InfoKey = keyof typeof FIELD_INFO;
 
 /** A field's label with its (i). Hover or focus shows the hint floating above, so nothing below moves. */
-function FieldLabel({ id, label }: { id: InfoKey; label: string }) {
+function FieldLabel({ id, label, end = false }: { id: InfoKey; label: string; end?: boolean }) {
   return (
-    <span className="flex items-center gap-1.5">
+    // On a phone the hint spans the label row (the outer span is its box), so it never runs off the
+    // screen; from 640px it sits by the (i), toward the inside of the column.
+    <span className="relative flex items-center gap-1.5">
       <span className={authLabel}>{label}</span>
-      <span className="group relative inline-flex">
+      <span className="group inline-flex sm:relative">
         <button
           type="button"
           aria-label={`What ${label.toLowerCase()} needs`}
@@ -61,7 +53,7 @@ function FieldLabel({ id, label }: { id: InfoKey; label: string }) {
         <span
           id={`info-${id}`}
           role="tooltip"
-          className="pointer-events-none invisible absolute bottom-full -left-2 z-20 mb-1.5 w-64 rounded-lg border border-[var(--border-strong)] bg-[var(--color-card)] px-3 py-2 text-xs font-normal leading-normal text-[var(--body)] opacity-0 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))] transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+          className={cn("pointer-events-none invisible absolute bottom-full inset-x-0 z-20 mb-1.5 rounded-lg sm:right-auto sm:-left-2 sm:w-64 border border-[var(--border-strong)] bg-[var(--color-card)] px-3 py-2 text-xs font-normal leading-normal text-[var(--body)] opacity-0 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))] transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100", end && "sm:left-auto sm:-right-2")}
         >
           {FIELD_INFO[id]}
         </span>
@@ -84,13 +76,14 @@ export type BusinessProfileInitial = {
  * when it saves the profile.
  *
  * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
- * `email`: the owner's address, to suggest the business name from its domain on a first visit.
+ * The name starts empty otherwise: guessing it from the email domain is gone (owner, 2026-10-27).
  */
-export function BusinessProfileForm({ initial = null, email = null }: { initial?: BusinessProfileInitial | null; email?: string | null }) {
+export function BusinessProfileForm({ initial = null }: { initial?: BusinessProfileInitial | null }) {
   const router = useRouter();
-  const suggested = initial ? "" : nameFromEmail(email);
-  const [businessName, setBusinessName] = useState(initial?.businessName ?? suggested);
-  const label = (id: InfoKey, text: string): ReactNode => <FieldLabel id={id} label={text} />;
+  const [businessName, setBusinessName] = useState(initial?.businessName ?? "");
+  // A field in the right column opens its hint toward the left, so it never runs past the column
+  // (owner, 2026-10-27: the page scrolled sideways at 125% Windows scaling).
+  const label = (id: InfoKey, text: string, end = false): ReactNode => <FieldLabel id={id} label={text} end={end} />;
   const [primaryState, setPrimaryState] = useState(initial?.primaryState ?? "");
   const [products, setProducts] = useState<string[]>(initial?.productsSold ?? []);
   const [volume, setVolume] = useState(initial?.monthlyVolumeRange ?? "");
@@ -107,10 +100,6 @@ export function BusinessProfileForm({ initial = null, email = null }: { initial?
     leadSources.length === 0 && "a lead source",
     leadSources.includes("other") && !leadSourceOther.trim() && "the other lead source",
   ].filter(Boolean) as string[];
-
-  function toggle(value: string, current: string[], set: (next: string[]) => void) {
-    set(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
-  }
 
   // One way out of this step (2026-10-26, owner: "remove save and exit"): save, then the plan step.
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -139,27 +128,31 @@ export function BusinessProfileForm({ initial = null, email = null }: { initial?
     <div>
       {/* One line saying why (copy table, owner 2026-10-27); no setup preview; the NPN is asked later in Settings. */}
       <FunnelHeading title="Tell us about your agency">We use this to set up your workspace.</FunnelHeading>
-      <form onSubmit={(event) => void save(event)} noValidate className="flex flex-col gap-5">
+      <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-5">
         {/* Name and state side by side on a wide screen: the step fits without scrolling (2026-10-26). */}
         <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
         <div>
           {label("name", "Business name")}
-          <input className={authControl} aria-label="Business name" autoComplete="organization" maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} aria-describedby={suggested ? "business-name-note" : undefined} />
-          {suggested && businessName === suggested && <span id="business-name-note" className="mt-1.5 block text-xs text-muted-foreground">Taken from your email address. Change it if it is not right.</span>}
+          <input className={authControl} aria-label="Business name" autoComplete="organization" maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
         </div>
 
         <div>
-          {label("state", "Primary state")}
+          {label("state", "Primary state", true)}
           <StatePicker value={primaryState} onChange={setPrimaryState} />
         </div>
         </div>
 
-        <fieldset>
-          <legend className="contents">{label("sell", "What you sell")}</legend>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {PRODUCT_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={products.includes(option.value)} className={chip(products.includes(option.value))} onClick={() => toggle(option.value, products, setProducts)}>{option.label}</button>)}
+        {/* The two multi-answer questions are dropdowns side by side (owner, 2026-10-27), not rows of chips. */}
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+          <div>
+            {label("sell", "What you sell")}
+            <MultiPicker label="What you sell" placeholder="Choose products" options={PRODUCT_OPTIONS} value={products} onChange={setProducts} />
           </div>
-        </fieldset>
+          <div>
+            {label("sources", "Where your leads come from", true)}
+            <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
+          </div>
+        </div>
 
         <fieldset>
           <legend className="contents">{label("volume", "Applications a month")}</legend>
@@ -172,12 +165,6 @@ export function BusinessProfileForm({ initial = null, email = null }: { initial?
           </div>
         </fieldset>
 
-        <fieldset>
-          <legend className="contents">{label("sources", "Where your leads come from")}</legend>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {LEAD_SOURCE_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={leadSources.includes(option.value)} className={chip(leadSources.includes(option.value))} onClick={() => toggle(option.value, leadSources, setLeadSources)}>{option.label}</button>)}
-          </div>
-        </fieldset>
         {leadSources.includes("other") && (
           <label className="block">
             <span className={authLabel}>Other lead source</span>

@@ -39,14 +39,13 @@ import { parseSettingsHash } from "@/lib/settings/registry";
 import { cn } from "@/lib/utils";
 import { US_STATES } from "@/lib/appointments/constants";
 import type { AppointmentRow, LicenseRow } from "@/lib/appointments/service-types";
+import { cardSurface } from "@/components/ui/card";
 import type { TenantCarrierRow } from "@/lib/carriers/service";
 import {
   appointmentChange, bpToLevel, carriersIn, coverage, currentAppointment, statesFor, todayIso,
   type AppointmentChange,
 } from "@/lib/appointments/tickModel";
 import type { CarriersPayload } from "@/lib/salesSettings/views";
-import type { FactReportView } from "@/lib/carriers/factReportConstants";
-import { cardSurface } from "@/components/ui/card";
 
 type Vault = {
   carriers: { id: string; name: string }[];
@@ -57,8 +56,7 @@ type Vault = {
   carrierRequirements: { carrier_id: string; contracted: boolean }[] | null;
 };
 type Sales = (Omit<CarriersPayload, "canEdit"> & { canEdit: boolean }) | null;
-/** "rules" is a link tab to /app/carrier-rules, never a step shown here. */
-type Step = "carriers" | "states" | "maps" | "rules";
+type Step = "carriers" | "states" | "maps";
 type Filter = "all" | "yes" | "no";
 
 const STATE_NAME = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
@@ -92,11 +90,10 @@ function Kicker({ id, text, hint }: { id: string; text: string; hint?: string })
   return <span className={KICKER}>{text}{hint && <HoverHint id={id} label={`About ${text.toLowerCase()}`}>{hint}</HoverHint>}</span>;
 }
 
-/** `carrierRules`: the agency has carrier rules (statement ingestion), so the Carrier rules tab is shown. */
-export function CarriersSettings({ carrierRules = false }: { carrierRules?: boolean } = {}) {
+// Owner, 2026-10-28: no Carrier rules tab here ("we don't need them"). The page itself stays for the money screens that link to it.
+export function CarriersSettings() {
   const [vault, setVault] = useState<Vault | null>(null);
   const [sales, setSales] = useState<Sales>(null);
-  const [reports, setReports] = useState<{ reports: FactReportView[]; available: boolean }>({ reports: [], available: false });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("carriers");
   const [carrierId, setCarrierId] = useState<string | null>(null);
@@ -134,14 +131,8 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
     const response = await fetch("/api/app/settings/sales/carriers", { cache: "no-store" });
     setSales(response.ok ? ((await response.json().catch(() => null)) as Sales) : null);
   }, []);
-  // The agency's reports to Insurvas (20261027200000). Until that is applied, available stays false
-  // and Tell us writes an email instead.
-  const loadReports = useCallback(async () => {
-    const response = await fetch("/api/app/carrier-fact-reports", { cache: "no-store" });
-    if (response.ok) setReports((await response.json()) as { reports: FactReportView[]; available: boolean });
-  }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the section's external data, loaded once
-  useEffect(() => { void loadVault(); void loadSales(); void loadReports(); }, [loadVault, loadSales, loadReports]);
+  useEffect(() => { void loadVault(); void loadSales(); }, [loadVault, loadSales]);
   const loaded = vault !== null;
   useEffect(() => {
     if (!loaded) return;
@@ -216,23 +207,41 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
     void saveAppointments(yours.flatMap((carrier) => pickedStates.flatMap((state) => appointmentChange(vault.appointments, carrier.id, state, on, today))));
   }
 
-  // One step (2026-10-27): the carrier is switched on and, where Applications is on, put on the
-  // applications list too, so its card opens with its products and facts and the three things to finish.
-  async function addCarrier(id: string, name: string) {
+  // One step (2026-10-27): each carrier is switched on and, where Applications is on, put on the
+  // applications list too, so its card opens with its products and the three things to finish.
+  // Several at once (owner, 2026-10-28), one after another; returns the ids that failed so the
+  // dialog keeps them ticked to retry.
+  async function addCarriers(picked: { id: string; name: string }[], onProgress: (done: number) => void): Promise<string[]> {
     setBusy(true);
-    const result = await send("/api/app/carrier-library/tenant-carriers", "PATCH", { carrier_id: id, contracted: true });
-    if (result.ok && sales !== null) {
-      const listed = await send("/api/app/settings/sales/carriers", "POST", { carrier_id: id });
-      // Already on the list is fine; anything else is said, and the carrier stays added.
-      if (!listed.ok && !/already on your list/i.test(listed.error)) notify.warn(`${name} was added, but its products could not be loaded`, { detail: listed.error });
+    const added: { id: string; name: string }[] = [];
+    const failed: { id: string; name: string; error: string }[] = [];
+    const noProducts: string[] = [];
+    for (const [index, carrier] of picked.entries()) {
+      onProgress(index);
+      const result = await send("/api/app/carrier-library/tenant-carriers", "PATCH", { carrier_id: carrier.id, contracted: true });
+      if (!result.ok) { failed.push({ ...carrier, error: result.error }); continue; }
+      added.push(carrier);
+      if (sales !== null) {
+        const listed = await send("/api/app/settings/sales/carriers", "POST", { carrier_id: carrier.id });
+        // Already on the list is fine; anything else is said, and the carrier stays added.
+        if (!listed.ok && !/already on your list/i.test(listed.error)) noProducts.push(carrier.name);
+      }
     }
     setBusy(false);
-    if (!result.ok) { notify.block(result.error); return; }
-    notify.done(`${name} added`, { detail: "Finish its contract, products and states to start selling it." });
-    setAdding(false);
-    setStep("carriers");
-    setCarrierId(id);
-    await Promise.all([loadVault(), loadSales()]);
+    if (added.length) {
+      const title = added.length === 1 ? `${added[0].name} added` : `${added.length} carriers added`;
+      notify.done(title, { detail: "Finish each one's contract, products and states to start selling it." });
+      if (noProducts.length) notify.warn(`Products could not be loaded for ${noProducts.join(", ")}`, { detail: "The carriers are added. Open each card to try again." });
+      setStep("carriers");
+      setCarrierId(added[0].id);
+      await Promise.all([loadVault(), loadSales()]);
+    }
+    if (failed.length) {
+      notify.block(`Could not add ${failed.map((carrier) => carrier.name).join(", ")}`, { detail: failed[0].error });
+    } else {
+      setAdding(false);
+    }
+    return failed.map((carrier) => carrier.id);
   }
 
   const needle = query.trim().toLowerCase();
@@ -274,8 +283,6 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
           { key: "states", label: "2 · States", count: nAppointed },
           // Field maps need the Applications feature (the extension reads them); without it the tab is absent.
           ...(sales !== null ? [{ key: "maps" as const, label: "3 · Field maps" }] : []),
-          // Owner, 2026-10-27: not a step of its own here, a link to the Carrier rules page.
-          ...(carrierRules ? [{ key: "rules" as const, label: "Carrier rules", href: "/app/carrier-rules" }] : []),
         ]}
         actions={<Button type="button" data-guide="carrier-library-add" onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add carrier</Button>}
       />
@@ -317,10 +324,8 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
               salesAvailable={sales !== null}
               productLines={sales?.productLines ?? []}
               canEdit={sales?.canEdit ?? true}
-              reports={reports.reports.filter((report) => report.carrierId === current.id)}
-              reportsAvailable={reports.available}
               onSetStates={() => { setStep("states"); setQuery(""); setFilter("all"); }}
-              onSaved={async () => { await Promise.all([loadVault(), loadSales(), loadReports()]); }}
+              onSaved={async () => { await Promise.all([loadVault(), loadSales()]); }}
             />
           ) : (
             <div className={cn(cardSurface, "grid place-items-center p-6 text-sm text-[var(--muted)]")}>Add a carrier to set it up.</div>
@@ -444,7 +449,7 @@ export function CarriersSettings({ carrierRules = false }: { carrierRules?: bool
         <AddCarrierDialog
           options={vault.carriers.filter((carrier) => !yours.some((row) => row.id === carrier.id))}
           busy={busy}
-          onAdd={(id, name) => void addCarrier(id, name)}
+          onAdd={addCarriers}
           onClose={() => setAdding(false)}
         />
       )}
@@ -462,23 +467,77 @@ function StateLicenceLine({ states, licences }: { states: string[]; licences: Ma
 
 /* ── add a carrier ───────────────────────────────────────────────────────────────────────────── */
 
-function AddCarrierDialog({ options, busy, onAdd, onClose }: { options: { id: string; name: string }[]; busy: boolean; onAdd: (id: string, name: string) => void; onClose: () => void }) {
+/** Tick several carriers, then add them together (owner, 2026-10-28: one at a time meant reopening the dialog for each). */
+function AddCarrierDialog({ options, busy, onAdd, onClose }: {
+  options: { id: string; name: string }[];
+  busy: boolean;
+  /** Adds the ticked carriers; resolves with the ids that failed, which stay ticked. */
+  onAdd: (picked: { id: string; name: string }[], onProgress: (done: number) => void) => Promise<string[]>;
+  onClose: () => void;
+}) {
   const [q, setQ] = useState("");
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [progress, setProgress] = useState<number | null>(null);
   const shown = options.filter((carrier) => carrier.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const picked = options.filter((carrier) => ticked.includes(carrier.id));
+  const toggle = (id: string) => setTicked((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
+  const shownTicked = shown.filter((carrier) => ticked.includes(carrier.id)).length;
+  const allShown = shown.length > 0 && shownTicked === shown.length;
+
+  async function submit() {
+    if (!picked.length) return;
+    const failed = await onAdd(picked, setProgress);
+    setProgress(null);
+    setTicked(failed);
+  }
+
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
       <DialogContent aria-describedby={undefined} className="border-[var(--border)] bg-[var(--surface)] sm:max-w-md">
-        <DialogHeader><DialogTitle className="text-[var(--ink)]">Add a carrier you are contracted with</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="text-[var(--ink)]">Add carriers you are contracted with</DialogTitle></DialogHeader>
         <input className={cn(control, "mt-0")} aria-label="Search the carrier library" placeholder="Search the carrier library" value={q} onChange={(event) => setQ(event.target.value)} autoFocus />
-        <div className={cn(SCROLL, "max-h-[360px]")}>
-          {shown.length === 0 && <p className="m-0 px-2 py-3 text-sm text-[var(--muted)]">{options.length ? "No carrier matches." : "Every carrier in the library is already yours."}</p>}
-          {shown.map((carrier) => (
-            <button key={carrier.id} type="button" onClick={() => onAdd(carrier.id, carrier.name)} disabled={busy} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2.5 text-left text-sm text-[var(--ink)] hover:bg-[var(--surface-alt)] disabled:cursor-wait">
-              {carrier.name}<span className="font-semibold text-[var(--accent-ink)]">Add</span>
+        <div className="flex items-center justify-between gap-2 px-2.5 text-xs text-[var(--muted)]">
+          <span className="tabular-nums">{ticked.length ? `${ticked.length} selected` : "Tick every carrier you write with"}</span>
+          {shown.length > 1 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setTicked((list) => (allShown ? list.filter((id) => !shown.some((carrier) => carrier.id === id)) : [...new Set([...list, ...shown.map((carrier) => carrier.id)])]))}
+              className="font-semibold text-[var(--accent-ink)] hover:underline disabled:opacity-60"
+            >
+              {allShown ? "Clear these" : q.trim() ? "Select these" : "Select all"}
             </button>
-          ))}
+          )}
         </div>
-        <p className="m-0 text-xs text-[var(--muted)]">Adding it opens its card with what is left to set up. Not listed? <a href="mailto:support@insurvas.com?subject=Please%20add%20a%20carrier%20to%20the%20library" className="font-semibold text-[var(--accent-ink)] hover:underline">Ask Insurvas to add it</a></p>
+        <div className={cn(SCROLL, "max-h-[340px]")}>
+          {shown.length === 0 && <p className="m-0 px-2 py-3 text-sm text-[var(--muted)]">{options.length ? "No carrier matches." : "Every carrier in the library is already yours."}</p>}
+          {shown.map((carrier) => {
+            const on = ticked.includes(carrier.id);
+            return (
+              <button
+                key={carrier.id}
+                type="button"
+                role="checkbox"
+                aria-checked={on}
+                onClick={() => toggle(carrier.id)}
+                disabled={busy}
+                className={cn("flex w-full items-center gap-3 rounded-[8px] px-2.5 py-2.5 text-left text-sm text-[var(--ink)] hover:bg-[var(--surface-alt)] disabled:cursor-wait", on && "bg-[var(--primary-soft)] hover:bg-[var(--primary-soft)]")}
+              >
+                <span className={BOX(on ? "all" : "none")} aria-hidden="true">✓</span>
+                <span className="min-w-0 flex-1 truncate">{carrier.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="button" onClick={() => void submit()} disabled={busy || picked.length === 0}>
+            {progress !== null
+              ? `Adding ${Math.min(progress + 1, picked.length)} of ${picked.length}…`
+              : picked.length > 1 ? `Add ${picked.length} carriers` : "Add carrier"}
+          </Button>
+        </div>
+        <p className="m-0 text-xs text-[var(--muted)]">Each one opens its card with what is left to set up. Not listed? <a href="mailto:support@insurvas.com?subject=Please%20add%20a%20carrier%20to%20the%20library" className="font-semibold text-[var(--accent-ink)] hover:underline">Ask Insurvas to add it</a></p>
       </DialogContent>
     </Dialog>
   );

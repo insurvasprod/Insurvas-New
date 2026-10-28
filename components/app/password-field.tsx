@@ -74,7 +74,7 @@ export function NewPasswordField({
         </button>
       </div>
       <div className="flex items-center gap-3 pt-1">
-      <div className="grid w-28 shrink-0 grid-cols-4 gap-1" aria-hidden="true">
+      <div className="grid w-16 shrink-0 grid-cols-4 gap-1" aria-hidden="true">
         {[1, 2, 3, 4].map((bar) => (
           <span
             key={bar}
@@ -85,7 +85,7 @@ export function NewPasswordField({
           />
         ))}
       </div>
-      <p id={`${id}-strength`} aria-live="polite" className={cn("text-xs leading-normal", strength.level === 1 ? "text-[var(--error-ink)]" : strength.level >= 3 ? "text-[var(--success-ink)]" : "text-muted-foreground")}>
+      <p id={`${id}-strength`} aria-live="polite" className={cn("whitespace-nowrap text-xs leading-normal", strength.level === 1 ? "text-[var(--error-ink)]" : strength.level >= 3 ? "text-[var(--success-ink)]" : "text-muted-foreground")}>
         {strength.label}
       </p>
       </div>

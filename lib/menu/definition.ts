@@ -249,7 +249,6 @@ export const AGENT_MENU: MenuSection[] = [
       item("Settings", { key: "accounting.settings", label: "Accounting settings", path: "/app/accounting-settings", icon: "list-checks", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, sidebar: false, blurb: "Thresholds, categories, periods and split rules." }),
       // LA-5.11 · everything LA-5 reads: weights, thresholds, queue, signals, campaigns, reinstatement, win-back, holdout, assignment.
       item("Settings", { key: "retention.settings", label: "Retention settings", path: "/app/retention-settings", icon: "list-checks", required_feature: "chargeback_radar", required_roles: ["owner"], built: true, sidebar: false, blurb: "Weights, thresholds, cooling-off periods and the holdout." }),
-      item("Settings", { key: "book.carrier_rules", label: "Carrier rules", path: "/app/carrier-rules", icon: "scroll-text", built: true, sidebar: false, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Each carrier's save windows, grace, triggers and payout rules, and what is still missing." }),
     ],
   },
   {

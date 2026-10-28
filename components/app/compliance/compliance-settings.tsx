@@ -327,7 +327,7 @@ function Retention({ data, disabled, post }: { data: Bundle; disabled: boolean; 
           </DialogContent>
         </Dialog>
       ) : null}
-      <p className="text-sm text-muted-foreground">Carrier retention windows belong to <Link className="underline" href="/app/carrier-rules">Carrier rules</Link>.</p>
+      <p className="text-sm text-muted-foreground">Insurvas keeps each carrier&apos;s retention windows.</p>
     </>
   );
 }

@@ -3,8 +3,7 @@
   "extra-page-header": {},
   "tall-control": {
     "components/app/disposition-wizard.tsx": 1,
-    "components/app/issued-policy-panel.tsx": 1,
-    "components/app/template-settings.tsx": 1
+    "components/app/issued-policy-panel.tsx": 1
   },
   "hex-colour": {
     "components/admin/feature-switches-panel.tsx": 1,
@@ -23,12 +22,12 @@
   "hand-filter-panel": {},
   "mixed-stat": {},
   "local-surface": {
-    "components/app/plan-choice.tsx": 1,
     "components/app/settings/carriers-settings.tsx": 1
   },
   "window-confirm": {},
   "hand-tablist": {
-    "components/app/agent-settings-tabs.tsx": 1,
+    "components/app/form-templates/form-settings.tsx": 1,
+    "components/app/form-templates/status-tabs.tsx": 1,
     "components/public/pricing-explorer.tsx": 1
   },
   "local-chip": {
@@ -39,7 +38,11 @@
     "components/marketing/landing-mocks.tsx": 1
   },
   "raw-h1": {},
-  "hand-popover": {},
-  "unguarded-dirty": {},
+  "hand-popover": {
+    "components/app/multi-picker.tsx": 1
+  },
+  "unguarded-dirty": {
+    "components/app/form-templates/status-line.tsx": 1
+  },
   "radix-select": {}
 }

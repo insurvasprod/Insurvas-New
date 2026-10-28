@@ -7,6 +7,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const guard = await guardPage("book_of_business");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Lead workspace" description="Open the submitted application, verification history, and every lead event in one place." />;
   if (!actAsPage(guard, ["owner", "producer", "assistant"])) return <RoleGateNotice featureLabel="Lead workspace" detail="Only owners, producers, and assistants can open lead workspaces." />;
-  // Leads A3 (2026-10-25): on the dashboard's moving ribbon.
+  // Leads A3 (2026-10-25): on the shell's stage (one per page, drawn by the layout).
   return <><div className="portal-lead-detail-page"><LeadDetailWorkspace leadId={(await params).id} /></div></>;
 }

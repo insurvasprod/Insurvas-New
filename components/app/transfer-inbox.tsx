@@ -19,7 +19,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { TeamViews } from "@/components/app/inbound/transfers-views";
 import { callHref } from "@/components/app/inbound/use-floor";
 import { WaitBar } from "@/components/app/inbound/stream-parts";
-import { LeadFlowMap } from "@/components/ui/lead-flow-map";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -494,29 +493,6 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
           return <StatTile label="Completed today" value={extras ? today.completed : "—"} valueTone={today.completed ? "good" : undefined} footnote={!extras ? "loading today" : today.sent ? `${Math.round((today.completed / today.sent) * 100)}% of ${today.sent} sent today` : "nothing sent today"} />;
         })()}
       </StatStrip>
-
-      {/* Today's inbound as the dashboard's stream: sent, waiting, with an agent, completed. Waiting
-          lights up amber while anyone is waiting. */}
-      {(() => {
-        const today = (extras?.byPartner ?? []).reduce((sum, partner) => ({ sent: sum.sent + partner.sent, completed: sum.completed + partner.completed, dropped: sum.dropped + partner.dropped }), { sent: 0, completed: 0, dropped: 0 });
-        const sending = (extras?.byPartner ?? []).filter((partner) => partner.sent > 0).length;
-        return (
-          <LeadFlowMap
-            mode="path"
-            label="Today's inbound"
-            hot={summary?.waiting ? 1 : null}
-            drops={[]}
-            worst={null}
-            aside={<span className="text-xs text-muted-foreground">{extras ? `${today.dropped} dropped today` : ""}</span>}
-            stages={[
-              { label: "Sent today", value: extras ? String(today.sent) : "—", count: today.sent, note: extras ? `from ${sending} ${sending === 1 ? "partner" : "partners"}` : undefined },
-              { label: "Waiting", value: summary ? String(summary.waiting) : "—", count: summary?.waiting ?? 0, note: summary?.waiting ? `longest ${duration(summary.longestWaitSeconds)}` : "nobody waiting" },
-              { label: "With an agent", value: summary ? String(summary.claimed) : "—", count: summary?.claimed ?? 0, note: summary?.claimedWithoutCall ? `${summary.claimedWithoutCall} with no call` : "on calls" },
-              { label: "Completed today", value: extras ? String(today.completed) : "—", count: today.completed, note: today.sent ? `${Math.round((today.completed / today.sent) * 100)}% of sent` : undefined },
-            ]}
-          />
-        );
-      })()}
 
       {extras && extras.lost.length > 0 && (
         <section aria-label="Lost transfers" className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[color-mix(in_srgb,var(--error)_30%,transparent)] bg-[var(--error-surface)] px-4 py-3 sm:flex-row sm:items-start">

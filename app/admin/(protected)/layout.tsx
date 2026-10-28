@@ -38,7 +38,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage ribbon className="flex min-w-0 flex-1 flex-col">{children}</DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col">{children}</DashboardStage>
       </div>
       </main>
     </div>

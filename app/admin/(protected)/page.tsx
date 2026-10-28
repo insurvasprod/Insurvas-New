@@ -7,7 +7,6 @@ import { DashTile, DashTileLoading, type TileRow, type TileTone } from "@/compon
 import { Launchpad, type LaunchCell, type LaunchSpace } from "@/components/ui/launchpad";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
-import { AdminLeadTile, AdminMapLoading, AdminMapView, loadAdminMap } from "@/components/admin/home-signup-flow";
 import { DashboardRefresh } from "@/components/admin/dashboard-refresh";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { ADMIN_ROLE_LABELS, type AdminRole } from "@/lib/adminAuth/roles";
@@ -19,11 +18,8 @@ import { fetchHomeTiles } from "@/lib/adminDashboard/queries";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
- * The staff home (redesign 2026-10-25, owner: "the map on top, not split; Dashboard C's tiles, exactly;
- * delete every other thing"): the header, this ROLE's map full width (components/admin/home-signup-
- * flow — the revenue roles' sign-up-to-paying funnel, support's path through the customers' day,
- * platform_config's path through the platform's switches), then the launchpad. Nothing the old blocks
- * carried is lost: every figure is a tile opening its rows (LA-4.20), the daily checks (owner,
+ * The staff home: a role-specific launchpad under a live header. Every figure is a tile opening its
+ * rows (LA-4.20), the daily checks (owner,
  * 2026-10-13) are a tall tile worst-first, admins by role a tile, and "Start here" its own workspace.
  * Every figure and link stays the one the role can open (lib/adminDashboard/compose.ts).
  */
@@ -122,10 +118,8 @@ export default async function AdminDashboardPage() {
   const deactivated = admins.filter((row) => !row.is_active).length;
   const signedIn = formatUtcDateTime(admin?.last_login_at);
   const steps = admin ? startStepsFor(admin.role) : [];
-  const map = admin ? loadAdminMap(admin.role, tiles) : Promise.resolve(null);
 
   const today: LaunchCell[] = [];
-  if (admin) today.push({ id: "lead", title: "Start here", w: 1, h: 1, href: "/admin", node: <Suspense fallback={<DashTileLoading title="Your next step" />}><AdminLeadTile map={map} /></Suspense> });
   for (const tile of tiles) today.push({ id: tile.key, title: tile.label, w: tile.key === "mrr" || tile.key === "maintenance" ? 2 : 1, h: 1, href: tile.href, node: <FigureTile tile={tile} /> });
   if (admin) today.push({ id: "checks", title: "Daily checks", w: 2, h: 2, href: "/admin", node: <Suspense fallback={<DashTileLoading title="Daily checks" />}><DailyChecksTile admin={{ id: admin.id, role: admin.role }} /></Suspense> });
   today.push({
@@ -167,9 +161,7 @@ export default async function AdminDashboardPage() {
     <>
       <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
         <PageHeader title="Platform administration" actions={<LiveStamp updatedAt={renderedAt} />} />
-        <Suspense fallback={<AdminMapLoading />}>
-          <AdminMapView map={map} />
-        </Suspense>
+
         <Launchpad storageKey={`insurvas:admin-home:${admin?.id ?? "staff"}`} spaces={spaces} />
       </div>
     </>

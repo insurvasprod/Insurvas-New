@@ -1,19 +1,16 @@
 import { ViewTransition, type ReactNode } from "react";
 import Link from "next/link";
 
-import { LandingObject } from "@/components/marketing/three/landing-object";
-
 export type PortalAuthMode = "sign-in" | "sign-up";
 
 /**
  * The one sign-in / sign-up frame for the agent and partner portals (2026-10-13).
  *
- * The brand panel carries the landing hero's silk ribbon, so arriving from the landing page reads
- * as the same scene coming closer rather than a new page: the ribbon is a named view transition
- * ("brand-ribbon") on both pages and morphs from the hero into this panel, the logo does the same
- * ("brand-logo", see AuthBrand), and the form and the panel's words crossfade between doors
- * (agent ↔ partner, sign-in ↔ sign-up). Without View Transitions support it simply navigates; under
- * reduced motion the CSS in globals.css turns every one of these off.
+ * The brand panel is still: the brand green with one soft light, no ribbon (owner, 2026-10-27:
+ * "remove this animation … simple professional design on the right"). The logo is still a named
+ * view transition ("brand-logo", see AuthBrand), and the form and the panel's words crossfade
+ * between doors (agent ↔ partner, sign-in ↔ sign-up). Without View Transitions support it simply
+ * navigates; under reduced motion the CSS in globals.css turns these off.
  */
 export function PortalAuthSplitShell({
   mode,
@@ -34,13 +31,6 @@ export function PortalAuthSplitShell({
         </ViewTransition>
       </section>
       <aside className="portal-auth-split-story portal-auth-story-scene" aria-label="Insurvas workspace benefits">
-        <ViewTransition name="brand-ribbon" share="ribbon-morph" default="none">
-          <LandingObject
-            kind="ribbon-night"
-            className="pointer-events-none absolute inset-0 [mask-image:radial-gradient(120%_85%_at_70%_45%,black_45%,transparent_100%)]"
-          />
-        </ViewTransition>
-        <div aria-hidden="true" className="portal-auth-story-veil" />
         <ViewTransition name="auth-story" share="auth-swap" enter="auth-rise" exit="auth-fade" update="auth-swap" default="none">
           <div className="relative z-10 w-full">{story}</div>
         </ViewTransition>

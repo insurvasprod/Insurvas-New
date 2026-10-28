@@ -18,7 +18,7 @@ export default async function DialerPage({ searchParams }: { searchParams: Promi
   // opens that lead through the pick (serve_lead_by_id), so every serving rule still applies.
   const { lead } = await searchParams;
   const requestedLead = typeof lead === "string" && UUID.test(lead) ? lead : null;
-  // The moving ribbon behind the frosted cards, as on the home (redesign 2026-10-25, Dialer A).
+  // The static stage backdrop behind the frosted cards, as on the home (redesign 2026-10-25, Dialer A).
   return (
     <>
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">

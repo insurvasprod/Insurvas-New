@@ -18,20 +18,29 @@ async function proves(read: PromiseLike<ExistenceRead>, test: (result: Existence
 }
 
 /**
- * "Finish a carrier so you can sell it" (2026-10-27): one carrier with a contract in force (which
- * carries the writing number) and an appointment in force — the carrier card's To finish list.
+ * "Finish a carrier so you can sell it": one carrier the agency added and has not switched off, with an
+ * appointment in force — the carrier card's To finish list. The contract (level + writing number) is
+ * optional since 2026-10-28 (owner: "ready to sell even without filling up these"), so a carrier counts
+ * as added through either its contract row or its "contracted" switch.
  * Products are not read: a carrier's products are sold by default and only an owner unticking every
  * one of them would leave it unready, which the card itself still shows.
  */
 async function hasCarrierReadyToSell(tenantId: string): Promise<boolean> {
   try {
-    const [contracts, appointed] = await Promise.all([
+    const [contracts, switches, appointed] = await Promise.all([
       db().from("tenant_carriers").select("carrier_id").eq("tenant_id", tenantId).eq("is_active", true).limit(200),
+      db().from("tenant_carrier_requirements" as never).select("carrier_id, contracted").eq("tenant_id", tenantId).limit(500),
       db().from("appointments").select("carrier_id").eq("tenant_id", tenantId).is("terminated_at", null).limit(500),
     ]);
-    if (contracts.error || appointed.error) return false;
+    if (contracts.error || switches.error || appointed.error) return false;
+    const switchRows = (switches.data ?? []) as unknown as { carrier_id: string; contracted: boolean | null }[];
+    const off = new Set(switchRows.filter((row) => row.contracted === false).map((row) => row.carrier_id));
+    const added = new Set([
+      ...((contracts.data ?? []) as { carrier_id: string }[]).map((row) => row.carrier_id),
+      ...switchRows.filter((row) => row.contracted !== false).map((row) => row.carrier_id),
+    ]);
     const withState = new Set(((appointed.data ?? []) as { carrier_id: string }[]).map((row) => row.carrier_id));
-    return ((contracts.data ?? []) as { carrier_id: string }[]).some((row) => withState.has(row.carrier_id));
+    return [...added].some((id) => !off.has(id) && withState.has(id));
   } catch {
     return false;
   }

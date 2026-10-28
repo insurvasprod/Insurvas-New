@@ -10,8 +10,8 @@ import { fetchPlanChoices, readPlanChoice } from "@/lib/signup/planChoiceQueries
 const CHOOSABLE = new Set(["ready_for_checkout", "awaiting_payment"]);
 
 /**
- * Step 4 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, seats, and the
- * add-on modules the plan offers. The brand story makes way for a live summary of the choice.
+ * Step 4 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, and seats. No
+ * add-on modules at sign-up (owner, 2026-10-27). The brand story makes way for a live summary of the choice.
  */
 export default async function PlanStepPage() {
   const context = await resolveSignupContext();

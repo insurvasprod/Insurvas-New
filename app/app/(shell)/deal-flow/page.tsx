@@ -12,7 +12,7 @@ export default async function DealFlowPage({ searchParams }: { searchParams: Pro
   const [params, timeZone] = await Promise.all([searchParams, getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
   const focusLeadId = typeof params.focus_lead_id === "string" ? params.focus_lead_id : null;
   // "Today" is the agency's day when Settings › Agency profile stores a timezone, else the browser's.
-  // Leads A2 (2026-10-25): on the dashboard's moving ribbon.
+  // Leads A2 (2026-10-25): on the dashboard's static stage backdrop.
   return (
     <>
       <DealFlowWorkspace focusLeadId={focusLeadId} timeZone={timeZone} />

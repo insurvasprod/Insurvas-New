@@ -41,9 +41,9 @@ export type SettingsPanelContext = { team: TeamSnapshot | null; workspace: Works
 export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => ReactNode> = {
   "my-profile": () => <MyProfileSettings />,
   "business-identity": ({ team, workspace }) => <BusinessIdentitySettings team={team} workspace={workspace} />,
-  // Carrier rules is a tab here that opens its own page; only offered where the agency has it.
-  carriers: ({ granted }) => <CarriersSettings carrierRules={granted.includes("statement_ingestion")} />,
   products: () => <ProductsSettings />,
+  // Owner, 2026-10-28: Carriers has no Carrier rules tab.
+  carriers: () => <CarriersSettings />,
   "team-access": ({ team, workspace }) => (team && workspace ? <TeamSettings initial={team} workspace={workspace} /> : null),
   calendar: () => <CalendarAvailabilitySettings />,
   cadence: () => <CadenceSettings />,
