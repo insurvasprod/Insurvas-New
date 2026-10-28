@@ -3185,6 +3185,26 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 @keyframes auth-rise-in { from { opacity: 0; transform: translateY(16px); } }
 @keyframes auth-fade-out { to { opacity: 0; transform: translateY(-6px); } }
 
+/* Sign-up step to step (manager review, 2026-10-28: "it needs to be smooth"). The logo and the
+   progress bar stay put (auth-still: no animation, the old snapshot hidden so nothing doubles); the
+   step's content fades out fast and rises in (auth-step), drawn at its own size so text never
+   stretches while the column changes height; the brand panel crossfades in place (auth-hold). */
+::view-transition-group(.auth-still) { animation: none; }
+::view-transition-old(.auth-still) { display: none; }
+::view-transition-new(.auth-still) { animation: none; }
+::view-transition-group(.auth-step) { animation: none; }
+::view-transition-old(.auth-step),
+::view-transition-new(.auth-step) { width: 100%; height: auto; object-fit: none; object-position: top; }
+::view-transition-old(.auth-step) { animation: auth-fade-out 150ms ease-in both; }
+::view-transition-new(.auth-step) { animation: auth-rise-in 340ms cubic-bezier(.22, 1, .36, 1) 90ms both; }
+::view-transition-group(.auth-hold) { animation-duration: 320ms; }
+::view-transition-old(.auth-hold) { animation: auth-hold-out 280ms ease both; }
+::view-transition-new(.auth-hold) { animation: auth-hold-in 320ms ease both; }
+@keyframes auth-hold-out { to { opacity: 0; } }
+@keyframes auth-hold-in { from { opacity: 0; } }
+/* Clicks during a transition reach the page instead of the overlay (Next's view-transitions guide). */
+::view-transition { pointer-events: none; }
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-image-pair(*),

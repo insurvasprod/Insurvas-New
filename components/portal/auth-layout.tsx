@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { ViewTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, X } from "lucide-react";
 
@@ -77,10 +77,21 @@ export function AuthLayout({
           {/* Auto margins, not justify-content: a door taller than the window starts at the top
               instead of being cut off above it. */}
           <div className="m-stagger" data-auth-body="">
-            {steps && <AuthSteps {...steps} />}
-            {back && <AuthBack href={back.href} label={back.label} />}
-            {children}
-            {legal && <AuthLegalLinks />}
+            {/* Step to step (manager review, 2026-10-28: "from this page to next page should be smooth"):
+                the progress bar stays where it is and only the step's own content moves, a quick fade
+                out and a short rise in. Classes in globals.css (auth-still, auth-step). */}
+            {steps && (
+              <ViewTransition name="auth-steps" share="auth-still" default="none">
+                <div><AuthSteps {...steps} /></div>
+              </ViewTransition>
+            )}
+            <ViewTransition name="auth-step-body" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
+              <div>
+                {back && <AuthBack href={back.href} label={back.label} />}
+                {children}
+                {legal && <AuthLegalLinks />}
+              </div>
+            </ViewTransition>
           </div>
         </div>
       }

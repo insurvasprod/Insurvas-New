@@ -31,7 +31,8 @@ export function PortalAuthSplitShell({
         </ViewTransition>
       </section>
       <aside className="portal-auth-split-story portal-auth-story-scene" aria-label="Insurvas workspace benefits">
-        <ViewTransition name="auth-story" share="auth-swap" enter="auth-rise" exit="auth-fade" update="auth-swap" default="none">
+        {/* A soft crossfade only: the panel does not rise or blink between steps (2026-10-28). */}
+        <ViewTransition name="auth-story" share="auth-hold" enter="auth-rise" exit="auth-fade" update="auth-hold" default="none">
           <div className="relative z-10 w-full">{story}</div>
         </ViewTransition>
       </aside>
