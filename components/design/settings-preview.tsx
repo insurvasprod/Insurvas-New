@@ -6,9 +6,10 @@ import { Plus } from "lucide-react";
 import { AgentSettingsTabs } from "@/components/app/agent-settings-tabs";
 import { SettingsCard, SettingsSectionHeader, SettingsStack, SettingsTableCard } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
+import { PREVIEW_SECTIONS, type PreviewState } from "@/lib/settings/preview/fixtures";
+import { setPreviewState } from "@/components/design/preview-fetch";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
 /** Every feature a Settings section can ask for, so the preview shows the whole menu for an owner. */
@@ -23,35 +24,6 @@ const CARRIERS = [
 
 /** Sample buttons do nothing: the preview shows where they sit, not what they save. */
 const noop = () => undefined;
-
-/** A form section: fields in a card, Save on the title's line (through the frame's action slot). */
-function BusinessIdentitySample() {
-  return (
-    <SettingsStack>
-      <SettingsSectionHeader actions={<><Button variant="outline" className="h-9" onClick={noop}>Discard</Button><Button className="h-9" onClick={noop}>Save changes</Button></>} />
-      <SettingsCard title="Who the business is" sub="The name clients and partners see, and the legal details on your documents.">
-        <div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-2">
-          {[["Trading name", "Power Policies"], ["Legal name", "Unlimited Insurance LLC"], ["National Producer Number", "12312312"], ["Primary state", "Texas"]].map(([label, value]) => (
-            <label key={label} className="block">
-              <span className="text-label text-[var(--ink)]">{label}</span>
-              <Input defaultValue={value} className="mt-1.5 h-9" />
-            </label>
-          ))}
-        </div>
-      </SettingsCard>
-      <SettingsCard title="Address and contact" sub="Printed on statements, welcome packs and letters.">
-        <div className="grid max-w-[720px] grid-cols-1 gap-4 sm:grid-cols-2">
-          {[["Street", "1200 Main St"], ["City", "Dallas"], ["Phone", "(214) 555-0148"], ["Email", "ops@powerpolicies.com"]].map(([label, value]) => (
-            <label key={label} className="block">
-              <span className="text-label text-[var(--ink)]">{label}</span>
-              <Input defaultValue={value} className="mt-1.5 h-9" />
-            </label>
-          ))}
-        </div>
-      </SettingsCard>
-    </SettingsStack>
-  );
-}
 
 /** A table section: local tabs, then the list, "Add carrier" on the title's line. */
 function CarriersSample() {
@@ -94,17 +66,24 @@ function GenericSample() {
   );
 }
 
-/** `routeSection`: a section with its own route (Accounting…), drawn in the frame with a sample board. */
-export function SettingsPreview({ role, routeSection }: { role: TenantRole; routeSection?: string }) {
+/**
+ * `routeSection`: a section with its own route (Accounting…), drawn in the frame with a sample board.
+ * `state`: what the preview's API answers (loaded, empty, error) or a read-only account (R1).
+ */
+export function SettingsPreview({ role, routeSection, state = "loaded" }: { role: TenantRole; routeSection?: string; state?: PreviewState }) {
+  // Before the panels mount: they fetch in their first effect.
+  setPreviewState(state);
   return (
     <AgentSettingsTabs
       routeSection={routeSection}
+      readOnly={state === "readonly"}
       tabs={SETTINGS_SECTIONS}
       team={null}
       workspace={null}
       granted={ALL_FEATURES}
       role={role}
-      renderPanel={(id) => (id === "business-identity" ? <BusinessIdentitySample /> : id === "carriers" ? <CarriersSample /> : <GenericSample />)}
+      // Sections with fixtures render their real panel; the rest keep a sample.
+      renderPanel={(id) => (PREVIEW_SECTIONS.has(id) ? undefined : id === "carriers" ? <CarriersSample /> : <GenericSample />)}
     >
       {routeSection ? <SettingsCard title="Sample board" sub="The module's own board renders here on :3000, inside the same frame." /> : null}
     </AgentSettingsTabs>

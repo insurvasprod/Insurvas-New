@@ -220,7 +220,11 @@ export function AgentSettingsTabs({
   function renderActiveContent(): ReactNode {
     if (!active) return null;
     if (routeSection) return children;
-    if (renderPanel) return renderPanel(active.id);
+    // The preview's stand-in, or undefined to render the real panel (its API answered by the preview).
+    if (renderPanel) {
+      const sample = renderPanel(active.id);
+      if (sample !== undefined) return sample;
+    }
     const panel = SETTINGS_PANELS[active.id];
     return panel ? panel({ team, workspace, granted }) : <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
   }

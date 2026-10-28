@@ -220,7 +220,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
       <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex flex-col gap-4">
         {tab === "business" && (
-          <SettingsCard title="Who the business is" className={glass}>
+          <SettingsCard title="Names and licence" className={glass}>
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Field label="Trading name" htmlFor="identity-trading-name" hint="The name clients and partners see: the welcome pack, statements and letters.">
                 <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />

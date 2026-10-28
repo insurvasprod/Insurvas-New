@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { SettingsPreview } from "@/components/design/settings-preview";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
+import { PREVIEW_STATES } from "@/lib/settings/preview/fixtures";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
 export const metadata = { title: "Settings · Insurvas design system" };
@@ -15,9 +16,10 @@ const ROLES: TenantRole[] = ["owner", "producer", "bookkeeper"];
  * components; a 280px sidebar and the 56px top bar are stood in so the content is as wide as in the
  * app. Development only.   ?role=owner|producer|bookkeeper   then pick a section, or open #carriers.
  */
-export default async function SettingsDesignPage({ searchParams }: { searchParams: Promise<{ role?: string; route?: string }> }) {
+export default async function SettingsDesignPage({ searchParams }: { searchParams: Promise<{ role?: string; route?: string; state?: string }> }) {
   if (process.env.NODE_ENV === "production") notFound();
-  const { role: requested, route } = await searchParams;
+  const { role: requested, route, state: requestedState } = await searchParams;
+  const state = PREVIEW_STATES.find((item) => item === requestedState) ?? "loaded";
   const role = ROLES.find((item) => item === requested) ?? "owner";
   return (
     <div className="portal-agent flex min-h-screen bg-[var(--color-page-bg)]">
@@ -27,13 +29,18 @@ export default async function SettingsDesignPage({ searchParams }: { searchParam
         <div className="portal-top-bar flex h-14 shrink-0 items-center gap-3 border-b border-border bg-[var(--surface)] px-6 text-sm text-muted-foreground">
           <span className="font-semibold text-foreground">Settings preview</span>
           {ROLES.map((item) => (
-            <Link key={item} href={`/design/settings?role=${item}`} aria-current={item === role ? "page" : undefined} className="rounded-md px-2 py-1 capitalize no-underline aria-[current=page]:bg-[var(--surface-alt)] aria-[current=page]:text-foreground">{item}</Link>
+            <Link key={item} href={`/design/settings?role=${item}&state=${state}`} aria-current={item === role ? "page" : undefined} className="rounded-md px-2 py-1 capitalize no-underline aria-[current=page]:bg-[var(--surface-alt)] aria-[current=page]:text-foreground">{item}</Link>
+          ))}
+          <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+          {/* What the sample API answers (lib/settings/preview/fixtures.ts), or a read-only account. */}
+          {PREVIEW_STATES.map((item) => (
+            <Link key={item} href={`/design/settings?role=${role}&state=${item}`} aria-current={item === state ? "page" : undefined} className="rounded-md px-2 py-1 capitalize no-underline aria-[current=page]:bg-[var(--surface-alt)] aria-[current=page]:text-foreground">{item === "readonly" ? "read-only" : item}</Link>
           ))}
         </div>
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
           <DashboardStage className="flex min-w-0 flex-1 flex-col">
             <div className="portal-settings-page flex flex-col gap-6">
-              <SettingsPreview key={`${role}-${route ?? ""}`} role={role} routeSection={route} />
+              <SettingsPreview key={`${role}-${route ?? ""}-${state}`} role={role} routeSection={route} state={state} />
             </div>
           </DashboardStage>
         </div>
