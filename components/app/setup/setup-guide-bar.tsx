@@ -87,6 +87,16 @@ export function SetupGuideBar() {
     };
   }, [stepKey, load]);
 
+  // The carriers step has a second half on the same page: the States tab. Its hash is watched so the
+  // bar can lead there before the next setup step (owner, 2026-10-28).
+  const [hash, setHash] = useState("");
+  useEffect(() => {
+    const read = () => setHash(window.location.hash);
+    const first = window.setTimeout(read, 0);
+    window.addEventListener("hashchange", read);
+    return () => { window.clearTimeout(first); window.removeEventListener("hashchange", read); };
+  }, [pathname]);
+
   const steps = data?.checklist.steps ?? [];
   const index = steps.findIndex((step) => step.key === stepKey);
   const step = index >= 0 ? steps[index] : null;
@@ -146,7 +156,12 @@ export function SetupGuideBar() {
   const position = step.optional ? "Optional setting" : `Step ${counted.findIndex((item) => item.key === step.key) + 1} of ${counted.length}`;
   // The next counted step after this one (wrapping round), not the first undone one: that may be this step.
   const following = [...steps.slice(index + 1), ...steps.slice(0, index)].find((item) => !item.optional && !item.complete && !item.skipped);
-  const next = following ? { label: following.label, href: guideHref(following) } : null;
+  // Carriers, then the states, in one pass over the 50 (owner, 2026-10-28): once a carrier is added the
+  // bar leads to the States tab first, and only from there to the next setup step.
+  const onStates = hash.includes("carriers-states");
+  const next = step.key === "carriers" && step.complete && !onStates
+    ? { label: "Set your states", href: `${guideHref(step).split("#")[0]}#carriers/carriers-states`, samePage: true }
+    : following ? { label: following.label, href: guideHref(following), samePage: false } : null;
 
   const skip = () => {
     void markSetupStep("skip", step.key).then((ok) => {
@@ -181,7 +196,11 @@ export function SetupGuideBar() {
         {!step.complete && !step.optional ? (
           <Button type="button" variant="ghost" onClick={skip}>Skip</Button>
         ) : null}
-        {step.complete ? (
+        {/* A same-page jump (the States tab) is a plain link: the router's push does not fire
+            hashchange, so the page would not switch tabs. */}
+        {step.complete && next?.samePage ? (
+          <a href={next.href} className={buttonVariants({ variant: "default" })}>Next: {next.label}</a>
+        ) : step.complete ? (
           <Link href={next ? next.href : data.checklist.complete ? "/app/setup?celebrate=1" : "/app/setup"} className={buttonVariants({ variant: "default" })}>
             {next ? `Next: ${next.label}` : "Finish"}
           </Link>

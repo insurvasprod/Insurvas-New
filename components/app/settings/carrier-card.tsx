@@ -80,17 +80,20 @@ export function carrierProgress(contract: TenantCarrierRow | null, sales: SalesC
   return { contract: Boolean(contract), products, states: states.length > 0, done, total: checks.length, ready: done === checks.length };
 }
 
+/**
+ * What a carrier still needs before it can be sold, said once in plain words (owner, 2026-10-28: the
+ * card said "not ready" five ways): "Needs your states", "Needs products", or both.
+ */
+export function carrierNeeds(progress: CarrierProgress): string | null {
+  if (progress.ready) return null;
+  const missing = [progress.products === false ? "products" : null, progress.states ? null : "your states"].filter(Boolean);
+  return `Needs ${missing.join(" and ")}`;
+}
+
 export function ProgressLine({ progress, switchedOff }: { progress: CarrierProgress; switchedOff: boolean }) {
   if (switchedOff) return <span className="block truncate text-xs text-[var(--muted)]">Switched off</span>;
   if (progress.ready) return <span className="block text-xs font-semibold text-[var(--accent-ink)]">✓ Ready to sell</span>;
-  return (
-    <span className="flex items-center gap-2 text-xs font-semibold text-[var(--warning-ink)]">
-      <span className="flex gap-0.5" aria-hidden="true">
-        {Array.from({ length: progress.total }, (_, i) => <span key={i} className={cn("h-1 w-4 rounded-full", i < progress.done ? "bg-[var(--primary)]" : "bg-[var(--border-strong)]")} />)}
-      </span>
-      {progress.done} of {progress.total} done
-    </span>
-  );
+  return <span className="block truncate text-xs font-semibold text-[var(--warning-ink)]">{carrierNeeds(progress)}</span>;
 }
 
 function jumpTo(id: string) {
@@ -105,8 +108,6 @@ function ToFinish({ name, progress, ids }: { name: string; progress: CarrierProg
   const items: { key: string; title: string; why: string; done: boolean; optional?: boolean; target: string }[] = [
     ...(progress.products === null ? [] : [{ key: "products", title: "Products you sell", why: "Tick at least one. Only ticked products show when you quote.", done: progress.products, target: ids.products }]),
     { key: "states", title: "States you’re appointed in", why: "An application in a state you didn’t tick gets a warning.", done: progress.states, target: ids.states },
-    // Optional, last: selling does not wait for it.
-    { key: "contract", title: "Contract level and writing number", why: "Optional. Fills in your commission figures.", done: progress.contract, optional: true, target: ids.contract },
   ];
   const next = items.find((item) => !item.done && !item.optional)?.key;
   let n = 0;
@@ -181,14 +182,19 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <span className="flex items-center gap-2.5"><span className={cn("size-3 rounded-full", dot)} aria-hidden="true" /><h3 className="m-0 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]">{carrier.name}</h3></span>
-          <p className={cn("m-0 mt-1 text-xs", states.length ? "text-[var(--muted)]" : "text-[var(--warning-ink)]")}>
-            {switchedOff ? "Switched off: no new quotes, applications or leads" : states.length ? `Appointed in ${states.length} state${states.length === 1 ? "" : "s"} · ${states.slice(0, 6).join(", ")}${states.length > 6 ? "…" : ""}` : "Not appointed in any state yet"}
-          </p>
+          {/* Said once (owner, 2026-10-28): what is missing is the badge's job, so this line only says
+              where it is appointed, or that it is switched off. */}
+          {(switchedOff || states.length > 0) && (
+            <p className="m-0 mt-1 text-xs text-[var(--muted)]">
+              {switchedOff ? "Switched off: no new quotes, applications or leads" : `Appointed in ${states.length} state${states.length === 1 ? "" : "s"} · ${states.slice(0, 6).join(", ")}${states.length > 6 ? "…" : ""}`}
+            </p>
+          )}
         </div>
-        {!switchedOff && <StatusChip tone={progress.ready ? "good" : "warning"}>{progress.ready ? "Ready to sell" : "Not ready to sell"}</StatusChip>}
+        {!switchedOff && <StatusChip tone={progress.ready ? "good" : "warning"}>{progress.ready ? "Ready to sell" : carrierNeeds(progress)}</StatusChip>}
       </div>
 
-      {!progress.ready && !switchedOff && <ToFinish name={carrier.name} progress={progress} ids={ids} />}
+      {/* A checklist only earns its place with two things left; one is the badge plus its own button below. */}
+      {!switchedOff && progress.total - progress.done > 1 && <ToFinish name={carrier.name} progress={progress} ids={ids} />}
 
       <ContractSection key={`${contract?.id ?? "none"}-${contract?.contract_level_bp ?? ""}-${contract?.writing_number ?? ""}`} carrierId={carrier.id} carrierName={carrier.name} contract={contract} canEdit={canEdit} levelId={ids.contract} portal={sales?.portal ?? null} onSaved={onSaved} />
 
@@ -202,7 +208,9 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales
         <span className={cn(KICKER, "mr-1")}>Appointed states</span>
         {states.length === 0 && <span className="mr-1 text-sm text-[var(--muted)]">None yet</span>}
         {states.map((code) => <span key={code} className="inline-flex h-7 items-center rounded-full bg-[var(--primary-soft)] px-2.5 text-xs font-semibold text-[var(--accent-ink)]">{code}</span>)}
-        <button type="button" onClick={onSetStates} className="inline-flex h-8 items-center rounded-full border border-[var(--border-strong)] px-3 text-xs font-semibold text-[var(--body)] hover:border-[var(--accent-ink)]">Set states →</button>
+        {states.length === 0 && !switchedOff
+          ? <Button type="button" size="sm" onClick={onSetStates}>Set your states →</Button>
+          : <button type="button" onClick={onSetStates} className="inline-flex h-8 items-center rounded-full border border-[var(--border-strong)] px-3 text-xs font-semibold text-[var(--body)] hover:border-[var(--accent-ink)]">Change states →</button>}
       </div>
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
@@ -227,6 +235,8 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
   const [writing, setWriting] = useState(contract?.writing_number ?? portal?.writingNumber ?? "");
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Folded until wanted (owner, 2026-10-28): it is optional, and it was the biggest thing on the card.
+  const [open, setOpen] = useState(Boolean(contract));
   const levelBad = level.trim() !== "" && levelToBp(level) === null;
 
   async function save() {
@@ -242,6 +252,14 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
   }
 
   const missing = !contract && (level.trim() === "" || writing.trim() === "");
+  if (!open) {
+    return (
+      <section aria-label="Contract" className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-dashed border-[var(--border-strong)] px-3.5 py-2.5">
+        <span className="text-sm text-[var(--body)]">Contract level and writing number <span className="text-[var(--muted)]">· optional, for commission figures</span></span>
+        {canEdit && <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(true)}>Add contract details</Button>}
+      </section>
+    );
+  }
   return (
     <section aria-label="Contract" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">

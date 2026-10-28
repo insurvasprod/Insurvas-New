@@ -265,6 +265,13 @@ export function CarriersSettings() {
   const listBody = (children: ReactNode) => <div className={cn(SCROLL, "-mx-1.5 max-h-[420px] min-h-0 flex-1 px-1.5 lg:max-h-none")}>{children}</div>;
 
   const openStep = (next: Step) => { setStep(next); setQuery(""); setFilter("all"); };
+  // A tab the person picks is written to the address too, so the Get set up bar (which reads the
+  // hash) knows the States half is open (owner, 2026-10-28). Same anchors as the deep links above.
+  const pickStep = (next: Step) => {
+    openStep(next);
+    const hash = next === "states" ? "#carriers/carriers-states" : next === "maps" ? "#carriers/carriers-maps" : "#carriers";
+    if (window.location.hash !== hash) window.location.hash = hash;
+  };
 
   return (
     <SettingsStack>
@@ -277,7 +284,7 @@ export function CarriersSettings() {
       <ViewTabs
         label="Carrier setup"
         value={step}
-        onChange={(next) => { setStep(next); setQuery(""); setFilter("all"); }}
+        onChange={pickStep}
         tabs={[
           { key: "carriers", label: "Your carriers", count: yours.length },
           { key: "states", label: "States", count: nAppointed },
@@ -291,7 +298,7 @@ export function CarriersSettings() {
       {step === "carriers" && (
         <div ref={panes} className={PANES} style={paneHeight ? { height: paneHeight } : undefined}>
           {listCard(<>
-            <span className="flex items-center justify-between gap-2"><Kicker id="hint-your-carriers" text="Your carriers" hint="The carriers you hold a contract with. Click one to finish its setup or change it." />{yours.length > 0 && <span className="text-xs text-[var(--muted)]">{readyCount} ready · {yours.length - readyCount} to finish</span>}</span>
+            <span className="flex items-center justify-between gap-2"><Kicker id="hint-your-carriers" text="Your carriers" hint="The carriers you hold a contract with. Click one to finish its setup or change it." />{yours.length > 1 && <span className="text-xs text-[var(--muted)]">{readyCount} ready · {yours.length - readyCount} to finish</span>}</span>
             <input className={cn(control, "mt-0")} aria-label="Find a carrier" placeholder="Find a carrier" value={query} onChange={(event) => setQuery(event.target.value)} />
             {listBody(yours.length === 0
               ? <p className="m-0 px-2 py-3 text-sm text-[var(--muted)]">No carriers yet. Add the first one you write with.</p>
@@ -324,7 +331,7 @@ export function CarriersSettings() {
               salesAvailable={sales !== null}
               productLines={sales?.productLines ?? []}
               canEdit={sales?.canEdit ?? true}
-              onSetStates={() => { setStep("states"); setQuery(""); setFilter("all"); }}
+              onSetStates={() => pickStep("states")}
               onSaved={async () => { await Promise.all([loadVault(), loadSales()]); }}
             />
           ) : (
