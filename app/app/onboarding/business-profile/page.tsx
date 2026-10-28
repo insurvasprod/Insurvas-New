@@ -5,6 +5,7 @@ import { BusinessProfileForm, type AboutYouInitial, type BusinessProfileInitial 
 import { audienceForPlanType } from "@/lib/agency/constants";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { PROFILE_EDITABLE_STATES } from "@/lib/signup/destination";
+import { PROFILE_SKIP_PATH } from "@/lib/signup/profileSkip";
 import { nameFromEmail } from "@/lib/signup/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -63,7 +64,14 @@ export default async function BusinessProfilePage() {
   // this page directly) it goes to the plan.
   return (
     <FunnelFrame step={5} wide>
-      <BusinessProfileForm initial={initial} person={person} audience={audience} back={paid ? undefined : "/app/onboarding/plan"} />
+      <BusinessProfileForm
+        initial={initial}
+        person={person}
+        audience={audience}
+        back={paid ? undefined : "/app/onboarding/plan"}
+        // After payment the owner may skip it for now; it is asked again at the next login.
+        skipHref={paid ? PROFILE_SKIP_PATH : undefined}
+      />
     </FunnelFrame>
   );
 }

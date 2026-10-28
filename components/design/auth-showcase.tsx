@@ -86,14 +86,14 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
       width: "wide",
       story: <StoryPanel mode="sign-up" step={5} noPayment />,
       steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
-      node: <BusinessProfileForm key="agent" person={{ firstName: "", lastName: "", phone: "" }} audience="individual" />,
+      node: <BusinessProfileForm key="agent" person={{ firstName: "", lastName: "", phone: "" }} audience="individual" skipHref="#skip" />,
     },
     "step-3-agency": {
       plane: "agent",
       width: "wide",
       story: <StoryPanel mode="sign-up" step={5} noPayment />,
       steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
-      node: <BusinessProfileForm key="agency" person={{ firstName: "Avery", lastName: "Collins", phone: "+12015550123" }} audience="agency" />,
+      node: <BusinessProfileForm key="agency" person={{ firstName: "Avery", lastName: "Collins", phone: "+12015550123" }} audience="agency" skipHref="#skip" />,
     },
     // The real screens with Google switched on, before it is on in Supabase (2026-10-27).
     "sign-in-google": { plane: "agent", story: <StoryPanel mode="sign-in" />, node: null },

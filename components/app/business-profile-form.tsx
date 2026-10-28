@@ -99,12 +99,14 @@ export type AboutYouInitial = { firstName: string; lastName: string; phone: stri
  * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
  * The name starts empty otherwise: guessing it from the email domain is gone (owner, 2026-10-27).
  */
-export function BusinessProfileForm({ initial = null, person, audience = "agency", back }: {
+export function BusinessProfileForm({ initial = null, person, audience = "agency", back, skipHref }: {
   initial?: BusinessProfileInitial | null;
   person: AboutYouInitial;
   audience?: "individual" | "agency";
   /** The Back button beside Continue. */
   back?: string;
+  /** "Skip for now", after payment: into the app without the profile (asked again at the next login). */
+  skipHref?: string;
 }) {
   const router = useRouter();
   const solo = audience === "individual";
@@ -258,7 +260,16 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
         {error && <AuthAlert>{error}</AuthAlert>}
         {/* Back beside Continue, the footer of every step (manager review, 2026-10-28). */}
         <FunnelActions back={back}>
-          <Button type="submit" className="h-11 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
+          {/* Skip beside Continue, quieter (manager review, 2026-10-28: "make a skip button … he can
+              skip business information"). A plain link: nothing typed here is sent. */}
+          <div className="flex gap-3">
+            {skipHref && (
+              <Button asChild variant="outline" className="h-11 shrink-0 border-[var(--border-strong)] px-5">
+                <a href={skipHref} data-profile-skip="">Skip for now</a>
+              </Button>
+            )}
+            <Button type="submit" className="h-11 min-w-0 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
+          </div>
         </FunnelActions>
       </form>
     </div>
