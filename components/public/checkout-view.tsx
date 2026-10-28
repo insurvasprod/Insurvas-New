@@ -96,7 +96,7 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
           {planLine && <p className={cn("text-sm", muted)}>{planLine}</p>}
         </div>
         {/* Back to Step 3 of 5: a buyer who picked the wrong plan must not be stuck paying for it. */}
-        <Link href="/app/onboarding/plan" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
+        <Link href="/app/onboarding/plan?change=1" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
       </div>
 
       <dl className="text-sm">

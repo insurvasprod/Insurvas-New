@@ -5,7 +5,7 @@ import { useState } from "react";
 import { AuthHeading, AuthLayout, AuthStory, type AuthPlane } from "@/components/portal/auth-layout";
 import { AuthAlert, AuthField, AuthInput, AuthSubmit } from "@/components/portal/auth-controls";
 import { BusinessProfileForm } from "@/components/app/business-profile-form";
-import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary } from "@/components/app/plan-choice";
+import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary, PlanChosenPanel } from "@/components/app/plan-choice";
 import { FUNNEL_STEPS } from "@/components/app/funnel-frame";
 import { FunnelReview } from "@/components/app/funnel-review";
 import { VerifyEmailPanel } from "@/components/app/verify-email-panel";
@@ -30,6 +30,7 @@ const VARIANTS = [
   { key: "step-3", label: "Sign-up · step 5 About you (agent)" },
   { key: "step-3-agency", label: "Sign-up · step 5 About you (agency)" },
   { key: "step-4", label: "Sign-up · step 3 (plan)" },
+  { key: "step-4-chosen", label: "Sign-up · step 3 (picked on Pricing)" },
   { key: "done", label: "Sign-up · all done" },
   { key: "partner", label: "Partner sign-in" },
   { key: "admin", label: "Staff sign-in · step 2" },
@@ -128,6 +129,14 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
       story: planChoices?.plans.length ? <PlanChoiceSummary /> : <StoryPanel mode="sign-up" step={3} />,
       node: planChoices?.plans.length ? <PlanChoiceForm /> : <AuthHeading title="Choose your plan">No published plans could be loaded here.</AuthHeading>,
     },
+    // The plan step when the plan came from a pricing card: shown, not asked again (2026-10-28).
+    "step-4-chosen": {
+      plane: "agent",
+      width: "wide",
+      steps: { current: 3, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[2], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      story: <StoryPanel mode="sign-up" step={3} />,
+      node: planChoices?.plans.length ? <PlanChosenPanel /> : <AuthHeading title="Your plan">No published plans could be loaded here.</AuthHeading>,
+    },
     done: {
       plane: "agent",
       story: <StoryPanel mode="sign-in" />,
@@ -169,7 +178,7 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
   );
   return (
     <>
-      {variant === "sign-in-google" ? <TenantAuthWorkspace googleEnabled /> : variant === "step-4" && planChoices?.plans.length ? (
+      {variant === "sign-in-google" ? <TenantAuthWorkspace googleEnabled /> : (variant === "step-4" || variant === "step-4-chosen") && planChoices?.plans.length ? (
         <PlanChoiceProvider plans={planChoices.plans} modules={planChoices.modules} initial={null} now={now} noPayment={false}>{layout}</PlanChoiceProvider>
       ) : layout}
       {picker}

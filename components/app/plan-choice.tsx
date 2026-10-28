@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, LoaderCircle, Minus, Plus, Users } from "lucide-react";
 
@@ -344,6 +345,62 @@ export function PlanChoiceForm() {
           <ContinueButton />
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * The plan step when the plan was picked on the pricing page (manager review, 2026-10-28, 03:43:
+ * "I already made a choice from the landing page. Why do I need to make another choice? Just show
+ * them this information."). What they picked, and that today costs nothing; "Change plan" opens the
+ * full chooser (?change=1). Back and "Continue to payment" sit under it; the right side shows the
+ * product slides, since the plan is already on the left (owner, 2026-10-28).
+ */
+export function PlanChosenPanel() {
+  const choice = useChoice();
+  const { plan, cycle, seats, totalCents, noPayment } = choice;
+  const price = plan.cents[cycle];
+  const rows = [
+    { label: "Who it is for", value: plan.audience === "individual" ? "Independent Agent" : "Agency" },
+    { label: "Billing", value: BILLING_CYCLE_LABELS[cycle] },
+    { label: "Seats", value: plan.audience === "individual" ? "1" : String(seats) },
+    { label: "Price", value: price == null ? "—" : `${formatCentsAsCurrency(price)} / ${PER[cycle]}` },
+  ];
+  return (
+    <div>
+      <FunnelHeading title="Your plan">
+        {noPayment ? "Picked on the pricing page. Nothing is charged." : plan.trialDays > 0 ? "Picked on the pricing page. Nothing to pay today." : "Picked on the pricing page."}
+      </FunnelHeading>
+      <section aria-label="The plan you picked" data-plan-chosen="" className="rounded-xl border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xl font-semibold tracking-[-0.02em] text-foreground">{plan.name}</p>
+            {plan.blurb && <p className="mt-0.5 text-sm text-[var(--body)]">{plan.blurb}</p>}
+          </div>
+          <Check className="mt-1 size-5 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />
+        </div>
+        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          {rows.map((row) => (
+            <div key={row.label}>
+              <dt className="text-muted-foreground">{row.label}</dt>
+              <dd className="m-0 font-semibold tabular-nums text-foreground">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-[color-mix(in_srgb,var(--primary)_35%,transparent)] pt-3">
+          <span className="text-sm font-semibold text-foreground">Today</span>
+          <span className="text-title-lg font-semibold tabular-nums tracking-[-0.02em] text-foreground">{noPayment || plan.trialDays > 0 ? "$0.00" : totalCents == null ? "—" : formatCentsAsCurrency(totalCents)}</span>
+        </div>
+        <TrialLine className="mt-1 text-[var(--accent-ink)]" />
+      </section>
+      <p className="mt-4 text-sm text-muted-foreground">
+        Want something else?{" "}
+        <Link href="/app/onboarding/plan?change=1" data-tap="" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Change plan</Link>
+      </p>
+      {choice.error && <AuthAlert className="mt-4">{choice.error}</AuthAlert>}
+      {/* Back and Continue under the plan, at every width: the right side shows the product slides
+          here, not the summary (owner, 2026-10-28). */}
+      <div className="mt-6"><ContinueButton /></div>
     </div>
   );
 }
