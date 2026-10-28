@@ -13,22 +13,34 @@ import { cn } from "@/lib/utils";
  * `children` is the primary action (a submit Button, or a Link styled as one). Leave `back` out on
  * the first step.
  */
-export function FunnelActions({ back, children, className }: {
+export function FunnelActions({ back, children, className, onDark = false }: {
   back?: string;
-  children: ReactNode;
+  /** On the green brand panel (the plan summary): Back in the panel's own light-on-dark colours. */
+  onDark?: boolean;
+  /** Left out where the step's own form has the button (Payment: Whop's pay button). */
+  children?: ReactNode;
   className?: string;
 }) {
   return (
     <div data-funnel-actions="" className={cn("flex items-center gap-3", className)}>
       {back && (
-        <Button asChild variant="outline" className="h-11 shrink-0 border-[var(--border-strong)] px-5">
+        <Button
+          asChild
+          variant="outline"
+          className={cn(
+            "h-11 shrink-0 px-5",
+            onDark
+              ? "border-white/30 bg-transparent text-[var(--on-dark)] hover:bg-white/10 hover:text-[var(--on-dark)] dark:border-white/30 dark:bg-transparent dark:hover:bg-white/10"
+              : "border-[var(--border-strong)]",
+          )}
+        >
           <Link href={back}>
             <ArrowLeft aria-hidden="true" />
             Back
           </Link>
         </Button>
       )}
-      <div className="min-w-0 flex-1 [&>*]:w-full">{children}</div>
+      {children && <div className="min-w-0 flex-1 [&>*]:w-full">{children}</div>}
     </div>
   );
 }

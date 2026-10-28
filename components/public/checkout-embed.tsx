@@ -127,7 +127,8 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
 }
 
 /** The pay button in the brand green (--primary on --on-primary). The frame cannot read our CSS variables, so the values are spelled out. */
-const PAY_BUTTON = { backgroundColor: "rgb(7, 214, 160)", color: "rgb(13, 64, 55)", borderRadius: "999px", fontWeight: "600" };
+// 44px like every button in the app (2026-10-28: the payment step must fit the screen).
+const PAY_BUTTON = { backgroundColor: "rgb(7, 214, 160)", color: "rgb(13, 64, 55)", borderRadius: "999px", fontWeight: "600", height: "44px", minHeight: "44px" };
 
 /**
  * The country (and state) drop-downs in Whop's address form are native selects. Their open list is
@@ -147,7 +148,12 @@ function subscribeDark(callback: () => void) {
 const isDark = () => document.documentElement.classList.contains("dark");
 
 /** The left side: Whop's embedded checkout, or the free-coupon face, or the retry line. */
-export function PaymentEmbed({ email, environment }: { email: string; environment: "production" | "sandbox" }) {
+/**
+ * `name`: the cardholder name to prefill, only when the owner typed it (not the stand-in made from
+ * the address at sign-up). The email is the verified account address: prefilled, locked and hidden,
+ * so Whop's form starts at the card (manager review, 2026-10-28: the checkout must not scroll).
+ */
+export function PaymentEmbed({ email, name = null, environment }: { email: string; name?: string | null; environment: "production" | "sandbox" }) {
   const router = useRouter();
   const payment = usePayment();
   const dark = useSyncExternalStore(subscribeDark, isDark, () => false);
@@ -200,7 +206,8 @@ export function PaymentEmbed({ email, environment }: { email: string; environmen
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card p-1">
+    // No border or padding of our own: Whop draws its own card, and a box around it cost height.
+    <div className="overflow-hidden rounded-xl">
       <WhopElements
         elements={whop}
         environment={environment}
@@ -208,7 +215,8 @@ export function PaymentEmbed({ email, environment }: { email: string; environmen
         appearance={{
           theme: { appearance: dark ? "dark" : "light", accentColor: "jade", grayColor: "sage" },
           // The plan, price and coupon are on the receipt beside it; the form keeps only what it collects.
-          classes: { "whop-CheckoutDetails": { display: "none" }, "whop-CheckoutDetailsToggle": { display: "none" }, "whop-CheckoutPayButton": PAY_BUTTON, "whop-AddressFieldSelect": addressSelect(dark) },
+          // The email block too: it is the account's verified address, prefilled and locked below.
+          classes: { "whop-CheckoutDetails": { display: "none" }, "whop-CheckoutDetailsToggle": { display: "none" }, "whop-Email": { display: "none" }, "whop-CheckoutPayButton": PAY_BUTTON, "whop-AddressFieldSelect": addressSelect(dark) },
         }}
       >
         <Checkout
@@ -220,7 +228,7 @@ export function PaymentEmbed({ email, environment }: { email: string; environmen
           // Not proof of payment: the return page asks Whop, and the webhook is the second path.
           onComplete={() => { if (!returnUrl) router.push("/app/checkout/return"); }}
         >
-          <CheckoutElement buyerEmail={email} />
+          <CheckoutElement buyerEmail={email} lockBuyerEmail defaultValues={name ? { billingDetails: { name } } : undefined} />
         </Checkout>
       </WhopElements>
     </div>

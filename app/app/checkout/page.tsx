@@ -8,6 +8,7 @@ import { dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, priceForCycle, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { readPlanChoice } from "@/lib/signup/planChoiceQueries";
+import { nameFromEmail } from "@/lib/signup/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /** The Whop environment our API key belongs to, so the embedded form talks to the same one. */
@@ -95,6 +96,8 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
       pending={pending === "1"}
       failed={failed === "1"}
       email={context.email}
+      // The stand-in made from the address at sign-up is not a cardholder name.
+      name={context.name && context.name !== nameFromEmail(context.email) ? context.name : null}
       environment={whopEnvironment()}
       noPayment={checkoutPaymentMode() === "none"}
     />

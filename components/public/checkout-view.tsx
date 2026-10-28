@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
 import { AuthAlert } from "@/components/portal/auth-controls";
+import { AuthLegalLinks } from "@/components/portal/auth-layout";
 import { CheckoutStart } from "@/components/public/checkout-start";
 import { PaymentCoupon, PaymentEmbed, PaymentProvider } from "@/components/public/checkout-embed";
 import { BILLING_CYCLE_LABELS, type BillingCycle } from "@/lib/money";
@@ -30,8 +32,10 @@ export type CheckoutViewProps = {
   noPayment?: boolean;
   /** Add-ons ticked on Step 3 of 5. They are attached when the plan starts and billed on the Insurvas invoice. */
   addons?: { name: string; price: string; cycle: BillingCycle }[];
-  /** Prefills the email field in Whop's form. */
+  /** Prefills (and locks) the email in Whop's form: the verified account address. */
   email?: string;
+  /** The cardholder name to prefill; null when the owner has not typed one yet. */
+  name?: string | null;
   /** Which Whop environment the embedded form talks to: the one our API key belongs to. */
   environment?: "production" | "sandbox";
 };
@@ -115,22 +119,34 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
           ? <>No card is needed and nothing is charged. Your plan starts now{trialDays > 0 ? <> with a {trialDays}-day trial</> : null}, and no billing is set up for it.</>
           : renewalTerms(props)}
       </p>
+      {/* Privacy · Terms · Support: under the form on every other step, here in the summary. */}
+      <AuthLegalLinks className="!mt-0" onDark={dark} />
     </section>
   );
 }
 
 export function CheckoutView(props: CheckoutViewProps) {
-  const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production" } = props;
+  const { trialDays, pending, failed = false, noPayment = false, email = "", name = null, environment = "production" } = props;
 
   const body = (
-    <FunnelFrame step={4} wide back={{ href: "/app/onboarding/plan", label: "Back to your plan" }} aside={<Receipt props={props} dark />}>
-      <FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day free trial` : "Start your plan"}>
-        {noPayment
-          ? "No card needed. Nothing is charged."
-          : trialDays > 0
-            ? `Add a card to start. You won't be charged until ${props.trialEnds}.`
-            : `Your first ${props.cycle ? PER[props.cycle] : "period"} is charged today.`}
-      </FunnelHeading>
+    // Manager review, 2026-10-28: the payment step must not scroll. Whop's form is as tall as it is, so
+    // Back sits on the step line, where step 1 has "Have an account? Sign in", instead of a row under it.
+    <FunnelFrame
+      step={4}
+      wide
+      // The legal links move into the summary, which has room (owner, 2026-10-28: "a tiny bit of scrolling").
+      legal={false}
+      aside={<Receipt props={props} dark />}
+      stepsAside={
+        <Link href="/app/onboarding/plan" data-funnel-back="" className="inline-flex items-center gap-1 font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+          <ArrowLeft className="size-4" aria-hidden="true" />Back to your plan
+        </Link>
+      }
+    >
+      {/* No visible heading or subtitle (owner, 2026-10-28): the stepper says "Payment" and the
+          summary beside the form says what is charged and when, so the form starts right under the
+          stepper. The heading stays for screen readers. */}
+      <div className="sr-only"><FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day free trial` : "Start your plan"} /></div>
 
       {/* "Pending" also covers a payment the provider has not finished recording, so this must not
           tell someone who has paid to pay again. */}
@@ -151,11 +167,8 @@ export function CheckoutView(props: CheckoutViewProps) {
 
         {noPayment
           ? <CheckoutStart noPayment />
-          : <PaymentEmbed email={email} environment={environment} />}
+          : <PaymentEmbed email={email} name={name} environment={environment} />}
 
-        <p className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          Leave now and come back any time: you will return to this same step.
-        </p>
       </div>
     </FunnelFrame>
   );

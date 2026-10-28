@@ -359,10 +359,10 @@ function TrialLine({ className }: { className?: string }) {
 }
 
 /** Back beside "Continue to payment", the footer of every sign-up step (manager review, 2026-10-28). */
-function ContinueButton() {
+function ContinueButton({ onDark = false }: { onDark?: boolean }) {
   const { saving, save } = useChoice();
   return (
-    <FunnelActions back="/app/verify-email">
+    <FunnelActions back="/app/verify-email" onDark={onDark}>
       <Button type="button" className="h-11" disabled={saving} onClick={save}>
         {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
         {saving ? "Saving…" : "Continue to payment"}
@@ -416,7 +416,8 @@ export function PlanChoiceSummary() {
         </div>
       </dl>
       <TrialLine className="mt-1 text-[var(--primary)]" />
-      <div className="mt-4"><ContinueButton /></div>
+      {/* On the green panel: Back in the panel's colours (2026-10-28: it was white on white). */}
+      <div className="mt-4"><ContinueButton onDark /></div>
     </section>
   );
 }

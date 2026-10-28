@@ -25,7 +25,9 @@ export function FunnelStepper({ step }: { step: FunnelStep }) {
  * "the right side leave it as it is") — the trial story for the steps before the plan starts, the
  * floor story once it has.
  */
-export function FunnelFrame({ step, children, wide = false, aside, back, stepsAside }: {
+export function FunnelFrame({ step, children, wide = false, aside, back, stepsAside, legal = true }: {
+  /** The Privacy · Terms · Support line under the form; Payment shows it in its summary instead. */
+  legal?: boolean;
   step: FunnelStep;
   children: ReactNode;
   /** A step with many choices (2026-10-26, Your agency): the column is wider so they spread out instead of scrolling. */
@@ -44,6 +46,7 @@ export function FunnelFrame({ step, children, wide = false, aside, back, stepsAs
       width={wide ? "wide" : "default"}
       steps={{ current: step, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[step - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: stepsAside }}
       back={back}
+      legal={legal}
       story={aside ?? <StoryPanel mode={step === 6 ? "sign-in" : "sign-up"} step={step} noPayment={checkoutPaymentMode() === "none"} />}
     >
       {children}

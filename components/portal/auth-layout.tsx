@@ -35,6 +35,7 @@ export function AuthLayout({
   back,
   story,
   align,
+  legal = true,
   children,
 }: {
   plane: AuthPlane;
@@ -53,6 +54,12 @@ export function AuthLayout({
    * them in the center", the sign-up steps too). "top" is kept for a screen that needs it.
    */
   align?: "top" | "center";
+  /**
+   * The Privacy · Terms · Support line under the form. Payment turns it off and shows the same links
+   * in its summary instead (owner, 2026-10-28): Whop's form is as tall as it is, and this line was
+   * what still pushed the page past an 826px window.
+   */
+  legal?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -73,16 +80,24 @@ export function AuthLayout({
             {steps && <AuthSteps {...steps} />}
             {back && <AuthBack href={back.href} label={back.label} />}
             {children}
-            <nav className="portal-login-footer" aria-label="Legal links">
-              <Link href="/legal/privacy">Privacy</Link>
-              <Link href="/legal/tos">Terms</Link>
-              <a href="mailto:support@insurvas.com">Support</a>
-            </nav>
+            {legal && <AuthLegalLinks />}
           </div>
         </div>
       }
       story={story}
     />
+  );
+}
+
+/** Privacy · Terms · Support, the line under every auth form (and in the payment summary). */
+export function AuthLegalLinks({ className, onDark = false }: { className?: string; onDark?: boolean }) {
+  return (
+    // Inline colour on the green panel: .portal-login-footer's own colour outranks a utility class.
+    <nav className={cn("portal-login-footer", className)} style={onDark ? { color: "var(--nav-muted)" } : undefined} aria-label="Legal links">
+      <Link href="/legal/privacy">Privacy</Link>
+      <Link href="/legal/tos">Terms</Link>
+      <a href="mailto:support@insurvas.com">Support</a>
+    </nav>
   );
 }
 
