@@ -487,10 +487,6 @@ function DesktopSidebar({ menu, moduleAccess }: { menu: MenuSection[]; moduleAcc
           onExpand={() => setIsCollapsed(false)}
         />
       </div>
-      <div className="portal-agent-sidebar-account">
-        {/* AppTopBar mounts the existing account control here. */}
-        <div id="agent-rail-account" />
-      </div>
     </aside>
   );
 }
