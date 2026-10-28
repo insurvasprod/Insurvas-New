@@ -189,56 +189,57 @@ export function CarriersSettings() {
   const current = yours.find((carrier) => carrier.id === carrierId) ?? yours[0] ?? null;
   const pickedStates = selected.length ? selected : [];
 
-  async function saveAppointments(rows: AppointmentChange[]) {
-    if (!rows.length) return;
+  async function saveAppointments(rows: AppointmentChange[]): Promise<Vault | null> {
+    if (!rows.length) return vault;
     setBusy(true);
     const result = await send("/api/app/appointment-vault/appointments", "POST", { appointments: rows });
     setBusy(false);
-    if (!result.ok) { notify.block(result.error); return; }
-    await loadVault();
+    if (!result.ok) { notify.block(result.error); return null; }
+    return loadVault();
   }
 
-  function tick(carrier: string, on: boolean) {
-    if (!vault) return;
-    void saveAppointments(pickedStates.flatMap((state) => appointmentChange(vault.appointments, carrier, state, on, today)));
-  }
-
-  function tickAll(on: boolean) {
-    if (!vault) return;
-    void saveAppointments(yours.flatMap((carrier) => pickedStates.flatMap((state) => appointmentChange(vault.appointments, carrier.id, state, on, today))));
-  }
-
-  // Licences in the same pass as the carriers (owner, 2026-10-28: "both in one pass"). A tick is
-  // enough: the number and expiry are optional (the endpoint stores placeholders when they are blank).
-  async function setLicensed(on: boolean) {
-    const targets = pickedStates.filter((code) => licences.has(code) !== on);
-    if (!targets.length) return;
-    if (!on) {
-      const withDetails = targets.filter((code) => licenceNumberValue(licences.get(code)?.license_number) || licenceExpiryValue(licences.get(code)?.expires_at));
-      if (withDetails.length && !window.confirm(`Remove the licence${withDetails.length === 1 ? "" : "s"} for ${withDetails.join(", ")}, with the number and expiry on file?`)) return;
-    }
-    setBusy(true);
-    for (const code of targets) {
-      const result = on
-        ? await send("/api/app/appointment-vault/licenses", "POST", { state: code })
-        : await send(`/api/app/appointment-vault/licenses?state=${code}`, "DELETE");
-      if (!result.ok) { notify.block(result.error); break; }
-    }
-    setBusy(false);
-    await loadVault();
-  }
-
-  async function saveLicenceDetails(row: LicenseRow, number: string, expires: string) {
-    if (number === licenceNumberValue(row.license_number) && expires === licenceExpiryValue(row.expires_at)) return;
-    setBusy(true);
-    const result = await send("/api/app/appointment-vault/licenses", "POST", {
-      state: row.state, license_number: number, expires_at: expires,
-      ...(row.licence_type !== undefined ? { licence_type: row.licence_type ?? null } : {}),
-      ...(row.lines_of_authority ? { lines_of_authority: row.lines_of_authority } : {}),
+  /**
+   * One click (owner, 2026-10-28: "if it means I am clicking it and also clicking the carrier I am
+   * good to go"): ticking a carrier in a state records that you are licensed there too. Unticking the
+   * last carrier in a state takes the licence back off, unless it has a number or expiry on file,
+   * which is kept. No details are asked: the endpoint stores placeholders for them.
+   */
+  async function syncLicences(fresh: Vault, states: string[]) {
+    const held = new Map(fresh.licenses.map((row) => [row.state, row]));
+    const changes = states.flatMap((code) => {
+      const carriersHere = carriersIn(fresh.appointments, code, today).length;
+      const row = held.get(code);
+      if (carriersHere > 0 && !row) return [{ code, add: true }];
+      const bare = row && !licenceNumberValue(row.license_number) && !licenceExpiryValue(row.expires_at);
+      if (carriersHere === 0 && bare) return [{ code, add: false }];
+      return [];
     });
+    if (!changes.length) return;
+    setBusy(true);
+    // Six at a time: one by one, thirty states took fifteen seconds.
+    for (let start = 0; start < changes.length; start += 6) {
+      const results = await Promise.all(changes.slice(start, start + 6).map((change) => change.add
+        ? send("/api/app/appointment-vault/licenses", "POST", { state: change.code })
+        : send(`/api/app/appointment-vault/licenses?state=${change.code}`, "DELETE")));
+      const failed = results.find((result) => !result.ok);
+      if (failed && !failed.ok) { notify.block(failed.error); break; }
+    }
     setBusy(false);
-    if (!result.ok) { notify.block(result.error); return; }
     await loadVault();
+  }
+
+  async function tick(carrier: string, on: boolean) {
+    if (!vault) return;
+    const states = [...pickedStates];
+    const fresh = await saveAppointments(states.flatMap((state) => appointmentChange(vault.appointments, carrier, state, on, today)));
+    if (fresh) await syncLicences(fresh, states);
+  }
+
+  async function tickAll(on: boolean) {
+    if (!vault) return;
+    const states = [...pickedStates];
+    const fresh = await saveAppointments(yours.flatMap((carrier) => states.flatMap((state) => appointmentChange(vault.appointments, carrier.id, state, on, today))));
+    if (fresh) await syncLicences(fresh, states);
   }
 
   // One step (2026-10-27): each carrier is switched on and, where Applications is on, put on the
@@ -400,13 +401,21 @@ export function CarriersSettings() {
             <Kicker id="hint-pick-state" text="Your states" hint="Tick every state you work in, then mark them all at once on the right. Or click one state to open just that one." />
             {search("Find a state: Arkansas, AR…")}
             {filters("Appointed", "Not yet", nAppointed)}
+            {/* Many states, many carriers in one go (owner, 2026-10-28): pick what the list shows, then tick the carriers. */}
+            <span className="flex items-center justify-between gap-2 px-1 text-xs text-[var(--muted)]">
+              <span className="tabular-nums">{selected.length ? `${selected.length} picked` : "Tick the states you sell in"}</span>
+              <span className="flex gap-3">
+                <button type="button" onClick={() => setSelected((picked) => [...new Set([...picked, ...states.map(([code]) => code as string)])])} className="font-semibold text-[var(--accent-ink)] hover:underline">Pick all shown</button>
+                {selected.length > 0 && <button type="button" onClick={() => setSelected([])} className="font-semibold text-[var(--accent-ink)] hover:underline">Clear</button>}
+              </span>
+            </span>
             {listBody(states.map(([code, name]) => {
               const on = selected.includes(code);
               const here = carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id));
               return (
                 <div key={code} className={cn("flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-[var(--surface-alt)]", on && "bg-[var(--primary-soft)] hover:bg-[var(--primary-soft)]")}>
                   {/* One look for a picked state (owner, 2026-10-28, S1): the box shows it ticked whether one or several are picked. */}
-                  <button type="button" onClick={() => setSelected(on ? selected.filter((s) => s !== code) : [...selected, code])} role="checkbox" aria-checked={on} aria-label={`Pick ${name}`} className={BOX(on ? "all" : "none")}>✓</button>
+                  <button type="button" onClick={() => setSelected((picked) => (picked.includes(code) ? picked.filter((s) => s !== code) : [...picked, code]))} role="checkbox" aria-checked={on} aria-label={`Pick ${name}`} className={BOX(on ? "all" : "none")}>✓</button>
                   <button type="button" onClick={() => setSelected([code])} className="flex min-w-0 flex-1 items-center gap-2.5 py-0.5 text-left">
                     <span className="w-7 text-sm font-semibold text-[var(--ink)]">{code}</span>
                     <span className="min-w-0 flex-1 truncate text-sm text-[var(--body)]">{name}</span>
@@ -428,37 +437,13 @@ export function CarriersSettings() {
                 {/* S3: only worth showing with more than one carrier. */}
                 {yours.length > 1 && (
                   <span className="flex gap-1.5">
-                    <button type="button" onClick={() => tickAll(true)} disabled={busy} className={CHIP(false)}>All carriers</button>
-                    <button type="button" onClick={() => tickAll(false)} disabled={busy} className={CHIP(false)}>None</button>
+                    <button type="button" onClick={() => void tickAll(true)} disabled={busy} className={CHIP(false)}>All carriers</button>
+                    <button type="button" onClick={() => void tickAll(false)} disabled={busy} className={CHIP(false)}>None</button>
                   </span>
                 )}
               </div>
 
-              {(() => {
-                const held = pickedStates.filter((code) => licences.has(code)).length;
-                const licensed = held === 0 ? "none" : held === pickedStates.length ? "all" : "some";
-                const row = pickedStates.length === 1 ? licences.get(pickedStates[0]) ?? null : null;
-                return (
-                  <div className="flex flex-col gap-2">
-                    <Label id="hint-licensed" text="Your licence" hint="Tick it if you hold a licence in this state. The number and expiry are optional; add them when you have them." />
-                    <button
-                      type="button"
-                      onClick={() => void setLicensed(licensed !== "all")}
-                      role="checkbox"
-                      aria-checked={licensed === "all" ? true : licensed === "some" ? "mixed" : false}
-                      disabled={busy}
-                      className={cn("flex w-full items-center gap-3.5 rounded-[12px] border border-[var(--border)] p-3.5 text-left disabled:cursor-wait", licensed !== "none" && "bg-[var(--primary-soft)]")}
-                    >
-                      <span className={BOX(licensed)} aria-hidden="true">{licensed === "some" ? "–" : "✓"}</span>
-                      <span className="flex-1 text-sm font-semibold text-[var(--ink)]">I&apos;m licensed {pickedStates.length === 1 ? "here" : "in these states"}</span>
-                      {licensed === "some" && <span className="text-xs text-[var(--accent-ink)]">in {pickedStates.filter((code) => licences.has(code)).join(", ")} only</span>}
-                    </button>
-                    {row && <LicenceDetails key={`${row.id}-${row.license_number}-${row.expires_at}`} row={row} disabled={busy} onSave={(number, expires) => void saveLicenceDetails(row, number, expires)} />}
-                  </div>
-                );
-              })()}
-
-              <Label id="hint-which-carriers" text="Which of your carriers appointed you here?" hint="Tick a carrier once it has approved you to sell in this state. Quotes in a state you are not appointed in are flagged." />
+              <Label id="hint-which-carriers" text="Which of your carriers can you sell here?" hint="Tick each carrier you are licensed and appointed with in this state. One tick covers both; quotes in a state you have not ticked are flagged." />
               {yours.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">Add your carriers first, on the Your carriers tab.</p>}
               {yours.map((carrier) => {
                 const state = coverage(vault.appointments, carrier.id, pickedStates, today);
@@ -469,7 +454,7 @@ export function CarriersSettings() {
                   <button
                     key={carrier.id}
                     type="button"
-                    onClick={() => tick(carrier.id, state !== "all")}
+                    onClick={() => void tick(carrier.id, state !== "all")}
                     role="checkbox"
                     aria-checked={state === "all" ? true : state === "some" ? "mixed" : false}
                     disabled={busy}
@@ -516,25 +501,6 @@ export function CarriersSettings() {
         />
       )}
     </SettingsStack>
-  );
-}
-
-/** A licence's optional number and expiry, under its tick; saved when a field is left (owner, 2026-10-28). */
-function LicenceDetails({ row, disabled, onSave }: { row: LicenseRow; disabled: boolean; onSave: (number: string, expires: string) => void }) {
-  const [number, setNumber] = useState(licenceNumberValue(row.license_number));
-  const [expires, setExpires] = useState(licenceExpiryValue(row.expires_at));
-  const save = () => onSave(number.trim(), expires);
-  return (
-    <div className="grid gap-3 pl-1 sm:grid-cols-2">
-      <label className="flex flex-col gap-1.5 text-xs font-semibold text-[var(--muted)]">
-        Licence number · optional
-        <input className={cn(control, "mt-0")} value={number} disabled={disabled} maxLength={120} autoComplete="off" spellCheck={false} placeholder="e.g. 18834920" onChange={(event) => setNumber(event.target.value)} onBlur={save} />
-      </label>
-      <label className="flex flex-col gap-1.5 text-xs font-semibold text-[var(--muted)]">
-        Expires · optional
-        <input className={cn(control, "mt-0")} type="date" value={expires} disabled={disabled} onChange={(event) => setExpires(event.target.value)} onBlur={save} />
-      </label>
-    </div>
   );
 }
 
