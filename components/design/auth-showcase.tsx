@@ -3,12 +3,12 @@
 import { useState } from "react";
 
 import { AuthHeading, AuthLayout, AuthStory, type AuthPlane } from "@/components/portal/auth-layout";
-import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
+import { AuthAlert, AuthField, AuthInput, AuthSubmit } from "@/components/portal/auth-controls";
 import { BusinessProfileForm } from "@/components/app/business-profile-form";
 import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary } from "@/components/app/plan-choice";
 import { FUNNEL_STEPS } from "@/components/app/funnel-frame";
 import { FunnelReview } from "@/components/app/funnel-review";
-import { LogoutButton } from "@/components/app/logout-button";
+import { VerifyEmailPanel } from "@/components/app/verify-email-panel";
 import { StoryPanel, TenantAuthWorkspace } from "@/components/app/tenant-auth-workspace";
 import { GoogleFinishForm } from "@/components/public/google-finish-form";
 import { SignupForm } from "@/components/public/signup-form";
@@ -25,8 +25,10 @@ const VARIANTS = [
   { key: "step-1-google", label: "Step 1 · Google" },
   { key: "google-finish", label: "Step 1 · finish (Google)" },
   { key: "step-1", label: "Sign-up · step 1" },
+  { key: "step-2", label: "Sign-up · step 2" },
   { key: "step-2-review", label: "Sign-up · step 2 seen again" },
-  { key: "step-3", label: "Sign-up · step 3 (wide, back)" },
+  { key: "step-3", label: "Sign-up · step 3 (agent)" },
+  { key: "step-3-agency", label: "Sign-up · step 3 (agency)" },
   { key: "step-4", label: "Sign-up · step 4 (plan)" },
   { key: "done", label: "Sign-up · all done" },
   { key: "partner", label: "Partner sign-in" },
@@ -65,36 +67,32 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
         <AuthInput id="ds-auth-password" type="password" />
       </AuthField>
       <AuthSubmit>Sign in</AuthSubmit>
-      <AuthSecondary>Email me a sign-in link</AuthSecondary>
     </form>
   );
 
   const screens: Record<Variant, { plane: AuthPlane; node: React.ReactNode; story: React.ReactNode; width?: "wide"; steps?: Parameters<typeof AuthLayout>[0]["steps"]; back?: { href: string; label: string } }> = {
-    "sign-in": { plane: "agent", story: <StoryPanel mode="sign-in" />, node: <><AuthHeading title="Welcome back">Sign in to your agency&rsquo;s workspace.</AuthHeading>{fields}</> },
+    "sign-in": { plane: "agent", story: <StoryPanel mode="sign-in" />, node: <><AuthHeading title="Welcome back">Sign in to your workspace.</AuthHeading>{fields}</> },
     "step-1": {
       plane: "agent",
       story: <StoryPanel mode="sign-up" step={1} />,
       steps: { current: 1, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[0], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <><AuthHeading title="Create your account">Already have an account? Sign in</AuthHeading>{fields}</>,
     },
+    // The real step 3 form (it only sends on Continue with every answer given), so the page's height
+    // and its dropdowns are checked here without a sign-up account in that state.
     "step-3": {
       plane: "agent",
       width: "wide",
       story: <StoryPanel mode="sign-up" step={3} noPayment />,
-      back: { href: "#", label: "Back to your email" },
       steps: { current: 3, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[2], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
-      // The real step 3 form (it only sends on Continue with every answer given), so the page's height
-      // and its dropdowns are checked here without a sign-up account in that state.
-      node: (
-        <>
-          <BusinessProfileForm />
-          <p className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm leading-normal text-muted-foreground">
-            <span>Signed in as <span className="font-semibold text-foreground">avery@agency.com</span></span>
-            <span aria-hidden="true">·</span>
-            <LogoutButton variant="link" className="text-sm font-semibold text-foreground hover:text-[var(--accent-ink)]" />
-          </p>
-        </>
-      ),
+      node: <BusinessProfileForm key="agent" person={{ firstName: "", lastName: "", phone: "" }} audience="individual" back="#back" />,
+    },
+    "step-3-agency": {
+      plane: "agent",
+      width: "wide",
+      story: <StoryPanel mode="sign-up" step={3} noPayment />,
+      steps: { current: 3, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[2], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      node: <BusinessProfileForm key="agency" person={{ firstName: "Avery", lastName: "Collins", phone: "+12015550123" }} audience="agency" back="#back" />,
     },
     // The real screens with Google switched on, before it is on in Supabase (2026-10-27).
     "sign-in-google": { plane: "agent", story: <StoryPanel mode="sign-in" />, node: null },
@@ -110,17 +108,22 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
       steps: { current: 1, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[0], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Not you? <a href="#" className="font-semibold text-[var(--accent-ink)]">Use another email</a></> },
       node: <GoogleFinishForm email="avery@gmail.com" name="Avery Collins" />,
     },
+    // The real waiting panel: with no pending account here its status call fails, which shows the error line too.
+    "step-2": {
+      plane: "agent",
+      story: <StoryPanel mode="sign-up" step={2} />,
+      steps: { current: 2, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      node: <VerifyEmailPanel ttlHours={24} back="#back" />,
+    },
     "step-2-review": {
       plane: "agent",
       story: <StoryPanel mode="sign-up" step={2} />,
-      back: { href: "#", label: "Back to your account" },
       steps: { current: 2, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
-      node: <FunnelReview title="Your email is confirmed" subtitle="Nothing more to do here." rows={[{ label: "Email", value: "avery@agency.com", done: true }]} continueHref="#continue" next={{ href: "#next", label: "Your agency" }} />,
+      node: <FunnelReview title="Your email is confirmed" subtitle="Nothing more to do here." rows={[{ label: "Email", value: "avery@agency.com", done: true }]} continueHref="#continue" back="#back" />,
     },
     "step-4": {
       plane: "agent",
       width: "wide",
-      back: { href: "#", label: "Back to your agency" },
       steps: { current: 4, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[3], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       story: planChoices?.plans.length ? <PlanChoiceSummary /> : <StoryPanel mode="sign-up" step={4} />,
       node: planChoices?.plans.length ? <PlanChoiceForm /> : <AuthHeading title="Choose your plan">No published plans could be loaded here.</AuthHeading>,

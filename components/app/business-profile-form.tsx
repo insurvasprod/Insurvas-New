@@ -6,11 +6,14 @@ import { useRouter } from "next/navigation";
 
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
+import { FunnelActions } from "@/components/portal/funnel-actions";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { MultiPicker } from "@/components/app/multi-picker";
 import { StatePicker } from "@/components/app/state-picker";
+import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
 import { Button } from "@/components/ui/button";
 import { LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, VOLUME_OPTIONS } from "@/lib/signup/constants";
+import { checkPhone, phoneCountry, splitPhone } from "@/lib/signup/phone";
 import { cn } from "@/lib/utils";
 
 const chip = (on: boolean) =>
@@ -23,17 +26,28 @@ const chip = (on: boolean) =>
  * What each field needs, one short sentence (owner, 2026-10-26: "an informational icon that explains
  * each field"; then: shown on hover, not as a card that pushes the form down).
  */
-const FIELD_INFO = {
+const AGENCY_INFO = {
   name: "Your agency's legal name, or the DBA your clients know you by.",
   state: "The main state your agency will operate in. Type its name or two-letter code.",
   sell: "Every product line your agency writes. Pick as many as apply.",
   volume: "Roughly how many applications the whole agency submits a month.",
   sources: "Where your leads come from today. Pick all that apply.",
+  phone: "The number we reach you on about your account. Never shown to your clients.",
 } as const;
-type InfoKey = keyof typeof FIELD_INFO;
+type InfoKey = keyof typeof AGENCY_INFO;
+
+/** The same hints for one independent agent: "you", not "your agency". */
+const AGENT_INFO: Record<InfoKey, string> = {
+  name: "The name you do business under, if you have one. Leave it empty to use your own name.",
+  state: "The main state you sell in. Type its name or two-letter code.",
+  sell: "Every product line you write. Pick as many as apply.",
+  volume: "Roughly how many applications you submit a month.",
+  sources: "Where your leads come from today. Pick all that apply.",
+  phone: AGENCY_INFO.phone,
+};
 
 /** A field's label with its (i). Hover or focus shows the hint floating above, so nothing below moves. */
-function FieldLabel({ id, label, end = false }: { id: InfoKey; label: string; end?: boolean }) {
+function FieldLabel({ id, label, info, end = false }: { id: InfoKey; label: string; info: string; end?: boolean }) {
   return (
     // On a phone the hint spans the label row (the outer span is its box), so it never runs off the
     // screen; from 640px it sits by the (i), toward the inside of the column.
@@ -55,7 +69,7 @@ function FieldLabel({ id, label, end = false }: { id: InfoKey; label: string; en
           role="tooltip"
           className={cn("pointer-events-none invisible absolute bottom-full inset-x-0 z-20 mb-1.5 rounded-lg sm:right-auto sm:-left-2 sm:w-64 border border-[var(--border-strong)] bg-[var(--color-card)] px-3 py-2 text-xs font-normal leading-normal text-[var(--body)] opacity-0 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))] transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100", end && "sm:left-auto sm:-right-2")}
         >
-          {FIELD_INFO[id]}
+          {info}
         </span>
       </span>
     </span>
@@ -71,19 +85,39 @@ export type BusinessProfileInitial = {
   leadSourceOther: string | null;
 };
 
+/** The person, asked here since step 1 is only email and password (manager review, 2026-10-28). */
+export type AboutYouInitial = { firstName: string; lastName: string; phone: string };
+
 /**
- * Step 3 of 5. The answers decide the setup checklist shown after checkout; the server derives it
- * when it saves the profile.
+ * Step 3 of 5, About you. The person (name, phone) and the business. The answers decide the setup
+ * checklist shown after checkout; the server derives it when it saves the profile.
+ *
+ * `audience` is who signed up, from the plan picked on the pricing page: one independent agent reads
+ * "Tell us about you" and may leave the business name empty; an agency reads "Tell us about your agency"
+ * (manager review, 2026-10-28: "I started as an independent agent... it's common sense").
  *
  * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
  * The name starts empty otherwise: guessing it from the email domain is gone (owner, 2026-10-27).
  */
-export function BusinessProfileForm({ initial = null }: { initial?: BusinessProfileInitial | null }) {
+export function BusinessProfileForm({ initial = null, person, audience = "agency", back }: {
+  initial?: BusinessProfileInitial | null;
+  person: AboutYouInitial;
+  audience?: "individual" | "agency";
+  /** The Back button beside Continue. */
+  back?: string;
+}) {
   const router = useRouter();
+  const solo = audience === "individual";
+  const info = solo ? AGENT_INFO : AGENCY_INFO;
+  const [firstName, setFirstName] = useState(person.firstName);
+  const [lastName, setLastName] = useState(person.lastName);
+  const [phoneCountryCode, setPhoneCountryCode] = useState(() => splitPhone(person.phone).country);
+  const [phone, setPhone] = useState(() => splitPhone(person.phone).national);
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [businessName, setBusinessName] = useState(initial?.businessName ?? "");
   // A field in the right column opens its hint toward the left, so it never runs past the column
   // (owner, 2026-10-27: the page scrolled sideways at 125% Windows scaling).
-  const label = (id: InfoKey, text: string, end = false): ReactNode => <FieldLabel id={id} label={text} end={end} />;
+  const label = (id: InfoKey, text: string, end = false): ReactNode => <FieldLabel id={id} label={text} info={info[id]} end={end} />;
   const [primaryState, setPrimaryState] = useState(initial?.primaryState ?? "");
   const [products, setProducts] = useState<string[]>(initial?.productsSold ?? []);
   const [volume, setVolume] = useState(initial?.monthlyVolumeRange ?? "");
@@ -92,8 +126,17 @@ export function BusinessProfileForm({ initial = null }: { initial?: BusinessProf
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const phoneCheck = checkPhone(phoneCountryCode, phone);
+  const phoneError = phoneTouched && !phoneCheck.ok ? phoneCheck.error : null;
+  const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+  // One agent without a business name does business under their own.
+  const sentBusinessName = solo && businessName.trim().length < 2 ? fullName : businessName.trim();
+
   const missing = [
-    businessName.trim().length < 2 && "business name",
+    !firstName.trim() && "first name",
+    !lastName.trim() && "last name",
+    !phoneCheck.ok && "phone number",
+    sentBusinessName.length < 2 && (solo ? "business name" : "agency name"),
     !primaryState && "primary state",
     products.length === 0 && "a product",
     !volume && "monthly applications",
@@ -105,13 +148,13 @@ export function BusinessProfileForm({ initial = null }: { initial?: BusinessProf
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (missing.length) { setError(`Still needed: ${missing.join(", ")}.`); return; }
+    if (missing.length) { setPhoneTouched(true); setError(`Still needed: ${missing.join(", ")}.`); return; }
     setSubmitting(true);
     try {
       const response = await fetch("/api/app/onboarding/business-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessName, primaryState, productsSold: products, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phoneCheck.ok ? phoneCheck.e164 : undefined, businessName: sentBusinessName, primaryState, productsSold: products, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not save your business profile"); return; }
@@ -126,32 +169,72 @@ export function BusinessProfileForm({ initial = null }: { initial?: BusinessProf
 
   return (
     <div>
-      {/* One line saying why (copy table, owner 2026-10-27); no setup preview; the NPN is asked later in Settings. */}
-      <FunnelHeading title="Tell us about your agency">We use this to set up your workspace.</FunnelHeading>
+      {/* One line saying why (copy table, owner 2026-10-27); the NPN is asked later in Settings. */}
+      <FunnelHeading title={solo ? "Tell us about you" : "Tell us about your agency"}>
+        We use this to set up your workspace.
+      </FunnelHeading>
       <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-5">
-        {/* Name and state side by side on a wide screen: the step fits without scrolling (2026-10-26). */}
+        {/* Two to a row on a wide screen, so the step fits without scrolling (2026-10-26). */}
         <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
-        <div>
-          {label("name", "Business name")}
-          <input className={authControl} aria-label="Business name" autoComplete="organization" maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
+          <label className="block">
+            <span className={authLabel}>First name</span>
+            <input className={authControl} autoComplete="given-name" maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+          </label>
+          <label className="block">
+            <span className={authLabel}>Last name</span>
+            <input className={authControl} autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} />
+          </label>
         </div>
 
-        <div>
-          {label("state", "Primary state", true)}
-          <StatePicker value={primaryState} onChange={setPrimaryState} />
-        </div>
-        </div>
-
-        {/* The two multi-answer questions are dropdowns side by side (owner, 2026-10-27), not rows of chips. */}
         <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
           <div>
-            {label("sell", "What you sell")}
+            {label("phone", "Phone number")}
+            {/* One field, not two boxes side by side: the country code and the number share one border
+                with a divider, so they always line up (owner, 2026-10-28: "the code is not in line"). */}
+            <div
+              className={cn(
+                "mt-1.5 flex h-11 overflow-hidden rounded-md border border-[var(--border-strong)] bg-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]",
+                phoneError && "border-[var(--error)]",
+              )}
+            >
+              <PhoneCountryPicker value={phoneCountryCode} onChange={setPhoneCountryCode} className="h-full w-[92px] shrink-0 rounded-none border-0 border-r border-[var(--border-strong)] bg-transparent focus-visible:ring-0" />
+              <input
+                className="h-full min-w-0 flex-1 bg-transparent px-3 text-base leading-normal tracking-[-0.02em] text-foreground outline-none placeholder:text-muted-foreground"
+                aria-label="Phone number"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                maxLength={24}
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                onBlur={() => setPhoneTouched(true)}
+                placeholder={phoneCountry(phoneCountryCode)?.example}
+                aria-invalid={phoneError ? true : undefined}
+                aria-describedby="about-phone-note"
+              />
+            </div>
+            <p id="about-phone-note" aria-live="polite" className="mt-1 text-xs leading-normal text-[var(--error-ink)] empty:hidden">{phoneError}</p>
+          </div>
+          <div>
+            {label("name", solo ? "Business name (optional)" : "Agency name", true)}
+            <input className={authControl} aria-label={solo ? "Business name" : "Agency name"} autoComplete="organization" maxLength={160} placeholder={solo ? fullName || "Your own name" : undefined} value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+          <div>
+            {label("state", "Primary State")}
+            <StatePicker value={primaryState} onChange={setPrimaryState} />
+          </div>
+          <div>
+            {label("sell", "What you sell", true)}
             <MultiPicker label="What you sell" placeholder="Choose products" options={PRODUCT_OPTIONS} value={products} onChange={setProducts} />
           </div>
-          <div>
-            {label("sources", "Where your leads come from", true)}
-            <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
-          </div>
+        </div>
+
+        <div>
+          {label("sources", "Where your leads come from")}
+          <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
         </div>
 
         <fieldset>
@@ -173,9 +256,10 @@ export function BusinessProfileForm({ initial = null }: { initial?: BusinessProf
         )}
 
         {error && <AuthAlert>{error}</AuthAlert>}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" className="h-11 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
-        </div>
+        {/* Back beside Continue, the footer of every step (manager review, 2026-10-28). */}
+        <FunnelActions back={back}>
+          <Button type="submit" className="h-11 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
+        </FunnelActions>
       </form>
     </div>
   );

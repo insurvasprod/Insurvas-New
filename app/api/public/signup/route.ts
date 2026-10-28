@@ -6,7 +6,7 @@ import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { fetchPlans } from "@/lib/plans/queries";
 import { availableBillingCycles, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { audienceForPlanType } from "@/lib/agency/constants";
-import { publicSignupSchema } from "@/lib/signup/schemas";
+import { nameFromEmail, publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
 import { recordLastLogin } from "@/lib/loginEvents/record";
@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
   }
 
   const input = parsed.data;
+  // Step 1 no longer asks for a name; step 3 replaces this one (lib/signup/schemas.ts).
+  const fullName = input.fullName ?? nameFromEmail(input.email);
 
   // Before anything is created or sent. This endpoint is open to the internet and each call makes
   // a user, a tenant and an email from our sending domain — unthrottled, it is both a way to fill
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
     // The address is confirmed by our own token, sent below. Confirming here only tells Auth not to
     // send a second, competing email of its own.
     email_confirm: true,
-    user_metadata: { name: input.fullName, full_name: input.fullName },
+    user_metadata: { name: fullName, full_name: fullName },
   });
   if (authUser.error || !authUser.data.user) {
     // Auth reports an existing address as a 422. It is the same answer as the RPC's EMAIL_EXISTS and
@@ -103,9 +105,9 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase.rpc("self_serve_signup_with_auth", {
     p_auth_user_id: authUser.data.user.id,
-    p_name: input.fullName,
+    p_name: fullName,
     p_email: input.email,
-    p_phone: input.phone,
+    p_phone: input.phone ?? "",
     p_plan_id: plan.id,
     p_billing_cycle: billingCycle,
     p_token_hash: verification.tokenHash,
@@ -145,7 +147,7 @@ export async function POST(request: NextRequest) {
 
   const delivery = await sendVerificationEmail({
     email: input.email,
-    name: input.fullName,
+    name: fullName,
     verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
     audience: audienceForPlanType(plan.plan_type),

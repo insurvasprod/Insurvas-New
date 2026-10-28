@@ -5,7 +5,7 @@ import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds,
 import { fetchPlans } from "@/lib/plans/queries";
 import { availableBillingCycles, BILLING_CYCLES, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { createEmailVerification } from "@/lib/signup/verification";
-import { checkInternationalPhone } from "@/lib/signup/phone";
+import { nameFromEmail, phoneField } from "@/lib/signup/schemas";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
 import { recordLastLogin } from "@/lib/loginEvents/record";
 import { getSetting } from "@/lib/settings/queries";
@@ -21,13 +21,10 @@ import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
 import { recordSecurityEvent } from "@/lib/users/securityEvents";
 
 /** What the finish step sends. Who the person is never comes from here: it is the signed cookie. */
+// Name and phone are asked on step 3, About you (manager review, 2026-10-28); Google's name stands in.
 const finishSchema = z.object({
-  fullName: z.string().trim().min(2, "Enter your full name").max(120),
-  phone: z.string().trim().min(7, "Enter a valid phone number").max(40).transform((value, ctx) => {
-    const checked = checkInternationalPhone(value);
-    if (!checked.ok) { ctx.addIssue({ code: "custom", message: checked.error }); return z.NEVER; }
-    return checked.e164;
-  }),
+  fullName: z.string().trim().min(2, "Enter your full name").max(120).optional(),
+  phone: phoneField.optional(),
   acceptedDocumentIds: z.array(z.string().uuid()).max(5).default([]),
 });
 
@@ -85,9 +82,9 @@ export async function POST(request: NextRequest) {
   const verification = createEmailVerification();
   const { data, error } = await supabase.rpc("self_serve_signup_with_auth", {
     p_auth_user_id: google.sub,
-    p_name: input.fullName,
+    p_name: input.fullName ?? (google.name.trim().length >= 2 ? google.name.trim() : nameFromEmail(google.email)),
     p_email: google.email,
-    p_phone: input.phone,
+    p_phone: input.phone ?? "",
     p_plan_id: plan.id,
     p_billing_cycle: billingCycle,
     p_token_hash: verification.tokenHash,

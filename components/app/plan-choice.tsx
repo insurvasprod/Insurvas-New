@@ -6,6 +6,7 @@ import { ArrowRight, Check, LoaderCircle, Minus, Plus, Users } from "lucide-reac
 
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { AuthAlert } from "@/components/portal/auth-controls";
+import { FunnelActions } from "@/components/portal/funnel-actions";
 import { Button } from "@/components/ui/button";
 import { BILLING_CYCLES, BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import {
@@ -20,7 +21,8 @@ import { firstChargeDate } from "@/lib/checkout/constants";
 import { dayMonthYear } from "@/lib/format/dates";
 
 type Audience = PlanChoiceOption["audience"];
-const AUDIENCE_LABEL: Record<Audience, string> = { individual: "For one agent", agency: "For an agency" };
+// Manager review, 2026-10-28: "Independent agent", and a capital A on "Agency".
+const AUDIENCE_LABEL: Record<Audience, string> = { individual: "Independent Agent", agency: "For an Agency" };
 const PER: Record<BillingCycle, string> = { monthly: "month", quarterly: "quarter", yearly: "year" };
 
 export type PlanChoiceInitial = { planCode: string; billingCycle: BillingCycle; seats: number | null; addonCodes: string[] };
@@ -356,13 +358,16 @@ function TrialLine({ className }: { className?: string }) {
   );
 }
 
+/** Back beside "Continue to payment", the footer of every sign-up step (manager review, 2026-10-28). */
 function ContinueButton() {
   const { saving, save } = useChoice();
   return (
-    <Button type="button" className="h-11 w-full" disabled={saving} onClick={save}>
-      {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-      {saving ? "Saving…" : "Continue to payment"}
-    </Button>
+    <FunnelActions back="/app/onboarding/business-profile">
+      <Button type="button" className="h-11" disabled={saving} onClick={save}>
+        {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
+        {saving ? "Saving…" : "Continue to payment"}
+      </Button>
+    </FunnelActions>
   );
 }
 

@@ -2,15 +2,21 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, LoaderCircle } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, ExternalLink, LoaderCircle, Mail, MailCheck } from "lucide-react";
 
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelHeading } from "@/components/app/funnel-frame";
-import { LogoutButton } from "@/components/app/logout-button";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground hover:text-[var(--accent-ink)] disabled:opacity-50 [&_svg]:transition-transform hover:[&_svg]:translate-x-[3px]";
+const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-[var(--accent-ink)] hover:text-foreground hover:underline disabled:opacity-50";
+
+const INBOXES = [
+  { label: "Open Gmail", href: "https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" },
+  { label: "Open Outlook", href: "https://outlook.office.com/mail/" },
+] as const;
 
 /**
  * Step 2 of 5: the only screen a pending account can reach. It watches for the verification to
@@ -18,7 +24,7 @@ const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leadi
  * line of "What to expect" makes.
  */
 // `noPayment` is still passed by the page; this step no longer mentions charging, so it is unused.
-export function VerifyEmailPanel({ ttlHours }: { ttlHours: number; noPayment?: boolean }) {
+export function VerifyEmailPanel({ ttlHours, back }: { ttlHours: number; noPayment?: boolean; back?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -96,55 +102,72 @@ export function VerifyEmailPanel({ ttlHours }: { ttlHours: number; noPayment?: b
   return (
     <div>
       <FunnelHeading title="Confirm your email">
-        Open the link we sent to the address below. It works once, for {ttlHours} hours. This page moves on by itself when you open it.
+        We sent a link to the address below. It works once, for {ttlHours} hours, and this page moves on by itself when you open it.
       </FunnelHeading>
       {loading ? (
         <div className="flex h-28 items-center justify-center" role="status" aria-label="Loading your account"><LoaderCircle className="animate-spin text-muted-foreground" /></div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-alt)] px-4 py-3.5">
-            <span className="min-w-0 break-all text-base font-semibold tracking-[-0.02em] text-foreground">{email || "—"}</span>
-            <span className={sentNow ? "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--success-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--success-ink)]" : "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-card px-2.5 py-[3px] text-xs font-semibold text-[var(--body)]"}>
-              <span className={sentNow ? "size-1.5 rounded-full bg-[var(--success)]" : "size-1.5 rounded-full bg-[var(--muted)]"} aria-hidden="true" />
-              {sentNow ? "Sent just now" : "Sent at sign-up"}
+          {/* The address, where it was sent, and the one way to fix a typo, in one card (owner, 2026-10-28:
+              the step had "no good structure"). */}
+          <div className="flex items-center gap-3.5 rounded-lg border border-border bg-card px-4 py-3.5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--accent-ink)]" aria-hidden="true">
+              <MailCheck className="size-5" />
             </span>
+            <span className="min-w-0 flex-1">
+              <span className="block break-all text-base font-semibold tracking-[-0.02em] text-foreground">{email || "—"}</span>
+              <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className={cn("size-1.5 rounded-full", sentNow ? "bg-[var(--success)]" : "bg-[var(--muted)]")} aria-hidden="true" />
+                {sentNow ? "Sent just now" : "Sent when you signed up"}
+              </span>
+            </span>
+            <button type="button" className={cn(linkButton, "shrink-0")} aria-expanded={changing} onClick={() => setChanging((value) => !value)}>
+              {changing ? "Cancel" : "Change"}
+            </button>
           </div>
-
-          <div className="mt-4 flex flex-wrap gap-2.5">
-            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4">
-              <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
-            </Button>
-            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4">
-              <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
-            </Button>
-          </div>
-
-          <p className="sr-only" role="status">Waiting for the link to be opened.</p>
 
           {changing && (
-            <form onSubmit={(event) => send("change_email", event)} className="mt-4 rounded-lg border border-border p-4">
+            <form onSubmit={(event) => send("change_email", event)} className="mt-3 rounded-lg border border-border bg-card p-4">
               <label className="block">
                 <span className={authLabel}>Correct email</span>
-                <input type="email" required autoComplete="email" className={authControl} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
+                <input type="email" required autoComplete="email" autoFocus className={authControl} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
               </label>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="submit" className="h-11 px-4" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>{submitting ? "Sending…" : "Update and send a new link"}</Button>
-                <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" onClick={() => { setChanging(false); setNewEmail(email); }}>Cancel</Button>
-              </div>
+              <Button type="submit" className="mt-3 h-11 w-full" disabled={submitting || cooldown > 0 || !newEmail.trim() || newEmail.trim() === email}>
+                {submitting ? "Sending…" : "Update and send a new link"}
+              </Button>
             </form>
           )}
 
+          {/* The two inboxes most agents use, as two equal buttons in one row. */}
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {INBOXES.map((inbox) => (
+              <Button key={inbox.label} asChild variant="outline" className="h-11 justify-center gap-2 border-[var(--border-strong)]">
+                <a href={inbox.href} target="_blank" rel="noopener noreferrer">
+                  <Mail className="size-4" aria-hidden="true" />
+                  {inbox.label}
+                  <ExternalLink className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                </a>
+              </Button>
+            ))}
+          </div>
+
+          <p className="sr-only" role="status">Waiting for the link to be opened.</p>
           {message && <AuthAlert tone="success" className="mt-4">{message}</AuthAlert>}
           {error && <AuthAlert className="mt-4">{error}</AuthAlert>}
 
-          <div className="mt-7 flex flex-col gap-3">
-            <Button type="button" variant="outline" className="h-11 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
-              {cooldown > 0 ? `Send again in ${cooldown} ${cooldown === 1 ? "second" : "seconds"}` : submitting && !changing ? "Sending…" : "Send the link again"}
-            </Button>
-            <div className="flex flex-wrap justify-between gap-4">
-              <button type="button" className={linkButton} aria-expanded={changing} onClick={() => setChanging((value) => !value)}>Wrong address?<ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" /></button>
-              <LogoutButton variant="link" className={linkButton} />
-            </div>
+          {/* Footer: Back on the left; sending again is a quiet text action, not a second big button. */}
+          <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+            {back ? (
+              <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-5">
+                <Link href={back}><ArrowLeft aria-hidden="true" />Back</Link>
+              </Button>
+            ) : <span />}
+            <p className="m-0 text-sm text-muted-foreground">
+              Didn&rsquo;t get it?{" "}
+              <button type="button" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
+                {cooldown > 0 ? `Send again in ${cooldown}s` : submitting && !changing ? "Sending…" : "Send it again"}
+              </button>
+            </p>
           </div>
         </>
       )}

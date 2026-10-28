@@ -35,7 +35,7 @@ export default async function PlanStepPage() {
       now={new Date().toISOString()}
       noPayment={checkoutPaymentMode() === "none"}
     >
-      <FunnelFrame step={4} wide back={{ href: "/app/onboarding/business-profile", label: "Back to your agency" }} aside={<PlanChoiceSummary />}>
+      <FunnelFrame step={4} wide aside={<PlanChoiceSummary />}>
         <PlanChoiceForm />
       </FunnelFrame>
     </PlanChoiceProvider>

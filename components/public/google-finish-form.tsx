@@ -8,8 +8,6 @@ import { Check, LoaderCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AuthAlert, AuthSubmit, authLabel } from "@/components/portal/auth-controls";
 import { FunnelHeading } from "@/components/app/funnel-frame";
-import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
-import { DEFAULT_PHONE_COUNTRY, checkPhone, phoneCountry } from "@/lib/signup/phone";
 import { cn } from "@/lib/utils";
 
 type LegalDoc = { id: string; doc_type: string; version: number; title: string };
@@ -17,20 +15,14 @@ type LegalDoc = { id: string; doc_type: string; version: number; title: string }
 const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
 
 /**
- * Step 1 after "Continue with Google" (owner, 2026-10-27). The same form as step 1 (owner: "after
- * you get verified it's showing a different design"): First / Last name filled from Google, the
- * Email field filled and locked with Google's mark, then the phone, the terms and "Create account".
+ * Step 1 after "Continue with Google" (owner, 2026-10-27). The same form as step 1: the Email field
+ * filled and locked with Google's mark, the terms and "Create account". Name and phone are asked on
+ * step 3, About you, like every sign-up (manager review, 2026-10-28); Google's name is used until then.
  * The address is the one Google vouched for, read again from the signed cookie on the server. On
  * "Create account" the workspace is made and step 2 is skipped.
  */
 export function GoogleFinishForm({ email, name }: { email: string; name: string }) {
   const router = useRouter();
-  // Google gives one name; step 1 asks for two. Split at the first space, both editable.
-  const [firstName, setFirstName] = useState(() => name.trim().split(/\s+/)[0] ?? "");
-  const [lastName, setLastName] = useState(() => name.trim().split(/\s+/).slice(1).join(" "));
-  const [phoneCountryCode, setPhoneCountryCode] = useState(DEFAULT_PHONE_COUNTRY);
-  const [phone, setPhone] = useState("");
-  const [phoneTouched, setPhoneTouched] = useState(false);
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
   const [legalState, setLegalState] = useState<"loading" | "ready" | "failed">("loading");
   const [accepted, setAccepted] = useState(false);
@@ -54,22 +46,17 @@ export function GoogleFinishForm({ email, name }: { email: string; name: string 
     loadLegal();
   }, [loadLegal]);
 
-  const phoneCheck = checkPhone(phoneCountryCode, phone);
-  const phoneError = phoneTouched && !phoneCheck.ok ? phoneCheck.error : null;
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-    if (!firstName.trim() || !lastName.trim()) { setError("Enter your first and last name."); return; }
-    if (!phoneCheck.ok) { setPhoneTouched(true); setError(phoneCheck.error); return; }
+    const fullName = name.trim().length >= 2 ? name.trim() : undefined;
     if (!accepted) { setError("Tick the box to accept the terms and privacy policy."); return; }
     setSubmitting(true);
     try {
       const response = await fetch("/api/public/signup/google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, phone: phoneCheck.e164, acceptedDocumentIds: legalDocs.map((doc) => doc.id) }),
+        body: JSON.stringify({ fullName, acceptedDocumentIds: legalDocs.map((doc) => doc.id) }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not create your account. Try again."); return; }
@@ -86,17 +73,6 @@ export function GoogleFinishForm({ email, name }: { email: string; name: string 
       <FunnelHeading title="Finish your account">Google confirmed your email.</FunnelHeading>
 
       <form onSubmit={submit} noValidate data-auth-fields="" className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label htmlFor="google-first-name" className={authLabel}>First name</label>
-            <Input id="google-first-name" autoComplete="given-name" maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} className={fieldClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="google-last-name" className={authLabel}>Last name</label>
-            <Input id="google-last-name" autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} className={fieldClass} />
-          </div>
-        </div>
-
         {/* The step 1 Email field, filled and locked: Google's mark at the start, "Verified" at the end. */}
         <div className="space-y-1.5">
           <label htmlFor="google-email" className={authLabel}>Email</label>
@@ -108,28 +84,6 @@ export function GoogleFinishForm({ email, name }: { email: string; name: string 
               <Check className="size-3 stroke-[3]" aria-hidden="true" />Verified
             </span>
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="google-phone" className={authLabel}>Phone number</label>
-          <div className="flex gap-2">
-            <PhoneCountryPicker value={phoneCountryCode} onChange={setPhoneCountryCode} className="h-11 w-[120px] shrink-0" />
-            <Input
-              id="google-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel-national"
-              maxLength={24}
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              onBlur={() => setPhoneTouched(true)}
-              placeholder={phoneCountry(phoneCountryCode)?.example}
-              aria-invalid={phoneError ? true : undefined}
-              aria-describedby="google-phone-note"
-              className={cn(fieldClass, "min-w-0 flex-1", phoneError && "border-[var(--error)]")}
-            />
-          </div>
-          <p id="google-phone-note" aria-live="polite" className="text-xs leading-normal text-[var(--error-ink)] empty:hidden">{phoneError}</p>
         </div>
 
         {legalState === "failed" ? (

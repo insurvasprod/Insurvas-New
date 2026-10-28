@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { deriveRecommendedSetupSteps } from "@/lib/signup/constants";
@@ -23,6 +24,23 @@ export async function POST(request: NextRequest) {
   const profile = parsed.data;
   const setupSteps = deriveRecommendedSetupSteps(profile);
   const supabase = getSupabaseServiceClient();
+
+  // About you (manager review, 2026-10-28): step 1 is only email and password, so the person's name
+  // and phone are saved here. Left out (a profile corrected from checkout by an older page), they stay.
+  if (profile.firstName && profile.lastName) {
+    const fullName = `${profile.firstName} ${profile.lastName}`;
+    // Untyped, like lib/users/ownProfileService.ts: the generated types leave these columns read-only.
+    const { error: personError } = await (supabase as unknown as SupabaseClient)
+      .from("users")
+      .update({ name: fullName, full_name: fullName, display_name: fullName, ...(profile.phone ? { phone: profile.phone } : {}), updated_at: new Date().toISOString() })
+      .eq("id", context.userId);
+    if (personError) {
+      console.error("Could not save the signup name and phone", personError.code, personError.message);
+      return NextResponse.json({ error: "Could not save your details. Try again." }, { status: 500 });
+    }
+    // The Auth identity carries the name too (it is set at sign-up from the address until now).
+    await supabase.auth.admin.updateUserById(context.userId, { user_metadata: { name: fullName, full_name: fullName } }).catch(() => {});
+  }
   const { data, error } = await supabase.rpc("save_signup_business_profile", {
     p_user_id: context.userId,
     p_business_name: profile.businessName,

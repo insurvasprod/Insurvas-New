@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 
 import { FunnelFrame } from "@/components/app/funnel-frame";
 import { FunnelReview } from "@/components/app/funnel-review";
-import { LogoutButton } from "@/components/app/logout-button";
 import { GoogleFinishForm } from "@/components/public/google-finish-form";
 import { SignupForm } from "@/components/public/signup-form";
 import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
@@ -34,16 +33,11 @@ export default async function SignupPage({
         <FunnelReview
           title="Your account is created"
           subtitle="Carry on from where you left off."
-          rows={[{ label: "Name", value: context.name }, { label: "Email", value: context.email }]}
-          // Continue returns to where the signup stands; Next walks one step forward (owner, 2026-10-27).
+          rows={[{ label: "Email", value: context.email }]}
+          // The first step: one Continue, back to where the sign-up stands. No Sign out, no second
+          // button (manager review, 2026-10-28: "we want them to start and complete the process").
           continueHref={destination}
-          next={{ href: "/app/verify-email", label: "Your email" }}
-        >
-          <p className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
-            <span>Not you?</span>
-            <LogoutButton variant="link" className="text-sm font-semibold text-foreground hover:text-[var(--accent-ink)]" />
-          </p>
-        </FunnelReview>
+        />
       </FunnelFrame>
     );
   }

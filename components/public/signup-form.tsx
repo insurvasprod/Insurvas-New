@@ -8,12 +8,9 @@ import { LoaderCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AuthAlert, AuthSubmit, authLabel } from "@/components/portal/auth-controls";
 import { GoogleButton } from "@/components/portal/google-button";
-import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { NewPasswordField, passwordLongEnough } from "@/components/app/password-field";
 import { BILLING_CYCLES, type BillingCycle } from "@/lib/money";
-import { DEFAULT_PHONE_COUNTRY, checkPhone, phoneCountry } from "@/lib/signup/phone";
-import { cn } from "@/lib/utils";
 
 type LegalDoc = { id: string; doc_type: string; version: number; title: string; is_draft: boolean };
 
@@ -32,13 +29,12 @@ type Props = {
 const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
 
 /**
- * Step 1 of 5 (redesign A, 2026-10-24): the account. First and last name, email, password (typed
- * twice), phone number with its country code, and the legal box. No card here.
+ * Step 1 of 5: the account. Email, password and the legal box, nothing else (manager review,
+ * 2026-10-28: "the first one should only have email and password", with Google above). Name and phone
+ * moved to step 3, About you (components/app/business-profile-form.tsx).
  *
- * 2026-10-26 (owner): the name is two fields, "Work email" is "Email", the phone has a country prefix
- * and is checked as it is typed (lib/signup/phone.ts; the server checks it again), a confirm-password
- * field. The plan moved to its own step, Step 4 of 5; a plan picked on the pricing page is still
- * carried through and preselected there.
+ * The plan has its own step, Step 4 of 5; a plan picked on the pricing page is still carried through
+ * and preselected there.
  */
 export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = false, notice = null }: Props) {
   const router = useRouter();
@@ -49,9 +45,6 @@ export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = fals
   // Unticked, and initialised unticked — never derived from anything that could arrive true.
   const [accepted, setAccepted] = useState(false);
   const [password, setPassword] = useState("");
-  const [phoneCountryCode, setPhoneCountryCode] = useState(DEFAULT_PHONE_COUNTRY);
-  const [phone, setPhone] = useState("");
-  const [phoneTouched, setPhoneTouched] = useState(false);
 
   const loadLegal = useCallback(() => {
     setLegalState("loading");
@@ -70,14 +63,10 @@ export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = fals
     loadLegal();
   }, [loadLegal]);
 
-  const phoneCheck = checkPhone(phoneCountryCode, phone);
-  const phoneError = phoneTouched && !phoneCheck.ok ? phoneCheck.error : null;
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     if (!passwordLongEnough(password)) { setError("Use at least 12 characters for your password."); return; }
-    if (!phoneCheck.ok) { setPhoneTouched(true); setError(phoneCheck.error); return; }
     if (!accepted) { setError("Tick the box to accept the terms and privacy policy."); return; }
 
     const form = new FormData(event.currentTarget);
@@ -87,10 +76,8 @@ export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = fals
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: `${String(form.get("firstName") ?? "").trim()} ${String(form.get("lastName") ?? "").trim()}`.trim(),
           email: form.get("email"),
           password,
-          phone: phoneCheck.e164,
           // A plan picked on the pricing page; Step 4 of 5 is where it is chosen or changed.
           planCode: initialPlanCode || undefined,
           billingCycle: BILLING_CYCLES.includes(initialCycle as BillingCycle) ? initialCycle : undefined,
@@ -125,55 +112,14 @@ export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = fals
       )}
 
       <form onSubmit={handleSubmit} noValidate data-auth-fields="" className="flex flex-col gap-4 pointer-coarse:[&_input:not([type=checkbox])]:min-h-11">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label htmlFor="firstName" className={authLabel}>First name</label>
-            <Input id="firstName" name="firstName" autoComplete="given-name" minLength={1} maxLength={60} required autoFocus className={fieldClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="lastName" className={authLabel}>Last name</label>
-            <Input id="lastName" name="lastName" autoComplete="family-name" minLength={1} maxLength={60} required className={fieldClass} />
-          </div>
-        </div>
-
-        {/* Email and password share a row on a wide screen, like the name, so step 1 fits a laptop
-            window without scrolling (owner, 2026-10-27). */}
-        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label htmlFor="email" className={authLabel}>Email</label>
-            <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required className={fieldClass} />
-          </div>
-
-          <NewPasswordField id="password" name="password" value={password} onChange={setPassword} inputClassName={fieldClass} />
-        </div>
-
+        {/* Only what an account needs (manager review, 2026-10-28): email and password, each on its own
+            full-width line. Name and phone are asked on "About you", with the business details. */}
         <div className="space-y-1.5">
-          <label htmlFor="phone" className={authLabel}>Phone number</label>
-          <div className="flex gap-2">
-            {/* The prefix in the app's own dark list, a flag on each (2026-10-26: the browser's white list didn't match). */}
-            <PhoneCountryPicker value={phoneCountryCode} onChange={setPhoneCountryCode} className="h-11 w-[120px] shrink-0" />
-            <Input
-              id="phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel-national"
-              maxLength={24}
-              required
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              onBlur={() => setPhoneTouched(true)}
-              placeholder={phoneCountry(phoneCountryCode)?.example}
-              aria-invalid={phoneError ? true : undefined}
-              aria-describedby="phone-note"
-              className={cn(fieldClass, "min-w-0 flex-1", phoneError && "border-[var(--error)]")}
-            />
-          </div>
-          {/* Only when something is wrong: the field's purpose is in its placeholder and label. */}
-          <p id="phone-note" aria-live="polite" className="text-xs leading-normal tracking-[-0.01em] text-[var(--error-ink)] empty:hidden">
-            {phoneError}
-          </p>
+          <label htmlFor="email" className={authLabel}>Email</label>
+          <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" required autoFocus className={fieldClass} />
         </div>
+
+        <NewPasswordField id="password" name="password" value={password} onChange={setPassword} inputClassName={fieldClass} />
 
         {legalState === "failed" ? (
           <AuthAlert>

@@ -8,7 +8,8 @@ import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
  * The five sign-up steps (owner, 2026-10-26): account, email, agency, plan, payment. The plan has its
  * own step now; before, it sat on the account form and step 4 was the trial.
  */
-export const FUNNEL_STEPS = ["Your account", "Your email", "Your agency", "Your plan", "Payment"] as const;
+// Step 3 is "About you" (manager review, 2026-10-28): it reads right for one agent and for an agency.
+export const FUNNEL_STEPS = ["Your account", "Your email", "About you", "Your plan", "Payment"] as const;
 /** 6 is the welcome screen after the plan starts: every step done. */
 export type FunnelStep = 1 | 2 | 3 | 4 | 5 | 6;
 
