@@ -43,7 +43,7 @@ export function SourceTabs({ tabs, initialTab, label }: { tabs: SourceTab[]; ini
 }
 
 /**
- * "Import a list" (Lead sources): steps 1–2 open in a side sheet over the page. Continuing goes to
+ * "Import leads" (Lead sources): steps 1–2 open in a side sheet over the page. Continuing goes to
  * the review route (steps 3–4) — it stays a route on purpose, so a big file's review survives a
  * refresh and can be linked to (Module 2 §6).
  */
@@ -61,14 +61,14 @@ export function ImportSheet({ initialOpen, children }: { initialOpen: boolean; c
   };
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}><ListPlus aria-hidden="true" />Import a list</Button>
+      <Button type="button" onClick={() => setOpen(true)}><ListPlus aria-hidden="true" />Import leads</Button>
       {/* Portalled to the body: the page's stage animates with a transform, which would make a
           position: fixed sheet fixed to the header instead of the window. */}
       {open && createPortal(
         <DetailPanel
           mode="overlay"
-          title="Import a list"
-          subtitle="Steps 1 and 2 · nothing is imported until step 4"
+          title="Import leads"
+          subtitle="Upload and match columns · leads are checked before import"
           onClose={close}
           className="lg:w-[min(1040px,calc(100vw-120px))]"
           bodyClassName="flex flex-col gap-6 p-5"

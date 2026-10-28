@@ -11,10 +11,10 @@ import { cn } from "@/lib/utils";
  * stepper never claims a step is done before it is.
  *
  * Four, not five: "Validate & scrub" and "Review" were one screen's two moments (the preflight
- * running, then its answer on the review page), so they are one step, "Scrub". Nothing moved: the
+ * running, then its answer on the review page), so they are one step, "Check phone numbers". Nothing moved: the
  * review page is step 3 while it is being read and step 4 while it commits.
  */
-export const IMPORT_STEPS = ["Upload", "Map columns", "Scrub", "Commit"] as const;
+export const IMPORT_STEPS = ["Upload", "Match columns", "Check phone numbers", "Import leads"] as const;
 
 /** 1-based. A value past the last step shows every step done. */
 export type ImportStep = 1 | 2 | 3 | 4 | 5;

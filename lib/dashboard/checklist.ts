@@ -86,25 +86,29 @@ type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped" | "group" 
  * the component. The steps that are not settings go to the screens that actually own them.
  *
  * Order is the order a new agency should work in, in the three SETUP_GROUPS (owner, 2026-10-28):
- * Start working — carriers first ("nothing downstream is correct without it"), then the day-one work
- * of an agency that dials, takes transfers or sells (outcomes stay: QA 2026-10-22, new tenants have
- * no mapping); Get paid right — the book, then the first statement; Fine-tune later — settings with
- * working defaults. "Confirm your appointments" and "Finish a carrier" were folded into the carrier
- * card's To finish list (MERGED_STEPS).
+ * carriers, states, lead sources, campaign, then import; Get paid right — the book, then the first
+ * statement; Fine-tune later — settings with working defaults. "Confirm your appointments" and
+ * "Finish a carrier" were folded into the carrier card's To finish list (MERGED_STEPS).
  */
 const SETUP_STEPS = [
   { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers", action: "Add carriers", target: "carrier-library-add",
     instruction: "Tick the carriers you are contracted with. Contract level and writing number are optional.",
     why: "Every other step uses your carriers, so this comes first." },
+  { key: "states", module: "book", label: "Add your states", path: "/app/settings#carriers/carriers-states", action: "Add states",
+    instruction: "Choose the states where you are licensed and appointed with each carrier.",
+    why: "Insurvas uses your states to check where you can sell and which leads you can work." },
   { key: "lead-sources", module: "inbound", label: "Add your lead sources", path: "/app/publishers", action: "Add lead sources", target: "publisher-add",
     instruction: "Add each company that sends you leads or transfers calls to you, and how you pay them.",
     why: "Cost per sale and lead-source scorecards are worked out per source." },
+  { key: "campaign", module: "outbound", label: "Create a campaign", path: "/app/campaigns", action: "Create campaign",
+    instruction: "Add the company selling you leads, then create a campaign for the leads you plan to import.",
+    why: "Every imported lead needs a campaign so Insurvas can track its source and cost." },
+  { key: "import", module: "outbound", label: "Import your leads", path: "/app/import", action: "Import leads", target: "lead-import-upload",
+    instruction: "Upload a CSV or Excel file, match its columns, and review before it lands.",
+    why: "Imported leads are checked against do-not-call lists and duplicates before anyone dials them." },
   { key: "team", module: "account", label: "Invite your team", path: "/app/settings#team-access", action: "Invite people", target: "team-invite",
     instruction: "Invite each person who works with you and give them a role.",
     why: "A role decides which screens a person sees and which leads they can work." },
-  { key: "import", module: "outbound", label: "Import your leads", path: "/app/import", action: "Import leads", target: "lead-import-upload",
-    instruction: "Upload a CSV of leads, match its columns, and review before it lands.",
-    why: "Imported leads are checked against do-not-call lists and duplicates before anyone dials them." },
   { key: "calling-windows", module: "outbound", label: "Set your calling hours", path: "/app/settings#calling-windows", action: "Set hours", target: "calling-windows-save",
     instruction: "Choose the hours your agency dials. Federal and state limits always apply on top.",
     why: "The dialer never offers a lead outside these hours in the lead's own time zone." },
@@ -166,12 +170,14 @@ export type SetupStepKey = (typeof SETUP_STEPS)[number]["key"] | (typeof BOOK_ST
  */
 const STEP_FEATURES: Record<SetupStepKey, readonly string[]> = {
   carriers: ["appointment_vault"],
+  states: ["appointment_vault"],
   statement: ["statement_ingestion"],
   "lead-sources": ["publisher_records"],
   phone: [],
   team: [],
   book: ["statement_ingestion"],
   import: ["lead_import"],
+  campaign: ["lead_import", "outbound_dialing"],
   "calling-windows": ["outbound_dialing"],
   assign: ["outbound_dialing"],
   outcomes: ["book_of_business"],
@@ -287,22 +293,23 @@ export function setupStepGroup(key: string): SetupGroupKey {
 
 /**
  * A plan with nothing to work yet — no dialing, transfers, lead sources, leads or applications, so
- * Start working holds only carriers and team — is a money plan (Ledger): its statements are the work,
- * so Get paid right comes straight after the carriers (owner, 2026-10-28, open question 1).
+ * Start working holds only carriers, states and team — is a money plan (Ledger): its statements are
+ * the work, so Get paid right follows carriers and states (owner, 2026-10-28, open question 1).
  */
-const WORK_STEPS = new Set(["lead-sources", "import", "calling-windows", "assign", "outcomes", "disclosures"]);
+const WORK_STEPS = new Set(["lead-sources", "campaign", "import", "calling-windows", "assign", "outcomes", "disclosures"]);
 function moneyFirstWhenNothingToWork(steps: StepDefinition[]): StepDefinition[] {
   if (steps.some((step) => WORK_STEPS.has(step.key))) return steps;
   const carriers = steps.filter((step) => step.key === "carriers");
+  const states = steps.filter((step) => step.key === "states");
   const money = steps.filter((step) => setupStepGroup(step.key) === "money");
-  return [...carriers, ...money, ...steps.filter((step) => step.key !== "carriers" && setupStepGroup(step.key) !== "money")];
+  return [...carriers, ...states, ...money, ...steps.filter((step) => step.key !== "carriers" && step.key !== "states" && setupStepGroup(step.key) !== "money")];
 }
 
 /**
  * Steps that were folded into another (owner, 2026-10-28): the carrier card's To finish list covers
  * appointed states and products, so their old links and saved marks land on "Add your carriers".
  */
-const MERGED_STEPS: Record<string, string> = { appointments: "carriers", "sales-carriers": "carriers" };
+const MERGED_STEPS: Record<string, string> = { appointments: "states", "sales-carriers": "carriers" };
 
 /** A step key as it is today: an old link's merged key becomes the step that replaced it. */
 export function currentSetupStepKey(key: string): string {
@@ -384,6 +391,8 @@ export type SetupProgress = {
   appointmentsConfirmed?: boolean;
   /** A lead source on the Partners screen that is not offboarded (partners.status). */
   leadSourcesAdded?: boolean;
+  /** A campaign exists for the agency's lead imports. */
+  campaignAdded?: boolean;
   /** The agency's phone on the agency profile tab (tenants.support_phone). */
   phoneAdded?: boolean;
   /** A policy from the agency's carrier files (policy_current): the book import landed. */
@@ -434,9 +443,11 @@ export type SetupProgress = {
  */
 const STEP_MINUTES: Partial<Record<string, number>> = {
   carriers: 5,
+  states: 5,
   statement: 3,
   book: 10,
   "lead-sources": 5,
+  campaign: 5,
   phone: 1,
   team: 3,
   import: 10,
@@ -458,8 +469,10 @@ const STEP_MINUTES: Partial<Record<string, number>> = {
 
 const PROGRESS_FIELD: Record<string, keyof SetupProgress> = {
   carriers: "carriersAdded",
+  states: "appointmentsConfirmed",
   statement: "statementImported",
   "lead-sources": "leadSourcesAdded",
+  campaign: "campaignAdded",
   phone: "phoneAdded",
   book: "bookImported",
   team: "teamInvited",
