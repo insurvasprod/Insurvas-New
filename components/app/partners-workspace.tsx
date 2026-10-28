@@ -205,6 +205,11 @@ const SOURCE_TYPE_SHORT: Record<PartnerType, string> = {
   marketing: "Lead seller",
   affiliate: "Referrals",
 };
+/** Why a new source could not go Active, in the agent's words: almost always the plan's limit. */
+function friendlyActivation(reason: string): string {
+  return /limit|max_|cap/i.test(reason) ? "Your plan's limit for this kind of source is used. Pause another one or upgrade, then activate it from its Actions menu." : "Activate it from its Actions menu.";
+}
+
 /** How a source is usually paid, by kind: the form starts there (L2). */
 const DEFAULT_PAY: Record<PartnerType, PartnerPayoutModel> = { publisher: "per_transfer", marketing: "per_lead", affiliate: "per_sale" };
 
@@ -575,7 +580,8 @@ export function PartnersWorkspace({
           notify.warn(`${draft.name} was added, but its pay was not saved`, { detail: body?.error ?? "Add it on the source's Commercial terms tab." });
         }
       }
-      notify.done(`${draft.name} added`);
+      if (result.activationRefused) notify.warn(`${draft.name} was added as a draft`, { detail: friendlyActivation(result.activationRefused) });
+      else notify.done(`${draft.name} added`);
       await load();
       setNewRate("");
       setNewPay(DEFAULT_PAY[emptyDraft.partner_type]);
