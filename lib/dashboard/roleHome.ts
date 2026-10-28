@@ -201,7 +201,7 @@ export const ROLE_HOMES: Record<TenantRole, RoleHome> = {
     needs: ["transfers", "callbacks", "lapse", "licences"],
     money: ["owed", "statements", "exposure", "lapse", "persistency"],
     actions: [
-      { label: "Open the floor", opens: "leads.floor" },
+      { label: "Open the team", opens: "leads.floor" },
       { label: "Team scorecard", opens: "insight.activity" },
       { label: "Start calling", opens: "leads.dialer" },
       { label: "Settings", opens: "settings.root" },
@@ -216,7 +216,7 @@ export const ROLE_HOMES: Record<TenantRole, RoleHome> = {
     needs: ["transfers", "callbacks", "licences"],
     money: ["exposure", "lapse", "persistency"],
     actions: [
-      { label: "Open the inbox", opens: "leads.inbound" },
+      { label: "Open Inbound", opens: "leads.inbound" },
       { label: "Start calling", opens: "leads.dialer" },
       { label: "Callbacks", opens: "sell.callbacks" },
       { label: "Calendar", opens: "sell.calendar" },
@@ -243,7 +243,7 @@ export const ROLE_HOMES: Record<TenantRole, RoleHome> = {
     needs: ["transfers", "callbacks"],
     money: [],
     actions: [
-      { label: "Open the inbox", opens: "leads.inbound" },
+      { label: "Open Inbound", opens: "leads.inbound" },
       { label: "Callbacks", opens: "sell.callbacks" },
       { label: "Import a list", opens: "leads.import" },
       { label: "Lead lists", opens: "leads.lists" },

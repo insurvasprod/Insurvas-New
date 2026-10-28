@@ -412,7 +412,7 @@ export async function listMappedOutcomes(tenantId: string, pipelineId: string | 
   const candidates = [...own.rows.filter((row) => row.pipeline_id === pipelineId), ...(agencyWide.data ?? [])];
   const stageIds = [...new Set([...candidates.flatMap((mapping) => (mapping.stage_id ? [mapping.stage_id] : [])), ...(ownStages.data ?? []).map((stage) => stage.id)])];
   if (stageIds.length === 0) return [];
-  const stages = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, stage_type, is_archived").in("id", stageIds).eq("is_archived", false);
+  const stages = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, stage_type, color, is_archived").in("id", stageIds).eq("is_archived", false);
   if (stages.error) throw new DispositionError("disposition_unavailable", `Could not load outcome stages: ${stages.error.message}`);
   const pipelineIds = [...new Set((stages.data ?? []).map((stage) => stage.pipeline_id))];
   const pipelines = pipelineIds.length === 0 ? { data: [], error: null } : await supabase.from("tenant_pipelines").select("id, name").eq("tenant_id", tenantId).in("id", pipelineIds);
@@ -429,7 +429,7 @@ export async function listMappedOutcomes(tenantId: string, pipelineId: string | 
   };
   for (const [dispositionKey, stageId] of resolveOutcomeStages(agencyWide.data ?? [], own.rows, pipelineId, (id) => stageById.has(id), resolveOptions)) {
     const stage = stageById.get(stageId)!;
-    stageByKey.set(dispositionKey, { id: stage.id, name: stage.name, stage_type: stage.stage_type, pipeline_id: stage.pipeline_id, pipeline_name: pipelineNames.get(stage.pipeline_id) ?? "Pipeline" });
+    stageByKey.set(dispositionKey, { id: stage.id, name: stage.name, stage_type: stage.stage_type, pipeline_id: stage.pipeline_id, pipeline_name: pipelineNames.get(stage.pipeline_id) ?? "Pipeline", color: stage.color ?? null });
   }
   return (dispositions.data ?? [])
     .filter((row) => row.is_active && stageByKey.has(row.disposition_key))

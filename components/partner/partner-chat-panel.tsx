@@ -15,6 +15,7 @@ import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { productLineLabel } from "@/lib/format/productLine";
 import { composerCountLabel, PARTNER_CHAT_MESSAGE_MAX } from "@/lib/partnerChat/composer";
 import { formatSupportPhone, type SupportContact } from "@/lib/partnerSupport/contact";
+import { StatusChip } from "@/components/ui/status-chip";
 
 type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string };
 type DirectoryUser = { id: string; name: string; email: string; label: string; scope: "agent" | "partner"; role?: string; partnerName?: string };
@@ -51,7 +52,7 @@ function SystemCard({ message }: { message: PartnerMessage }) {
     ["Picked up", typeof payload.minutes_after_submission === "number" ? (payload.minutes_after_submission === 0 ? "Under a minute after submission" : `${payload.minutes_after_submission} ${payload.minutes_after_submission === 1 ? "minute" : "minutes"} after submission`) : null],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
   return <article className="portal-chat-auto-card" aria-label="Automatic update">
-    <div className="portal-chat-auto-head"><span className="portal-status-chip is-info"><span aria-hidden="true" />Automatic update</span><span className="portal-chat-auto-time">{formatMessageTime(message.createdAt)} · cannot be edited</span></div>
+    <div className="portal-chat-auto-head"><StatusChip tone="info">Automatic update</StatusChip><span className="portal-chat-auto-time">{formatMessageTime(message.createdAt)} · cannot be edited</span></div>
     {fields.length > 0 && <dl className="portal-chat-auto-fields">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
   </article>;
 }

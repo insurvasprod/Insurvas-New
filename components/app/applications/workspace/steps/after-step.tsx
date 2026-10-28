@@ -28,7 +28,8 @@ import { useNow } from "@/components/app/applications/outcome/use-now";
 import { attemptUrl, request } from "@/components/app/applications/submit/api";
 import { Overlay } from "@/components/app/applications/submit/overlay";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
-import { StepCard } from "@/components/app/applications/workspace/step-card";
+import { BareStepCards, StepCard } from "@/components/app/applications/workspace/step-card";
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
 
 type Detail = OfferDetail & { id: string };
 
@@ -113,9 +114,15 @@ function AfterBody() {
     );
   }
 
+  // Owner 2026-10-28: one card in sections like the other steps.
+  const openList = attempt.requirements?.filter((r) => r.status !== "satisfied" && r.status !== "waived") ?? [];
+  const openReqs = openList.length;
+  const onClient = openList.filter((r) => r.waitingOn === "client").length;
   return (
-    <div className="flex min-w-0 flex-col gap-5">
+    <section aria-label="After submit" className="m-glass flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--border)] p-[18px]">
+      <BareStepCards plain>
       {pending && (
+        <FoldSection heading="Counteroffer" done={0} total={1} complete={false} progressLabel="Waiting on the client">
         <CounterofferPanel
           offer={pending}
           carrierName={attempt.carrierName}
@@ -126,6 +133,7 @@ function AfterBody() {
           onDecline={() => setDelta(true)}
           onExpire={() => setExpiring(true)}
         />
+        </FoldSection>
       )}
       {!pending && lastResolved && (
         <p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--body)]">
@@ -135,8 +143,13 @@ function AfterBody() {
         </p>
       )}
 
-      <RequirementsCard now={now} />
-      <OutcomeCard onRecordCounteroffer={() => setRecording(true)} onAnswerOffer={(r) => { if (!pending) return; if (r === "expire") setExpiring(true); else setDelta(true); }} busy={busy} />
+      <FoldSection heading="Requirements" done={0} total={openReqs} complete={false} progressLabel={onClient ? `${openReqs} open · ${onClient} on the client` : openReqs ? `${openReqs} open` : "None open"}>
+        <RequirementsCard now={now} />
+      </FoldSection>
+      <FoldSection heading="Outcome" done={attempt.status === "closed" ? 1 : 0} total={1} complete={false} progressLabel={attempt.status === "closed" ? "Closed" : "Waiting on the carrier"}>
+        <OutcomeCard onRecordCounteroffer={() => setRecording(true)} onAnswerOffer={(r) => { if (!pending) return; if (r === "expire") setExpiring(true); else setDelta(true); }} busy={busy} />
+      </FoldSection>
+      </BareStepCards>
 
       <CounterofferDialog open={recording} onOpenChange={setRecording} />
       {pending && (
@@ -171,6 +184,6 @@ function AfterBody() {
           <p className="text-sm text-[var(--body)]">The client gave no answer. This closes the attempt as “offer expired” — you can then try another carrier or close the case.</p>
         </Overlay>
       )}
-    </div>
+    </section>
   );
 }

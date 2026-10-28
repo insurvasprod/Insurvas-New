@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { csvCell } from "@/lib/csv/cell";
 import type { Json } from "@/lib/supabase/database.types";
 import { getEntitlement } from "@/lib/entitlements/get";
+import { soldProductCodes } from "@/lib/products/agencyProducts";
 import {
   isKnownScreeningVersion,
   linkScreeningAuditToLead,
@@ -954,7 +955,9 @@ export class TemplateProductError extends Error {}
  * the plan includes that has an active platform template — the ones a copy can exist for.
  */
 export async function listAvailableTemplates(tenantId: string, userId: string, productCode?: string | null) {
-  const allowed = await allowedProductCodes(tenantId);
+  // Settings › Products (2026-10-27): forms are offered for the plan's products the agency sells.
+  const [planCodes, sold] = await Promise.all([allowedProductCodes(tenantId), soldProductCodes(tenantId)]);
+  const allowed = planCodes.filter((code) => sold.has(code));
   const supabase = getSupabaseServiceClient();
   const { data: sources, error } = allowed.length
     ? await supabase

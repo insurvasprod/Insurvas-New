@@ -231,7 +231,8 @@ export function PartnerFormStudio({
         return;
       }
       const next = (body.products ?? [])
-        .filter((item: Product) => item.approved !== false)
+        // Approved for this partner AND sold by the agency (Settings › Products).
+        .filter((item: Product) => item.approved !== false && (item as { is_enabled?: boolean }).is_enabled !== false)
         .map((item: Product) => ({
           code: item.code ?? item.product_code ?? "",
           name: item.name ?? item.product_name ?? item.code ?? "Product",

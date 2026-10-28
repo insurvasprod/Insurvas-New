@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { assertSoldProduct, ProductNotSoldError } from "@/lib/products/agencyProducts";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { assertOutboundLimit, outboundLimitResponse, outboundLimitSnapshot } from "@/lib/metering/outbound";
 import { isSchemaGap, type SchemaGapNotice } from "@/lib/supabase/schemaGap";
@@ -133,6 +134,11 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid campaign details" }, { status: 400 });
   try {
     if (parsed.data.status === "active") await assertOutboundLimit(auth.context.tenantId, "max_active_campaigns");
+    // Settings › Products (2026-10-27): a campaign's product is one the agency sells.
+    if (parsed.data.product_code) {
+      try { await assertSoldProduct(auth.context.tenantId, parsed.data.product_code); }
+      catch (error) { if (error instanceof ProductNotSoldError) return NextResponse.json({ error: error.message }, { status: 400 }); throw error; }
+    }
     const { data, error } = await (getSupabaseServiceClient() as unknown as Db).from("tenant_campaigns").insert({ ...parsed.data, tenant_id: auth.context.tenantId, product_code: parsed.data.product_code ?? null, created_by: auth.context.userId }).select("id, vendor_id, name, lead_type, product_code, status, paused_at, created_at, updated_at").single();
     if (error || !data) throw new Error(error?.message ?? "Could not create campaign");
     return NextResponse.json({ campaign: data }, { status: 201 });

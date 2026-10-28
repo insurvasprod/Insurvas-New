@@ -29,6 +29,7 @@ import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { STATEMENT_KIND_LABELS, STATEMENT_LINE_KINDS, type ManualStatementLine } from "@/lib/ledger/statementConstants";
 import { parseAmountCents, parseStatementDate } from "@/lib/ledger/statementParse";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 async function fileUrl(statementId: string, download: boolean): Promise<string> {
   const response = await fetch(`/api/app/statements/${statementId}/file${download ? "?download=1" : ""}`, { cache: "no-store" });
@@ -164,7 +165,7 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
             <span>{filled.length.toLocaleString("en-US")} {filled.length === 1 ? "line" : "lines"} entered</span>
             <span className="inline-flex flex-wrap items-center gap-2">
               {filled.length > 0 && (
-                <Button type="button" variant="ghost" disabled={busy} title="Empty the grid. Typed lines are kept on this computer until they are recorded." onClick={() => { if (window.confirm("Clear every line typed so far?")) setLines(() => [blank()]); }}>Clear</Button>
+                <Button type="button" variant="ghost" disabled={busy} title="Empty the grid. Typed lines are kept on this computer until they are recorded." onClick={() => void confirmAction({ title: "Clear every line typed so far?", description: "The grid is emptied and the typed lines are gone from this computer.", confirmLabel: "Clear lines", cancelLabel: "Keep lines" }).then((ok) => { if (ok) setLines(() => [blank()]); })}>Clear</Button>
               )}
               <Button type="button" variant="outline" disabled={busy} onClick={() => setLines((current) => [...current, blank()])}><Plus aria-hidden="true" />Add line</Button>
               <Button type="button" disabled={busy || Boolean(blocked)} title={blocked ?? undefined} onClick={() => void submit()}>

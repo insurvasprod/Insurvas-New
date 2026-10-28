@@ -11,7 +11,7 @@ import { NoMatches } from "@/components/admin/empty-state";
 import { StateDisclosureEditor, type EditorTarget } from "@/components/admin/state-disclosures-editor";
 import { StateDisclosuresImport } from "@/components/admin/state-disclosures-import";
 import { StateDisclosuresReviewCard } from "@/components/admin/state-disclosures-review";
-import { Callout, btn, st } from "@/components/app/settings/primitives";
+import { Callout, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -356,9 +356,9 @@ export function StateDisclosuresTable({
                   <td className={cn(st.td, st.num)}>{row.live ? formatEffectiveDate(row.live.effective_from) : "—"}</td>
                   <td className={cn(st.td, "text-right")}>
                     {row.live ? (
-                      <button
+                      <Button
                         type="button"
-                        className={btn("row")}
+                        variant="ghost" size="sm"
                         onClick={(event) => {
                           event.stopPropagation();
                           openRow(row);
@@ -366,7 +366,7 @@ export function StateDisclosuresTable({
                         aria-label={`Edit the ${row.stateName} ${row.productName} disclosure`}
                       >
                         Edit
-                      </button>
+                      </Button>
                     ) : (
                       <StatusChip dot={false} tone="danger">Not covered</StatusChip>
                     )}

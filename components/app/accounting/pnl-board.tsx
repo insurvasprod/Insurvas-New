@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
-import { DetailPanel } from "@/components/ui/detail-panel";
+import { Sheet } from "@/components/ui/sheet";
 import { SectionLoading } from "@/components/ui/page-states";
 import { Pager } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -77,7 +77,7 @@ function Drill({ line, query, onClose }: { line: PnlLine; query: Query; onClose:
     return () => { live = false; };
   }, [line, query, page]);
   return (
-    <DetailPanel mode="overlay" title={lineLabel(line)} subtitle={`${money(line.amountCents)} · ${line.entries} entr${line.entries === 1 ? "y" : "ies"}`} onClose={onClose}>
+    <Sheet title={lineLabel(line)} subtitle={`${money(line.amountCents)} · ${line.entries} entr${line.entries === 1 ? "y" : "ies"}`} onClose={onClose}>
       {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
       {rows === null && !error ? <SectionLoading rows={6} columns={3} /> : null}
       {rows ? (
@@ -95,7 +95,7 @@ function Drill({ line, query, onClose }: { line: PnlLine; query: Query; onClose:
         </table>
       ) : null}
       {page > 0 || more ? <Pager page={page + 1} pageSize={200} total={line.entries} noun="entries" onPage={(p) => setPage(p - 1)} /> : null}
-    </DetailPanel>
+    </Sheet>
   );
 }
 

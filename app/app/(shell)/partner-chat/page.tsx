@@ -1,7 +1,6 @@
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { AgentPartnerChatWorkspace } from "@/components/app/partner-chat-workspace";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,6 +15,6 @@ export default async function AgentPartnerChatPage({ searchParams }: { searchPar
   // ?partner= (the partner record's Message button) opens on that partner's latest conversation.
   const partner = (await searchParams).partner;
   const openPartnerId = typeof partner === "string" && UUID.test(partner) ? partner : undefined;
-  // Partners A (2026-10-25): on the dashboard's static stage backdrop.
-  return <DashboardStage><AgentPartnerChatWorkspace recordLinks={records.entitled && actAsPage(records, ["owner", "bookkeeper"])} openPartnerId={openPartnerId} /></DashboardStage>;
+  // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
+  return <><AgentPartnerChatWorkspace recordLinks={records.entitled && actAsPage(records, ["owner", "bookkeeper"])} openPartnerId={openPartnerId} /></>;
 }

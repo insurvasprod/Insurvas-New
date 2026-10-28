@@ -75,6 +75,13 @@ const CHECKS: Array<{ bucket: ReviewBucket; outcome: Outcome; label: string; blu
 
 const LIST_PAGE = 10;
 
+type ImportSummary = { imported: number; attachedToExisting: number; suppressed: number; rejectionsRecorded: number; servable: boolean; campaignStatus: string | null; spendAddedCents: number; certificatesFiled?: number; noState?: number; warning?: string | null };
+
+/** The server refused the commit (4xx/5xx with a reason), as opposed to the request never landing. */
+class ImportRefused extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 const money = (cents: number | null) => (cents === null ? "—" : formatCents(Math.round(cents)));
 
 /** The parser's header normalization (lib/agentTemplates/csv.ts), so a mapped header is found again. */
@@ -177,47 +184,61 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
     </TableCard>;
   }
 
+  async function send(): Promise<{ summary: ImportSummary; redirect: unknown }> {
+    const response = await fetch("/api/app/leads/import/preflight", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batch_id: plan.batchId,
+        csv,
+        decisions: { duplicates_in_file: duplicatesInFile, existing_leads: existingLeads, dnc },
+        add_to_campaign_spend: addSpend && plan.costCents !== null,
+      }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new ImportRefused(body?.error ?? "Could not import these leads", response.status);
+    return { summary: body.summary as ImportSummary, redirect: body.redirect };
+  }
+
+  // What the toast says once the import is in: the counts, then anything that stops these leads
+  // being dialled yet.
+  function outcomeOf(summary: ImportSummary) {
+    const counted =
+      `${summary.imported.toLocaleString()} imported`
+      + (summary.attachedToExisting ? ` · ${summary.attachedToExisting.toLocaleString()} added to people you already had` : "")
+      + (summary.suppressed ? ` · ${summary.suppressed.toLocaleString()} imported and suppressed` : "")
+      + (summary.rejectionsRecorded ? ` · ${summary.rejectionsRecorded.toLocaleString()} recorded for a vendor credit` : "")
+      + (summary.certificatesFiled ? ` · ${summary.certificatesFiled.toLocaleString()} consent certificate${summary.certificatesFiled === 1 ? "" : "s"} filed` : "");
+    // Said after the commit as well as before it: these leads are in, and will not be called yet.
+    const followUps = [summary.noState ? `${summary.noState.toLocaleString()} new lead${summary.noState === 1 ? " has" : "s have"} no state and will not be dialled until one is added.` : null, summary.warning ?? null].filter(Boolean).join(" ");
+    const spend = [summary.spendAddedCents > 0 ? `${formatCents(summary.spendAddedCents)} added to ${campaignLabel}'s spend.` : null, followUps || null].filter(Boolean).join(" ") || undefined;
+    if (summary.servable || summary.imported + summary.attachedToExisting === 0) return { title: counted, detail: spend };
+    return {
+      title: counted,
+      treatment: "warn" as const,
+      detail: `${spend ? `${spend} ` : ""}${summary.campaignStatus && summary.campaignStatus !== "active"
+        ? `${campaignLabel} is ${summary.campaignStatus}, so the dialer will not serve these leads until it is active.`
+        : summary.warning ? "" : "The campaign could not be marked as scrubbed, so the dialer will not serve these yet. Mark it on Vendors & campaigns, or re-run the import."}`.trim(),
+    };
+  }
+
   async function commit() {
     setCommitting(true);
     try {
-      const response = await fetch("/api/app/leads/import/preflight", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batch_id: plan.batchId,
-          csv,
-          decisions: { duplicates_in_file: duplicatesInFile, existing_leads: existingLeads, dnc },
-          add_to_campaign_spend: addSpend && plan.costCents !== null,
-        }),
+      // One toast for the whole commit (2026-10-28): a spinner while the rows are written, then the
+      // counts or the refusal in the same place.
+      const { redirect } = await notify.promise(send(), {
+        loading: `Importing ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}…`,
+        done: ({ summary }) => outcomeOf(summary),
+        fail: (error) => error instanceof ImportRefused
+          ? { title: error.message, treatment: "block" }
+          : { title: "The import could not be confirmed. You can retry safely.", treatment: "fail" },
       });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        notify.block(body?.error ?? "Could not import these leads");
-        // Already imported — elsewhere, or by a second press. The page shows that state.
-        if (response.status === 409) router.refresh();
-        return;
-      }
-      const summary = body.summary as { imported: number; attachedToExisting: number; suppressed: number; rejectionsRecorded: number; servable: boolean; campaignStatus: string | null; spendAddedCents: number; certificatesFiled?: number; noState?: number; warning?: string | null };
-      const counted =
-        `${summary.imported.toLocaleString()} imported`
-        + (summary.attachedToExisting ? ` · ${summary.attachedToExisting.toLocaleString()} added to people you already had` : "")
-        + (summary.suppressed ? ` · ${summary.suppressed.toLocaleString()} imported and suppressed` : "")
-        + (summary.rejectionsRecorded ? ` · ${summary.rejectionsRecorded.toLocaleString()} recorded for a vendor credit` : "")
-        + (summary.certificatesFiled ? ` · ${summary.certificatesFiled.toLocaleString()} consent certificate${summary.certificatesFiled === 1 ? "" : "s"} filed` : "");
-      // Said after the commit as well as before it: these leads are in, and will not be called yet.
-      const followUps = [summary.noState ? `${summary.noState.toLocaleString()} new lead${summary.noState === 1 ? " has" : "s have"} no state and will not be dialled until one is added.` : null, summary.warning ?? null].filter(Boolean).join(" ");
-      const spend = [summary.spendAddedCents > 0 ? `${formatCents(summary.spendAddedCents)} added to ${campaignLabel}'s spend.` : null, followUps || null].filter(Boolean).join(" ") || undefined;
-      if (summary.servable || summary.imported + summary.attachedToExisting === 0) notify.done(counted, spend ? { detail: spend } : undefined);
-      else
-        notify.warn(counted, {
-          detail: `${spend ? `${spend} ` : ""}${summary.campaignStatus && summary.campaignStatus !== "active"
-            ? `${campaignLabel} is ${summary.campaignStatus}, so the dialer will not serve these leads until it is active.`
-            : summary.warning ? "" : "The campaign could not be marked as scrubbed, so the dialer will not serve these yet. Mark it on Vendors & campaigns, or re-run the import."}`.trim(),
-        });
       try { sessionStorage.removeItem(`${IMPORT_CSV_KEY}:${plan.batchId}`); } catch { /* the tab keeps it until it closes */ }
-      router.push(typeof body.redirect === "string" ? body.redirect : "/app/leads");
-    } catch {
-      notify.fail("The import could not be confirmed. You can retry safely.");
+      router.push(typeof redirect === "string" ? redirect : "/app/leads");
+    } catch (error) {
+      // Already imported — elsewhere, or by a second press. The page shows that state.
+      if (error instanceof ImportRefused && error.status === 409) router.refresh();
     } finally {
       setCommitting(false);
     }

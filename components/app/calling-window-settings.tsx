@@ -11,6 +11,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, Field, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, ToggleRow, control, st } from "@/components/app/settings/primitives";
@@ -125,9 +126,10 @@ export function CallingWindowSettingsPanel() {
     return { ...(result as CallingWindowSettings), canEdit: loaded?.canEdit ?? false };
   }
 
-  async function saveAgency(clear = false) {
-    if (!draft || !baseline || !loaded) return;
-    if (!clear && check.problem) return;
+  /** True when it saved; the leave guard keeps the owner on the page otherwise. */
+  async function saveAgency(clear = false): Promise<boolean> {
+    if (!draft || !baseline || !loaded) return false;
+    if (!clear && check.problem) return false;
     setBusy(true);
     setSaveError("");
     try {
@@ -146,8 +148,10 @@ export function CallingWindowSettingsPanel() {
         setDraft(clear ? { ...draftFrom(next), options: draft.options } : draftFrom(next));
       }
       notify.done(clear ? "Your own narrowing was cleared." : "Calling window saved.");
+      return true;
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : "Could not save the calling window");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -218,6 +222,7 @@ export function CallingWindowSettingsPanel() {
   return (
     <SettingsStack>
       <SettingsSectionHeader />
+      <LeaveGuard dirty={dirty && !readOnly} onSave={() => saveAgency()} onDiscard={() => setDraft(baseline)} what="the calling window" />
 
       {saveError && <Callout tone="error" title={saveError} />}
       {!loaded.schemaReady && <Callout tone="warning" title="Until a pending database update is applied, hours save in whole hours only and the switches cannot be saved." />}

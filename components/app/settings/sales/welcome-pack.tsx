@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 import { PanelState, useSalesSettings } from "./prefs-settings";
 import { CardFact, DiscardSave, ReadOnlyNotice, SalesPanelTop, changedLine } from "./shared";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 const LOCKED = WELCOME_PACK_TOKENS.filter((t) => t.locked);
 const OPTIONAL = WELCOME_PACK_TOKENS.filter((t) => !t.locked);
@@ -212,6 +213,7 @@ function Editor({ view, save }: { view: SalesSettingsView; save: (next: SalesSet
         <Preview subject={subject} body={body} me={view.me} />
       </div>
 
+      <LeaveGuard dirty={view.canEdit && dirty} onDiscard={() => { setSubject(saved.subject); setBody(saved.body); setSaveError(null); }} what="the welcome pack" />
       <SettingsSaveBar visible={view.canEdit && dirty} note="Unsaved changes to the welcome pack. A pack already sent keeps its wording.">
         <DiscardSave saving={saving} problem={problem} onDiscard={() => { setSubject(saved.subject); setBody(saved.body); setSaveError(null); }} onSave={() => { void onSave(); }} />
       </SettingsSaveBar>

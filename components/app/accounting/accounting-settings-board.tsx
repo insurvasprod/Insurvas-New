@@ -12,6 +12,8 @@ import type { AccountingSettings } from "@/lib/accounting/settingsCore";
 import { TAX_NOTICE } from "@/lib/accounting/taxCore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-7.9 · one place for everything LA-7 reads. It links to the screens that own commission
@@ -28,14 +30,16 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
   const [s, setS] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [busy, setBusy] = useState(false);
-  const [money, setMoney] = useState({ tolerance: plain(initial.invoiceToleranceCents), disputeTol: plain(initial.payoutDisputeToleranceCents), bankTol: plain(initial.bankAmountToleranceCents), threshold: plain(initial.tax1099ThresholdCents), split: initial.producerDefaultSplitBp == null ? "" : percent(initial.producerDefaultSplitBp).replace("%", ""), cap: percent(initial.producerRecoveryCapBp).replace("%", "") });
+  const moneyOf = (from: AccountingSettings) => ({ tolerance: plain(from.invoiceToleranceCents), disputeTol: plain(from.payoutDisputeToleranceCents), bankTol: plain(from.bankAmountToleranceCents), threshold: plain(from.tax1099ThresholdCents), split: from.producerDefaultSplitBp == null ? "" : percent(from.producerDefaultSplitBp).replace("%", ""), cap: percent(from.producerRecoveryCapBp).replace("%", "") });
+  const [money, setMoney] = useState(() => moneyOf(initial));
   const set = <K extends keyof AccountingSettings>(k: K, v: AccountingSettings[K]) => setS((cur) => ({ ...cur, [k]: v }));
   const bp = (text: string) => { const m = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(text.trim()); return m ? Number(m[1]) * 100 + Number(((m[2] ?? "") + "00").slice(0, 2)) : null; };
 
-  const save = async () => {
+  /** True when it saved; the leave guard keeps the owner on the page otherwise. */
+  const save = async (): Promise<boolean> => {
     const tolerance = parseDollarsToCents(money.tolerance), disputeTol = parseDollarsToCents(money.disputeTol), bankTol = parseDollarsToCents(money.bankTol), threshold = parseDollarsToCents(money.threshold);
     const split = money.split.trim() ? bp(money.split) : null, cap = bp(money.cap);
-    if (tolerance === null || disputeTol === null || bankTol === null || threshold === null || cap === null || (money.split.trim() && split === null)) { notify.fail("Check the amounts and percentages."); return; }
+    if (tolerance === null || disputeTol === null || bankTol === null || threshold === null || cap === null || (money.split.trim() && split === null)) { notify.fail("Check the amounts and percentages."); return false; }
     const next = { ...s, invoiceToleranceCents: tolerance, payoutDisputeToleranceCents: disputeTol, bankAmountToleranceCents: bankTol, tax1099ThresholdCents: threshold, producerDefaultSplitBp: split, producerRecoveryCapBp: cap };
     const body = {
       default_basis: next.defaultBasis, fy_start_month: next.fyStartMonth, persistency_month: next.persistencyMonth, sample_threshold: next.sampleThreshold, acquisition_defaults: next.acquisitionDefaults,
@@ -52,15 +56,18 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
       setS(json.settings);
       setSaved(json.settings);
       notify.done(json.changes.length ? `Saved ${json.changes.length} change${json.changes.length === 1 ? "" : "s"} — recorded figures are unchanged` : "Nothing changed");
+      return true;
     } catch (err) {
       notify.fail(err instanceof Error ? err.message : "That didn't save");
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
   const dirty = JSON.stringify(s) !== JSON.stringify(saved) || money.tolerance !== plain(saved.invoiceToleranceCents) || money.disputeTol !== plain(saved.payoutDisputeToleranceCents) || money.bankTol !== plain(saved.bankAmountToleranceCents) || money.threshold !== plain(saved.tax1099ThresholdCents);
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   // Each section carries an id, so Settings search (LA-8.1) can land on it: "partner-payouts".
   const section = (title: string, children: ReactNode, note?: ReactNode, id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) => (
     <TableCard>
@@ -75,6 +82,7 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
 
   return (
     <div className="flex flex-col gap-6">
+      <LeaveGuard dirty={dirty} onSave={save} onDiscard={() => { setS(saved); setMoney(moneyOf(saved)); }} what="the accounting settings" />
       {!canEdit ? <p className="text-sm text-muted-foreground">Only the owner can change these.</p> : null}
       {section("Reporting", (
         <div className="grid gap-3 sm:grid-cols-4">

@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { canonicalFieldMap, FIELD_RULES, KNOWN_LEAD_FIELDS, OUR_FIELD_PATTERN, readFieldMap } from "@/lib/leadPost/fieldMap";
 import { REJECTION_LABELS, REJECTION_TONE, type PostKey, type PostKeysLoaded } from "@/lib/leadPost/types";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 const when = (value: string | null) => (value ? new Date(value).toLocaleDateString() : null);
 const fmt = (n: number) => n.toLocaleString();
@@ -141,9 +143,9 @@ export function LeadPostKeysSettings() {
     selectedKey !== null &&
     (!same(draftMap, selectedKey.fieldMap) || (loaded?.schemaReady === true && !same(notesOf(draft), selectedKey.fieldNotes)));
 
-  function selectKey(id: string) {
+  async function selectKey(id: string) {
     if (id === selectedKeyId) return;
-    if (dirty && !window.confirm("Discard the unsaved changes to this field map?")) return;
+    if (dirty && !(await confirmAction({ title: "Discard your field-map changes?", description: "The unsaved changes to this field map are lost.", confirmLabel: "Discard changes", cancelLabel: "Keep editing" }))) return;
     const key = loaded?.keys.find((item) => item.id === id) ?? null;
     setSelectedKeyId(id);
     setDraft(draftFromKey(key));
@@ -157,8 +159,9 @@ export function LeadPostKeysSettings() {
     setSaveError(null);
   }
 
-  async function save() {
-    if (!selectedKey || draftProblems.size > 0) return;
+  /** True when it saved; the leave guard stays on the page otherwise, with the error shown. */
+  async function save(): Promise<boolean> {
+    if (!selectedKey || draftProblems.size > 0) return false;
     setSaving(true);
     setSaveError(null);
     try {
@@ -169,8 +172,10 @@ export function LeadPostKeysSettings() {
       });
       notify.done(vendorKeys.length > 1 ? `Field map saved to all ${vendorKeys.length} of ${selectedKey.vendorName}'s keys.` : "Field map saved.");
       await load(selectedKey.id);
+      return true;
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : "Could not save the field map");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -200,7 +205,7 @@ export function LeadPostKeysSettings() {
   const [revokeTyped, setRevokeTyped] = useState("");
 
   async function act(key: PostKey, action: "rotate" | "activate" | "deactivate"): Promise<boolean> {
-    if (action === "rotate" && !window.confirm(`Rotate ${key.vendorName}'s key? Their current key stops working, so send them the new one straight away.`)) return false;
+    if (action === "rotate" && !(await confirmAction({ title: `Rotate ${key.vendorName}'s key?`, description: "Their current key stops working, so send them the new one straight away.", confirmLabel: "Rotate key", cancelLabel: "Keep current key" }))) return false;
     setBusy(key.id);
     try {
       const body = await send(`/api/app/lead-post-keys/${key.id}`, "PATCH", { action });
@@ -256,7 +261,7 @@ export function LeadPostKeysSettings() {
 
   async function refresh() {
     // Reloading resets the field-map draft, so ask first — the same question switching keys asks.
-    if (dirty && !window.confirm("Discard the unsaved changes to this field map?")) return;
+    if (dirty && !(await confirmAction({ title: "Discard your field-map changes?", description: "The unsaved changes to this field map are lost.", confirmLabel: "Discard changes", cancelLabel: "Keep editing" }))) return;
     setRefreshing(true);
     try { await load(selectedKeyId); } finally { setRefreshing(false); }
   }
@@ -677,6 +682,7 @@ export function LeadPostKeysSettings() {
           <Button type="button" onClick={() => void save()} disabled={saving || draftProblems.size > 0}>{saving ? "Saving…" : "Save changes"}</Button>
         </SettingsSaveBar>
       )}
+      <LeaveGuard dirty={dirty} onSave={save} onDiscard={discard} what={selectedKey ? `${selectedKey.vendorName}'s field map` : "this field map"} />
     </SettingsStack>
   );
 }

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, MAX_UPLOAD_BYTES, carrierFileKind, fileDay, type CarrierFileType } from "@/lib/ingestion/constants";
 import { prefillFromFilename, type CarrierChoice } from "@/lib/ingestion/path";
+import { notify } from "@/lib/notify";
 
 const selectClass = `${toolbarControl} w-full`;
 
@@ -58,7 +59,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
     if (!fileDate) return setProblem("Enter the file's date.");
     setBusy(true);
     setProblem(null);
-    try {
+    const send = async () => {
       const form = new FormData();
       form.set("file", file);
       form.set("carrier_id", carrierId);
@@ -68,6 +69,18 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
       const response = await fetch("/api/app/carrier-files", { method: "POST", body: form });
       const data = (await response.json().catch(() => ({}))) as Outcome & { error?: string };
       if (!response.ok) throw new Error(data.error ?? "The file could not be uploaded.");
+      return data;
+    };
+    try {
+      // The upload's progress is a toast (2026-10-28); its outcome is also the dialog's result panel,
+      // and a refusal stays in the dialog beside the fields to fix, so it ends without one.
+      const data = await notify.promise(send, {
+        loading: `Uploading ${file.name}…`,
+        done: (result) => result.outcome === "skipped" ? "Already received, not stored again"
+          : result.status === "failed" ? { title: "Received, but it cannot be read", treatment: "warn", detail: result.errorDetail ?? undefined }
+          : `Uploaded ${file.name}`,
+        fail: null,
+      });
       setDone(data);
       router.refresh();
     } catch (reason) {

@@ -51,6 +51,7 @@ import {
   dobFieldKey,
 } from "@/lib/templates/formats";
 import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
+import { StatusChip } from "@/components/ui/status-chip";
 import { placementWidth } from "@/lib/templates/placementWidth";
 
 type ApprovedProduct = { code: string; name: string; category: string };
@@ -1591,13 +1592,9 @@ type PartnerDraftRow = {
   updated_at: string;
 };
 
+/** A readiness check as the shared chip (foundation v3), in this page's tone names. */
 function ReadinessChip({ tone, children }: { tone: ChipTone; children: ReactNode }) {
-  return (
-    <span className={`portal-status-chip is-${tone}`}>
-      <span aria-hidden="true" />
-      {children}
-    </span>
-  );
+  return <StatusChip tone={tone === "success" ? "good" : tone}>{children}</StatusChip>;
 }
 
 /** "Term life also available." — the other products the agent approved, in one line. */
@@ -1755,26 +1752,19 @@ function LegacyPartnerPortalWorkspace({
     <div className="m-stagger mx-auto w-full max-w-7xl space-y-8">
       {section === "overview" && (
         <section id="overview" className="scroll-mt-6">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">
-                Partner workspace
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">
-                Partner operations
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Submit leads, follow their progress, and manage the people who
-                work them.
-              </p>
-            </div>
-            <Button asChild>
-              <a href="#submit">
-                <Send className="mr-1.5 size-4" aria-hidden="true" />
-                Submit a new lead
-              </a>
-            </Button>
-          </div>
+          {/* The one page header (UI-CONSISTENCY §2): no eyebrow, the 24px title. */}
+          <PageHeader
+            title="Partner operations"
+            description="Submit leads, follow their progress, and manage the people who work them."
+            actions={
+              <Button asChild>
+                <a href="#submit">
+                  <Send className="mr-1.5 size-4" aria-hidden="true" />
+                  Submit a new lead
+                </a>
+              </Button>
+            }
+          />
           {error && (
             <div
               role="status"
@@ -1857,7 +1847,7 @@ function LegacyPartnerPortalWorkspace({
                     </select>
                   </label>
                   {formVersion !== null && (
-                    <span className="portal-status-chip">Form v{formVersion}</span>
+                    <StatusChip>Form v{formVersion}</StatusChip>
                   )}
                   {alsoAvailable(approvedProducts, selectedProduct) && (
                     <p>
@@ -1968,10 +1958,7 @@ function LegacyPartnerPortalWorkspace({
                         </div>
                         <span className="flex flex-wrap gap-2">
                           {draft.id === activeDraftId ? (
-                            <span className="portal-status-chip is-success">
-                              <span aria-hidden="true" />
-                              Open below
-                            </span>
+                            <StatusChip tone="good">Open below</StatusChip>
                           ) : (
                             <Button
                               type="button"

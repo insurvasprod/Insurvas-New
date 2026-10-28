@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
-import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { control, Field } from "@/components/ui/field";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import type { TemplateField, TemplateRow } from "@/lib/templates/constants";
 import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
@@ -22,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
 import { DispositionPicker, ListView, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, initials, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
+import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
 
 type Lead = { id: string; pipeline_id: string; stage_id: string; values: Record<string, unknown>; screening_outcome?: string | null; screening_warning?: string | null; created_at: string; updated_at: string; submitter_name?: string | null; owner_user_id?: string | null; owner_name?: string | null; disposition?: string | null; disposition_at?: string | null; stage_entered_at?: string | null; monthly_premium_cents?: number | null };
 type Pipeline = { id: string; name: string; partner_type: string; stages: PipelineStage[] };
@@ -102,7 +105,7 @@ function PipelineCard({ lead, selected, readOnly, now, money, late, onSelect, on
   // Time in the current stage when it is known (20260925100000); until then, time since arrival.
   const stageMs = inStageMs(lead, now);
   return (
-    <article draggable={!readOnly} onDragStart={onDragStart} className={cn("m-card w-full shrink-0 overflow-hidden rounded-xl border bg-[color-mix(in_srgb,var(--color-card)_70%,transparent)]", !readOnly && "cursor-grab active:cursor-grabbing", late ? "border-[color-mix(in_srgb,var(--error)_55%,transparent)]" : "border-border", selected && "border-[var(--primary)] shadow-[var(--shadow-hover)]")}>
+    <article draggable={!readOnly} onDragStart={onDragStart} className={cn("m-card w-full shrink-0 overflow-hidden rounded-xl border m-glass-inset", !readOnly && "cursor-grab active:cursor-grabbing", late ? "border-[color-mix(in_srgb,var(--error)_55%,transparent)]" : "border-border", selected && "border-[var(--primary)] shadow-[var(--shadow-hover)]")}>
       <button type="button" onClick={onSelect} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left" title={readOnly ? undefined : "Open to see the lead, or drag it to another stage — you will be asked which disposition"}>
         <span aria-hidden className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--accent-ink)]">{initials(leadName(lead))}</span>
         <span className="min-w-0 flex-1">
@@ -203,7 +206,7 @@ function LeadPreviewPanel({ lead, stages, readOnly, onMove, onClose, onReconcile
     <div className="flex items-center gap-2 border-b border-border px-4 py-2.5"><span className="text-xs text-muted-foreground">Stage</span><span className="flex-1 truncate text-sm font-semibold">{liveStages.find((item) => item.id === lead.stage_id)?.name ?? "Unmapped"}</span><Button type="button" variant="outline" size="sm" aria-label={`Move ${leadName(lead)} to stage`} disabled={readOnly} onClick={onMove}>Move</Button></div>
       {/* LA-3.23 · when the application has moved on but the card was held back by hand. */}
       <LeadStageHint leadId={lead.id} boardStageId={lead.stage_id} readOnly={readOnly} onReconciled={onReconciled} />
-    <div className="lead-preview-tabs" role="tablist" aria-label="Lead preview"><button type="button" role="tab" id="lead-preview-tab-submission" aria-selected={tab === "submission"} aria-controls="lead-preview-tabpanel" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" role="tab" id="lead-preview-tab-timeline" aria-selected={tab === "timeline"} aria-controls="lead-preview-tabpanel" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>{error ? <div className="lead-preview-state text-destructive">{error}</div> : !data ? <div className="flex-1"><SectionLoading rows={6} columns={2} label="Loading lead" /></div> : tab === "submission" ? <div key="submission" id="lead-preview-tabpanel" role="tabpanel" aria-labelledby="lead-preview-tab-submission" className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(data.stage ?? undefined)}`}>{data.stage?.name ?? "Open"}</span><span>{data.screening.outcome ?? "Screening pending"}</span></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Form as submitted</h3><span>Version {data.lead.definition_version}</span></div><div className="lead-form-snapshot">{fieldEntries.map(([key, value]) => <div key={key} className="lead-snapshot-row"><span>{data.template.fields.find((field) => field.field_key === key)?.label ?? key}</span><strong>{display(value)}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(data.lead.created_at)}</dd></div><div><dt>Submitted by</dt><dd>{data.submitter?.name ?? lead.submitter_name ?? "Workspace"}</dd></div><div><dt>Owner</dt><dd>{data.owner?.name ?? "Unclaimed"}</dd></div><div><dt>Queue status</dt><dd>{data.queue?.status ?? "Not queued"}</dd></div></dl></div></div> : <div key="timeline" id="lead-preview-tabpanel" role="tabpanel" aria-labelledby="lead-preview-tab-timeline" className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{data.timeline.length ? data.timeline.map((event) => <div key={event.id} className="lead-timeline-item"><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? event.actor}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}</DetailPanel>;
+    <UnderlineTabs label="Lead preview" tabs={[{ key: "submission", label: "Submission" }, { key: "timeline", label: "Timeline" }]} value={tab} onChange={setTab} idPrefix="lead-preview-tab" controls="lead-preview-tabpanel" className="px-4" />{error ? <div className="lead-preview-state text-destructive">{error}</div> : !data ? <div className="flex-1"><SectionLoading rows={6} columns={2} label="Loading lead" /></div> : tab === "submission" ? <div key="submission" id="lead-preview-tabpanel" role="tabpanel" aria-labelledby="lead-preview-tab-submission" className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(data.stage ?? undefined)}`}>{data.stage?.name ?? "Open"}</span><span>{data.screening.outcome ?? "Screening pending"}</span></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Form as submitted</h3><span>Version {data.lead.definition_version}</span></div><div className="lead-form-snapshot">{fieldEntries.map(([key, value]) => <div key={key} className="lead-snapshot-row"><span>{data.template.fields.find((field) => field.field_key === key)?.label ?? key}</span><strong>{display(value)}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(data.lead.created_at)}</dd></div><div><dt>Submitted by</dt><dd>{data.submitter?.name ?? lead.submitter_name ?? "Workspace"}</dd></div><div><dt>Owner</dt><dd>{data.owner?.name ?? "Unclaimed"}</dd></div><div><dt>Queue status</dt><dd>{data.queue?.status ?? "Not queued"}</dd></div></dl></div></div> : <div key="timeline" id="lead-preview-tabpanel" role="tabpanel" aria-labelledby="lead-preview-tab-timeline" className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{data.timeline.length ? data.timeline.map((event) => <div key={event.id} className="lead-timeline-item"><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? event.actor}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}</DetailPanel>;
 }
 
 const VIEW_LABEL = { stages: "Stages", board: "Board", table: "Table", list: "List" } as const;
@@ -361,17 +364,7 @@ export function LeadWorkspace() {
 
       {/* Leads A1 (2026-10-25): one pipeline at a time, its tabs under the title. */}
       {pipelines.length > 0 && (
-        <div role="tablist" aria-label="Pipeline" className="-mt-2 flex overflow-x-auto overflow-y-hidden border-b border-border">
-                  {pipelines.map((item) => {
-                    const active = item.id === activePipeline?.id;
-                    return (
-                      <button key={item.id} type="button" role="tab" aria-selected={active} onClick={() => selectPipeline(item.id)} className={cn("-mb-px inline-flex h-9 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-semibold tracking-[-0.01em] whitespace-nowrap", active ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
-                        {item.name}
-                        <span className={cn("rounded-full px-1.5 text-xs tabular-nums", active ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{countFor(item.id).toLocaleString()}</span>
-                      </button>
-                    );
-                  })}
-        </div>
+        <UnderlineTabs label="Pipeline" tabs={pipelines.map((item) => ({ key: item.id, label: item.name, count: countFor(item.id) }))} value={activePipeline?.id ?? ""} onChange={selectPipeline} className="-mt-2" />
       )}
 
       {/* The board or table, with the lead preview split beside it from lg (DetailPanel). On the board
@@ -388,39 +381,32 @@ export function LeadWorkspace() {
               <DataToolbar
                 actions={
                   <>
-                    <span role="group" aria-label="View" className="inline-flex h-9 gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
-                      {(["stages", "board", "table", "list"] as const).map((option) => (
-                        <button key={option} type="button" aria-pressed={view === option} onClick={() => { setView(option); if (option === "stages" || option === "list") setSelected(null); }} className={cn("inline-flex h-8 items-center rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === option ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{VIEW_LABEL[option]}</button>
-                      ))}
-                    </span>
+                    <Segmented label="View" options={(["stages", "board", "table", "list"] as const).map((option) => ({ key: option, label: VIEW_LABEL[option] }))} value={view} onChange={(option) => { setView(option); if (option === "stages" || option === "list") setSelected(null); }} />
                     <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
                   </>
                 }
               >
                 <ToolbarSearch value={search} onChange={setSearch} placeholder="Search name, phone, policy" />
-                <FilterButton open={moreFilters} onClick={() => setMoreFilters((value) => !value)} count={activeFilters} />
+                <FilterButton open={moreFilters} controls="lead-filters" onClick={() => setMoreFilters((value) => !value)} count={activeFilters} />
                 {/* Saved views name the Table's scope too, so they sit on the Table. Per-browser for now. */}
                 {view === "table" && <SavedViews storageKey="leads.table" current={viewState} builtIns={builtInViews} onApply={applyView} />}
-                {moreFilters && (
-                  <>
-                    <select aria-label="Product" className={toolbarControl} value={product} onChange={(event) => setProduct(event.target.value)}><option value="">All products</option>{products.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                    <select aria-label="Stage" className={toolbarControl} value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}><option value="">All stages</option>{filterStages.map((entry) => <option key={entry.stage.id} value={entry.stage.id}>{entry.pipelineName ? `${entry.pipelineName} · ${entry.stage.name}` : entry.stage.name}</option>)}</select>
-                    <select aria-label="Submitted by" className={toolbarControl} value={submitter} onChange={(event) => setSubmitter(event.target.value)}><option value="">Everyone</option>{submitters.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                    <select aria-label="Outcome" className={toolbarControl} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Any outcome</option><option value="clear">Clear</option><option value="blocked">Blocked</option></select>
-                    <input type="date" aria-label="Submitted from" className={toolbarControl} value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
-                    <input type="date" aria-label="Submitted to" className={toolbarControl} value={toDate} onChange={(event) => setToDate(event.target.value)} />
-                  </>
-                )}
-                {!moreFilters && filterChips.map((chip) => (
-                  <button key={chip.key} type="button" onClick={chip.clear} aria-label={`Remove filter ${chip.label}`} className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground hover:bg-muted">
-                    {chip.label}<X className="size-3" aria-hidden="true" />
-                  </button>
-                ))}
+                {filterChips.map((chip) => <ToggleChip key={chip.key} onRemove={chip.clear}>{chip.label}</ToggleChip>)}
                 {(activeFilters > 0 || query) && <ClearFiltersButton onClick={resetFilters} />}
                 <button type="submit" className="sr-only">Search</button>
               </DataToolbar>
             </form>
             </div>
+          }
+          filters={
+            // Inline under the toolbar (UI-CONSISTENCY §6a): labelled fields that push the list down.
+            <FilterPanel id="lead-filters" open={moreFilters}>
+              <Field label="Product" htmlFor="lead-filter-product"><select id="lead-filter-product" className={control} value={product} onChange={(event) => setProduct(event.target.value)}><option value="">All products</option>{products.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field>
+              <Field label="Stage" htmlFor="lead-filter-stage"><select id="lead-filter-stage" className={control} value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}><option value="">All stages</option>{filterStages.map((entry) => <option key={entry.stage.id} value={entry.stage.id}>{entry.pipelineName ? `${entry.pipelineName} · ${entry.stage.name}` : entry.stage.name}</option>)}</select></Field>
+              <Field label="Submitted by" htmlFor="lead-filter-submitter"><select id="lead-filter-submitter" className={control} value={submitter} onChange={(event) => setSubmitter(event.target.value)}><option value="">Everyone</option>{submitters.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field>
+              <Field label="Outcome" htmlFor="lead-filter-outcome"><select id="lead-filter-outcome" className={control} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Any outcome</option><option value="clear">Clear</option><option value="blocked">Blocked</option></select></Field>
+              <Field label="Submitted from" htmlFor="lead-filter-from"><input id="lead-filter-from" type="date" className={control} value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></Field>
+              <Field label="Submitted to" htmlFor="lead-filter-to"><input id="lead-filter-to" type="date" className={control} value={toDate} onChange={(event) => setToDate(event.target.value)} /></Field>
+            </FilterPanel>
           }
         >
           {/* The board's columns sit inset; Stages, Table and List render bare, edge to edge in the card. */}

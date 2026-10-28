@@ -33,6 +33,7 @@ import { parseSettingsHash } from "@/lib/settings/registry";
 import { cn } from "@/lib/utils";
 import { USAGE_CRITICAL_FRACTION, retentionEndsAt, tierWarns, type DunningView, type SelfServeActions, type UsageTier } from "@/lib/billing/selfServiceRules";
 import type { SubscriptionStatus } from "@/lib/subscriptions/access";
+import { cardSurface } from "@/components/ui/card";
 
 type Limit = { key: string; label: string; used: number; limit: number; tier: UsageTier; metered: boolean; resetsAt: string | null; hardCap: boolean };
 type Invoice = { id: string; number: string; status: string; totalCents: number; periodStart: string | null; periodEnd: string | null; issuedAt: string | null; dueAt: string | null; paidAt: string | null; payOnlineUrl: string | null };
@@ -76,7 +77,6 @@ const TIER_LOOK: Record<UsageTier, { bar: string; text: string; row: string }> =
 const ANCHOR_TAB: Record<string, Tab> = { "billing-limits": "overview", "billing-plan": "plan", "billing-invoices": "invoices", "billing-card": "invoices", "billing-cancel": "invoices" };
 /** A plan can include forty features; the card shows the first few and opens the rest on request. */
 const FEATURES_SHOWN = 10;
-const CARD = "rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
 const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
 
 function tierCaption(l: Limit, warnPercent: number): string {
@@ -93,7 +93,7 @@ const idempotencyKey = () => (typeof crypto !== "undefined" && "randomUUID" in c
 
 function Card({ title, hint, action, children, className, id }: { title?: string; hint?: string; action?: ReactNode; children: ReactNode; className?: string; id?: string }) {
   return (
-    <section id={id} className={cn(CARD, "flex flex-col gap-3 p-5", className)}>
+    <section id={id} className={cn(cardSurface, "flex flex-col gap-3 p-5", className)}>
       {(title || action) && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           {title && <span className={KICKER}>{title}{hint && <HoverHint id={`hint-billing-${title.toLowerCase().replace(/\W+/g, "-")}`} label={`About ${title.toLowerCase()}`}>{hint}</HoverHint>}</span>}
@@ -176,7 +176,7 @@ export function BillingSettings() {
   }
 
   if (error) return <SettingsStack><SettingsSectionHeader /><Callout tone="error" title={error} /></SettingsStack>;
-  if (!view) return <SettingsStack><SettingsSectionHeader /><div className={CARD}><SectionLoading rows={6} columns={3} label="Loading your plan and billing" /></div></SettingsStack>;
+  if (!view) return <SettingsStack><SettingsSectionHeader /><div className={cardSurface}><SectionLoading rows={6} columns={3} label="Loading your plan and billing" /></div></SettingsStack>;
 
   const sub = view.subscription;
   const actions = view.actions;
@@ -193,7 +193,7 @@ export function BillingSettings() {
   const updateCard = view.cardOnFile ? <Button asChild variant="outline"><a href="/api/app/billing/payment-method" target="_blank" rel="noopener noreferrer">Update card<ExternalLink aria-hidden="true" /></a></Button> : null;
   const paymentMethod = (
     <div className="flex flex-wrap items-center gap-3.5">
-      <span className="grid h-9 w-14 shrink-0 place-items-center rounded-[8px] bg-[var(--surface-alt)] text-xs font-bold tracking-[0.06em] text-[var(--ink)]" aria-hidden="true">{view.cardOnFile ? "CARD" : "LINK"}</span>
+      <span className="grid h-9 w-14 shrink-0 place-items-center rounded-[8px] bg-[var(--surface-alt)] text-xs font-bold tracking-[0.06em] text-[var(--ink)]" aria-hidden="true">{view.cardOnFile ? "cardSurface" : "LINK"}</span>
       <span className="min-w-[160px] flex-1">
         <strong className="block text-sm font-semibold text-[var(--ink)]">{view.cardOnFile ? "Card on file with Whop" : "Paid by invoice link"}</strong>
         <span className="text-xs text-[var(--muted)]">{view.cardOnFile ? "Your card is held by our payment provider, Whop — it never passes through Insurvas." : "This workspace pays each invoice by its own link; there is no card on file."}</span>
@@ -352,7 +352,7 @@ export function BillingSettings() {
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {view.plan ? (
-              <div className={cn(CARD, "flex flex-col gap-2 border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] p-4")}>
+              <div className={cn(cardSurface, "flex flex-col gap-2 border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] p-4")}>
                 <span className="flex items-center justify-between"><span className={KICKER}>Now</span><span className="text-xs font-bold text-[var(--accent-ink)]">Current plan</span></span>
                 <strong className="text-base font-semibold text-[var(--ink)]">{view.plan.name}</strong>
                 {view.plan.priceCents !== null && <span><strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(view.plan.priceCents)}</strong><span className="text-xs text-[var(--muted)]"> {cycle}</span></span>}
@@ -363,7 +363,7 @@ export function BillingSettings() {
               const on = target === o.id;
               return (
                 <button key={o.id} type="button" disabled={busy} onClick={() => void review(on ? "" : o.id)} aria-pressed={on}
-                  className={cn(CARD, "flex flex-col gap-2 border-[1.5px] p-4 text-left transition-colors disabled:cursor-wait", on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "hover:border-[var(--border-strong)]")}>
+                  className={cn(cardSurface, "flex flex-col gap-2 border-[1.5px] p-4 text-left transition-colors disabled:cursor-wait", on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "hover:border-[var(--border-strong)]")}>
                   <span className={KICKER}>{o.applyNow ? "Upgrade" : "Smaller plan"}</span>
                   <strong className="text-base font-semibold text-[var(--ink)]">{o.name}</strong>
                   <span><strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(o.priceCents)}</strong><span className="text-xs text-[var(--muted)]"> {cycle}</span></span>

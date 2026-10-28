@@ -26,6 +26,7 @@ import {
   type VendorContact,
   type VendorStatus,
 } from "@/lib/vendors/types";
+import { StatusChip } from "@/components/ui/status-chip";
 
 /**
  * The vendor roster on /app/campaigns (Vendors concept board, LA-2 §5), and the New vendor form.
@@ -90,14 +91,9 @@ function contactOf(vendor: Vendor): VendorContact {
   return { name: pick("name"), email: pick("email"), phone: pick("phone") };
 }
 
-/** 12px chips (the shared StatusChip is 11px, under this page's floor). */
+/** A vendor's state as the shared chip (foundation v3; the chip is 12px now). */
 function Chip({ tone, children }: { tone: "warning" | "info" | "neutral"; children: ReactNode }) {
-  const tones = {
-    warning: "bg-[var(--warning-surface)] text-[var(--warning-ink)]",
-    info: "bg-[var(--info-surface)] text-[var(--info-ink)]",
-    neutral: "bg-[var(--surface-alt)] text-[var(--body)]",
-  } as const;
-  return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 align-middle text-xs font-semibold ${tones[tone]}`}>{children}</span>;
+  return <StatusChip tone={tone}>{children}</StatusChip>;
 }
 
 /** A full-width line under a vendor row. Danger for money about to lapse and drop facts; info for a trial. */

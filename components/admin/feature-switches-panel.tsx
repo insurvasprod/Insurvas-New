@@ -5,7 +5,8 @@ import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { Field, btn, control } from "@/components/app/settings/primitives";
+import { Field, control } from "@/components/app/settings/primitives";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import {
@@ -250,15 +251,15 @@ export function FeatureSwitchesPanel({
                 <span className="flex shrink-0 items-center gap-2">
                   <StatusPill state={state} />
                   {canToggle && (
-                    <button
+                    <Button
                       type="button"
-                      className={btn("row")}
+                      variant="ghost" size="sm"
                       aria-expanded={isOpen}
                       aria-label={`${isOpen ? "Cancel changing" : "Change"} the kill switch on ${f.featureKey}`}
                       onClick={() => (isOpen ? close() : edit(f.featureKey))}
                     >
                       {isOpen ? "Cancel" : "Change"}
-                    </button>
+                    </Button>
                   )}
                 </span>
               </div>
@@ -276,16 +277,14 @@ export function FeatureSwitchesPanel({
                       className="flex flex-wrap gap-2"
                     >
                       {SWITCH_STATES.map((s) => (
-                        <button
+                        <ToggleChip
                           key={s}
-                          type="button"
                           role="radio"
-                          aria-checked={draft.state === s}
-                          className={btn(draft.state === s ? "primary-sm" : "secondary")}
+                          selected={draft.state === s}
                           onClick={() => setDraft({ ...draft, state: s })}
                         >
                           {SWITCH_STATE_LABELS[s]}
-                        </button>
+                        </ToggleChip>
                       ))}
                     </div>
                     <p className="mt-1.5 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">

@@ -4,7 +4,6 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { TrueCpaWorkspace } from "@/components/app/true-cpa-workspace";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { getVendorScorecard } from "@/lib/vendorScorecard/service";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 
 export default async function TrueCpaPage() {
   const guard = await guardPage("true_cpa");
@@ -16,5 +15,5 @@ export default async function TrueCpaPage() {
   // first paint instead of after the shell, hydration and a second request. A failure here is not a
   // failed page: the workspace fetches it itself and shows its own error.
   const initialReport = await getVendorScorecard(guard.context.tenantId, {}, guard.entitlement.access === "read_only").catch(() => null);
-  return <DashboardStage><TrueCpaWorkspace initialReport={initialReport} /></DashboardStage>;
+  return <><TrueCpaWorkspace initialReport={initialReport} /></>;
 }

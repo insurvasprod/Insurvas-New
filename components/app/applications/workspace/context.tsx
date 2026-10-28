@@ -150,6 +150,8 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
     if (next.attemptNo) q.set("attempt", String(next.attemptNo));
     router.replace(`?${q.toString()}${next.hash ? `#${next.hash}` : ""}`, { scroll: false });
     if (next.hash) {
+      // A step that keeps fields folded (the interview) opens the one asked for.
+      window.dispatchEvent(new CustomEvent("workspace:field", { detail: next.hash }));
       // The field is usually on another step, which renders only after the URL has moved — and the
       // step being left can hold a field with the same id (Verify's date of birth). Wait for the new
       // step, land on the field, and try again if what was focused was the old step's copy.

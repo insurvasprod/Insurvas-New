@@ -34,6 +34,7 @@ import { draftFrom, uniqueKey, type Available, type Current, type DraftState, ty
 import { FormCanvas, type Picked } from "@/components/app/form-templates/form-canvas";
 import { QuestionPanel } from "@/components/app/form-templates/question-panel";
 import { FormSettingsPanel } from "@/components/app/form-templates/form-settings";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PublishBar, SETTINGS_TABS, StatusLine, type SettingsTab } from "@/components/app/form-templates/status-line";
 
 const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
@@ -365,6 +366,7 @@ export function TemplateSettings() {
   return (
     <SettingsStack>
       <SettingsSectionHeader />
+      <LeaveGuard dirty={dirty} onDiscard={discard} what="the form draft" />
 
       {productTabs.length > 1 && <StatusTabs label="Products" tabs={productTabs} value={productCode} onChange={switchProduct} idPrefix="form-product" panelIdPrefix="form-product-panel" />}
 

@@ -78,6 +78,20 @@ export function releaseConfirmation(action: ReleaseAction, names: { customer?: s
   return `End ${names.bufferName?.trim() || "the buffer"}'s involvement? ${names.agentName?.trim() || "The licensed agent"} keeps the call and the verification. This does not unassign the transfer.`;
 }
 
+const RELEASE_DIALOG: Record<ReleaseAction, { title: string; confirmLabel: string }> = {
+  unassign: { title: "Give this transfer back?", confirmLabel: "Give it back" },
+  requeue: { title: "Put this call back in the queue?", confirmLabel: "Put back in queue" },
+  end_buffer: { title: "End the buffer's involvement?", confirmLabel: "End involvement" },
+};
+
+/**
+ * The same question as `releaseConfirmation`, shaped for the shared confirm dialog (foundation v3:
+ * `confirmAction`, never the browser's box). The wording is unchanged; the buttons name the act.
+ */
+export function releaseDialog(action: ReleaseAction, names: { customer?: string | null; bufferName?: string | null; agentName?: string | null } = {}) {
+  return { ...RELEASE_DIALOG[action], description: releaseConfirmation(action, names), cancelLabel: "Keep it", destructive: false };
+}
+
 export function isWithAgent(status: string) {
   return (WITH_AGENT_STATUSES as readonly string[]).includes(status);
 }

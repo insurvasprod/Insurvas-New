@@ -15,7 +15,6 @@ import { NeedsYou } from "@/components/app/lead-sources/needs-you";
 import { ImportSheet, SourceTabs, type SourceTab } from "@/components/app/lead-sources/source-tabs";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/app/settings/primitives";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
@@ -65,7 +64,7 @@ export async function LeadSourcesPage({ tab, importOpen = false, guards }: {
   if (canCampaigns) tabs.push({ key: "campaigns", label: "Vendors & campaigns", panel: <CampaignWorkspace embedded /> });
 
   return (
-    <DashboardStage>
+    <>
       <div className="m-stagger flex flex-col gap-6">
         <PageHeader
           title="Lead sources"
@@ -82,7 +81,7 @@ export async function LeadSourcesPage({ tab, importOpen = false, guards }: {
         />
         <SourceTabs label="Lead sources" tabs={tabs} initialTab={tab} />
       </div>
-    </DashboardStage>
+    </>
   );
 }
 
@@ -126,13 +125,13 @@ export async function VendorBillsPage({ tab, open, vendor, guards }: { tab: Vend
   const readOnly = (canInvoices ? money : returns).entitlement.access === "read_only";
 
   return (
-    <DashboardStage>
+    <>
       <div className="m-stagger flex flex-col gap-6">
         <PageHeader title="Vendor bills" description="What you paid for leads, and what vendors owe you back." />
         {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}
         {canInvoices && <NeedsYou access={{ lists: false, claims: false, invoices: true, invoicesHref: "/app/vendor-bills?tab=invoices", campaignsHref: null }} only={["invoices"]} />}
         <SourceTabs label="Vendor bills" tabs={tabs} initialTab={tab} />
       </div>
-    </DashboardStage>
+    </>
   );
 }

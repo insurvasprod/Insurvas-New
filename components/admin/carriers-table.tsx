@@ -11,7 +11,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { TableCard } from "@/components/ui/table-card";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, st, pillTone, Switch } from "@/components/app/settings/primitives";
+import { st, pillTone, Switch } from "@/components/app/settings/primitives";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -311,14 +311,14 @@ export function CarriersTable({
                     <td className={cn(st.td, "py-1 text-right")}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button
+                          <Button
                             type="button"
-                            className={btn("row", "w-[30px] px-0")}
+                            variant="ghost" size="sm" className="w-[30px] px-0"
                             disabled={pending === carrier.id}
                             aria-label={`Actions for ${carrier.name}`}
                           >
                             <MoreHorizontal className="size-4" aria-hidden="true" />
-                          </button>
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem className={MENU_ITEM} onSelect={() => setEditing(carrier)}>

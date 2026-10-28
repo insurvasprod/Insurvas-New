@@ -19,10 +19,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { Copy, Download, Plus } from "lucide-react";
+import { BadgeCheck, Copy, Download, Handshake, Hourglass, Plus, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
@@ -41,7 +41,6 @@ import {
   DEAL_FLOW_STATUSES,
   STAGE_TYPE_LABEL,
   shortLeadId,
-  type DealFlowKpis,
   type DealFlowReport,
   type DealFlowRow,
   type DealFlowStageType,
@@ -51,7 +50,8 @@ import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Pager } from "@/components/ui/pager";
-import { TrendTile } from "@/components/ui/trend-tile";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { productName, useSoldProducts } from "@/components/app/products/use-sold-products";
 
 type Data = DealFlowReport & { readOnly: boolean };
 type Filters = { from: string; to: string; partner_id: string; product_line: string; agent_id: string; stage_type: string; status: string };
@@ -189,6 +189,31 @@ function Alert({ tone, children }: { tone: "info" | "warning" | "error"; childre
   return <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-lg border border-border border-l-[3px] px-4 py-3 text-sm", look)}>{children}</div>;
 }
 
+/** One labelled field in the inline Filters panel (foundation v3 §6a). */
+function FilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="grid min-w-0 gap-1.5">
+      <label htmlFor={htmlFor} className="text-xs font-medium text-muted-foreground">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+/** The deal's money at a glance at the top of its panel: annualised, monthly and face, tabular. */
+function MoneyTrio({ row }: { row: DealFlowRow }) {
+  const cells: Array<[string, string]> = [["Annualised", annualised(row.monthly_premium_cents)], ["Monthly", money(row.monthly_premium_cents)], ["Face amount", money(row.face_amount_cents)]];
+  return (
+    <dl className="m-0 grid shrink-0 grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border">
+      {cells.map(([label, value]) => (
+        <div key={label} className="min-w-0 bg-card px-3 py-2.5">
+          <dt className="text-xs text-muted-foreground">{label}</dt>
+          <dd className="m-0 mt-0.5 truncate font-[family-name:var(--font-display)] text-base font-semibold tabular-nums text-foreground">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function StagePill({ row }: { row: DealFlowRow }) {
   if (!row.stage_name) return <StatusChip tone="neutral" dot>No stage</StatusChip>;
   return <StatusChip tone={STAGE_TONE[row.stage_type ?? "open"]} dot>{row.stage_name}</StatusChip>;
@@ -207,14 +232,6 @@ function CopyId({ leadId }: { leadId: string }) {
     </button>
   );
 }
-
-/** "2026-10-25" moved by whole days, on the calendar (no timezone involved). */
-function shiftDay(day: string, delta: number) {
-  const at = new Date(`${day}T12:00:00Z`);
-  at.setUTCDate(at.getUTCDate() + delta);
-  return at.toISOString().slice(0, 10);
-}
-const TREND_DAYS = 7;
 
 /** Leads A2: one premium bar per row, against the largest premium on the page. */
 function PremiumBar({ monthlyCents, max }: { monthlyCents: number | null; max: number }) {
@@ -259,8 +276,9 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
   const [tab, setTab] = useState<View>("deals");
   // The deal panel opens on a click, or on arrival from the disposition wizard with a focus.
   const [panelOpen, setPanelOpen] = useState(Boolean(focus));
-  const filtersRef = useRef<HTMLDivElement>(null);
-  const [manual, setManual] = useState({ product_line: "term_life", insured_name: "", phone: "", partner_id: "", local_date: today, carrier: "", product_type: "", monthly_premium: "", face_amount: "", draft_date: "", initial_quote: "", notes: "" });
+  const soldProducts = useSoldProducts();
+  // Settings › Products (2026-10-27): the product is chosen from what the agency sells; none preselected.
+  const [manual, setManual] = useState({ product_line: "", insured_name: "", phone: "", partner_id: "", local_date: today, carrier: "", product_type: "", monthly_premium: "", face_amount: "", draft_date: "", initial_quote: "", notes: "" });
   const requestRef = useRef(0);
   const scrolledRef = useRef(false);
 
@@ -300,32 +318,6 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     const timer = window.setTimeout(() => row.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     return () => window.clearTimeout(timer);
   }, [data, focus]);
-
-  // Leads A2 (2026-10-25): each tile carries its last seven days. One light read per day (a page of
-  // one row; the KPIs cover the whole day), with the same filters, ending on the range's last day.
-  const trendKey = useMemo(() => {
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(active)) if (value && key !== "from" && key !== "to") params.set(key, value);
-    return `${active.to}|${params.toString()}`;
-  }, [active]);
-  const [trend, setTrend] = useState<{ key: string; days: DealFlowKpis[] } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const [to, rest] = trendKey.split("|");
-    if (!to) return;
-    const days = Array.from({ length: TREND_DAYS }, (_, index) => shiftDay(to, index - (TREND_DAYS - 1)));
-    void Promise.all(days.map(async (day) => {
-      const params = new URLSearchParams(rest);
-      params.set("from", day);
-      params.set("to", day);
-      params.set("page_size", "1");
-      const response = await fetch(`/api/app/deal-flow?${params}`, { cache: "no-store" }).catch(() => null);
-      const body = response?.ok ? await response.json().catch(() => null) : null;
-      return (body?.kpis ?? null) as DealFlowKpis | null;
-    })).then((list) => { if (!cancelled) setTrend(list.every(Boolean) ? { key: trendKey, days: list as DealFlowKpis[] } : null); });
-    return () => { cancelled = true; };
-  }, [trendKey]);
-  const series = (pick: (kpis: DealFlowKpis) => number) => (trend && trend.key === trendKey ? trend.days.map(pick) : null);
 
   const csvHref = useMemo(() => { const params = new URLSearchParams(queryFor(active, search, 1, null)); params.delete("page"); params.delete("page_size"); params.set("format", "csv"); return `/api/app/deal-flow?${params.toString()}`; }, [active, search]);
   const pinned = data?.focus && !data.focus.inFilter ? data.focus.row : null;
@@ -401,17 +393,6 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     void load(query);
   }
 
-  // The Filters popover closes on Escape and on a click outside it; the deal panel closes on Escape
-  // through DetailPanel, which leaves the key to an open dialog first (2026-10-09 detail panel).
-  useEffect(() => {
-    if (!showFilters) return;
-    const onDown = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setShowFilters(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setShowFilters(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [showFilters]);
-
   const header = <PageHeader title="Daily deal flow" description="Every deal worked today, with what it is worth." />;
   const pageActions = (
     <>
@@ -441,8 +422,17 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
   const hasNarrowing = extraFilters > 0 || !!search;
   const update = (key: keyof Draft, value: string) => setDraft((current) => (current ? { ...current, [key]: value } : current));
   const oldest = kpis.oldest_in_progress_days;
-  const inProgressFoot = kpis.in_progress === 0 ? "none open" : oldest == null ? "no start time recorded" : oldest < 1 ? "oldest under a day" : `oldest ${oldest} ${oldest === 1 ? "day" : "days"}`;
-  const wonFoot = `${formatCentsAsCurrency(kpis.won_annualised_cents)} annualised${kpis.won_unpriced > 0 ? ` · ${kpis.won_unpriced} with no premium` : ""}`;
+  const periodText = isToday ? "today" : active.from === active.to ? formatDay(active.from) : rangeText(active.from, active.to);
+  const topPartner = [...data.summary].sort((a, b) => b.total - a.total)[0] ?? null;
+  // Foundation v3 §6a: what is narrowing the list, as removable chips under the toolbar.
+  const chips: ActiveFilter[] = [
+    active.partner_id && { key: "partner", label: "Partner", value: data.options.partners.find((partner) => partner.id === active.partner_id)?.name ?? "Unknown partner", onRemove: () => applyFilter({ partner_id: "" }) },
+    active.stage_type && { key: "status", label: "Status", value: STAGE_TYPE_LABEL[active.stage_type as DealFlowStageType] ?? active.stage_type, onRemove: () => applyFilter({ stage_type: "" }) },
+    active.status && { key: "record", label: "Deal record", value: DEAL_RECORD_LABEL[active.status as DealFlowStatus] ?? active.status, onRemove: () => applyFilter({ status: "" }) },
+    active.product_line && { key: "product", label: "Product", value: productName(soldProducts, active.product_line), onRemove: () => applyFilter({ product_line: "" }) },
+    active.agent_id && { key: "agent", label: "Agent", value: data.options.agents.find((agent) => agent.id === active.agent_id)?.name ?? "Unknown agent", onRemove: () => applyFilter({ agent_id: "" }) },
+    search && { key: "search", label: "Search", value: search, onRemove: () => { setSearchTerm(""); setSearch(""); setPage(1); } },
+  ].filter((chip): chip is ActiveFilter => Boolean(chip));
   const dayTitle = `Dates are the agent’s local day${timeZone ? `; today is ${formatDay(today)} in ${timeZone}` : ""}`;
   // applyFilter holds an incomplete or reversed range without applying it; say so while it is held.
   const rangeProblem = !filters.from || !filters.to ? "Choose both a From and a To date" : filters.from > filters.to ? "From must be on or before To" : null;
@@ -483,12 +473,23 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
         </Alert>
       )}
 
-      <section aria-label="Deal flow summary" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <TrendTile label="Deals worked" value={kpis.deals_worked} footnote={isToday ? "today" : active.from === active.to ? formatDay(active.from) : rangeText(active.from, active.to)} trend={series((k) => k.deals_worked)} trendLabel="Deals worked, last 7 days" />
-        <TrendTile label="Won" value={kpis.won} tone={kpis.won ? "good" : "neutral"} footnote={wonFoot} trend={series((k) => k.won)} trendLabel="Won, last 7 days" />
-        <TrendTile label="In progress" value={kpis.in_progress} tone={kpis.in_progress ? "warning" : "neutral"} footnote={inProgressFoot} trend={series((k) => k.in_progress)} trendLabel="In progress, last 7 days" />
-        <TrendTile label="Lost" value={kpis.lost} tone={kpis.lost ? "danger" : "neutral"} footnote="no longer active" trend={series((k) => k.lost)} trendLabel="Lost, last 7 days" />
-      </section>
+      {/* Foundation v3 §4a (2026-10-27): the four figures once, as glossy stat cards. They replace the
+          four trend tiles and the flow map under them, which repeated the same four numbers. Each
+          card's footer narrows the list to its deals; In progress turns amber when a deal is days old. */}
+      {/* The Dial funnel tab has its own row of cards; one row of figures per screen (§4a). */}
+      {tab !== "funnel" && <StatRow label="Deal flow summary">
+        <StatCard icon={Handshake} label="Deals worked" period={periodText} value={kpis.deals_worked}
+          fact={topPartner ? { label: "Most from", value: `${topPartner.partner_name} · ${topPartner.total}` } : { label: "No deals in this range" }} />
+        <StatCard icon={BadgeCheck} label="Won" period={periodText} value={kpis.won}
+          fact={{ label: "Annualised", value: `${formatCentsAsCurrency(kpis.won_annualised_cents)}${kpis.won_unpriced > 0 ? ` · ${kpis.won_unpriced} unpriced` : ""}` }}
+          action={kpis.won > 0 && active.stage_type !== "won" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "won" })}>Show</button> : undefined} />
+        <StatCard icon={Hourglass} label="In progress" period={periodText} value={kpis.in_progress} tone={oldest != null && oldest >= 2 ? "warn" : "default"}
+          fact={{ label: "Oldest", value: kpis.in_progress === 0 ? "none open" : oldest == null ? "not recorded" : oldest < 1 ? "under a day" : `${oldest} ${oldest === 1 ? "day" : "days"}` }}
+          action={kpis.in_progress > 0 && active.stage_type !== "open" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "open" })}>Show</button> : undefined} />
+        <StatCard icon={XCircle} label="Lost" period={periodText} value={kpis.lost}
+          fact={{ label: "Of deals worked", value: kpis.deals_worked ? `${Math.round((kpis.lost / kpis.deals_worked) * 100)}%` : "—" }}
+          action={kpis.lost > 0 && active.stage_type !== "lost" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "lost" })}>Show</button> : undefined} />
+      </StatRow>}
 
       {/* One tab panel for the three views, so a switch fades like every other tab (2026-10-09). */}
       <div key={tab} id="deal-flow-panel" role="tabpanel" aria-labelledby={`deal-flow-panel-tab-${tab}`}>
@@ -497,42 +498,49 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           <TableCard
             className="relative z-20 flex min-h-[calc(100dvh-var(--top-bar-h)-360px)] min-w-0 flex-1 flex-col [&>.overflow-x-auto]:flex-1"
             toolbar={
-              <DataToolbar actions={<>
-                {hasNarrowing && <ClearFiltersButton onClick={clearFilters} />}
-                <RefreshButton onClick={() => void load(query)} refreshing={loading} />
-              </>}>
+              // Foundation v3 §6a: search, the day range (the page's scope), one Filters button; the
+              // facets open inline under the toolbar and show as chips while closed.
+              <DataToolbar actions={<RefreshButton onClick={() => void load(query)} refreshing={loading} />}>
                 <ToolbarSearch value={searchTerm} onChange={setSearchTerm} placeholder="Customer, phone, campaign, ID…" label="Search deals" />
                 <input type="date" aria-label="From" title={dayTitle} className={toolbarControl} value={filters.from} max={filters.to || undefined} onChange={(event) => setDate("from", event.target.value)} />
                 <input type="date" aria-label="To" title={dayTitle} className={toolbarControl} value={filters.to} min={filters.from || undefined} onChange={(event) => setDate("to", event.target.value)} />
                 {rangeProblem && <span role="alert" className="text-xs font-semibold text-[var(--error-ink)]">{rangeProblem}</span>}
                 {!isToday && <Button type="button" variant="outline" onClick={resetToToday} aria-label="Show today’s deals">Today</Button>}
-                <select aria-label="Filter by partner" className={cn(toolbarControl, "max-w-[200px]")} value={filters.partner_id} onChange={(event) => applyFilter({ partner_id: event.target.value })}>
-                  <option value="">All partners</option>
-                  {data.options.partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}
-                </select>
-                <select aria-label="Filter by status" className={toolbarControl} value={filters.stage_type} onChange={(event) => applyFilter({ stage_type: event.target.value })}>
-                  <option value="">All statuses</option>
-                  {DEAL_FLOW_STAGE_TYPES.map((type) => <option key={type} value={type}>{STAGE_TYPE_LABEL[type]}</option>)}
-                </select>
-                <div ref={filtersRef} className="relative">
-                  <FilterButton open={showFilters} onClick={() => setShowFilters((value) => !value)} count={[active.status, active.product_line, active.agent_id].filter(Boolean).length} aria-controls="deal-flow-filters" />
-                  {showFilters && (
-                    <div id="deal-flow-filters" role="dialog" aria-label="More deal filters" className="absolute top-[calc(100%+6px)] left-0 z-30 grid w-[300px] gap-3 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[var(--shadow-overlay)]">
-                      <select aria-label="Filter by deal record" className={cn(toolbarControl, "w-full")} value={filters.status} onChange={(event) => applyFilter({ status: event.target.value })}>
-                        <option value="">Any deal record</option>
-                        {DEAL_FLOW_STATUSES.map((item) => <option key={item} value={item}>{DEAL_RECORD_LABEL[item]}</option>)}
-                      </select>
-                      <input aria-label="Filter by product line" className={cn(toolbarControl, "w-full")} value={filters.product_line} placeholder="Product line, e.g. term_life" onChange={(event) => setFilters({ ...filters, product_line: event.target.value })} onBlur={() => applyFilter({})} onKeyDown={(event) => { if (event.key === "Enter") applyFilter({}); }} />
-                      <select aria-label="Filter by agent" className={cn(toolbarControl, "w-full")} value={filters.agent_id} onChange={(event) => applyFilter({ agent_id: event.target.value })}>
-                        <option value="">All agents</option>
-                        {data.options.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} · {agent.role}</option>)}
-                      </select>
-                      <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setShowFilters(false)}>Done</Button></div>
-                    </div>
-                  )}
-                </div>
+                <FilterButton open={showFilters} onClick={() => setShowFilters((value) => !value)} count={extraFilters} controls="deal-flow-filters" />
               </DataToolbar>
             }
+            filters={<>
+              <FilterPanel id="deal-flow-filters" open={showFilters}>
+                <FilterField label="Partner" htmlFor="deal-filter-partner">
+                  <select id="deal-filter-partner" aria-label="Filter by partner" className={cn(toolbarControl, "w-full min-w-0")} value={filters.partner_id} onChange={(event) => applyFilter({ partner_id: event.target.value })}>
+                    <option value="">All partners</option>
+                    {data.options.partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}
+                  </select>
+                </FilterField>
+                <FilterField label="Status" htmlFor="deal-filter-status">
+                  <select id="deal-filter-status" className={cn(toolbarControl, "w-full min-w-0")} value={filters.stage_type} onChange={(event) => applyFilter({ stage_type: event.target.value })}>
+                    <option value="">All statuses</option>
+                    {DEAL_FLOW_STAGE_TYPES.map((type) => <option key={type} value={type}>{STAGE_TYPE_LABEL[type]}</option>)}
+                  </select>
+                </FilterField>
+                <FilterField label="Deal record" htmlFor="deal-filter-record">
+                  <select id="deal-filter-record" className={cn(toolbarControl, "w-full min-w-0")} value={filters.status} onChange={(event) => applyFilter({ status: event.target.value })}>
+                    <option value="">Any deal record</option>
+                    {DEAL_FLOW_STATUSES.map((item) => <option key={item} value={item}>{DEAL_RECORD_LABEL[item]}</option>)}
+                  </select>
+                </FilterField>
+                <FilterField label="Agent" htmlFor="deal-filter-agent">
+                  <select id="deal-filter-agent" className={cn(toolbarControl, "w-full min-w-0")} value={filters.agent_id} onChange={(event) => applyFilter({ agent_id: event.target.value })}>
+                    <option value="">All agents</option>
+                    {data.options.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} · {agent.role}</option>)}
+                  </select>
+                </FilterField>
+                <FilterField label="Product" htmlFor="deal-filter-product">
+                  <select id="deal-filter-product" className={cn(toolbarControl, "w-full min-w-0")} value={filters.product_line} onChange={(event) => applyFilter({ product_line: event.target.value })}><option value="">All products</option>{(soldProducts ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}</select>
+                </FilterField>
+              </FilterPanel>
+              <ActiveFilters filters={chips} onClear={clearFilters} />
+            </>}
             footer={<>
               <Pager page={data.page} total={data.total} pageSize={data.pageSize} noun={data.total === 1 ? "deal" : "deals"} suffix={!loading && focusedRow ? `focused on ${customerName(focusedRow)}` : undefined} disabled={loading} onPage={setPage} />
             </>}
@@ -617,10 +625,11 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                 <Button asChild variant="outline"><Link href={`/app/leads/${selectedRow.lead_id}`}>Open lead</Link></Button>
               </>}
             >
+              <MoneyTrio row={selectedRow} />
               <KeyValues
                 items={[
                   { label: "Carrier", value: selectedRow.carrier ?? "—" },
-                  { label: "Annualised", value: annualised(selectedRow.monthly_premium_cents) },
+                  { label: "Partner", value: selectedRow.partner_name },
                   { label: "Written", value: formatStamp(selectedRow.created_at, timeZone) ?? "—" },
                   { label: "Owner", value: shortPerson(selectedRow.agent_name) },
                   // LA-1.13-2: the buffer who took the call first, when one did.
@@ -633,12 +642,9 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                 <div className="mt-3">
                   <KeyValues
                     items={[
-                      { label: "Product", value: selectedRow.product_type ? `${selectedRow.product_line} · ${selectedRow.product_type}` : selectedRow.product_line || "—" },
-                      { label: "Face amount", value: money(selectedRow.face_amount_cents) },
-                      { label: "Monthly premium", value: money(selectedRow.monthly_premium_cents) },
+                      { label: "Product", value: selectedRow.product_type ? `${productName(soldProducts, selectedRow.product_line)} · ${selectedRow.product_type}` : selectedRow.product_line ? productName(soldProducts, selectedRow.product_line) : "—" },
                       { label: "Draft date", value: formatDay(selectedRow.draft_date) },
                       { label: "Phone", value: selectedRow.phone ?? "—" },
-                      { label: "Partner", value: selectedRow.partner_name },
                       { label: "Vendor", value: selectedRow.vendor_name ?? "—" },
                       { label: "Initial quote", value: selectedRow.initial_quote ?? "—" },
                     ]}
@@ -707,7 +713,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           <form onSubmit={createManual} className="grid gap-4 md:grid-cols-3">
             <Field label="Customer name" htmlFor="manual-name" required><input id="manual-name" className={control} required maxLength={160} value={manual.insured_name} onChange={(event) => setManual({ ...manual, insured_name: event.target.value })} /></Field>
             <Field label="Phone" htmlFor="manual-phone"><input id="manual-phone" className={control} maxLength={40} value={manual.phone} onChange={(event) => setManual({ ...manual, phone: event.target.value })} /></Field>
-            <Field label="Product line" htmlFor="manual-product" required><input id="manual-product" className={control} required maxLength={120} value={manual.product_line} onChange={(event) => setManual({ ...manual, product_line: event.target.value })} /></Field>
+            <Field label="Product" htmlFor="manual-product" required><select id="manual-product" className={control} required value={manual.product_line} onChange={(event) => setManual({ ...manual, product_line: event.target.value })}><option value="">Choose a product…</option>{(soldProducts ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}</select></Field>
             <Field label="Agent local date" htmlFor="manual-date" required><input id="manual-date" className={control} required type="date" value={manual.local_date} onChange={(event) => setManual({ ...manual, local_date: event.target.value })} /></Field>
             <Field label="Partner" htmlFor="manual-partner"><select id="manual-partner" className={control} value={manual.partner_id} onChange={(event) => setManual({ ...manual, partner_id: event.target.value })}><option value="">No partner</option>{data.options.partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}</select></Field>
             <Field label="Carrier" htmlFor="manual-carrier"><input id="manual-carrier" className={control} maxLength={160} value={manual.carrier} onChange={(event) => setManual({ ...manual, carrier: event.target.value })} /></Field>

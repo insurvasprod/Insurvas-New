@@ -328,7 +328,7 @@ const MEMBER_STEPS: readonly MemberStepDefinition[] = [
   { key: "first-call", module: "work", label: "Call your first lead", path: "/app/dialer", action: "Open the dialer", feature: "outbound_dialing", roles: ["producer", "setter"], page: "leads.dialer", target: "dialer-next",
     instruction: "Take the next lead in your queue and call it.",
     why: "Your queue holds the leads assigned to you, inside the agency's calling hours." },
-  { key: "first-transfer", module: "work", label: "Claim your first transfer", path: "/app/inbound", action: "Open the inbox", feature: "inbound_transfers", roles: ["producer", "assistant"], page: "leads.inbound", target: "inbound-claim",
+  { key: "first-transfer", module: "work", label: "Take your first caller", path: "/app/inbound", action: "Open Inbound", feature: "inbound_transfers", roles: ["producer", "assistant"], page: "leads.inbound", target: "inbound-claim",
     instruction: "Claim the next transfer waiting in the inbox.",
     why: "An unclaimed transfer escalates after a few minutes, so claim it fast." },
   { key: "first-outcome", module: "work", label: "Record a call outcome", path: "/app/dialer", action: "Open the dialer", feature: "outbound_dialing", roles: ["producer", "setter"], page: "leads.dialer", target: "disposition-open",

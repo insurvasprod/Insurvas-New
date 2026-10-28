@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS, PRODUCT_CODE_RULE, type ProductRow } from "@/lib/products/constants";
+import { inputControl } from "@/components/ui/field";
 
 export function ProductDialog({
   mode,
@@ -74,10 +74,7 @@ export function ProductDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="product-category">Category</Label>
-              <Select value={category} onValueChange={(value) => setCategory(value as ProductRow["category"])}>
-                <SelectTrigger id="product-category" className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>{PRODUCT_CATEGORIES.map((item) => <SelectItem key={item} value={item}>{PRODUCT_CATEGORY_LABELS[item]}</SelectItem>)}</SelectContent>
-              </Select>
+              <select id="product-category" className={inputControl} value={category} onChange={(event) => { const value = event.target.value; setCategory(value as ProductRow["category"]); }}>{PRODUCT_CATEGORIES.map((item) => <option key={item} value={item}>{PRODUCT_CATEGORY_LABELS[item]}</option>)}</select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="product-description">Description</Label>

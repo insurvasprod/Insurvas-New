@@ -39,7 +39,7 @@ export type DispositionSettingsRow = Disposition & {
    */
   next: NextActionSetting | null;
   /** The stage this outcome moves the lead to (stage_dispositions), if it is mapped. */
-  mapped_stage: { id: string; name: string; stage_type: string; pipeline_id: string; pipeline_name: string } | null;
+  mapped_stage: { id: string; name: string; stage_type: string; pipeline_id: string; pipeline_name: string; /** The stage's colour on the pipeline board. */ color?: string | null } | null;
 };
 
 export type DispositionOption = {

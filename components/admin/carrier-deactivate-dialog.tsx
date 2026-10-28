@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { btn, Callout, control, Field } from "@/components/app/settings/primitives";
+import { Callout, control, Field } from "@/components/app/settings/primitives";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import {
   blockingSentence,
@@ -13,6 +13,7 @@ import {
   type CarrierBlockingUsage,
 } from "@/lib/carriers/usage";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * Shown when a carrier tenants use is deactivated (user decision: blocked, super admin may override
@@ -108,18 +109,18 @@ export function CarrierDeactivateDialog({
             )}
 
             <DialogFooter>
-              <button type="button" onClick={onClose} disabled={saving} className={btn("ghost")}>
+              <Button type="button" onClick={onClose} disabled={saving} variant="ghost">
                 {canOverride ? "Cancel" : "Close"}
-              </button>
+              </Button>
               {canOverride && (
-                <button
+                <Button
                   type="submit"
                   disabled={saving || !reasonOk}
                   title={!reasonOk ? `Give a reason of at least ${OVERRIDE_REASON_MIN} characters` : undefined}
-                  className={cn(btn("primary"), "bg-[var(--error)] text-[var(--on-error)] hover:bg-[var(--error-ink)]")}
+                  variant="destructive"
                 >
                   {saving ? "Deactivating…" : "Deactivate anyway"}
-                </button>
+                </Button>
               )}
             </DialogFooter>
           </form>

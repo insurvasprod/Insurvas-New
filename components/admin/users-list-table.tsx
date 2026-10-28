@@ -7,12 +7,12 @@ import { ArrowDown, ArrowUp, MoreHorizontal, TriangleAlert, X } from "lucide-rea
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { btn, st, pillTone } from "@/components/app/settings/primitives";
+import { st, pillTone } from "@/components/app/settings/primitives";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -294,7 +294,7 @@ export function UsersListTable({
                   </option>
                 ))}
               </select>
-              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={panelCount} />
+              <FilterButton open={filtersOpen} controls={`${ids}-filters`} onClick={() => setFiltersOpen((open) => !open)} count={panelCount} />
               {chips.map((chip) => (
                 <span
                   key={chip.key}
@@ -315,8 +315,7 @@ export function UsersListTable({
                 {total.toLocaleString("en-US")} of {stats.rows.toLocaleString("en-US")} users
               </span>
             </DataToolbar>
-            {filtersOpen && (
-              <div id={`${ids}-filters`} className="flex w-full flex-wrap items-center gap-2 border-t border-border pt-3">
+            <FilterPanel id={`${ids}-filters`} open={filtersOpen} className="flex w-full flex-wrap items-center gap-2 border-t border-b-0 px-0 pb-0 pt-3">
                 <select aria-label="Plan" value={facets.plan} onChange={(event) => setFacet("plan", event.target.value)} className={toolbarControl}>
                   <option value="">Any plan</option>
                   {planCodes.map((code) => (
@@ -376,8 +375,7 @@ export function UsersListTable({
                   <option value="desc">Descending</option>
                   <option value="asc">Ascending</option>
                 </select>
-              </div>
-            )}
+              </FilterPanel>
           </>
         }
       >
@@ -482,7 +480,7 @@ export function UsersListTable({
                   </td>
                   <td className={cn(st.td, "text-right")}>
                     <span className="inline-flex items-center justify-end gap-2">
-                      <Link href={`/admin/users/${user.id}`} className={btn("secondary")}>
+                      <Link href={`/admin/users/${user.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
                         View
                       </Link>
                       {canManage && (

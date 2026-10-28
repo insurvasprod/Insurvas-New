@@ -2,18 +2,22 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { PageHeaderActions } from "./page-header-actions";
+
 /**
  * The top of every page, in one shape.
  *
- * Title on the ramp, one line of description, actions on the right. The eyebrow is the uppercase
- * label style and carries the section a page belongs to — the thing a breadcrumb would say on a
- * detail page and a category says on a list.
+ * No visible title (owner 2026-10-28): the top bar's breadcrumb already says where you are, so the
+ * page no longer repeats its own name. The title is still the page's `<h1>`, visually hidden, so a
+ * screen reader lands on it and the bar can read it (`data-page-title`) where a shell has no menu
+ * of its own to name the page. The one line of description goes with it, hidden the same way.
  *
- * One size. Every artboard in the system draws its page title at 32px/1.13/-0.025em, from the
- * dashboard to the smallest settings tab, and the description under it at 16px — because a reader
- * who lands on a list and a reader who lands on the dashboard are asking the same question, and a
- * title that changes size between them reads as a different kind of screen. `size` is kept so no
- * caller has to change, and both values now render the same type.
+ * What stays on screen is the actions. When the page's own tabs or step bar come straight after the
+ * header (anything marked `data-page-lead`: ViewTabs, UnderlineTabs, the Inbound step bar), the
+ * actions sit on that row, on the right, from md up; otherwise they are one row at the top, on the
+ * right. A header with no actions takes no space at all.
+ *
+ * `size` and `eyebrow` are kept so no caller has to change.
  */
 export function PageHeader({
   title,
@@ -23,13 +27,10 @@ export function PageHeader({
   size = "page",
   className,
 }: {
-  /**
-   * Accepted and ignored (2026-09-28 review): the eyebrow repeated the page's section, which the
-   * sidebar already shows, so a page read its own name twice or three times. One title per page.
-   */
+  /** Accepted and ignored (2026-09-28 review): one title per page, and now that one is hidden too. */
   eyebrow?: string;
   title: string;
-  /** An (i) beside the title that says what the page is for, when its name alone may not (an <InfoTip>). */
+  /** Optional help tip retained beside the page actions when the visible title moves to the top bar. */
   titleInfo?: ReactNode;
   description?: string;
   actions?: ReactNode;
@@ -37,24 +38,13 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-end justify-between gap-4", className)}>
-      <div className="min-w-0">
-        {/* The display face (Inter Tight, foundation v3): narrower than the body face at this size. */}
-        <div className="flex items-center gap-2">
-          <h1 data-size={size} className="font-[family-name:var(--font-display)] text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]">
-            {title}
-          </h1>
-          {titleInfo}
-        </div>
-        {description && (
-          <p className="mt-1.5 max-w-[720px] text-base leading-[1.5] tracking-[-0.02em] text-muted-foreground">
-            {description}
-          </p>
-        )}
-      </div>
-      {/* max-w-full, not shrink-0: a fixed-width row never wraps, so on a phone the last action ran
-          off the screen and was clipped (Policies' Import, 2026-10-03). Now the row wraps instead. */}
-      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
+    <div className={cn("m-page-header", className)} data-has-actions={actions ? "" : undefined}>
+      {/* The display face (Inter Tight, foundation v3) if it is ever shown again; sr-only for now. */}
+      <h1 data-page-title data-size={size} className="sr-only font-[family-name:var(--font-display)] text-page text-[var(--ink)]">
+        {title}
+      </h1>
+      {description && <p className="sr-only">{description}</p>}
+      {(titleInfo || actions) && <PageHeaderActions>{titleInfo}{actions}</PageHeaderActions>}
     </div>
   );
 }

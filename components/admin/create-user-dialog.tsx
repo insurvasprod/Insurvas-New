@@ -15,16 +15,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TENANT_ROLES, TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
 import type { PlanListRow } from "@/lib/plans/constants";
 import { InviteLinkPanel } from "./invite-link-panel";
+import { inputControl } from "@/components/ui/field";
 
 export type TenantOption = { id: string; name: string };
 
@@ -172,11 +166,7 @@ export function CreateUserDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="user-tenant">Tenant</Label>
-                <Select value={form.tenantId} onValueChange={chooseTenant}>
-                  <SelectTrigger id="user-tenant" className="w-full">
-                    <SelectValue placeholder="Choose…" />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select id="user-tenant" className={inputControl} value={form.tenantId} onChange={(event) => chooseTenant(event.target.value)}><option value="" disabled>Choose…</option>
                     {/*
                       The action goes before the data, not after it. This list is every tenant on
                       the platform — 563 entries on 2026-09-21 — and "+ Create new tenant" sat at
@@ -187,30 +177,24 @@ export function CreateUserDialog({
                       ("sales closes a deal on a call and wants the account ready before hanging
                       up"), and it is also the only route to the plan picker below.
                     */}
-                    <SelectItem value={NEW_TENANT}>+ Create new tenant</SelectItem>
+                    <option value={NEW_TENANT}>+ Create new tenant</option>
                     {tenants.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
+                      <option key={t.id} value={t.id}>
                         {t.name}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
               </div>
               {creatingNewTenant && (
                 <div className="space-y-1.5">
                   <Label htmlFor="user-plan">Initial plan</Label>
-                  <Select value={form.planId} onValueChange={(v) => set("planId", v)}>
-                    <SelectTrigger id="user-plan" className="w-full">
-                      <SelectValue placeholder="Choose a plan…" />
-                    </SelectTrigger>
-                    <SelectContent>
+                  <select id="user-plan" className={inputControl} value={form.planId} onChange={(event) => { const v = event.target.value; set("planId", v); }}><option value="" disabled>Choose a plan…</option>
                       {plans.map((plan) => (
-                        <SelectItem key={plan.id} value={plan.id}>
+                        <option key={plan.id} value={plan.id}>
                           {plan.name} ({plan.code}, v{plan.version})
-                        </SelectItem>
+                        </option>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </select>
                   {/*
                     The trial half of this sentence was missing, and the omission had a price. A
                     plan with trial days produces a subscription in `trialing`, not `active` — so
@@ -228,18 +212,13 @@ export function CreateUserDialog({
               )}
               <div className="space-y-1.5">
                 <Label htmlFor="user-role">Role in tenant</Label>
-                <Select value={form.role} onValueChange={(v) => set("role", v as TenantRole)} disabled={creatingNewTenant}>
-                  <SelectTrigger id="user-role" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select id="user-role" className={inputControl} value={form.role} onChange={(event) => { const v = event.target.value; set("role", v as TenantRole); }} disabled={creatingNewTenant}>
                     {TENANT_ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
+                      <option key={r} value={r}>
                         {TENANT_ROLE_LABELS[r]}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
                 {creatingNewTenant && <p className="text-xs text-muted-foreground">The first member of a new tenant is always its owner.</p>}
               </div>
               {creatingNewTenant && (

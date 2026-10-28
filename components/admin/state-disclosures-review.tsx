@@ -4,7 +4,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState } from "react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Callout, Field, KeyValues, btn, control, st, pillTone } from "@/components/app/settings/primitives";
+import { Callout, Field, KeyValues, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -126,9 +126,9 @@ export function StateDisclosuresReviewCard({
                   <When iso={proposal.proposed_at} />
                 </td>
                 <td className={cn(st.td, "text-right")}>
-                  <button type="button" className={btn("row")} onClick={() => setOpen(proposal)}>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(proposal)}>
                     {proposal.proposed_by === currentAdminId && !proposals.selfApprovalAllowed ? "Open" : "Review"}
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -148,9 +148,9 @@ export function StateDisclosuresReviewCard({
                       </span>
                     </td>
                     <td className={cn(st.td, "text-right")}>
-                      <button type="button" className={btn("row")} onClick={() => setOpen(proposal)}>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(proposal)}>
                         View
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 );
@@ -392,45 +392,45 @@ function ReviewDialog({
         )}
 
         <DialogFooter>
-          <button type="button" className={btn("ghost")} onClick={onClose} disabled={Boolean(busy)}>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={Boolean(busy)}>
             {pending ? "Cancel" : "Close"}
-          </button>
+          </Button>
           {pending && mine && (
-            <button type="button" className={btn("secondary")} onClick={() => decide("cancel")} disabled={Boolean(busy)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => decide("cancel")} disabled={Boolean(busy)}>
               {busy === "cancel" ? "Withdrawing…" : "Withdraw proposal"}
-            </button>
+            </Button>
           )}
           {pending && selfApprove && (
-            <button
+            <Button
               type="button"
-              className={btn("primary")}
+              
               onClick={() => decide("approve")}
               disabled={Boolean(busy) || approveBlocker !== null}
               title={approveBlocker ?? undefined}
             >
               {busy === "approve" ? "Publishing…" : "Approve my own proposal"}
-            </button>
+            </Button>
           )}
           {pending && !mine && (
             <>
-              <button
+              <Button
                 type="button"
-                className={btn("secondary")}
+                variant="outline" size="sm"
                 onClick={() => decide("reject")}
                 disabled={Boolean(busy) || note.trim().length === 0}
                 title={note.trim().length === 0 ? "Add a review note saying why" : undefined}
               >
                 {busy === "reject" ? "Rejecting…" : "Reject"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={btn("primary")}
+                
                 onClick={() => decide("approve")}
                 disabled={Boolean(busy) || approveBlocker !== null}
                 title={approveBlocker ?? undefined}
               >
                 {busy === "approve" ? "Publishing…" : "Approve and publish"}
-              </button>
+              </Button>
             </>
           )}
         </DialogFooter>

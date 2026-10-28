@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Callout, SettingsCard, SettingsGrid, ToggleRow, control } from "@/components/app/settings/primitives";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import type { LadderValues } from "@/lib/queueSla/ladder";
 import { cn } from "@/lib/utils";
 
@@ -143,6 +144,7 @@ export function InboundSettingsCards({ inbound, disabled }: { inbound: ReturnTyp
   const set = (patch: Partial<InboundSettings>) => inbound.setDraft((current) => (current ? { ...current, ...patch } : current));
   return (
     <>
+      <LeaveGuard dirty={inbound.dirty} onSave={inbound.save} onDiscard={inbound.reset} what="the inbound settings" />
       {!loaded.ready && <Callout tone="warning" title="Alerts, buffer handoff and routing need a database update before they can be changed. Until then transfers work as they always have." />}
       {inbound.error && <Callout tone="error" title={inbound.error} />}
       <SettingsGrid cols={3}>

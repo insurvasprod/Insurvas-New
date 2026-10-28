@@ -8,15 +8,9 @@ import { notify } from "@/lib/notify";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import type { AddonRow, AttachedAddon } from "@/lib/addons/constants";
+import { inputControl } from "@/components/ui/field";
 
 export function AddonsPanel({
   subscriptionId,
@@ -132,19 +126,12 @@ export function AddonsPanel({
 
         <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
           <div className="min-w-[220px] flex-1">
-            <Select value={selected} onValueChange={setSelected}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={attachable.length ? "Add an add-on…" : "Nothing available to attach"} />
-              </SelectTrigger>
-              <SelectContent>
-                {attachable.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name} — {formatCentsAsCurrency(a.price_cents)}
-                    {!available.has(a.id) && " · not on this plan"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select aria-label="Add-on to attach" className={inputControl} value={selected} onChange={(event) => setSelected(event.target.value)}>
+              <option value="" disabled>{attachable.length ? "Add an add-on…" : "Nothing available to attach"}</option>
+              {attachable.map((a) => (
+                <option key={a.id} value={a.id}>{`${a.name} — ${formatCentsAsCurrency(a.price_cents)}${available.has(a.id) ? "" : " · not on this plan"}`}</option>
+              ))}
+            </select>
           </div>
           <Button size="sm" disabled={busy || !selected} onClick={attach}>
             {needsOverride ? "Attach anyway" : "Attach"}

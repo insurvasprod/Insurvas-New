@@ -9,7 +9,7 @@ import { DateTimePicker } from "@/components/app/settings/date-time-picker";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
-import { Callout, DashedCard, DraftActions, Field, PlusIcon, SettingsCard, SettingsSectionHeader, SettingsStack, SettingsTableCard, Switch, btn, control, st } from "@/components/app/settings/primitives";
+import { Callout, DashedCard, DraftActions, Field, PlusIcon, SettingsCard, SettingsSectionHeader, SettingsStack, SettingsTableCard, Switch, control, st } from "@/components/app/settings/primitives";
 import { ViewTabs, type ViewTab } from "@/components/ui/view-tabs";
 import {
   BLOCK_REPEATS,
@@ -26,6 +26,9 @@ import {
   type CalendarProviderView,
 } from "@/lib/appointments/linkedCalendarsShared";
 import { cn } from "@/lib/utils";
+import { cardHead, glass } from "@/components/ui/card";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 
 /**
  * LA-2.11 · Calendar & availability.
@@ -105,8 +108,6 @@ function withCurrent(options: number[], current: number) {
 
 type BlockEditor = { index: number | null; draft: Block };
 /** Frosted glass, as on Settings › Carriers (owner, 2026-10-27): the page's glow shows through every card. */
-const GLASS = "bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
-const GLASS_HEAD = "bg-[color-mix(in_srgb,var(--surface-alt)_45%,transparent)]";
 /** The five views of the page, one at a time (owner pick C, 2026-10-26). */
 type CalendarTab = "hours" | "appointments" | "blocks" | "rules" | "agency";
 
@@ -287,40 +288,9 @@ export function CalendarAvailabilitySettings() {
     }
   }
 
-  // Unsaved changes stop a move away (owner, 2026-10-27): a reload or closed tab gets the browser's
-  // own prompt; a click on any link, or on another Settings section, outside this page is held and
-  // the owner chooses Save changes, Discard or Stay. The click is replayed once they have chosen.
+  // Unsaved changes stop a move away (owner, 2026-10-27): <LeaveGuard> below, the shared guard this
+  // page's own one became. Clicks inside rootRef are the page's own.
   const rootRef = useRef<HTMLDivElement>(null);
-  const replaying = useRef(false);
-  const [leaving, setLeaving] = useState<HTMLElement | null>(null);
-  const [leaveSaving, setLeaveSaving] = useState(false);
-  useEffect(() => {
-    if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); };
-    const onClick = (event: MouseEvent) => {
-      if (replaying.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const target = (event.target as Element | null)?.closest?.("a[href], [role='tab']");
-      if (!(target instanceof HTMLElement) || rootRef.current?.contains(target)) return;
-      if (target instanceof HTMLAnchorElement && (target.target === "_blank" || target.hasAttribute("download"))) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setLeaving(target);
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    document.addEventListener("click", onClick, true);
-    return () => {
-      window.removeEventListener("beforeunload", beforeUnload);
-      document.removeEventListener("click", onClick, true);
-    };
-  }, [dirty]);
-  function leaveNow() {
-    const target = leaving;
-    setLeaving(null);
-    if (!target) return;
-    replaying.current = true;
-    target.click();
-    replaying.current = false;
-  }
 
   const header = (
     <SettingsSectionHeader
@@ -345,9 +315,9 @@ export function CalendarAvailabilitySettings() {
         {header}
         <Callout tone="error" title="Could not load the calendar settings">
           <span className="block">{error}</span>
-          <button type="button" className={btn("secondary", "mt-3")} onClick={() => { setLoading(true); void load(); }}>
+          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => { setLoading(true); void load(); }}>
             Try again
-          </button>
+          </Button>
         </Callout>
       </SettingsStack>
     );
@@ -398,17 +368,17 @@ export function CalendarAvailabilitySettings() {
             const current = member.userId === draft.userId;
             const days = new Set((edits[member.userId] ?? member).hours.map((hour) => hour.weekday)).size;
             return (
-              <button
+              <Button
                 key={member.userId}
                 type="button"
                 aria-pressed={current}
-                className={btn("secondary", current ? "border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : "")}
+                variant="outline" size="sm" className={current ? "border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : ""}
                 onClick={() => { setSelected(member.userId); setSaveError(""); }}
               >
                 {member.name}
                 <span className={cn("text-xs font-normal", days ? "text-[var(--muted)]" : "text-[var(--warning-ink)]")}>{days ? `${days} ${days === 1 ? "day" : "days"}` : "No hours"}</span>
                 {edits[member.userId] && <span className="sr-only">, unsaved changes</span>}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -425,8 +395,8 @@ export function CalendarAvailabilitySettings() {
       <div id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-tab-${view}`}>
         {view === "hours" && (
           <SettingsTableCard
-            className={GLASS}
-            headerClassName={GLASS_HEAD}
+            className={glass}
+            headerClassName={cardHead}
             title="Working hours"
             actions={
               <span className="relative inline-flex">
@@ -455,18 +425,18 @@ export function CalendarAvailabilitySettings() {
               <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3">
                 <span className="text-xs text-[var(--muted)]">Quick start</span>
                 {presets.map((preset) => (
-                  <button
+                  <Button
                     key={preset.label}
                     type="button"
-                    className={btn("secondary")}
+                    variant="outline" size="sm"
                     disabled={busy}
                     onClick={() => setHours(preset.days.map((weekday) => ({ weekday, startTime: preset.from, endTime: preset.to })))}
                   >
                     {preset.label}
-                  </button>
+                  </Button>
                 ))}
                 {draft.hours.length > 0 && (
-                  <button type="button" className={btn("row")} disabled={busy} onClick={() => setHours([])}>Clear all</button>
+                  <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setHours([])}>Clear all</Button>
                 )}
               </div>
             )}
@@ -501,11 +471,11 @@ export function CalendarAvailabilitySettings() {
         )}
 
         {view === "appointments" && (
-          <SettingsCard title="Appointments" className={GLASS}>
+          <SettingsCard title="Appointments" className={glass}>
             <div className="flex flex-col gap-5">
               <ChipField label="Length" hint="How long one appointment takes.">
                 {withCurrent(LENGTHS, length).map((minutes) => (
-                  <Chip key={minutes} on={minutes === length} disabled={busy} onClick={() => setPolicy({ appointmentMinutes: minutes })}>{minutes} min</Chip>
+                  <ToggleChip key={minutes} selected={minutes === length} disabled={busy} onClick={() => setPolicy({ appointmentMinutes: minutes })}>{minutes} min</ToggleChip>
                 ))}
               </ChipField>
               <ChipField
@@ -513,7 +483,7 @@ export function CalendarAvailabilitySettings() {
                 hint={buffer > 0 ? `Added after each one, so a ${length}-minute appointment takes ${length + buffer} minutes of the day.` : "No gap: one appointment may start the minute the previous one ends."}
               >
                 {withCurrent(BUFFERS, buffer).map((minutes) => (
-                  <Chip key={minutes} on={minutes === buffer} disabled={busy} onClick={() => setPolicy({ bufferMinutes: minutes })}>{minutes ? `${minutes} min` : "None"}</Chip>
+                  <ToggleChip key={minutes} selected={minutes === buffer} disabled={busy} onClick={() => setPolicy({ bufferMinutes: minutes })}>{minutes ? `${minutes} min` : "None"}</ToggleChip>
                 ))}
               </ChipField>
             </div>
@@ -523,14 +493,14 @@ export function CalendarAvailabilitySettings() {
         {view === "blocks" && (
           <PagedProvider>
           <SettingsTableCard
-            className={GLASS}
-            headerClassName={GLASS_HEAD}
+            className={glass}
+            headerClassName={cardHead}
             title="Time off & breaks"
             actions={
               editable ? (
-                <button
+                <Button
                   type="button"
-                  className={btn("secondary")}
+                  variant="outline" size="sm"
                   disabled={saving}
                   onClick={() => {
                     const start = new Date(Math.ceil((Date.now() + 1) / 3_600_000) * 3_600_000);
@@ -539,7 +509,7 @@ export function CalendarAvailabilitySettings() {
                   }}
                 >
                   <PlusIcon />Block some time
-                </button>
+                </Button>
               ) : undefined
             }
           >
@@ -575,24 +545,24 @@ export function CalendarAvailabilitySettings() {
                         <td className={cn(st.td, st.num, "whitespace-nowrap")}>
                           {editable && (
                             <>
-                              <button
+                              <Button
                                 type="button"
-                                className={btn("row")}
+                                variant="ghost" size="sm"
                                 disabled={saving}
                                 aria-label={`Edit ${block.reason || "blocked time"}`}
                                 onClick={() => setBlockEditor({ index, draft: { ...block } })}
                               >
                                 Edit
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                 type="button"
-                                className={btn("row")}
+                                variant="ghost" size="sm"
                                 disabled={saving}
                                 aria-label={`Remove ${block.reason || "blocked time"}`}
                                 onClick={() => setBlocks(draft.blocks.filter((_, position) => position !== index))}
                               >
                                 Remove
-                              </button>
+                              </Button>
                             </>
                           )}
                         </td>
@@ -612,7 +582,7 @@ export function CalendarAvailabilitySettings() {
         )}
 
         {view === "rules" && (
-          <SettingsTableCard title="Booking rules" className={GLASS} headerClassName={GLASS_HEAD}>
+          <SettingsTableCard title="Booking rules" className={glass} headerClassName={cardHead}>
             {!schemaReady && (
               <p role="status" className="m-0 border-b border-[var(--border)] px-4 py-3 text-xs text-[var(--warning-ink)]">
                 Same-day booking, linked calendars and repeating blocked time can be changed once a pending database update is applied.
@@ -638,7 +608,7 @@ export function CalendarAvailabilitySettings() {
         )}
 
         {view === "agency" && (
-          <SettingsCard title="Whole agency" className={GLASS}>
+          <SettingsCard title="Whole agency" className={glass}>
             <div className="flex flex-col gap-5">
               <p className="m-0 text-xs text-[var(--muted)]">These apply to every agent, not only {draft.name}. Only an owner can change them.</p>
               <Field
@@ -713,32 +683,7 @@ export function CalendarAvailabilitySettings() {
         }}
       />
 
-      <Dialog open={leaving !== null} onOpenChange={(open) => { if (!open && !leaveSaving) setLeaving(null); }}>
-        <DialogContent aria-describedby={undefined} className="border-[var(--border)] bg-[var(--surface)] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[var(--ink)]">Save your changes?</DialogTitle>
-          </DialogHeader>
-          <p className="m-0 text-sm text-[var(--body)]">You changed {draft.name}&rsquo;s calendar and have not saved it yet.</p>
-          <div className="flex flex-wrap justify-end gap-2.5">
-            <Button type="button" variant="ghost" disabled={leaveSaving} onClick={() => setLeaving(null)}>Stay</Button>
-            <Button type="button" variant="outline" disabled={leaveSaving} onClick={() => { discard(); leaveNow(); }}>Discard changes</Button>
-            <Button
-              type="button"
-              disabled={leaveSaving}
-              onClick={() => {
-                setLeaveSaving(true);
-                void save().then((ok) => {
-                  setLeaveSaving(false);
-                  if (ok) leaveNow();
-                  else setLeaving(null);
-                });
-              }}
-            >
-              {leaveSaving ? "Saving…" : "Save changes"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <LeaveGuard dirty={dirty} scope={rootRef} onSave={save} onDiscard={discard} what={`${draft.name}’s calendar`} />
     </SettingsStack>
     </div>
   );
@@ -748,27 +693,10 @@ export function CalendarAvailabilitySettings() {
 function ChipField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div role="group" aria-label={label}>
-      <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{label}</span>
+      <span className="block text-label text-[var(--body)]">{label}</span>
       <div className="mt-2 flex flex-wrap gap-2">{children}</div>
       {hint && <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">{hint}</span>}
     </div>
-  );
-}
-
-function Chip({ on, disabled, onClick, children }: { on: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "h-8 rounded-full px-3 text-sm font-semibold tracking-[-0.01em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
-        on ? "border-[1.5px] border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] text-[var(--body)] hover:border-[var(--accent-ink)]",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -867,7 +795,7 @@ function LinkedCalendarRow({
           const configured = (linked?.providers ?? []).some((item) => item.id === id && item.configured);
           const failed = connection?.status === "error";
           return (
-            <div key={id} className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_40%,transparent)] px-3 py-2">
+            <div key={id} className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] m-glass-inset px-3 py-2">
               <Mark />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-[var(--ink)]">{name}</span>
@@ -885,21 +813,21 @@ function LinkedCalendarRow({
               </span>
               {editable && connection && (
                 <span className="inline-flex shrink-0 gap-1">
-                  <button type="button" className={btn("row")} disabled={Boolean(working)} onClick={() => onAction("sync", connection.id)}>
+                  <Button type="button" variant="ghost" size="sm" disabled={Boolean(working)} onClick={() => onAction("sync", connection.id)}>
                     {working === `sync:${connection.id}` ? "…" : "Refresh"}
-                  </button>
-                  <button type="button" className={btn("danger-row")} disabled={Boolean(working)} onClick={() => onAction("unlink", connection.id)}>Unlink</button>
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={Boolean(working)} onClick={() => onAction("unlink", connection.id)}>Unlink</Button>
                 </span>
               )}
               {editable && !connection && (
-                <button
+                <Button
                   type="button"
-                  className={btn("secondary", "shrink-0")}
+                  variant="outline" size="sm" className="shrink-0"
                   disabled={Boolean(working) || !ready || !configured}
                   onClick={() => onAction("connect", id)}
                 >
                   {working === `connect:${id}` ? "Opening…" : "Connect"}
-                </button>
+                </Button>
               )}
             </div>
           );
@@ -984,9 +912,9 @@ function DayRow({
           </span>
         ))}
         {open && editable && (
-          <button type="button" className={btn("row")} disabled={disabled} onClick={onAdd}>
+          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={onAdd}>
             <PlusIcon />Add hours
-          </button>
+          </Button>
         )}
         {inverted && <p role="alert" className="m-0 w-full text-xs text-[var(--error-ink)]">Hours have to close after they open.</p>}
       </div>
@@ -1086,10 +1014,10 @@ function BlockForm({
       </Field>
       {problem && from && to && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{problem}</p>}
       <div className="flex justify-end gap-2.5">
-        <button type="button" className={btn("ghost")} onClick={onClose}>Cancel</button>
-        <button type="submit" className={btn("primary")} disabled={Boolean(problem)}>
+        <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button type="submit"  disabled={Boolean(problem)}>
           {editor.index === null ? "Add block" : "Update block"}
-        </button>
+        </Button>
       </div>
     </form>
   );

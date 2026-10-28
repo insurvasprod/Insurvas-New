@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { localClock, zoneShort, type QueuePriority, type ReturnWindow } from "@/lib/dialerScripts/display";
 import { APPLICATION_OUTCOME, type DialerVocabulary } from "@/lib/dialerScripts/outcomes";
+import { Ban, CalendarClock, Circle, CircleHelp, CircleMinus, FileText, PhoneMissed, PhoneOff, ThumbsDown, Unplug, Voicemail, type LucideIcon } from "lucide-react";
 
 export type Lead = { id: string; product_line?: string; values: Record<string, unknown> };
 
@@ -82,6 +83,16 @@ export const RETURNABLE = new Set(["wrong_number", "disconnected"]);
 export const CALLBACK_OUTCOME = "callback_scheduled";
 
 export const DNC_OUTCOME = "do_not_call";
+
+/**
+ * An icon per seeded outcome, so the tiles read at a glance (Dialer A round 2, 2026-10-27). An
+ * outcome a tenant added has none of its own and gets the plain circle.
+ */
+export const OUTCOME_ICONS: Record<string, LucideIcon> = {
+  [APPLICATION_OUTCOME]: FileText, [CALLBACK_OUTCOME]: CalendarClock, not_interested: ThumbsDown, no_answer: PhoneMissed,
+  voicemail: Voicemail, busy: CircleMinus, call_dropped: PhoneOff, wrong_number: CircleHelp, disconnected: Unplug, [DNC_OUTCOME]: Ban,
+};
+export const outcomeIcon = (key: string): LucideIcon => OUTCOME_ICONS[key] ?? Circle;
 
 /** A disposition key as words, for a history row whose outcome the tenant has since removed. */
 export const keyWords = (key: string) => key.replaceAll("_", " ");

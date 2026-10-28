@@ -27,7 +27,8 @@ export type TemplateRowView = {
 };
 
 export type NamedCarrier = { id: string; name: string };
-export type ProductLine = { code: string; name: string };
+/** A catalogue product line. `sold`: the agency sells it (Settings › Products); pickers offer only these, names cover all. */
+export type ProductLine = { code: string; name: string; sold?: boolean };
 
 export type TemplatesPayload = {
   templates: TemplateRowView[];

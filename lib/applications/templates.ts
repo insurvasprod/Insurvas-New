@@ -178,7 +178,8 @@ export function missingRequiredAnswers(questions: InterviewQuestion[], answers: 
     return v !== null && v !== undefined && String(v) === String(q.showWhen.equals);
   };
   const answered = (q: InterviewQuestion) => {
-    if (q.type === "medication_list") return medicationCount > 0;
+    // "none" is the agent's "Takes none" (the interview's Medications section).
+    if (q.type === "medication_list") return medicationCount > 0 || answers[q.key] === "none";
     const v = answers[q.key];
     return !(v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0));
   };

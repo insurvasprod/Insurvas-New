@@ -60,7 +60,8 @@ export function PairDialog({
         )}
         <Field label="Product line" htmlFor="pair-product" required>
           <select id="pair-product" className={control} value={choice.productCode} onChange={(e) => setChoice({ ...choice, productCode: e.target.value })}>
-            {productLines.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+            {/* Only the lines the agency sells (Settings › Products); the one already chosen stays listed. */}
+            {productLines.filter((p) => p.sold !== false || p.code === choice.productCode).map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
           </select>
         </Field>
         <Field label="Carrier" htmlFor="pair-carrier" required={!allowGeneral} hint={carriers.length === 0 ? "Add a carrier in Carriers and products first." : undefined}>

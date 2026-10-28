@@ -29,7 +29,6 @@ import { HomeKpis } from "@/components/app/home/home-kpis";
 import { HomeMoneyCards } from "@/components/app/home/home-money-cards";
 import { HomePanelLoading, KpiRowLoading } from "@/components/app/home/home-panel";
 import { HomeLowerRow, HomeMainRow, type MainRowLinks } from "@/components/app/home/home-rows";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -119,7 +118,7 @@ export default async function AgentDashboardPage() {
   const nothing = !moneyProfile && home.figures.length === 0 && home.needs.length === 0 && !mainLinks.activity && !mainLinks.appointments && !mainLinks.callbacks && modules.length === 0 && !money;
 
   return (
-    <DashboardStage>
+    <>
       <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
         {/* The finish moment, when the last step was done somewhere other than the guide bar: this render stamps it. */}
         {shown.has("setup") && checklist.total > 0 && checklist.complete && !setupProgress.finished ? <SetupCelebration steps={checklist.total} done={checklist.completed} audience="owner" /> : null}
@@ -191,7 +190,7 @@ export default async function AgentDashboardPage() {
           </Card>
         )}
       </div>
-    </DashboardStage>
+    </>
   );
 }
 

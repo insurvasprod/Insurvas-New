@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Callout, pillTone } from "@/components/app/settings/primitives";
 import type { ProductRow } from "@/lib/products/constants";
 import {
@@ -24,6 +23,7 @@ import {
   type TemplateStage,
 } from "@/lib/templates/constants";
 import { TEMPLATE_STATE_LABELS, leadFieldDependents, type TemplateState, type TemplateUsage } from "@/lib/templates/catalog";
+import { inputControl } from "@/components/ui/field";
 
 type Draft = {
   name: string;
@@ -254,7 +254,7 @@ export function TemplateEditorDialog({
           <div className="space-y-6 py-4">
             <section className="rounded-lg border p-4"><h3 className="text-sm font-semibold">Template details</h3><div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5"><Label htmlFor="template-name">Name</Label><Input id="template-name" required value={draft.name} onChange={(event) => updateDraft({ name: event.target.value })} placeholder="Term Life — standard" /></div>
-              <div className="space-y-1.5"><Label htmlFor="template-product">Product</Label><Select value={draft.product_code} onValueChange={(value) => updateDraft({ product_code: value })}><SelectTrigger id="template-product" className="w-full"><SelectValue placeholder="Choose a product" /></SelectTrigger><SelectContent>{products.filter((product) => product.is_active || product.code === draft.product_code).map((product) => <SelectItem key={product.code} value={product.code}>{product.name} ({product.code})</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label htmlFor="template-product">Product</Label><select id="template-product" className={inputControl} value={draft.product_code} onChange={(event) => { const value = event.target.value; updateDraft({ product_code: value }); }}><option value="" disabled>Choose a product</option>{products.filter((product) => product.is_active || product.code === draft.product_code).map((product) => <option key={product.code} value={product.code}>{product.name} ({product.code})</option>)}</select></div>
               <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="template-description">Description</Label><Input id="template-description" value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} placeholder="Optional description for agents" /></div>
             </div></section>
 

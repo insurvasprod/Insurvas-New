@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
  *
  * The glass cards use the two still brand glows for a little depth. Background motion was removed
  * from the SaaS shell so every page has the same quiet canvas.
+ *
+ * Foundation v3 (2026-10-27): the three shell layouts draw it once around every page, so a page
+ * never adds its own.
  */
 export function DashboardStage({ children, className, ambient = true }: { children: ReactNode; className?: string; ambient?: boolean }) {
   return (

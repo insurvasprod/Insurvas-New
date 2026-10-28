@@ -25,6 +25,7 @@ import type { PipelineOption, StageMapView } from "@/lib/salesSettings/stageMap"
 import { cn } from "@/lib/utils";
 
 import { CardFact, DiscardSave, ReadOnlyNotice, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, useSalesSample } from "./shared";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Mapping = Record<PipelineSyncKey, string | null>;
 const UNMAPPED = "Doesn't move the card";
@@ -174,6 +175,7 @@ export function SalesPipelineSync() {
             )}
           </TableCard>
 
+          <LeaveGuard dirty={view.canEdit && dirty} onDiscard={() => { setDraft(saved); setSaveError(null); }} what="the pipeline sync" />
           <SettingsSaveBar visible={view.canEdit && dirty} note={suggestedOnly ? "Filled in from your stage names — nothing moves until you save." : "Unsaved changes to pipeline sync"}>
             <DiscardSave
               saving={saving}

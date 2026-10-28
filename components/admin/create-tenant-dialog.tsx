@@ -15,13 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { PlanListRow } from "@/lib/plans/constants";
 import {
   TENANT_BILLING_CHOICES,
@@ -29,6 +22,7 @@ import {
   TRIAL_DAYS_MAX,
   type TenantBillingChoice,
 } from "@/lib/tenants/createOptions";
+import { inputControl } from "@/components/ui/field";
 
 type Form = {
   tenantName: string;
@@ -168,18 +162,13 @@ export function CreateTenantDialog({ onCreated, plans }: { onCreated: () => void
             </div>
             <div className="col-span-2 space-y-1.5">
               <Label htmlFor="tenant-plan">Plan</Label>
-              <Select value={form.planId} onValueChange={(v) => set("planId", v)}>
-                <SelectTrigger id="tenant-plan" className="w-full">
-                  <SelectValue placeholder="Choose a plan…" />
-                </SelectTrigger>
-                <SelectContent>
+              <select id="tenant-plan" className={inputControl} value={form.planId} onChange={(event) => { const v = event.target.value; set("planId", v); }}><option value="" disabled>Choose a plan…</option>
                   {plans.map((plan) => (
-                    <SelectItem key={plan.id} value={plan.id}>
+                    <option key={plan.id} value={plan.id}>
                       {plan.name} ({plan.code}, v{plan.version})
-                    </SelectItem>
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
             </div>
             <fieldset className="col-span-2 space-y-1.5">
               <legend className="text-sm font-medium">Billing</legend>

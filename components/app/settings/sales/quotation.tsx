@@ -33,6 +33,7 @@ import {
 } from "./shared";
 import { lineageKey, liveOf, tableRows, useSalesTemplates } from "./templates-data";
 import { PairDialog, PublishDialog, RetireDialog } from "./templates-dialogs";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 // The Quote step reads the premium per $1,000 of face and prices the age from the date of birth, so a
 // template without either cannot save a quote. The server refuses one too (templateSchemas).
@@ -239,6 +240,7 @@ export function SalesQuotationTemplates() {
             </SettingsCard>
           )}
 
+          <LeaveGuard dirty={Boolean(selected && !readOnly && dirty)} onDiscard={discard} what="this quotation template" />
           <SettingsSaveBar
             visible={Boolean(selected && !readOnly && dirty)}
             note={selected?.status === "draft" ? `Unsaved changes to ${carrierLabel(selected)} · ${productLabel(selected)}` : `Unsaved changes — saving makes version ${nextVersion}, a draft`}
@@ -257,7 +259,7 @@ export function SalesQuotationTemplates() {
           productLines={payload.productLines}
           allowGeneral={false}
           withName={false}
-          initial={{ productCode: payload.productLines[0]?.code ?? "final_expense", carrierId: payload.carriers[0]?.id ?? null, name: "" }}
+          initial={{ productCode: (payload.productLines.find((p) => p.sold !== false) ?? payload.productLines[0])?.code ?? "final_expense", carrierId: payload.carriers[0]?.id ?? null, name: "" }}
           problem={(c) => (all.some((x) => x.tenantOwned && x.productCode === c.productCode && x.carrierId === c.carrierId) ? "That pair already has a template. Edit it from the table." : null)}
           onClose={() => setDialog(null)}
           onSubmit={async (c) => {

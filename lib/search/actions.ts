@@ -33,7 +33,7 @@ export type WorkspaceAction = {
 export const WORKSPACE_ACTIONS: readonly WorkspaceAction[] = [
   { key: "serve-next", title: "Serve the next lead", meta: "Dialer", href: "/app/dialer", menuKey: "leads.dialer", keywords: ["call", "dial", "next lead", "start calling"] },
   { key: "import-list", title: "Import a lead list", meta: "List import", href: "/app/import", menuKey: "leads.import", keywords: ["upload", "csv", "import leads", "new list"] },
-  { key: "claim-transfer", title: "Take the next transfer", meta: "Inbound inbox", href: "/app/inbound", menuKey: "leads.inbound", keywords: ["claim", "transfer", "inbound", "pick up"] },
+  { key: "claim-transfer", title: "Take the next caller", meta: "Inbound", href: "/app/inbound", menuKey: "leads.inbound", keywords: ["claim", "transfer", "inbound", "pick up"] },
   { key: "book-callback", title: "Book a callback", meta: "Callbacks", href: "/app/callbacks", menuKey: "sell.callbacks", keywords: ["callback", "call back", "reschedule"] },
   { key: "book-appointment", title: "Book an appointment", meta: "Calendar", href: "/app/calendar", menuKey: "sell.calendar", keywords: ["appointment", "schedule", "meeting", "book"] },
   { key: "add-lead", title: "Add a lead", meta: "Lead workspace", href: "/app/leads", menuKey: "leads.workspace", keywords: ["new lead", "create lead", "contact"] },

@@ -75,6 +75,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     search_keywords: ["profile", "my name", "phone number", "avatar", "photo", "licence number", "npn", "security", "alerts", "notifications", "email alerts", "browser alerts", "push", "digest", "daily email", "weekly email", "too many emails"],
     items: [
       { label: "Display timezone", anchor: "profile-timezone", keywords: ["my timezone", "time zone", "display time"] },
+      { label: "Languages I speak", anchor: "profile-languages", keywords: ["language", "languages", "spanish", "bilingual", "speak"] },
       { label: "Sign-in email", anchor: "security-email", keywords: ["change email", "email address", "login email"] },
       { label: "Password", anchor: "security-password", keywords: ["change password", "reset password"] },
       { label: "Two-factor authentication", anchor: "security-two-factor", keywords: ["2fa", "two factor", "authenticator", "mfa", "recovery codes"] },
@@ -102,6 +103,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       { label: "Partner support contact", anchor: "identity-partner-support", keywords: ["support contact", "partner support", "support email", "support phone"] },
       { label: "Ownership", anchor: "identity-ownership", keywords: ["owner", "workspace owner", "workspace id"] },
     ],
+  },
+  {
+    // Owner pick A, 2026-10-27: the products the agency sells, from the Insurvas catalogue and within the plan.
+    group: "Agency", id: "products", label: "Products", sort_order: 15, owned_by_module: "LA-1.3", required_roles: OWNER,
+    description: "The products your agency sells, from the Insurvas catalogue and within your plan. Leads, partners, forms, quotes and reports offer only these.",
+    short: "Which products your agency sells.",
+    search_keywords: ["products", "product", "final expense", "term life", "whole life", "iul", "medicare", "annuity", "what we sell", "product lines", "products you sell"],
+    items: [{ label: "Products you sell", anchor: "products-list", keywords: ["products you sell", "sell", "turn on", "turn off"] }],
   },
   { group: "Agency", id: "team-access", label: "Team & access", sort_order: 20, owned_by_module: "LA-0.2", required_roles: OWNER, description: "Owners, licensed agents, setters, assistants and bookkeepers — and the boundary each one works inside.", short: "Who is on the workspace, their role and where they are licensed.", search_keywords: ["team", "users", "staff", "invite", "seats", "roles", "members", "deactivate"] },
   {

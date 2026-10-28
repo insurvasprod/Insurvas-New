@@ -1,6 +1,4 @@
-// The fixed set of actions this app currently logs. Not exhaustive of what SA-0.3 lists — the
-// rest (plan/price/subscription/invoice/payment/tenant-suspend events) don't exist until SA-1/2/3
-// add the routes that produce them; add each one here as it lands.
+// Combined audit actions from foundation-v3 and main.
 export const AUDIT_ACTIONS = [
   "admin.login",
   "admin.logout",
@@ -14,12 +12,9 @@ export const AUDIT_ACTIONS = [
   "tenant.member_invite_resent",
   "tenant.member_invite_revoked",
   "tenant.member_licensed_states_changed",
-  // LA-8.6: deactivation (open work handed over first), reactivation, the member's own time zone.
   "tenant.member_deactivated",
   "tenant.member_reactivated",
   "tenant.member_timezone_set",
-  // Admin tenant record › Users & seats. Staff revoking an invite reuse tenant.member_invite_revoked
-  // (actor_type admin); these two are the bulk revoke and the people export.
   "tenant.stale_invites_revoked",
   "tenant.users_exported",
   "user.invite_resent",
@@ -32,19 +27,15 @@ export const AUDIT_ACTIONS = [
   "user.suspended",
   "user.unsuspended",
   "user.sessions_revoked",
-  // LA-8.2: a person's own account security (each also in user_security_event).
   "user.password_changed",
   "user.two_factor_enabled",
   "user.two_factor_disabled",
   "user.recovery_codes_regenerated",
   "user.own_sessions_ended",
-  // SA-1.4 soft delete. The row stays in audit_log for good, which is the point: it is the only
-  // durable record of who removed an account and when the recovery window closed.
   "user.deleted",
   "feature.created",
   "feature.updated",
   "feature.switch_changed",
-  // Per-tenant feature overrides (20260924344000). Target is the tenant; the feature is in metadata.
   "tenant.feature_override_set",
   "tenant.feature_override_removed",
   "addon.created",
@@ -70,8 +61,6 @@ export const AUDIT_ACTIONS = [
   "coupon.created",
   "coupon.applied",
   "coupon.removed",
-  // Deactivation switches the Whop promo code off first (fail closed). A refused attempt is its own
-  // row, so "who tried to switch this code off, and why did it not happen" has an answer.
   "coupon.deactivated",
   "coupon.deactivation_failed",
   "offer.created",
@@ -85,9 +74,7 @@ export const AUDIT_ACTIONS = [
   "carrier.updated",
   "carrier.archived",
   "carrier.restored",
-  // A super admin deactivated a platform carrier tenants still use (20260924357000). Reason required.
   "carrier.deactivated_in_use",
-  // Carrier fact reports (20261027200000): an agency reports a wrong fact; staff close it.
   "carrier.fact_reported",
   "carrier.fact_report_resolved",
   "tenant.carrier_configured",
@@ -119,7 +106,6 @@ export const AUDIT_ACTIONS = [
   "tenant.partner_updated",
   "tenant.partner_timezone_updated",
   "tenant.consent_evidence_exported",
-  // LA-2.6-2: a certificate claimed (copy stored), or found past its provider's claim window.
   "tenant.consent_certificate_claimed",
   "tenant.consent_certificate_expired",
   "tenant.dial_refused",
@@ -153,7 +139,6 @@ export const AUDIT_ACTIONS = [
   "tenant.partner_lead_duplicate_detected",
   "tenant.partner_lead_duplicate_overridden",
   "tenant.intake_failure_recording_failed",
-  // An owner put a partner lead back in the inbox after its queue insert failed at intake.
   "tenant.intake_work_item_recovered",
   "tenant.lead_signature_readiness_updated",
   "tenant.affiliate_link_created",
@@ -230,7 +215,6 @@ export const AUDIT_ACTIONS = [
   "field_map.created",
   "field_map.updated",
   "field_map.published",
-  // LA-4.3 (Notion sprint) · carrier layout maps for spreadsheets, and which carriers use them (20261008120000).
   "layout_map.created",
   "layout_map.updated",
   "layout_map.published",
@@ -239,10 +223,8 @@ export const AUDIT_ACTIONS = [
   "layout_map.deleted",
   "layout_assignment.saved",
   "layout_assignment.removed",
-  // LA-4.5 (Notion sprint) · the carrier status map (20261008130000).
   "status_map.approved",
   "status_map.discarded",
-  // LA-4.17 (Notion sprint) · carrier rules and settings (20261008150000).
   "carrier_rule.added",
   "carrier_rule.override_cleared",
   "carrier_rule.verified",
@@ -374,12 +356,8 @@ export const AUDIT_ACTIONS = [
   "trial.reminder_sent",
   "legal_document.published",
   "legal_document.reacceptance_cleared",
-  // Unpublished drafts (20260924363000). Never read by a customer surface; publishing one writes
-  // legal_document.published like the direct publish does, with metadata.fromDraft = true.
   "legal_document.draft_saved",
   "legal_document.draft_discarded",
-  // The period billing run raises invoices without a human choosing each amount, so the run itself
-  // is the auditable act — who triggered it, what it billed, and what failed.
   "billing.period_run",
   "billing.waiver_granted",
   "billing.waiver_revoked",
@@ -394,14 +372,12 @@ export const AUDIT_ACTIONS = [
   "tenant.calendar_unlinked",
   "tenant.cadence_updated",
   "tenant.phone_suppressed",
-  // LA-2.3-3: an owner recorded or revoked a federal/state DNC exemption for one number.
   "tenant.dnc_exemption_recorded",
   "tenant.dnc_exemption_revoked",
   "tenant.calling_window_updated",
   "tenant.post_key_minted",
   "tenant.post_key_rotated",
   "tenant.post_key_updated",
-  // LA-8.7: integration API keys and webhooks.
   "tenant.api_key_created",
   "tenant.api_key_rotated",
   "tenant.api_key_revoked",
@@ -411,44 +387,24 @@ export const AUDIT_ACTIONS = [
   "tenant.webhook_deleted",
   "tenant.webhook_tested",
   "tenant.lead_import_committed",
-  // A reviewed import that added the file's cost to its campaign (20260924330100), in the same
-  // transaction as the leads.
   "tenant.campaign_spend_added_by_import",
-  // Campaigns concept audit: an owner's re-screen of a whole campaign (20260925706100), and a
-  // campaign's status, cost, weight or test-batch flag changed from /app/campaigns.
   "tenant.campaign_scrub_started",
   "tenant.campaign_scrub_finished",
   "tenant.campaign_updated",
-  // A whole list assigned in one transaction (assign_lead_list, 20260924342000). Written by the SQL
-  // function itself, in the same transaction as the moves, with the rule chain as published.
   "tenant.lead_list_assigned",
-  // Lead recycling (20260925706500). Both written by SQL: reactivate_nurture when a batch starts,
-  // complete_nurture_reactivation when its last lead is screened.
   "tenant.recycle_batch_started",
   "tenant.recycle_batch_completed",
-  // Lead assignment (20260925702100 / 702200). The first three are written by SQL functions: a
-  // posted lead routed on arrival, one left in the pool, and an owned lead returned because the
-  // owner's own licence in its state lapsed. The last is the owner turning routing on arrival on/off.
   "tenant.lead_auto_routed",
   "tenant.lead_auto_route_skipped",
   "tenant.lead_returned_licence_lapsed",
   "tenant.assignment_auto_route_changed",
-  // A claim drafted from a list's import removals (create_import_removal_claim, 20260925703200).
-  // Written by the SQL function in the same transaction as the claim.
   "tenant.vendor_claim_drafted_from_import",
-  // One claim per campaign from Vendor returns' preview: lead rows and import removals together,
-  // only the reasons left on (create_combined_vendor_return_claim, 20260925707500). Written by the
-  // SQL function in the same transaction as the claim.
   "tenant.vendor_claim_drafted",
   "tenant.queue_scoring_updated",
   "tenant.agency_profile_saved",
-  // LA-8.3: the business tax ID shown in full (one row per reveal, written before it is decrypted),
-  // and the logo documents print.
   "tenant.agency_tax_id_revealed",
   "tenant.business_logo_changed",
   "tenant.partner_support_contact_saved",
-  // Carrier commission statements (20260924260000). Import proposes; only a person's acceptance or
-  // manual match posts a line to the ledger, so each decision is its own row.
   "tenant.commission_statement_imported",
   "tenant.statement_mapping_saved",
   "tenant.statement_match_accepted",
@@ -456,26 +412,20 @@ export const AUDIT_ACTIONS = [
   "tenant.statement_line_matched",
   "tenant.statement_line_left_unmatched",
   "tenant.commission_statement_voided",
-  // LA-4.2 · lines typed from a PDF; LA-4.3 · re-matching and re-processing (20261002100000).
   "tenant.statement_lines_entered_manually",
   "tenant.statement_lines_rematched",
   "tenant.commission_statement_reprocessed",
-  // LA-4.4 / 4.5 · discrepancies (20261002110000).
   "tenant.discrepancy_status_changed",
   "tenant.dispute_letter_generated",
-  // LA-4.5 follow-up · where a carrier's dispute letters go (20261007110000).
   "tenant.carrier_commission_contact_saved",
-  // LA-4.1 (Notion sprint) · carrier files through the three doors (20261008100000).
   "tenant.carrier_file_received",
   "tenant.carrier_file_skipped",
   "tenant.carrier_file_downloaded",
-  // Owner request 2026-10-14 · the whole file shown in the app, and a carrier confirmed for a file that came without one.
   "tenant.carrier_file_viewed",
   "tenant.carrier_file_attributed",
   "tenant.carrier_inbound_address_created",
   "tenant.carrier_inbound_sender_added",
   "tenant.carrier_inbound_sender_removed",
-  // LA-4.2 (Notion sprint) · a reprocess from the raw rows (20261008110000).
   "tenant.carrier_files_reprocessed",
   "tenant.carrier_files_run",
   "tenant.carrier_bucket_checked",
@@ -489,13 +439,11 @@ export const AUDIT_ACTIONS = [
   "state_disclosure.proposal_approved",
   "state_disclosure.proposal_rejected",
   "state_disclosure.proposal_cancelled",
-  // LA-2.4 · state calling rules and holidays, maintained by super admins (20260929201000).
   "calling_rule.published",
   "calling_rule.withdrawn",
   "calling_holiday.added",
   "calling_holiday.removed",
   "calling_rules.reviewed",
-  // Agency Module 0 (AG-0 / AG-1).
   "tenant.member_invite_accepted",
   "agency.producer_suspended",
   "agency.producer_reactivated",
@@ -517,6 +465,7 @@ export const AUDIT_ACTIONS = [
   "tenant.member_access_changed",
   "tenant.access_preset_saved",
   "tenant.access_preset_deleted",
+  "tenant.sales_template_deleted",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -556,10 +505,10 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "user.own_sessions_ended": "Ended one or all of their other sessions",
   "user.deleted": "User deleted",
   "feature.created": "Feature created",
+  "feature.updated": "Feature updated",
   "feature.switch_changed": "Feature kill switch changed",
   "tenant.feature_override_set": "Feature switched on or off for one tenant",
   "tenant.feature_override_removed": "Feature override removed; the tenant is back on the plan",
-  "feature.updated": "Feature updated",
   "addon.created": "Add-on created",
   "addon.updated": "Add-on updated",
   "addon.archived": "Add-on archived",
@@ -619,8 +568,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.partner_chat_message_sent": "Partner chat message sent",
   "tenant.partner_message_posted": "Partner message posted",
   "tenant.partner_chat_read": "Partner chat marked read",
-  "tenant.partner_notification_settings_updated":
-    "Partner notification settings updated",
+  "tenant.partner_notification_settings_updated": "Partner notification settings updated",
   "tenant.agent_partner_chat_message_sent": "Agent partner chat message sent",
   "tenant.partner_chat_channel_created": "Partner chat channel created",
   "tenant.partner_chat_channel_archived": "Chat channel archived",
@@ -642,8 +590,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.partner_user_deactivated": "Partner user deactivated",
   "tenant.partner_user_reactivated": "Partner user reactivated",
   "tenant.partner_user_accepted": "Partner user accepted invitation",
-  "tenant.partner_user_admin_assigned":
-    "Partner user assigned to partner admin",
+  "tenant.partner_user_admin_assigned": "Partner user assigned to partner admin",
   "tenant.partner_form_profile_saved": "Partner form profile saved",
   "tenant.partner_form_catalog_field_added": "Partner form catalog field added",
   "tenant.partner_form_catalog_field_updated": "Partner form catalog field updated",
@@ -661,8 +608,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.partner_lead_submitted": "Partner lead submitted",
   "tenant.partner_submission_rejected": "Partner submission rejected",
   "tenant.partner_lead_duplicate_detected": "Partner lead duplicate detected",
-  "tenant.partner_lead_duplicate_overridden":
-    "Partner lead duplicate overridden",
+  "tenant.partner_lead_duplicate_overridden": "Partner lead duplicate overridden",
   "tenant.intake_failure_recording_failed": "Intake failure recording failed",
   "tenant.intake_work_item_recovered": "Lost transfer recovered into the inbox",
   "tenant.lead_signature_readiness_updated": "Signature availability updated on a lead",
@@ -763,6 +709,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "queue_rule.saved": "Exception queue ownership rule saved",
   "book_import.carrier_skipped": "Book import: carrier skipped for now",
   "book_import.carrier_unskipped": "Book import: carrier skip taken back",
+  "carrier_guidance.saved": "Carrier portal guidance saved",
   "policy.annotated": "Policy notes or lead source saved",
   "rate_card.saved": "Rate card changed (contract level, rate, age band or product family)",
   "carrier_account.statement_saved": "Carrier statement totals entered or corrected",
@@ -816,7 +763,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "accounting.tax_export": "Tax-ready export downloaded",
   "accounting.settings_saved": "Accounting settings changed",
   "scorecards.settings_saved": "Scorecard sample size changed",
-  "carrier_guidance.saved": "Carrier portal guidance saved",
   "tenant.dispositioned": "Call dispositioned",
   "tenant.agent_presence_updated": "Agent availability updated",
   "tenant.agent_floor_nudged": "Agent Floor nudge sent",
@@ -827,8 +773,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.callback_missed": "Callback missed",
   "tenant.callback_replaced": "Callback replaced by a new booking",
   "tenant.queue_sla_settings_updated": "Queue SLA settings updated",
-  "tenant.agent_notification_settings_updated":
-    "Agent notification settings updated",
+  "tenant.agent_notification_settings_updated": "Agent notification settings updated",
   "tenant.own_profile_updated": "Own profile updated",
   "tenant.own_avatar_updated": "Profile picture updated",
   "tenant.own_avatar_removed": "Profile picture removed",
@@ -852,6 +797,9 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "template.published": "Template draft published",
   "template.default_set": "Template made the product default",
   "invoice.custom_created": "Custom invoice raised",
+  "tenant.billing_mode_changed": "Billing mode changed",
+  "tenant.suspended": "Agency suspended",
+  "tenant.unsuspended": "Agency unsuspended",
   "setting.updated": "Setting changed",
   "payment_provider.connection_tested": "Provider connection tested",
   "payment_provider.config_viewed": "Payment setup viewed",
@@ -870,9 +818,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "announcement.created": "Announcement created",
   "announcement.updated": "Announcement updated",
   "announcement.deleted": "Announcement deleted",
-  "tenant.billing_mode_changed": "Billing mode changed",
-  "tenant.suspended": "Agency suspended",
-  "tenant.unsuspended": "Agency unsuspended",
   "credit_note.requested": "Credit note raised",
   "credit_note.approved": "Credit note approved",
   "credit_note.reconciled": "Credit note reconciled",
@@ -897,8 +842,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.calendar_linked": "A Google or Outlook calendar was linked to an agent's availability",
   "tenant.calendar_unlinked": "A linked Google or Outlook calendar was removed from an agent's availability",
   "tenant.cadence_updated": "Dialing cadence changed for the tenant or one campaign",
-  "tenant.recycle_batch_started": "A recycle batch was started with a new angle; its leads wait for a fresh screening",
-  "tenant.recycle_batch_completed": "Every lead in a recycle batch was screened; cleared ones went back to the dialer",
   "tenant.phone_suppressed": "A phone number was added to a do-not-call list, permanently",
   "tenant.dnc_exemption_recorded": "A written-consent or business-relationship exemption from federal/state DNC was recorded for a number",
   "tenant.dnc_exemption_revoked": "A federal/state DNC exemption was revoked",
@@ -920,13 +863,15 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.campaign_scrub_finished": "A campaign re-scrub ended, scrubbed or failed",
   "tenant.campaign_updated": "A campaign's status, cost, mixing weight or test-batch flag was changed",
   "tenant.lead_list_assigned": "A lead list's unassigned leads were assigned in one transaction",
+  "tenant.recycle_batch_started": "A recycle batch was started with a new angle; its leads wait for a fresh screening",
+  "tenant.recycle_batch_completed": "Every lead in a recycle batch was screened; cleared ones went back to the dialer",
   "tenant.lead_auto_routed": "A posted lead was routed on arrival by a real-time rule",
   "tenant.lead_auto_route_skipped": "A posted lead could not be routed on arrival and stayed in the pool",
   "tenant.lead_returned_licence_lapsed": "An owned lead returned to the pool because the owner's licence in its state lapsed",
   "tenant.assignment_auto_route_changed": "Routing posted leads on arrival turned on or off",
   "tenant.vendor_claim_drafted_from_import": "A vendor credit claim was drafted from a list's import removals",
   "tenant.vendor_claim_drafted": "A vendor credit claim was drafted for a campaign on Vendor returns",
-  "tenant.queue_scoring_updated":"Queue scoring settings or weights changed",
+  "tenant.queue_scoring_updated": "Queue scoring settings or weights changed",
   "tenant.agency_profile_saved": "Business identity changed (a dated history row is kept)",
   "tenant.agency_tax_id_revealed": "The agency's tax ID was shown in full",
   "tenant.business_logo_changed": "The business logo was replaced or removed",
@@ -991,4 +936,5 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.member_access_changed": "Team member extra roles or hidden pages changed",
   "tenant.access_preset_saved": "Team access preset saved",
   "tenant.access_preset_deleted": "Team access preset deleted",
+  "tenant.sales_template_deleted": "Sales template deleted",
 };

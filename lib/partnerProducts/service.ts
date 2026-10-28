@@ -1,23 +1,22 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { fetchProducts } from "@/lib/products/queries";
+import { agencyProducts } from "@/lib/products/agencyProducts";
 import type { ProductConfiguration, PartnerProductConfiguration } from "./constants";
 
+/**
+ * The catalogue with what this agency sells. `is_enabled` is "sold" (Settings › Products, 2026-10-27):
+ * switched on AND in the plan, from the one rule in lib/products/agencyProducts.ts, so the partner
+ * pages, the portal, the affiliate form and the transfer gate all follow the same answer.
+ */
 export async function listTenantProducts(tenantId: string): Promise<ProductConfiguration[]> {
-  const [products, selected] = await Promise.all([
-    fetchProducts({ includeArchived: false }),
-    getSupabaseServiceClient().from("tenant_products").select("product_code, is_enabled, sort_order").eq("tenant_id", tenantId),
-  ]);
-  if (selected.error) throw new Error(`Could not load tenant product settings: ${selected.error.message}`);
-  const settings = new Map((selected.data ?? []).map((row) => [row.product_code, row]));
-  return products.map((product) => ({
+  return (await agencyProducts(tenantId)).map((product) => ({
     code: product.code,
     name: product.name,
-    category: product.category,
+    category: product.category as ProductConfiguration["category"],
     description: product.description,
-    is_enabled: settings.get(product.code)?.is_enabled ?? false,
-    sort_order: settings.get(product.code)?.sort_order ?? product.sort_order,
+    is_enabled: product.sold,
+    sort_order: product.sortOrder,
   }));
 }
 
@@ -45,23 +44,13 @@ async function loadPartner(tenantId: string, partnerId: string) {
 
 export async function listPartnerProductConfiguration(tenantId: string, partnerId: string): Promise<PartnerProductConfiguration[]> {
   await loadPartner(tenantId, partnerId);
-  const [products, selected, approvals] = await Promise.all([
-    fetchProducts({ includeArchived: false }),
-    getSupabaseServiceClient().from("tenant_products").select("product_code, is_enabled").eq("tenant_id", tenantId),
+  const [products, approvals] = await Promise.all([
+    listTenantProducts(tenantId),
     getSupabaseServiceClient().from("partner_products").select("product_code").eq("partner_id", partnerId),
   ]);
-  if (selected.error || approvals.error) throw new Error(`Could not load partner product settings: ${selected.error?.message ?? approvals.error?.message}`);
-  const enabled = new Map((selected.data ?? []).map((row) => [row.product_code, row.is_enabled]));
+  if (approvals.error) throw new Error(`Could not load partner product settings: ${approvals.error.message}`);
   const approved = new Set((approvals.data ?? []).map((row) => row.product_code));
-  return products.map((product) => ({
-    code: product.code,
-    name: product.name,
-    category: product.category,
-    description: product.description,
-    is_enabled: enabled.get(product.code) ?? false,
-    sort_order: product.sort_order,
-    approved: approved.has(product.code),
-  }));
+  return products.map((product) => ({ ...product, approved: approved.has(product.code) }));
 }
 
 export async function setPartnerProductApproval(tenantId: string, partnerId: string, productCode: string, isApproved: boolean, approvedBy: string) {

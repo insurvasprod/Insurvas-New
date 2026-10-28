@@ -149,7 +149,7 @@ function PartnerQualityDrawer({ label, data, loading, error, labels, page, pageS
   }, [onClose]);
 
   const drawer = (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(16,24,32,0.42)]" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="flex h-full w-full max-w-[960px] flex-col border-l border-border bg-card shadow-xl" role="dialog" aria-modal="true" aria-labelledby="quality-drawer-title">
         <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div className="min-w-0">

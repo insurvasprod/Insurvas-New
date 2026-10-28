@@ -4,7 +4,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useState, type FormEvent } from "react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Callout, Field, btn, control, pillTone } from "@/components/app/settings/primitives";
+import { Callout, Field, control, pillTone } from "@/components/app/settings/primitives";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { STATE_CODES, US_STATES } from "@/lib/appointments/constants";
@@ -12,6 +12,7 @@ import { formatEffectiveDate, type CoverageRow, type ScopeProduct } from "@/lib/
 import { isPlaceholderDisclosure, type StateDisclosure } from "@/lib/stateDisclosures/constants";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export type EditorTarget = { kind: "pair"; row: CoverageRow } | { kind: "new" };
 
@@ -198,16 +199,16 @@ export function StateDisclosureEditor({
                           )}
                           <span className="grow" />
                           {version.status !== "superseded" && (
-                            <button
+                            <Button
                               type="button"
-                              className={btn("danger-row")}
+                              variant="ghost" size="sm" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]"
                               onClick={() => {
                                 setWithdrawError(null);
                                 setWithdrawing(version);
                               }}
                             >
                               Withdraw
-                            </button>
+                            </Button>
                           )}
                         </div>
                         <details className="mt-1">
@@ -241,17 +242,17 @@ export function StateDisclosureEditor({
                   </p>
                 )}
                 <div className="mt-3 flex gap-2">
-                  <button type="button" className={btn("ghost")} onClick={() => setWithdrawing(null)} disabled={withdrawBusy}>
+                  <Button type="button" variant="ghost" onClick={() => setWithdrawing(null)} disabled={withdrawBusy}>
                     Keep it
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className={cn(btn("primary"), "bg-[var(--error)] text-[var(--on-error)] hover:bg-[var(--error-ink)]")}
+                    variant="destructive"
                     onClick={withdraw}
                     disabled={withdrawBusy}
                   >
                     {withdrawBusy ? "Withdrawing…" : "Withdraw version"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -324,18 +325,18 @@ export function StateDisclosureEditor({
                 States <span className="font-normal text-[var(--muted)]">({states.length} selected)</span>
               </span>
               {row && !moreStates && (
-                <button type="button" className={btn("secondary")} onClick={() => setMoreStates(true)}>
+                <Button type="button" variant="outline" size="sm" onClick={() => setMoreStates(true)}>
                   Apply to more states
-                </button>
+                </Button>
               )}
               {moreStates && (
                 <>
-                  <button type="button" className={btn("secondary")} onClick={() => setStates([...STATE_CODES])}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setStates([...STATE_CODES])}>
                     Select all
-                  </button>
-                  <button type="button" className={btn("ghost", "h-8")} onClick={() => setStates(row ? [row.state] : [])}>
+                  </Button>
+                  <Button type="button" variant="ghost" className="h-8" onClick={() => setStates(row ? [row.state] : [])}>
                     {row ? "Only this state" : "Clear"}
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -373,9 +374,9 @@ export function StateDisclosureEditor({
           </Field>
           {reusable && !wording && (
             <div>
-              <button type="button" className={btn("secondary")} onClick={() => setWording(reusable)}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setWording(reusable)}>
                 Start from the wording in force
-              </button>
+              </Button>
             </div>
           )}
 
@@ -401,10 +402,10 @@ export function StateDisclosureEditor({
           )}
 
           <DialogFooter>
-            <button type="button" className={btn("ghost")} onClick={onClose} disabled={saving}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
               Cancel
-            </button>
-            <button type="submit" className={btn("primary")} disabled={saving || !canSubmit} title={blocker ?? undefined}>
+            </Button>
+            <Button type="submit"  disabled={saving || !canSubmit} title={blocker ?? undefined}>
               {saving
                 ? reviewAvailable
                   ? "Sending…"
@@ -412,7 +413,7 @@ export function StateDisclosureEditor({
                 : reviewAvailable
                   ? "Submit for review"
                   : `Publish for ${states.length} state${states.length === 1 ? "" : "s"}`}
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

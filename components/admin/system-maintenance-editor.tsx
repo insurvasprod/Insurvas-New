@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { btn, Callout, control, Field, SettingsCard, type Tone } from "@/components/app/settings/primitives";
+import { Callout, control, Field, SettingsCard, type Tone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,7 @@ import {
   toUtcInput,
   utcDateTime,
 } from "@/lib/system/adminFormat";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Draft = { level: EffectiveMaintenanceLevel; message: string; start: string; end: string };
 
@@ -191,6 +192,8 @@ export function SystemMaintenanceEditor({
 
   return (
     <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+      {/* Saving asks for a reason first, so the guard offers Discard or Stay. */}
+      <LeaveGuard dirty={canChange && dirty} onDiscard={() => setDraft(baseline)} what="the maintenance settings" />
       {/* ── Level ───────────────────────────────────────────────────────── */}
       <SettingsCard title="Level">
         <fieldset className="m-0 flex min-w-0 flex-col gap-2.5 border-0 p-0" disabled={!canChange}>
@@ -414,16 +417,16 @@ export function SystemMaintenanceEditor({
             )}
 
             <DialogFooter>
-              <button type="button" onClick={() => setOpen(false)} disabled={saving} className={btn("ghost")}>
+              <Button type="button" onClick={() => setOpen(false)} disabled={saving} variant="ghost">
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 disabled={saving || !reasonOk || !phraseOk}
-                className={danger ? cn(btn("primary"), "bg-[var(--error)] text-[var(--on-error)] hover:bg-[var(--error-ink)]") : btn("primary")}
+                variant={danger ? "destructive" : "default"}
               >
                 {saving ? "Saving…" : levelChanged ? dialogTitle : "Save changes"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

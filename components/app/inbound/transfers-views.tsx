@@ -3,18 +3,17 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * One Inbound page (named Transfers until 2026-10-25), two views (Module 1 simplified, 2026-10-25): the queue of transfers (the
- * inbox, at /app/inbound) and the floor (who is waiting, on a call or free, at /app/floor). They
- * were two sidebar entries over the same transfers; now one entry and this switch. Both addresses
- * still work, so a link to either lands on its view.
+ * Team's two views (Inbound A, 2026-10-27; was the Queue/Floor switch): Now (who needs you, the
+ * people, the calls) at /app/inbound/team, and All callers (every transfer today, Today by partner,
+ * filters, lost-transfer recovery) at /app/inbound/team?tab=all. Agents work on Inbound itself.
  */
-export function TransfersViews({ current }: { current: "queue" | "floor" }) {
+export function TeamViews({ current }: { current: "now" | "all" }) {
   const views = [
-    { key: "queue", label: "Queue", href: "/app/inbound" },
-    { key: "floor", label: "Floor", href: "/app/floor" },
+    { key: "now", label: "Now", href: "/app/inbound/team" },
+    { key: "all", label: "All callers", href: "/app/inbound/team?tab=all" },
   ] as const;
   return (
-    <nav aria-label="Inbound view" className="inline-flex h-9 items-center gap-0.5 rounded-full border border-border p-0.5">
+    <nav aria-label="Team views" className="inline-flex h-9 w-fit items-center gap-0.5 rounded-full border border-border p-0.5">
       {views.map((view) => (
         <Link
           key={view.key}

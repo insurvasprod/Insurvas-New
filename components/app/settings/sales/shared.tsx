@@ -41,10 +41,10 @@ export function warnUnsaved(what: string) {
 export const OWNER_ONLY = "Only an owner can change this.";
 
 /** The panel's top: the section title/purpose (from the provider), then the sample notice. */
-export function SalesPanelTop({ sample = true }: { sample?: boolean }) {
+export function SalesPanelTop({ sample = true, trail, actions }: { sample?: boolean; trail?: ReactNode; actions?: ReactNode }) {
   return (
     <>
-      <SettingsSectionHeader />
+      <SettingsSectionHeader trail={trail} actions={actions} />
       {sample && <SampleDataNotice />}
     </>
   );

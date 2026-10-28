@@ -25,6 +25,7 @@ import {
   type DncExemptionUse,
   type RelationshipKind,
 } from "@/lib/suppression/exemptionConstants";
+import { inputControl } from "@/components/ui/field";
 
 /**
  * LA-2.3-3 · DNC exemptions on /app/tcpa.
@@ -59,7 +60,8 @@ const STATE_CHIP: Record<DncExemption["state"], { tone: "good" | "neutral" | "wa
 
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
-const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
+// The shared control (foundation v3), without the gap a stacked Field puts above it.
+const field = inputControl;
 const today = () => new Date().toISOString().slice(0, 10);
 
 type Draft = { phone: string; basis: DncExemptionBasis; consentArtefactId: string; relationshipKind: RelationshipKind; relationshipDate: string; note: string };

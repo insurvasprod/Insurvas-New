@@ -17,6 +17,7 @@ import { Callout, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/c
 import { NotificationPreferences } from "@/components/app/settings/notification-preferences";
 import { SettingsHistory } from "@/components/app/settings/settings-history";
 import { OwnProfileForm } from "@/components/app/own-profile-form";
+import { OwnLanguages } from "@/components/app/settings/own-languages";
 import { SecuritySettings } from "@/components/app/profile/security-settings";
 import { SectionLoading } from "@/components/ui/page-states";
 import { ViewTabs } from "@/components/ui/view-tabs";
@@ -87,7 +88,7 @@ export function MyProfileSettings() {
           : error ? <Callout tone="error" title={error} />
           : !profile ? <SettingsCard><SectionLoading rows={5} columns={2} label="Loading your profile" /></SettingsCard>
           : tab === "security" ? <SecuritySettings email={profile.email} timeZone={profile.displayTimezone} promptTwoFactor={promptTwoFactor} />
-          : <div id="profile"><OwnProfileForm initial={profile} /></div>}
+          : <div id="profile" className="flex flex-col gap-6"><OwnProfileForm initial={profile} /><OwnLanguages /></div>}
       </div>
     </SettingsStack>
   );

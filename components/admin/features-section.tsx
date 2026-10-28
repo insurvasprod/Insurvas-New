@@ -10,9 +10,9 @@ import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
 import type { FeatureModuleGroup, FeatureModuleRow } from "@/lib/features/constants";
 import { switchSummaryTitle, type FeatureSwitch, type SwitchReason } from "@/lib/features/killSwitchRules";
-import { cn } from "@/lib/utils";
 
 type Tab = "catalog" | "switches";
 
@@ -93,38 +93,14 @@ export function FeaturesSection({
 
       {title && <Callout tone="warning" title={title} />}
 
-      <div role="tablist" aria-label="Features" className="flex gap-6 border-b border-[var(--border)]">
-        {tabs.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              id={`${baseId}-tab-${t.id}`}
-              role="tab"
-              type="button"
-              aria-selected={active}
-              aria-controls={`${baseId}-panel-${t.id}`}
-              tabIndex={active ? 0 : -1}
-              onClick={() => setTab(t.id)}
-              onKeyDown={(event) => {
-                if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-                event.preventDefault();
-                const next = tabs[(tabs.findIndex((x) => x.id === t.id) + 1) % tabs.length];
-                setTab(next.id);
-                document.getElementById(`${baseId}-tab-${next.id}`)?.focus();
-              }}
-              className={cn(
-                "-mb-px h-10 cursor-pointer border-0 border-b-2 bg-transparent px-1 text-sm leading-[1.43] font-semibold tracking-[-0.01em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-                active
-                  ? "border-[var(--primary)] text-[var(--ink)]"
-                  : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",
-              )}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+      <UnderlineTabs
+        label="Features"
+        tabs={tabs.map((t) => ({ key: t.id, label: t.label }))}
+        value={tab}
+        onChange={setTab}
+        idPrefix={`${baseId}-tab`}
+        controls={(key) => `${baseId}-panel-${key}`}
+      />
 
       <div
         role="tabpanel"

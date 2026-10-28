@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { cardSurface } from "@/components/ui/card";
+import { checkboxControl, control, Field } from "@/components/ui/field";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
@@ -23,7 +26,7 @@ import { NextStepLine } from "@/components/app/next-step-line";
 /** One view at a time: Vendors, Where leads drop off (funnel, curves, speed and consent), Compare (2026-10-26). */
 type View = "scorecard" | "dropoff" | "compare";
 /** Vendor cards a page. */
-const CARD_PAGE = 8;
+const PAGE_SIZE_CARDS = 8;
 /** The persistency toggle's window. User decision: 60 days. Mirrors SCORECARD_PERSIST_DAYS on the server. */
 const PERSIST_DAYS = 60;
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -165,16 +168,6 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
   const [sort, setSort] = useState<Sort>("cost");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState<View>("scorecard");
-  // The filter popover closes on a click outside it or Esc, like the inbox's.
-  const filtersRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const onPointer = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setFiltersOpen(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
-  }, [filtersOpen]);
   // Refresh re-reads the applied scope; the query string alone would not change.
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -277,9 +270,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     return sortLines(allLines.filter((line) => !needle || line.label.toLowerCase().includes(needle)), sort);
   }, [allLines, search, sort]);
   const tint = useMemo(() => extremes(allLines), [allLines]);
-  const pageCount = Math.max(1, Math.ceil(lines.length / CARD_PAGE));
+  const pageCount = Math.max(1, Math.ceil(lines.length / PAGE_SIZE_CARDS));
   const currentPage = Math.min(page, pageCount - 1);
-  const shown = lines.slice(currentPage * CARD_PAGE, currentPage * CARD_PAGE + CARD_PAGE);
+  const shown = lines.slice(currentPage * PAGE_SIZE_CARDS, currentPage * PAGE_SIZE_CARDS + PAGE_SIZE_CARDS);
   const totals = report?.totals;
   const exportUrl = `/api/app/true-cpa?${query}&format=csv`;
   const persistOn = report?.persist_days != null;
@@ -345,35 +338,30 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     {/* Views on the left; the report's scope (period and filters), which every view reads, on the
         right. The scope is a draft that Apply commits, so a change of vendor does not fire three reloads. */}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="tablist" aria-label="True CPA views" className="inline-flex h-9 w-fit flex-wrap gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
-        {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" id={`true-cpa-tab-${item.key}`} aria-controls="true-cpa-view" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
-        ))}
-      </div>
+      <ViewTabs label="True CPA views" tabs={tabs} value={view} onChange={setView} idPrefix="true-cpa-tab" controls="true-cpa-view" />
       <div className="flex flex-wrap items-center gap-2">
         <input type="date" aria-label="From" className={toolbarControl} value={draft.from} max={draft.to} onChange={(event) => setDraft((current) => ({ ...current, from: event.target.value || current.from }))} />
         <input type="date" aria-label="To" className={toolbarControl} value={draft.to} min={draft.from} onChange={(event) => setDraft((current) => ({ ...current, to: event.target.value || current.to }))} />
-        <div ref={filtersRef} className="relative">
-          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={appliedFilters} />
-          {filtersOpen && <div role="group" aria-label="Filter the scorecard" className="absolute top-[calc(100%+6px)] right-0 z-30 grid w-[320px] gap-3 rounded-xl border border-[var(--border-strong)] bg-card p-4 shadow-[var(--shadow-overlay)]">
-            <select aria-label="Vendor" className={toolbarControl} value={draft.vendorId} onChange={(event) => setDraft((current) => ({ ...current, vendorId: event.target.value, campaignId: "" }))}><option value="">All vendors</option>{vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-            <select aria-label="Campaign" className={toolbarControl} value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">All campaigns</option>{(report?.rows ?? []).filter((row) => !draft.vendorId || row.vendor_id === draft.vendorId).map((row) => <option key={row.campaign_id} value={row.campaign_id}>{row.campaign_name}</option>)}</select>
-            <select aria-label="Product" className={toolbarControl} value={draft.productCode} onChange={(event) => setDraft((current) => ({ ...current, productCode: event.target.value }))}><option value="">All products</option>{products.map((product) => <option key={product} value={product}>{product.replaceAll("_", " ")}</option>)}</select>
-            <label className="inline-flex items-center gap-2 text-sm text-foreground" htmlFor="scorecard-persist" title={upgraded ? undefined : "Needs a database update that has not been applied yet."}>
-              <input id="scorecard-persist" type="checkbox" checked={draft.persist} disabled={!upgraded} onChange={(event) => setDraft((current) => ({ ...current, persist: event.target.checked }))} />
-              <span>Only policies still in force after {PERSIST_DAYS} days</span>
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={clearFilters}>Clear</Button>
-              <Button type="button" onClick={apply}>Apply</Button>
-            </div>
-          </div>}
-        </div>
+        <FilterButton open={filtersOpen} controls="true-cpa-filters" onClick={() => setFiltersOpen((open) => !open)} count={appliedFilters} />
         {appliedFilters > 0 && <ClearFiltersButton onClick={clearAndApply} />}
         {pending && <Button type="button" onClick={apply}>Apply</Button>}
       </div>
     </div>
 
+    {/* The scope's filters open inline under the row (UI-CONSISTENCY §6a), not as a popover. */}
+    <FilterPanel id="true-cpa-filters" open={filtersOpen} className={cn(cardSurface, "border-b")}>
+      <Field label="Vendor" htmlFor="true-cpa-vendor"><select aria-label="Vendor" id="true-cpa-vendor" className={control} value={draft.vendorId} onChange={(event) => setDraft((current) => ({ ...current, vendorId: event.target.value, campaignId: "" }))}><option value="">All vendors</option>{vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></Field>
+      <Field label="Campaign" htmlFor="true-cpa-campaign"><select aria-label="Campaign" id="true-cpa-campaign" className={control} value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">All campaigns</option>{(report?.rows ?? []).filter((row) => !draft.vendorId || row.vendor_id === draft.vendorId).map((row) => <option key={row.campaign_id} value={row.campaign_id}>{row.campaign_name}</option>)}</select></Field>
+      <Field label="Product" htmlFor="true-cpa-product"><select aria-label="Product" id="true-cpa-product" className={control} value={draft.productCode} onChange={(event) => setDraft((current) => ({ ...current, productCode: event.target.value }))}><option value="">All products</option>{products.map((product) => <option key={product} value={product}>{product.replaceAll("_", " ")}</option>)}</select></Field>
+      <label className="inline-flex items-center gap-2 self-end pb-2 text-sm text-foreground" htmlFor="scorecard-persist" title={upgraded ? undefined : "Needs a database update that has not been applied yet."}>
+              <input id="scorecard-persist" type="checkbox" className={checkboxControl} checked={draft.persist} disabled={!upgraded} onChange={(event) => setDraft((current) => ({ ...current, persist: event.target.checked }))} />
+              <span>Only policies still in force after {PERSIST_DAYS} days</span>
+            </label>
+      <div className="flex items-end justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={clearFilters}>Clear</Button>
+        <Button type="button" onClick={apply}>Apply</Button>
+      </div>
+    </FilterPanel>
     {/* The selected view, as the tab panel: it fades in when the tab changes (2026-10-09). */}
     <div key={view} role="tabpanel" id="true-cpa-view" aria-labelledby={`true-cpa-tab-${view}`} className="flex min-w-0 flex-col gap-6">
     {/* Vendors (redesign 2026-10-26, owner pick B): one card per vendor — or per campaign — with its cost
@@ -400,7 +388,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
         page={currentPage + 1}
         total={lines.length}
         noun={`${noun}s`}
-        pageSize={CARD_PAGE}
+        pageSize={PAGE_SIZE_CARDS}
         onPage={(next) => setPage(next - 1)}
         suffix={`${sort === "cost" ? "cheapest policy first, test batches last" : "highest spend first"}${report ? ` · computed ${new Date(report.generated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}`}
       />}

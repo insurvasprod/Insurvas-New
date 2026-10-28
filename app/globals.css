@@ -31,6 +31,9 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
+  /* v3 (UI-CONSISTENCY §5a): menus and popovers 10px, badges and chips 6px. rounded-menu / rounded-badge. */
+  --radius-menu: 10px;
+  --radius-badge: 6px;
   /* Typefaces, all self-hosted by next/font in app/layout.tsx (UI-CONSISTENCY.md §0, BRAND.md).
      Inter is the UI face; Inter Tight is the display face for titles and large numbers; Geist Mono
      is for identifiers people copy (policy numbers, Medicare IDs). Montserrat is the brand face:
@@ -54,6 +57,20 @@
   --text-headline-lg--line-height: 1.15;
   --text-hero: 3.5rem;
   --text-hero--line-height: 1.1;
+  /* Foundation v3 steps (mockup rules table): text-page 24/600 for the one page title, text-card-title
+     15/600 for a card's title, text-label 13/500 for field labels and column heads. */
+  --text-page: 1.5rem;
+  --text-page--line-height: 1.25;
+  --text-page--letter-spacing: -0.025em;
+  --text-page--font-weight: 600;
+  --text-card-title: 0.9375rem;
+  --text-card-title--line-height: 1.35;
+  --text-card-title--letter-spacing: -0.015em;
+  --text-card-title--font-weight: 600;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: -0.01em;
+  --text-label--font-weight: 500;
 }
 
 /*
@@ -175,6 +192,18 @@
   --on-error:   #ffffff;
   --on-info:    #ffffff;
 
+  /* The toast (lib/notify, rendered by Sileo). Sileo's look is an inverted pill: a dark blob on a
+     light page, a light one on a dark page. So these are the OTHER theme's values on purpose: the
+     light theme's toast is ink with the dark theme's bright tones on it, and the reverse. */
+  --toast-fill:    #0d4037;
+  --toast-text:    #f2f7f5;
+  --toast-muted:   rgba(242, 247, 245, .78);
+  --toast-success: #45c07d;
+  --toast-warning: #e2973a;
+  --toast-error:   #f0837c;
+  --toast-info:    #7fb0ff;
+  --toast-win:     #07d6a0;
+
   /* Dark grounds: the footer and the announcement bar — the guide's deep olive. */
   --footer-bg: #0d4037;
   --logo-gray: #98a1ac;
@@ -186,6 +215,14 @@
   --cat-4: #b02a9b;
   --cat-5: #8a5a00;
   --cat-6: #0091a8;
+
+  /* Card network marks (Payment step): the networks' own colours, the same in both themes. */
+  --card-visa: #1a1f71;
+  --card-mc-red: #eb001b;
+  --card-mc-amber: #f79e1b;
+  --card-mc-mix: #ff5f00;
+  --card-discover: #ff6000;
+  --card-amex: #006fcf;
 
   /* The ramp. 700-900 stay the deep olive family: dark panels (the auth brand panel) read them. */
   --brand-50:  #effdf8;
@@ -340,6 +377,15 @@
   --on-warning: #1c1207;
   --on-error:   #2a0b08;
   --on-info:    #08142a;
+
+  --toast-fill:    #f2f7f5;
+  --toast-text:    #0d4037;
+  --toast-muted:   rgba(13, 64, 55, .8);
+  --toast-success: #0c6633;
+  --toast-warning: #8a4600;
+  --toast-error:   #ab1f1f;
+  --toast-info:    #1d4f9a;
+  --toast-win:     #00735a;
 
   --footer-bg: #06211c;
   --logo-gray: #6b7480;
@@ -1309,7 +1355,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-pipeline-page [data-slot="card-content"] > div.grid.rounded-lg { border-color: var(--portal-line); background: var(--portal-group); }
 .portal-partner-pipeline-page [data-slot="card-content"] > div.grid.rounded-lg > div { min-width: 0; }
 .portal-partner-pipeline-page [data-slot="card-content"] > div.grid.rounded-lg label { color: var(--portal-muted); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.portal-partner-pipeline-page [data-slot="card-content"] > div.flex.gap-3 { scrollbar-color: var(--portal-line) transparent; }
+.portal-partner-pipeline-page [data-slot="card-content"] > div.flex.gap-3 { scrollbar-color: var(--scrollbar-thumb) transparent; }
 .portal-partner-pipeline-page [data-slot="card-content"] > div.flex.gap-3 > section { border-color: var(--portal-line); background: var(--portal-group); }
 .portal-partner-pipeline-page [data-slot="card-content"] > div.flex.gap-3 > section > div:first-child { border-bottom-color: var(--portal-line); background: var(--portal-panel); }
 .portal-partner-pipeline-page [data-slot="card-content"] > div.flex.gap-3 > section > div:first-child h3 { font-size: .88rem; }
@@ -1345,19 +1391,19 @@ a.portal-top-foot-action { text-decoration: none; }
 @keyframes portal-team-loading-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 .portal-team-review-detail-person > span { display: grid; width: 1.9rem; height: 1.9rem; place-items: center; border-radius: 50%; background: var(--surface-alt); color: var(--ink); font-size: .66rem; font-weight: 600; }
 .portal-team-review-detail-link { display: inline-flex; align-items: center; gap: .3rem; color: var(--accent-ink); font-size: .72rem; font-weight: 600; }
-.portal-team-review-detail { display: flex; flex-direction: column; align-self: start; position: fixed; z-index: 40; top: 0; right: 0; bottom: 0; width: min(32rem, calc(100vw - 18rem)); min-height: 100vh; max-height: 100vh; overflow: hidden; border: 1px solid var(--portal-line); border-radius: 0; background: var(--portal-panel); box-shadow: var(--shadow-overlay); padding: 1.35rem; }
+/* The teammate panel is the shared Sheet now (foundation v3); these style what is inside it. */
 .portal-team-review-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
 .portal-team-review-detail-close { display: inline-grid; width: 2rem; height: 2rem; flex: 0 0 auto; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--portal-muted); }
 .portal-team-review-detail-close:hover { border-color: var(--portal-line); background: var(--portal-group); color: var(--portal-ink); }
 .portal-team-review-detail-close:focus-visible { outline: 2px solid var(--ring-color); outline-offset: 2px; }
 .portal-team-review-detail-person { display: flex; align-items: center; gap: .65rem; border-bottom: 1px solid var(--portal-line); padding: .85rem 0 1rem; }
 .portal-team-review-detail-person > span { width: 2.4rem; height: 2.4rem; font-size: .8rem; }
-.portal-team-review-detail h2 { font-size: 1rem; font-weight: 600; }
+.portal-team-review-sheet h2 { font-size: 1rem; font-weight: 600; }
 .portal-team-review-detail-person p { margin-top: .1rem; color: var(--portal-muted); font-size: .72rem; }
-.portal-team-review-detail dl { display: grid; gap: .65rem; border-bottom: 1px solid var(--portal-line); padding: 1rem 0; }
-.portal-team-review-detail dl div { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
-.portal-team-review-detail dt { color: var(--portal-muted); font-size: .74rem; }
-.portal-team-review-detail dd { font-size: .9rem; font-weight: 600; }
+.portal-team-review-sheet dl { display: grid; gap: .65rem; border-bottom: 1px solid var(--portal-line); padding: 1rem 0; }
+.portal-team-review-sheet dl div { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+.portal-team-review-sheet dt { color: var(--portal-muted); font-size: .74rem; }
+.portal-team-review-sheet dd { font-size: .9rem; font-weight: 600; }
 .portal-team-review-detail-link { width: 100%; justify-content: space-between; margin-top: 1rem; border: 1px solid var(--portal-line); border-radius: 8px; padding: .65rem .75rem; color: var(--portal-ink); }
 .portal-team-review-detail-link:hover { border-color: var(--portal-primary); color: var(--accent-ink); }
 .portal-team-review-detail-leads { display: grid; gap: .65rem; margin-top: 1rem; }
@@ -1385,7 +1431,6 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-team-section-tabs a[aria-current="page"] { border-bottom-color: var(--portal-primary); color: var(--accent-ink); }
 
 @media (max-width: 1000px) {
-  .portal-team-review-detail { position: static; width: 100%; min-height: auto; max-height: none; overflow: visible; border-radius: 12px; box-shadow: none; }
   .portal-team-review-detail-leads { max-height: none; overflow: visible; }
 }
 
@@ -1910,7 +1955,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: .75rem;
-  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 .portal-agent > main { width: calc(100% - 280px); margin-left: 280px; }
@@ -2308,14 +2353,15 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-campaigns-table th,
 .portal-lead-table th,
 .portal-team-table th {
-  height: 2rem;
+  /* v3 (2026-10-27): a 40px head in sentence case at the label step, 13/500. */
+  height: 2.5rem;
   padding: .5rem .625rem;
   background: var(--surface-alt);
   color: var(--muted);
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .05em;
+  font-size: .8125rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 
@@ -2323,7 +2369,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-callback-table td,
 .portal-campaigns-table td,
 .portal-lead-table td,
-.portal-team-table td { padding: .5rem .625rem; }
+.portal-team-table td { height: 2.75rem; padding: .5rem .625rem; } /* 44px rows (owner pick, 2026-10-27) */
 
 /* The outer gutter. */
 .portal-activity-table tr > *:first-child,
@@ -2584,15 +2630,15 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
  *
  * Twenty screens had invented their own: 2.25rem here, clamp(2rem, 4vw, 3rem) there, one at
  * clamp(2.1rem, 4vw, 3.35rem). On a 1440px monitor that is a 32px title on one page and a 53px
- * title on the next, which reads as two different products. Every artboard draws it at
- * 32px/1.13/-0.025em, so that is what a page inside the shell gets.
+ * title on the next, which reads as two different products. Foundation v3 (owner pick 2026-10-27)
+ * draws it at 24/600 (`text-page`), so that is what a page inside the shell gets.
  *
  * The class is doubled to out-specify the per-page rules above without reaching for !important.
  * Marketing and the sign-in screens are outside the shell and keep their own display type.
  * ========================================================================== */
 .portal-agent.portal-agent main h1 {
-  font-size: 32px;
-  line-height: 1.13;
+  font-size: 24px;
+  line-height: 1.25;
   font-weight: 600;
   letter-spacing: -.025em;
 }
@@ -2635,8 +2681,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
  * artboard has one table and components/ui/table.tsx draws it; these are that table’s numbers,
  * applied to the hand-built ones so a column heading reads the same on every screen.
  *
- * The same values as TableHead / TableCell: a 32px head row on the grey band, the 12px label style
- * (the board’s 10.5px is below the type scale’s floor), 8px cells, 16px at the table’s outer
+ * The same values as TableHead / TableCell (foundation v3, 2026-10-27): a 40px head row in sentence
+ * case at 13/500 on the see-through band, 44px rows, 8px cell padding, 16px at the table’s outer
  * edges. Only header rows in <thead> — group rows inside a body keep their own look. Alignment is
  * left alone so numeric columns stay right-aligned. :is() carries the most specific selector in
  * the list, and this sits last, so it wins without !important.
@@ -2651,16 +2697,17 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
     .portal-partners-page > div.grid > [data-slot="card"],
     .portal-team-table
   ) thead th {
-  height: 2rem;
+  /* Foundation v3 (2026-10-27): the 40px head in sentence case at the label step, 13/500. */
+  height: 2.5rem;
   padding: 0 .625rem;
   border-bottom: 0;
-  background: var(--surface-alt);
+  background: color-mix(in srgb, var(--surface-alt) 45%, transparent);
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.33;
-  font-weight: 600;
-  letter-spacing: .02em;
-  text-transform: uppercase;
+  font-size: .8125rem;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  text-transform: none;
   white-space: nowrap;
   vertical-align: middle;
 }
@@ -2674,6 +2721,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
     .portal-partners-page > div.grid > [data-slot="card"],
     .portal-team-table
   ) tbody td {
+  height: 2.75rem; /* 44px rows (owner pick, 2026-10-27) */
   padding-block: .5rem;
   padding-inline: .625rem;
   border-color: var(--border);
@@ -3045,9 +3093,27 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 
 .m-stage .m-glass {
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
 }
+
+/* A glass card's header band (a table card's title row, a settings card's head): the band colour,
+   see-through, so the ribbon still reads under it. */
+@layer components {
+  .m-glass-head { background-color: color-mix(in srgb, var(--surface-alt) 45%, transparent); }
+  /* A tile or row inside a glass card: lighter, so it reads as a layer of the card. */
+  .m-glass-inset { background-color: color-mix(in srgb, var(--color-card) 40%, transparent); }
+}
+
+/* Foundation v3, 2026-10-27: every app, console and partner page sits on one stage, drawn by the
+   shell layout. A page or component that still draws its own DashboardStage inside it keeps its
+   layout but draws no second ribbon or second pair of glows. */
+.m-stage .m-stage > .m-ribbon-layer,
+.m-stage .m-stage > .m-ambient { display: none; }
+
+/* Inter's open digits and single-storey a (the v3 mockup's font features), inside the apps only:
+   the marketing pages set Montserrat, whose ss01 is a different glyph set. */
+.m-stage { font-feature-settings: "cv11", "ss01"; }
 
 /* The strip's lit edge: a thin brand line along its top that fades out at both ends. */
 .m-stat-strip { position: relative; }
@@ -3292,7 +3358,23 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   :has(> .portal-agent-desktop-nav) .portal-top-panel-search { top: 44px; width: min(520px, calc(100vw - 2rem)); }
 }
 
-/* Launchpad tiles (components/ui/launch-tile*; 2026-10-25). */
+/* The ribbon behind a role home (components/ui/ribbon-backdrop.tsx). The layer spans the page's
+   padding too, so the lines reach the edges; the canvas sticks under the top bar while the cards
+   scroll over it. The glass is a little clearer here so the lines read through it. */
+:root { --ribbon-ink: 10, 135, 105; }
+.dark { --ribbon-ink: 7, 214, 160; }
+.m-ribbon-layer { position: absolute; inset: -1rem -1rem -1rem; z-index: -10; pointer-events: none; }
+@media (min-width: 640px) { .m-ribbon-layer { inset: -1.5rem; } }
+@media (min-width: 1024px) { .m-ribbon-layer { inset: -1.5rem -2rem -2rem; } }
+.m-ribbon { position: sticky; top: var(--top-bar-h, 56px); display: block; width: 100%; height: calc(100vh - var(--top-bar-h, 56px)); }
+/* 55%: the see-through card the owner chose for Settings (2026-10-26), now on every page. Set on the
+   stage itself since the ribbon left the app (main, 2026-10-28: a quiet canvas), so the glass stays. */
+.m-stage, .m-stage--ribbon { --glass-alpha: 55%; }
+.dark .m-stage, .dark .m-stage--ribbon { --glass-alpha: 55%; }
+
+/* Launchpad tiles and the lead-to-money map (components/ui/launch-tile*, lead-flow-map; 2026-10-25). */
+:root { --leak-ink: 214, 129, 18; }
+.dark { --leak-ink: 242, 165, 65; }
 .m-tile-grid { counter-reset: launch-tile; }
 .m-tile-grid > .m-tile { counter-increment: launch-tile; }
 .m-tile-key { display: none; }
@@ -3312,3 +3394,300 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 @keyframes m-bar-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .m-bar-rise { transform-origin: bottom; animation: m-bar-rise .9s cubic-bezier(.2, .8, .2, 1) both; }
 @media (prefers-reduced-motion: reduce) { .m-dash-tile, .m-dash-tile:hover { transition: none; transform: none; } .m-launch-wiggle, .m-bar-rise { animation: none; } }
+
+/* One scrollbar across the app (owner 2026-10-27): thin, a brand-green thumb on a clear track, as
+   Pipelines & outcomes drew it. Every scrolling area gets it; only the agent rail hides its bar. */
+:root { --scrollbar-thumb: color-mix(in srgb, var(--primary) 45%, transparent); }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 999px; }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* ===========================================================================
+ * Toasts (Sileo, mounted by components/ui/toaster.tsx, raised only through lib/notify).
+ *
+ * Sileo's own look is kept: the gooey pill, the spring, the badge-and-title header that opens into
+ * the detail. Only its colours are ours. Sileo injects its stylesheet at runtime, after this one,
+ * so every rule here leads with [data-sileo-viewport] to outrank it rather than relying on order.
+ * The pill is an SVG rect with a `fill` attribute; a CSS `fill` beats a presentation attribute.
+ * ========================================================================= */
+[data-sileo-viewport] {
+  --sileo-state-success: var(--toast-success);
+  --sileo-state-warning: var(--toast-warning);
+  --sileo-state-error:   var(--toast-error);
+  --sileo-state-info:    var(--toast-info);
+  --sileo-state-action:  var(--toast-win);
+  --sileo-state-loading: var(--toast-muted);
+}
+/* Above dialogs and sheets (z-50), and clear of the portal's top bar. */
+:root [data-sileo-viewport][data-position] { z-index: 60; }
+:root [data-sileo-viewport][data-position^="top"] { top: calc(var(--top-bar-h, 0px) + .5rem); }
+[data-sileo-viewport] [data-sileo-svg] rect { fill: var(--toast-fill); }
+[data-sileo-viewport] [data-sileo-toast] { color: var(--toast-text); font-family: var(--font-inter), system-ui, sans-serif; }
+/* Our titles are sentences ("Lead saved"), not Sileo's state names, so no Title Case. */
+[data-sileo-viewport] [data-sileo-title] { text-transform: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+[data-sileo-viewport] [data-sileo-description] { color: var(--toast-muted); }
+[data-sileo-viewport] [data-sileo-description] strong { display: block; color: var(--toast-text); font-weight: 600; }
+/* An action with no detail line: the button leads the body, so no gap above it. */
+[data-sileo-viewport] [data-sileo-description] > [data-sileo-button]:first-child { margin-top: 0; }
+[data-sileo-viewport] [data-sileo-button]:focus-visible { outline: 2px solid var(--toast-text); outline-offset: 2px; }
+/* A sale: the brand green, not the success green, so a win never reads as a routine save. */
+[data-sileo-viewport] [data-sileo-badge].notify-win,
+[data-sileo-viewport] [data-sileo-title].notify-win,
+[data-sileo-viewport] [data-sileo-button].notify-win { --_c: var(--toast-win); }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════
+   Navigation A (owner's pick 2026-10-28, canvas page "navigation"). The agent sidebar is labelled:
+   your workspace, Home, your pins, the job groups with what waits in them, Settings and your account
+   at the foot. One click collapses it to the icon rail above (data-collapsed="true"), remembered in
+   a cookie. The top bar gains the breadcrumb, a wider search, the Inbound pill, New and one Inbox.
+   ══════════════════════════════════════════════════════════════════════════════════════════════════ */
+.portal-nav[data-collapsed="false"] { width: 248px; align-items: stretch; }
+@media (min-width: 768px) {
+  :has(> .portal-nav[data-collapsed="false"]) > main { width: calc(100% - 248px); margin-left: 248px; }
+}
+.portal-nav[data-collapsed="false"] .portal-agent-rail-brand { display: flex; align-items: center; justify-content: space-between; padding: 0 10px 0 16px; }
+.portal-nav[data-collapsed="false"] .portal-agent-rail-brand a { display: flex; width: auto; height: 40px; align-items: center; border-radius: 8px; }
+.portal-nav-toggle {
+  display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: 8px; background: transparent; color: var(--nav-muted); cursor: pointer;
+  transition: background-color var(--t-micro) var(--e), color var(--t-micro) var(--e);
+}
+.portal-nav-toggle:hover,
+.portal-nav-toggle:focus-visible { background: color-mix(in srgb, var(--nav-ink), transparent 90%); color: var(--nav-ink); }
+.portal-nav-toggle:focus-visible { outline: 2px solid var(--nav-success); outline-offset: 2px; }
+.portal-nav[data-collapsed="true"] .portal-nav-toggle { width: 44px; height: 44px; border-radius: 12px; }
+
+/* The workspace card: which agency, which plan, which role; it opens the account menu's workspace switch. */
+.portal-nav-workspace {
+  flex: none; display: flex; align-items: center; gap: 10px; height: 48px; margin: 12px 12px 4px; padding: 0 10px;
+  border: 1px solid var(--nav-line); border-radius: 12px; background: color-mix(in srgb, var(--nav-ink), transparent 96%);
+  color: var(--nav-ink); text-align: left; cursor: pointer;
+  transition: background-color var(--t-micro) var(--e), border-color var(--t-micro) var(--e);
+}
+.portal-nav-workspace:hover,
+.portal-nav-workspace:focus-visible { border-color: color-mix(in srgb, var(--nav-ink), transparent 70%); background: color-mix(in srgb, var(--nav-ink), transparent 92%); }
+.portal-nav-workspace:focus-visible { outline: 2px solid var(--nav-success); outline-offset: 2px; }
+.portal-nav-workspace svg { color: var(--nav-muted); }
+.portal-nav-workspace-mark {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px;
+  background: color-mix(in srgb, var(--nav-success), transparent 80%); color: var(--nav-success);
+  font-size: .75rem; font-weight: 700; line-height: 1;
+}
+.portal-nav-workspace-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.portal-nav-workspace-name,
+.portal-nav-workspace-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-nav-workspace-name { font-size: .875rem; font-weight: 600; line-height: 1.35; letter-spacing: -.02em; }
+.portal-nav-workspace-meta { font-size: .75rem; line-height: 1.4; letter-spacing: -.01em; color: var(--nav-muted); }
+
+/* The labelled tree (sidebar and phone drawer). */
+.portal-nav[data-collapsed="false"] .portal-agent-rail-scroll { padding: 8px 10px 12px; scrollbar-width: thin; }
+.portal-nav[data-collapsed="false"] .portal-agent-rail-scroll::-webkit-scrollbar { display: block; }
+.portal-nav-tree { display: flex; flex-direction: column; gap: 2px; }
+.portal-nav-list,
+.portal-nav-sub { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.portal-nav-row { position: relative; display: flex; align-items: center; }
+.portal-nav-link,
+.portal-nav-group-head {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--nav-ink);
+  font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; text-align: left; text-decoration: none; cursor: pointer;
+  transition: background-color var(--t-micro) var(--e), color var(--t-micro) var(--e);
+}
+.portal-nav-row .portal-nav-link { padding-right: 34px; }
+.portal-nav-link:hover,
+.portal-nav-link:focus-visible,
+.portal-nav-group-head:hover,
+.portal-nav-group-head:focus-visible { background: color-mix(in srgb, var(--nav-ink), transparent 92%); color: var(--nav-ink); }
+.portal-nav-link:focus-visible,
+.portal-nav-group-head:focus-visible { outline: 2px solid var(--nav-success); outline-offset: -2px; }
+.portal-nav-link[aria-current="page"] { background: var(--nav-active-bg); color: var(--nav-active-ink); font-weight: 600; }
+.portal-nav-link[aria-current="page"] .portal-nav-icon { color: var(--nav-active-icon); }
+.portal-nav-icon { flex: none; width: 18px; height: 18px; color: var(--nav-muted); }
+.portal-nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-nav-group-head { color: var(--nav-muted); font-weight: 600; }
+.portal-nav-group[data-active] .portal-nav-group-head { color: var(--nav-ink); }
+.portal-nav-chevron { flex: none; width: 14px; height: 14px; color: var(--nav-muted); transform: rotate(-90deg); transition: transform var(--t-micro) var(--e); }
+.portal-nav-chevron.is-open { transform: none; }
+.portal-nav-sub { margin: 2px 0 6px 19px; padding-left: 8px; border-left: 1px solid var(--nav-line); }
+.portal-nav-link-sub { height: 32px; }
+.portal-nav-heading { margin: 10px 10px 2px; font-size: .75rem; font-weight: 600; line-height: 1.5; letter-spacing: -.01em; color: var(--nav-muted); }
+.portal-nav-pinned { padding-bottom: 6px; border-bottom: 1px solid var(--nav-line); margin-bottom: 4px; }
+.portal-nav-count {
+  flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box;
+  border-radius: 6px; background: color-mix(in srgb, var(--nav-success), transparent 82%); color: var(--nav-success);
+  font-size: .75rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.portal-nav-link[aria-current="page"] .portal-nav-count { background: color-mix(in srgb, var(--nav-active-icon), transparent 80%); color: var(--nav-active-ink); }
+.portal-nav-pin {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--nav-muted); cursor: pointer; opacity: 0;
+  transition: opacity var(--t-micro) var(--e), color var(--t-micro) var(--e);
+}
+.portal-nav-row:hover .portal-nav-pin,
+.portal-nav-pin:focus-visible,
+.portal-nav-pin[aria-pressed="true"] { opacity: 1; }
+.portal-nav-pin:hover { color: var(--nav-ink); background: color-mix(in srgb, var(--nav-ink), transparent 88%); }
+.portal-nav-pin:focus-visible { outline: 2px solid var(--nav-success); outline-offset: 0; }
+.portal-nav-pin[aria-pressed="true"] { color: var(--nav-success); }
+@media (hover: none) { .portal-nav-pin { opacity: .7; } }
+.portal-nav-drawer { margin-top: .75rem; display: flex; flex-direction: column; gap: 2px; }
+.portal-nav-drawer > .portal-nav-list { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--nav-line); }
+
+/* The collapsed rail: a dot counting what waits in a group. The flyout carries the page counts. */
+.portal-nav-dot {
+  position: absolute; top: -5px; right: -9px; min-width: 18px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  display: inline-grid; place-items: center; border-radius: 999px; border: 2px solid var(--nav-bg);
+  background: var(--nav-success); color: var(--nav-bg); font-size: 10px; font-weight: 700; line-height: 1;
+  pointer-events: none;
+}
+.portal-agent-rail-list { padding-top: .875rem; }
+/* Counts by size (owner 2026-10-28): green for a little waiting, then yellow, orange, red. */
+.portal-nav-count[data-tone="yellow"],
+.portal-nav-link[aria-current="page"] .portal-nav-count[data-tone="yellow"] { background: color-mix(in srgb, #f5c542, transparent 80%); color: #f5c542; }
+.portal-nav-count[data-tone="orange"],
+.portal-nav-link[aria-current="page"] .portal-nav-count[data-tone="orange"] { background: color-mix(in srgb, #ff9a3d, transparent 80%); color: #ffa552; }
+.portal-nav-count[data-tone="red"],
+.portal-nav-link[aria-current="page"] .portal-nav-count[data-tone="red"] { background: color-mix(in srgb, #ff5a4f, transparent 78%); color: #ff7a70; }
+.portal-nav-dot[data-tone="yellow"] { background: #f5c542; }
+.portal-nav-dot[data-tone="orange"] { background: #ff9a3d; }
+.portal-nav-dot[data-tone="red"] { background: #ff5a4f; color: #fff; }
+.portal-agent-rail-fly a .portal-nav-count { margin-left: auto; }
+
+/* The foot: Settings and your account, labelled when the sidebar is. */
+.portal-nav[data-collapsed="false"] .portal-agent-rail-foot { align-items: stretch; gap: 2px; padding: 8px 10px 12px; }
+.portal-nav[data-collapsed="false"] .portal-agent-rail-account { justify-content: stretch; }
+.portal-rail-account-text { display: none; }
+.portal-nav[data-collapsed="false"] .portal-rail-account {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 48px; padding: 0 8px; text-align: left;
+}
+.portal-nav[data-collapsed="false"] .portal-rail-account-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.portal-rail-account-name,
+.portal-rail-account-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-rail-account-name { font-size: .875rem; font-weight: 600; line-height: 1.35; letter-spacing: -.02em; color: var(--nav-ink); }
+.portal-rail-account-meta { font-size: .75rem; line-height: 1.4; color: var(--nav-muted); }
+.portal-nav[data-collapsed="false"] .portal-top-panel.portal-top-panel-rail { left: 256px; }
+.portal-top-panel.portal-top-panel-rail.portal-top-panel-rail-top { top: calc(var(--top-bar-h, 56px) + 8px); bottom: auto; }
+
+/* The top bar: where you are, a wide search, the Inbound pill, New, one Inbox. */
+.portal-top-crumb { display: none; }
+.portal-top-presence { display: none; }
+@media (min-width: 1024px) {
+  :has(> .portal-agent-rail) .portal-top-crumb {
+    display: flex; flex: 0 1 auto; min-width: 0; max-width: 240px; align-items: center; gap: 6px;
+    font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; color: var(--nav-muted); white-space: nowrap;
+  }
+  .portal-top-presence {
+    display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px;
+    background: color-mix(in srgb, var(--nav-ink), transparent 92%); color: var(--nav-ink);
+    font-size: .75rem; font-weight: 600; line-height: 1; text-decoration: none; white-space: nowrap;
+    transition: background-color var(--t-micro) var(--e);
+  }
+  .portal-top-presence:hover { background: color-mix(in srgb, var(--nav-ink), transparent 86%); }
+  .portal-top-presence:focus-visible { outline: 2px solid var(--nav-success); outline-offset: 2px; }
+}
+.portal-top-crumb-group { flex: none; }
+.portal-top-crumb-page { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--nav-ink); font-weight: 600; }
+.portal-top-presence-dot { flex: none; width: 8px; height: 8px; border-radius: 999px; background: var(--nav-muted); }
+.portal-top-presence[data-status="ready"] { background: color-mix(in srgb, var(--nav-success), transparent 86%); }
+.portal-top-presence[data-status="ready"] .portal-top-presence-dot { background: var(--nav-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nav-success), transparent 75%); }
+.portal-top-presence[data-status="on_call"] .portal-top-presence-dot,
+.portal-top-presence[data-status="on_break"] .portal-top-presence-dot { background: var(--warning); }
+@media (min-width: 768px) {
+  :has(> .portal-agent-rail) .portal-top-search { width: auto; flex: 0 1 520px; min-width: 200px; margin-inline: 0 auto; }
+}
+/* A darker field (owner 2026-10-28): the search reads as a well cut into the bar, not a lighter strip. */
+:has(> .portal-agent-rail) .portal-top-search-input,
+:has(> .portal-agent-rail) .portal-top-search-input:focus { background: color-mix(in srgb, var(--nav-bg), black 38%); }
+@media (max-width: 639px) { .portal-top-new { display: none; } }
+.portal-top-inbox-tabs { flex: none; padding: 10px 12px 2px; }
+
+/* NavB's rail look on the collapsed sidebar (owner 2026-10-28): six areas, each an outline icon over
+   its name, a count badge on the icon's top-right corner, the open page's area as a green pill. */
+.portal-nav[data-collapsed="true"] { width: 88px; }
+@media (min-width: 768px) {
+  :has(> .portal-nav[data-collapsed="true"]) > main { width: calc(100% - 88px); margin-left: 88px; }
+}
+.portal-nav[data-collapsed="true"] .portal-agent-rail-list,
+.portal-nav[data-collapsed="true"] .portal-agent-rail-foot { gap: 2px; }
+.portal-nav[data-collapsed="true"] .portal-agent-rail-item {
+  flex-direction: column; gap: 4px; width: 76px; height: auto; padding: 8px 0 6px; border-radius: 12px;
+}
+.portal-nav[data-collapsed="true"] .portal-agent-rail-item.is-active::before { content: none; }
+.portal-nav[data-collapsed="true"] .portal-agent-rail-item.is-active,
+.portal-nav[data-collapsed="true"] .portal-agent-rail-item[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--nav-success), transparent 86%); color: var(--nav-active-ink);
+}
+.portal-nav-rail-icon { position: relative; display: inline-flex; }
+.portal-nav-rail-label { display: none; }
+.portal-nav[data-collapsed="true"] .portal-nav-rail-label {
+  display: block; max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: .75rem; font-weight: 600; line-height: 1.2; letter-spacing: -.01em;
+}
+.portal-nav-rail-icon .portal-nav-dot { top: -7px; right: auto; left: calc(100% - 3px); }
+.portal-nav[data-collapsed="true"] ~ * .portal-agent-rail-fly,
+.portal-nav[data-collapsed="true"] .portal-agent-rail-fly { left: 96px; }
+.portal-nav[data-collapsed="true"] .portal-top-panel.portal-top-panel-rail { left: 96px; }
+/* An area of two job groups names each group over its pages, in the sidebar and in the rail's panel. */
+/* Owner 2026-10-28: the group headings must split an area at a glance ("Today" work vs "Sales"):
+   brighter, bolder, a green tick before the name, and a hairline with room above every group after
+   the first. */
+.portal-nav-subhead,
+.portal-nav-fly-subhead {
+  display: flex; align-items: center; gap: 8px;
+  font-size: .875rem; font-weight: 700; line-height: 1.5; letter-spacing: -.02em; color: var(--nav-ink);
+}
+.portal-nav-subhead::before,
+.portal-nav-fly-subhead::before { content: ""; flex: none; width: 3px; height: 14px; border-radius: 3px; background: var(--nav-success); }
+.portal-nav-subhead { margin: 4px 10px 4px; }
+.portal-nav-subhead:first-child { margin-top: 2px; }
+.portal-nav-row + .portal-nav-subhead { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--nav-line); }
+.portal-nav-fly-subhead { margin: .25rem .5rem .25rem; }
+.portal-agent-rail-fly ul + .portal-nav-fly-subhead { margin-top: .625rem; padding-top: .625rem; border-top: 1px solid color-mix(in srgb, var(--nav-ink), transparent 85%); }
+
+/* Page header without a title (owner 2026-10-28, components/ui/page-header.tsx). The breadcrumb in
+   the top bar names the page; the header keeps a hidden <h1> and shows only its actions. With no
+   actions it takes no space. Right before the page's tabs or step bar ([data-page-lead]) the
+   actions join that row on the right, from md up; the lead row leaves them room and they sit at its
+   middle (both measured by page-header-actions.tsx). */
+.m-page-header:not([data-has-actions]) { display: contents; }
+.m-page-header[data-has-actions] { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
+@media (min-width: 768px) {
+  :has(> .m-page-header[data-has-actions] + :is([data-page-lead], :has(> [data-page-lead]:first-child))) { position: relative; }
+  .m-page-header[data-has-actions]:has(+ :is([data-page-lead], :has(> [data-page-lead]:first-child))) {
+    position: absolute; right: 0; z-index: 2; max-width: 70%;
+    height: var(--page-lead-h, auto);
+  }
+  /* space-y on the parent gives the lead a top margin the out-of-flow header no longer earns. */
+  .m-page-header[data-has-actions]:first-child + :is([data-page-lead], :has(> [data-page-lead]:first-child)) { margin-top: 0; }
+  .m-page-header[data-has-actions] + :is([data-page-lead], :has(> [data-page-lead]:first-child)) { max-width: calc(100% - var(--page-actions-w, 0px)); }
+  /* A step bar stays in the true middle of the row (owner 2026-10-28, "the progress bar in the
+     middle"); the actions take the space to its right and wrap onto a second line when they do not
+     fit there. The row grows to the actions' height and the bar sits at its middle. */
+  .m-page-header[data-has-actions]:has(+ [data-page-lead="center"]) {
+    height: auto; max-width: calc((100% - var(--page-lead-content-w, 0px)) / 2 - 16px);
+  }
+  .m-page-header[data-has-actions] + [data-page-lead="center"] {
+    max-width: none; align-items: center; min-height: var(--page-actions-h, auto);
+  }
+}
+/* Phones: the bar first, then the actions under it. */
+@media (max-width: 767px) {
+  .m-page-header[data-has-actions]:first-child + [data-page-lead="center"] { order: -1; }
+}
+.portal-top-bar .portal-top-crumb { display: none; }
+@media (min-width: 1024px) {
+  .portal-top-bar .portal-top-crumb {
+    display: flex; flex: 0 1 auto; min-width: 0; max-width: 280px; align-items: center; gap: 6px;
+    font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; color: var(--nav-muted); white-space: nowrap;
+  }
+}
+/* Search in the middle of the agent bar (owner 2026-10-28): the trail on the left and the actions on
+   the right take equal shares, so the field sits centred whatever each side holds. */
+@media (min-width: 1024px) {
+  :has(> .portal-agent-rail) .portal-top-bar .portal-top-crumb { flex: 1 1 0; max-width: none; }
+  :has(> .portal-agent-rail) .portal-top-bar .portal-top-search { flex: 0 1 520px; margin-inline: 0; }
+  :has(> .portal-agent-rail) .portal-top-bar .portal-top-actions { flex: 1 1 0; justify-content: flex-end; }
+}
