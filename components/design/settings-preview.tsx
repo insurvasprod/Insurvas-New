@@ -10,6 +10,10 @@ import { ViewTabs } from "@/components/ui/view-tabs";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
 import { PREVIEW_SECTIONS, PREVIEW_TEAM, PREVIEW_WORKSPACE, type PreviewState } from "@/lib/settings/preview/fixtures";
 import { setPreviewState } from "@/components/design/preview-fetch";
+import { AccountingSettingsBoard } from "@/components/app/accounting/accounting-settings-board";
+import { ComplianceSettingsBoard } from "@/components/app/compliance/compliance-settings";
+import { RetentionSettingsBoard } from "@/components/app/retention/retention-settings-board";
+import { PREVIEW_ACCOUNTING, PREVIEW_RETENTION } from "@/lib/settings/preview/money";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
 /** Every feature a Settings section can ask for, so the preview shows the whole menu for an owner. */
@@ -86,7 +90,15 @@ export function SettingsPreview({ role, routeSection, state = "loaded" }: { role
       // Sections with fixtures render their real panel; the rest keep a sample.
       renderPanel={(id) => (PREVIEW_SECTIONS.has(id) ? undefined : id === "carriers" ? <CarriersSample /> : <GenericSample />)}
     >
-      {routeSection ? <SettingsCard title="Sample board" sub="The module's own board renders here on :3000, inside the same frame." /> : null}
+      {routeSection ? <RouteBoard id={routeSection} readOnly={state === "readonly"} /> : null}
     </AgentSettingsTabs>
   );
+}
+
+/** The routed sections' real boards, with sample data (their pages hand them server data; R2). */
+function RouteBoard({ id, readOnly }: { id: string; readOnly: boolean }) {
+  if (id === "accounting") return <AccountingSettingsBoard {...PREVIEW_ACCOUNTING} canEdit={!readOnly} />;
+  if (id === "retention") return <RetentionSettingsBoard hub={PREVIEW_RETENTION} canEdit={!readOnly} />;
+  if (id === "compliance") return <ComplianceSettingsBoard readOnly={readOnly} />;
+  return <SettingsCard title="Sample board" sub="This section's board has no sample yet." />;
 }

@@ -12,6 +12,8 @@ import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import { CARRIER_HANDLERS } from "@/lib/settings/preview/carriers";
 import { DIALING_HANDLERS } from "@/lib/settings/preview/dialing";
+import { FORM_HANDLERS } from "@/lib/settings/preview/forms";
+import { MONEY_HANDLERS } from "@/lib/settings/preview/money";
 
 export type PreviewState = "loaded" | "empty" | "error" | "readonly";
 export const PREVIEW_STATES: PreviewState[] = ["loaded", "empty", "error", "readonly"];
@@ -194,6 +196,8 @@ export const PREVIEW_WORKSPACE: WorkspaceSnapshot = {
 const HANDLERS: Record<string, Handler> = {
   ...CARRIER_HANDLERS,
   ...DIALING_HANDLERS,
+  ...FORM_HANDLERS,
+  ...MONEY_HANDLERS,
   "GET /api/app/agency-profile": (state) => (state === "error" ? failed("the business identity") : ok(agencyProfile(state === "empty"))),
   // Saves answer with the profile as it now stands (the form keeps its own draft).
   "PUT /api/app/agency-profile": (state) => ok({ profile: agencyProfile(state === "empty").profile }),
@@ -230,7 +234,7 @@ const HANDLERS: Record<string, Handler> = {
 /** Sections whose real panel renders in the preview (their fixtures are above). */
 export const PREVIEW_SECTIONS = new Set([
   "my-profile", "business-identity", "products", "team-access", "billing", "settings-history", "carriers",
-  "pipelines", "lead-posting", "calendar", "cadence", "queue-sla", "calling-windows", "integrations",
+  "pipelines", "form-templates", "lead-posting", "calendar", "cadence", "queue-sla", "calling-windows", "integrations",
   // The Sales panels carry their own sample mode (?preview=sample, components/app/settings/sales/shared.tsx).
   "sales-underwriting", "sales-quotation", "sales-field-sets", "sales-disclosures", "sales-preferences",
   "sales-welcome-pack", "sales-ai", "sales-pipeline-sync", "sales-extension",
