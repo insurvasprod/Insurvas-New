@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
  */
 export function PageHeader({
   title,
+  titleInfo,
   description,
   actions,
   size = "page",
@@ -28,6 +29,8 @@ export function PageHeader({
    */
   eyebrow?: string;
   title: string;
+  /** An (i) beside the title that says what the page is for, when its name alone may not (an <InfoTip>). */
+  titleInfo?: ReactNode;
   description?: string;
   actions?: ReactNode;
   size?: "page" | "hero";
@@ -37,9 +40,12 @@ export function PageHeader({
     <div className={cn("flex flex-wrap items-end justify-between gap-4", className)}>
       <div className="min-w-0">
         {/* The display face (Inter Tight, foundation v3): narrower than the body face at this size. */}
-        <h1 data-size={size} className="font-[family-name:var(--font-display)] text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]">
-          {title}
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 data-size={size} className="font-[family-name:var(--font-display)] text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]">
+            {title}
+          </h1>
+          {titleInfo}
+        </div>
         {description && (
           <p className="mt-1.5 max-w-[720px] text-base leading-[1.5] tracking-[-0.02em] text-muted-foreground">
             {description}

@@ -20,6 +20,26 @@ export const SETUP_MODULES = [
 
 export type SetupModuleKey = (typeof SETUP_MODULES)[number]["key"];
 
+/**
+ * How Get set up is laid out (owner, 2026-10-28: "simplify it and make it easier for people to set up
+ * and start working"). Start working and Get paid right count toward done; Fine-tune later is folded,
+ * optional, never "next" and never holds the progress back.
+ */
+export const SETUP_GROUPS = [
+  { key: "start", label: "Start working", hint: "What you need before the first call, transfer or application." },
+  { key: "money", label: "Get paid right", hint: "Bring in your book and statements so Insurvas can check every commission." },
+  { key: "later", label: "Fine-tune later", hint: "Optional. Each one has a working default until you change it." },
+] as const;
+
+export type SetupGroupKey = (typeof SETUP_GROUPS)[number]["key"];
+
+/**
+ * What a carrier statement is and what uploading one does, in one place: the setup row's (i), the
+ * statement step's guide bar and the Statements page title all show this (owner, 2026-10-28).
+ */
+export const STATEMENT_EXPLAINER =
+  "The report each carrier sends you, usually monthly, listing the commission it paid you and any it took back. Upload it and Insurvas reads every line and matches it to your policies. Once you accept the matches, the payments go into your commission ledger, and anything missing, short-paid or wrongly charged back shows up in Discrepancies, so you can claim it.";
+
 export type SetupChecklistStep = {
   key: string;
   label: string;
@@ -41,6 +61,10 @@ export type SetupChecklistStep = {
   complete: boolean;
   /** Put aside by the reader ("skip it and come back", Basic Idea step 8). Not done, not blocking. */
   skipped?: boolean;
+  /** Which part of Get set up it sits in (SETUP_GROUPS). */
+  group?: SetupGroupKey;
+  /** A Fine-tune later step: listed, never counted, never next. */
+  optional?: boolean;
 };
 
 export type SetupChecklist = {
@@ -52,7 +76,7 @@ export type SetupChecklist = {
   steps: SetupChecklistStep[];
 };
 
-type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped">;
+type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped" | "group" | "optional">;
 
 /**
  * Every step used to point at `/app/settings`, which renders ten tabs — so the reader clicked a
@@ -61,29 +85,20 @@ type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped">;
  * `AgentSettingsTabs` already selects a tab from the URL hash, so the fix is the destination, not
  * the component. The steps that are not settings go to the screens that actually own them.
  *
- * Order is the order a new agency should work in. The first five keep the Basic Idea step 8 order
- * (carriers first: "nothing downstream is correct without it"); the 2026-10-21 walkthrough adds the
- * day-one work of an agency that dials and takes transfers — team, leads, hours, assignment and the
- * outcome-to-stage map that moves a lead (QA 2026-10-22: new tenants have none) — then the settings
- * each further module needs before it can be trusted.
+ * Order is the order a new agency should work in, in the three SETUP_GROUPS (owner, 2026-10-28):
+ * Start working — carriers first ("nothing downstream is correct without it"), then the day-one work
+ * of an agency that dials, takes transfers or sells (outcomes stay: QA 2026-10-22, new tenants have
+ * no mapping); Get paid right — the book, then the first statement; Fine-tune later — settings with
+ * working defaults. "Confirm your appointments" and "Finish a carrier" were folded into the carrier
+ * card's To finish list (MERGED_STEPS).
  */
 const SETUP_STEPS = [
   { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers", action: "Open settings tab", target: "carrier-library-add",
     instruction: "Tick the carriers you are contracted with. Contract level and writing number are optional.",
     why: "Every other step uses your carriers, so this comes first." },
-  // LA-4.6: straight to the import, which is the activation step ("You appear to be owed $X").
-  { key: "statement", module: "book", label: "Upload a carrier statement", path: "/app/statements?import=1", action: "Import a statement",
-    instruction: "Drop in your latest carrier statement — PDF, Excel or CSV.",
-    why: "One statement is enough to show what you are owed and what was paid wrong." },
-  { key: "appointments", module: "book", label: "Confirm your appointments", path: "/app/settings#carriers/carriers-states", action: "Open settings tab",
-    instruction: "Confirm the states and carriers you are appointed with.",
-    why: "Leads and applications are only routed to agents who are appointed for that state and carrier." },
   { key: "lead-sources", module: "inbound", label: "Add your lead sources", path: "/app/publishers", action: "Open lead sources", target: "publisher-add",
     instruction: "Add each publisher or vendor that sends you leads, and how you pay them.",
     why: "Cost per sale and lead-source scorecards are worked out per source." },
-  { key: "phone", module: "account", label: "Connect your phone number", path: "/app/settings#business-identity/identity-partner-support", action: "Open settings tab",
-    instruction: "Enter the phone number clients and partners should call.",
-    why: "It appears on documents and partner messages sent from your workspace." },
   { key: "team", module: "account", label: "Invite your team", path: "/app/settings#team-access", action: "Open settings tab", target: "team-invite",
     instruction: "Invite each person who works with you and give them a role.",
     why: "A role decides which screens a person sees and which leads they can work." },
@@ -99,17 +114,20 @@ const SETUP_STEPS = [
   { key: "outcomes", module: "pipeline", label: "Map call outcomes to stages", path: "/app/settings#pipelines", action: "Open settings tab", target: "pipeline-outcomes",
     instruction: "Pick the pipeline stage each call outcome moves a lead to.",
     why: "Until an outcome has a stage, recording it leaves the lead where it was." },
-  { key: "queue-sla", module: "inbound", label: "Set how fast transfers must be claimed", path: "/app/settings#queue-sla", action: "Open settings tab", target: "queue-sla-save",
-    instruction: "Set when an unclaimed transfer warns, escalates and expires.",
-    why: "These times drive the Agent Floor alerts and when the partner is told." },
-  // 2026-10-27: Carrier details folded into Settings › Carriers; the carrier facts are Insurvas's now,
-  // so this step is the carrier card's To finish list (products, states; the contract is optional).
-  { key: "sales-carriers", module: "sell", label: "Finish a carrier so you can sell it", path: "/app/settings#carriers", action: "Open settings tab",
-    instruction: "Tick the products you sell and the states you're appointed in. Contract level and writing number are optional.",
-    why: "Each carrier on Carriers shows what is left; once it is done it reads Ready to sell." },
   { key: "disclosures", module: "sell", label: "Publish your disclosures", path: "/app/settings#sales-disclosures", action: "Open settings tab",
     instruction: "Write or copy the disclosures your applications need, then publish them.",
     why: "A required disclosure must be read before an application can be submitted." },
+  // LA-4.6 made the statement step 2 ("You appear to be owed $X"). Owner, 2026-10-28: it helps nobody
+  // start working and matches nothing before the book is in, so it closes "Get paid right" instead.
+  { key: "statement", module: "book", label: "Upload your first carrier statement", path: "/app/statements?import=1", action: "Import a statement",
+    instruction: "When your next carrier statement arrives, drop it in: PDF, Excel or CSV.",
+    why: STATEMENT_EXPLAINER },
+  { key: "phone", module: "account", label: "Connect your phone number", path: "/app/settings#business-identity/identity-partner-support", action: "Open settings tab",
+    instruction: "Enter the phone number clients and partners should call.",
+    why: "It appears on documents and partner messages sent from your workspace." },
+  { key: "queue-sla", module: "inbound", label: "Set how fast transfers must be claimed", path: "/app/settings#queue-sla", action: "Open settings tab", target: "queue-sla-save",
+    instruction: "Set when an unclaimed transfer warns, escalates and expires.",
+    why: "These times drive the Agent Floor alerts and when the partner is told." },
   { key: "retention", module: "retention", label: "Set your retention rules", path: "/app/retention-settings", action: "Open retention settings",
     instruction: "Choose which risk bands reach the save queue.",
     why: "The save queue only shows policies at or above the band you choose here." },
@@ -145,7 +163,6 @@ export type SetupStepKey = (typeof SETUP_STEPS)[number]["key"] | (typeof BOOK_ST
 const STEP_FEATURES: Record<SetupStepKey, readonly string[]> = {
   carriers: ["appointment_vault"],
   statement: ["statement_ingestion"],
-  appointments: ["appointment_vault"],
   "lead-sources": ["publisher_records"],
   phone: [],
   team: [],
@@ -155,7 +172,6 @@ const STEP_FEATURES: Record<SetupStepKey, readonly string[]> = {
   assign: ["outbound_dialing"],
   outcomes: ["book_of_business"],
   "queue-sla": ["book_of_business", "inbound_transfers"],
-  "sales-carriers": ["applications"],
   disclosures: ["applications"],
   retention: ["chargeback_radar"],
   compliance: ["tcpa_checker"],
@@ -237,10 +253,53 @@ export function applicableSetupSteps(context: SetupChecklistContext = {}): StepD
   const steps: StepDefinition[] = [];
   for (const step of SETUP_STEPS) {
     if (step.key === "lead-sources" && !wantsLeadSources(context.profile)) continue;
-    if (allowed(step.key)) steps.push(step);
     if (step.key === "statement" && wantsBookImport(context.profile) && allowed(BOOK_STEP.key)) steps.push(BOOK_STEP);
+    if (allowed(step.key)) steps.push(step);
   }
-  return steps;
+  return moneyFirstWhenNothingToWork(steps);
+}
+
+/**
+ * Which part of Get set up a step sits in. Member steps are their day-one work, so Start working.
+ * Fine-tune later holds the settings that work on their defaults (owner, 2026-10-28).
+ */
+const STEP_GROUP: Partial<Record<string, SetupGroupKey>> = {
+  book: "money",
+  statement: "money",
+  phone: "later",
+  "queue-sla": "later",
+  retention: "later",
+  compliance: "later",
+  accounting: "later",
+  hierarchy: "later",
+};
+
+export function setupStepGroup(key: string): SetupGroupKey {
+  return STEP_GROUP[key] ?? "start";
+}
+
+/**
+ * A plan with nothing to work yet — no dialing, transfers, lead sources, leads or applications, so
+ * Start working holds only carriers and team — is a money plan (Ledger): its statements are the work,
+ * so Get paid right comes straight after the carriers (owner, 2026-10-28, open question 1).
+ */
+const WORK_STEPS = new Set(["lead-sources", "import", "calling-windows", "assign", "outcomes", "disclosures"]);
+function moneyFirstWhenNothingToWork(steps: StepDefinition[]): StepDefinition[] {
+  if (steps.some((step) => WORK_STEPS.has(step.key))) return steps;
+  const carriers = steps.filter((step) => step.key === "carriers");
+  const money = steps.filter((step) => setupStepGroup(step.key) === "money");
+  return [...carriers, ...money, ...steps.filter((step) => step.key !== "carriers" && setupStepGroup(step.key) !== "money")];
+}
+
+/**
+ * Steps that were folded into another (owner, 2026-10-28): the carrier card's To finish list covers
+ * appointed states and products, so their old links and saved marks land on "Add your carriers".
+ */
+const MERGED_STEPS: Record<string, string> = { appointments: "carriers", "sales-carriers": "carriers" };
+
+/** A step key as it is today: an old link's merged key becomes the step that replaced it. */
+export function currentSetupStepKey(key: string): string {
+  return MERGED_STEPS[key] ?? key;
 }
 
 /**
@@ -291,7 +350,7 @@ export function isManualStep(key: string): boolean {
 
 /** Every step key that exists, owner and member: what the setup API accepts. */
 export function isSetupStepKey(key: string): boolean {
-  return key === BOOK_STEP.key || SETUP_STEPS.some((step) => step.key === key) || MEMBER_STEPS.some((step) => step.key === key);
+  return key in MERGED_STEPS || key === BOOK_STEP.key || SETUP_STEPS.some((step) => step.key === key) || MEMBER_STEPS.some((step) => step.key === key);
 }
 
 /**
@@ -370,7 +429,6 @@ const STEP_MINUTES: Partial<Record<string, number>> = {
   carriers: 5,
   statement: 3,
   book: 10,
-  appointments: 5,
   "lead-sources": 5,
   phone: 1,
   team: 3,
@@ -379,7 +437,6 @@ const STEP_MINUTES: Partial<Record<string, number>> = {
   assign: 5,
   outcomes: 5,
   "queue-sla": 2,
-  "sales-carriers": 10,
   disclosures: 15,
   retention: 3,
   compliance: 5,
@@ -395,7 +452,6 @@ const STEP_MINUTES: Partial<Record<string, number>> = {
 const PROGRESS_FIELD: Record<string, keyof SetupProgress> = {
   carriers: "carriersAdded",
   statement: "statementImported",
-  appointments: "appointmentsConfirmed",
   "lead-sources": "leadSourcesAdded",
   phone: "phoneAdded",
   book: "bookImported",
@@ -405,7 +461,6 @@ const PROGRESS_FIELD: Record<string, keyof SetupProgress> = {
   assign: "leadsAssigned",
   outcomes: "outcomesMapped",
   "queue-sla": "queueSlaSet",
-  "sales-carriers": "salesCarriersSet",
   disclosures: "disclosuresPublished",
   retention: "retentionSet",
   compliance: "complianceSet",
@@ -443,16 +498,19 @@ export function setupChecklistForState(onboardingState: string, progress: SetupP
     // stays shown as skipped rather than claiming work that was never done (live walkthrough, 2026-10-22).
     const complete = proven || (finished && !skippedKeys.has(step.key));
     const minutes = step.minutes ?? STEP_MINUTES[step.key];
-    return { ...step, ...(minutes ? { minutes } : {}), complete, skipped: !complete && skippedKeys.has(step.key) };
+    const group = setupStepGroup(step.key);
+    return { ...step, ...(minutes ? { minutes } : {}), complete, skipped: !complete && skippedKeys.has(step.key), group, ...(group === "later" ? { optional: true } : {}) };
   });
-  const completed = steps.filter((step) => step.complete).length;
-  const skipped = steps.filter((step) => step.skipped).length;
-  return { complete: completed + skipped === steps.length, completed, skipped, total: steps.length, steps };
+  // Fine-tune later steps are listed but never counted: done means Start working and Get paid right.
+  const counted = steps.filter((step) => !step.optional);
+  const completed = counted.filter((step) => step.complete).length;
+  const skipped = counted.filter((step) => step.skipped).length;
+  return { complete: completed + skipped === counted.length, completed, skipped, total: counted.length, steps };
 }
 
-/** The step the reader should do next: the first one neither done nor skipped. */
+/** The step the reader should do next: the first counted one neither done nor skipped. */
 export function nextSetupStep(checklist: SetupChecklist): SetupChecklistStep | null {
-  return checklist.steps.find((step) => !step.complete && !step.skipped) ?? null;
+  return checklist.steps.find((step) => !step.optional && !step.complete && !step.skipped) ?? null;
 }
 
 /** One existence read as Supabase returns it: rows (or one row) and an error. */
