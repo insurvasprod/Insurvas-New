@@ -11,7 +11,8 @@ import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { control, Field } from "@/components/ui/field";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -204,7 +205,7 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
                 <option value="issued">Recorded sales, awaiting file</option>
               </select>
             )}
-            <FilterButton open={more} count={[filters.product, filters.agent, filters.agency, filters.lead, filters.issuedFrom, filters.issuedTo].filter(Boolean).length} onClick={() => setMore(!more)}>More filters</FilterButton>
+            <FilterButton open={more} count={[filters.product, filters.agent, filters.agency, filters.lead, filters.issuedFrom, filters.issuedTo].filter(Boolean).length} controls="policy-filters" onClick={() => setMore(!more)}>More filters</FilterButton>
             {saved.length > 0 && (
               <select aria-label="Saved filters" className={toolbarControl} value={savedNow?.id ?? ""} onChange={(event) => { const pick = saved.find((item) => item.id === event.target.value); if (pick) { const next = readQuery(pick.query); setFilters(next.filters); setSort(next.sort); setPage(1); } }}>
                 <option value="">Saved filters…</option>
@@ -214,38 +215,33 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
             {savedNow && !readOnly && <Button type="button" variant="ghost" disabled={busy} onClick={() => void post({ action: "delete_filter", id: savedNow.id }, `"${savedNow.name}" removed.`)}>Remove &ldquo;{savedNow.name}&rdquo;</Button>}
           </DataToolbar>
         }
-        footer={rows.length ? <Pager page={current} pageSize={10} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "policy" : "policies"} /> : undefined}
-      >
-        {more && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-            <select aria-label="Filter by product" className={toolbarControl} value={filters.product} onChange={(event) => set("product", event.target.value)}>
+        filters={
+          // Inline under the toolbar (UI-CONSISTENCY §6a): labelled fields that push the table down.
+          <FilterPanel id="policy-filters" open={more}>
+            <Field label="Product" htmlFor="policy-filter-product"><select aria-label="Filter by product" id="policy-filter-product" className={control} value={filters.product} onChange={(event) => set("product", event.target.value)}>
               <option value="">All products</option>
               {options.products.map((product) => <option key={product} value={product}>{product}</option>)}
-            </select>
-            <select aria-label="Filter by agent" className={toolbarControl} value={filters.agent} onChange={(event) => set("agent", event.target.value)}>
+            </select></Field>
+            <Field label="Agent" htmlFor="policy-filter-agent"><select aria-label="Filter by agent" id="policy-filter-agent" className={control} value={filters.agent} onChange={(event) => set("agent", event.target.value)}>
               <option value="">All agents</option>
               {options.anyUnassigned && <option value={NONE}>No agent mapped</option>}
               {options.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-            </select>
-            <select aria-label="Filter by lead source" className={toolbarControl} value={filters.lead} onChange={(event) => set("lead", event.target.value)}>
+            </select></Field>
+            <Field label="Lead source" htmlFor="policy-filter-lead"><select aria-label="Filter by lead source" id="policy-filter-lead" className={control} value={filters.lead} onChange={(event) => set("lead", event.target.value)}>
               <option value="">Any lead source</option>
               <option value={NONE}>No lead source</option>
               {options.leads.map((lead) => <option key={lead} value={lead}>{lead}</option>)}
-            </select>
-            {options.agencies.length > 1 && (
-              <select aria-label="Filter by agency" className={toolbarControl} value={filters.agency} onChange={(event) => set("agency", event.target.value)}>
+            </select></Field>
+            {options.agencies.length > 1 && <Field label="Agency" htmlFor="policy-filter-agency"><select aria-label="Filter by agency" id="policy-filter-agency" className={control} value={filters.agency} onChange={(event) => set("agency", event.target.value)}>
                 <option value="">All agencies</option>
                 {options.agencies.map((agency) => <option key={agency} value={agency}>{agency}</option>)}
-              </select>
-            )}
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-              Issued
-              <input type="date" aria-label="Issued from" className={toolbarControl} value={filters.issuedFrom} max={filters.issuedTo || undefined} onChange={(event) => set("issuedFrom", event.target.value)} />
-              <span aria-hidden="true">–</span>
-              <input type="date" aria-label="Issued to" className={toolbarControl} value={filters.issuedTo} min={filters.issuedFrom || undefined} onChange={(event) => set("issuedTo", event.target.value)} />
-            </span>
-          </div>
-        )}
+              </select></Field>}
+            <Field label="Issued from" htmlFor="policy-filter-from"><input id="policy-filter-from" type="date" aria-label="Issued from" className={control} value={filters.issuedFrom} max={filters.issuedTo || undefined} onChange={(event) => set("issuedFrom", event.target.value)} /></Field>
+            <Field label="Issued to" htmlFor="policy-filter-to"><input id="policy-filter-to" type="date" aria-label="Issued to" className={control} value={filters.issuedTo} min={filters.issuedFrom || undefined} onChange={(event) => set("issuedTo", event.target.value)} /></Field>
+          </FilterPanel>
+        }
+        footer={rows.length ? <Pager page={current} pageSize={10} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "policy" : "policies"} /> : undefined}
+      >
         {rows.length === 0 ? (
           <EmptyState title={scoped ? "No policies are credited to you yet" : "No policies from carrier files yet"} hint={scoped ? "Policies appear once a carrier's file names you as the writing agent and the code is mapped to you." : "Import each carrier's latest policy file in Import your book, and they appear here."} />
         ) : visible.length === 0 ? (

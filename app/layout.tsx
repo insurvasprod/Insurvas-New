@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter, Inter_Tight, Montserrat } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { ConfirmHost } from "@/components/ui/confirm-dialog";
 import { ThemeProvider } from "@/components/theme-provider";
 
 // Typefaces (docs/design/BRAND.md, UI-CONSISTENCY.md §0). Self-hosted at build by next/font, so no
@@ -38,7 +39,8 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           {children}
-          <Toaster position="top-right" />
+          <Toaster />
+          <ConfirmHost />
         </ThemeProvider>
       </body>
     </html>

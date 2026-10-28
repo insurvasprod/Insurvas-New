@@ -14,16 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TENANT_ROLES, TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
 import type { UserListRow } from "@/lib/users/list";
 import { InviteLinkPanel } from "./invite-link-panel";
+import { inputControl } from "@/components/ui/field";
 
 export function EditUserDialog({
   user,
@@ -129,18 +123,13 @@ export function EditUserDialog({
               </div>
               <div className="col-span-2 space-y-1.5">
                 <Label htmlFor="edit-role">Role in tenant</Label>
-                <Select value={role} onValueChange={(v) => setRole(v as TenantRole)}>
-                  <SelectTrigger id="edit-role" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select id="edit-role" className={inputControl} value={role} onChange={(event) => { const v = event.target.value; setRole(v as TenantRole); }}>
                     {TENANT_ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
+                      <option key={r} value={r}>
                         {TENANT_ROLE_LABELS[r]}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
               </div>
             </div>
             <DialogFooter>

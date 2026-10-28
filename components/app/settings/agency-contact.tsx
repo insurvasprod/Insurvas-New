@@ -20,6 +20,7 @@ import { notify } from "@/lib/notify";
 import { formatSupportPhone, SUPPORT_EMAIL_MAX, SUPPORT_PHONE_MAX, supportContactInputSchema, type SupportContact } from "@/lib/partnerSupport/contact";
 import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 export function PartnerSupportCard({ className }: { className?: string } = {}) {
   const [support, setSupport] = useState<SupportContact | null>(null);
@@ -67,6 +68,7 @@ export function PartnerSupportCard({ className }: { className?: string } = {}) {
       className={className}
     >
       <div id="identity-partner-support">
+        <LeaveGuard dirty={dirty} onDiscard={() => { if (support) setDraft({ email: support.email ?? "", phone: support.phone ?? "" }); setError(null); }} what="the partner support contact" />
         {support === null && !error ? (
           <SectionLoading rows={1} columns={2} label="Loading the support contact" />
         ) : (

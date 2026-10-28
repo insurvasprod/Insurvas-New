@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { DetailPanel } from "@/components/ui/detail-panel";
+import { Sheet } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -16,6 +16,7 @@ import { PAID_METHODS, PAID_METHOD_LABELS } from "@/lib/accounting/invoicesCore"
 import { BASIS_LABELS, NEGATIVE_POLICY_LABELS, PAYS_ON_LABELS, PRODUCER_ENTRY_LABELS, percent, type Basis, type NegativePolicy, type PaysOn, type ProducerEntry, type ProducerRun } from "@/lib/accounting/producersCore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-7.5 · what each producer is owed from the commission the agency received — and, when their
@@ -62,7 +63,8 @@ function SplitDialog({ person, carriers, defaults, onClose, onSaved }: { person:
       setBusy(false);
     }
   };
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[560px]">
@@ -110,7 +112,7 @@ function PersonPanel({ person, splits, carriers, readOnly, onClose, onChanged }:
     }
   };
   return (
-    <DetailPanel mode="overlay" title={person.name} subtitle={`Balance ${money(person.balanceCents)}${person.balanceCents < 0 ? " — owes the agency" : ""}`} onClose={onClose}
+    <Sheet title={person.name} subtitle={`Balance ${money(person.balanceCents)}${person.balanceCents < 0 ? " — owes the agency" : ""}`} onClose={onClose}
       footer={readOnly ? undefined : <div className="flex flex-wrap gap-2"><Button onClick={() => setRun(lastMonth())}>Draft a run</Button>{person.balanceCents < 0 ? <Button variant="outline" onClick={() => setWriteOff("")}>Write off the balance</Button> : null}</div>}>
       {run ? (
         <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-3">
@@ -142,7 +144,7 @@ function PersonPanel({ person, splits, carriers, readOnly, onClose, onChanged }:
           </tbody></table>
         )}
       </div>
-    </DetailPanel>
+    </Sheet>
   );
 }
 

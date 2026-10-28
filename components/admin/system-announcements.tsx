@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, control, Field, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
+import { control, Field, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
@@ -263,17 +263,17 @@ export function SystemAnnouncements({
                       </StatusChip>
                     </td>
                     <td className={cn(st.td, "text-right whitespace-nowrap")}>
-                      <button type="button" className={btn("row")} onClick={() => openEdit(item)} disabled={busy}>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(item)} disabled={busy}>
                         Edit
-                      </button>
+                      </Button>
                       {state === "live" && (
-                        <button type="button" className={btn("row")} onClick={() => void endNow(item)} disabled={busy}>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => void endNow(item)} disabled={busy}>
                           End now
-                        </button>
+                        </Button>
                       )}
-                      <button type="button" className={btn("danger-row")} onClick={() => setDeleting(item)} disabled={busy}>
+                      <Button type="button" variant="ghost" size="sm" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" onClick={() => setDeleting(item)} disabled={busy}>
                         Delete
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 );
@@ -375,12 +375,12 @@ export function SystemAnnouncements({
               </p>
             )}
             <DialogFooter>
-              <button type="button" className={btn("ghost")} onClick={() => setEditing(null)} disabled={saving}>
+              <Button type="button" variant="ghost" onClick={() => setEditing(null)} disabled={saving}>
                 Cancel
-              </button>
-              <button type="submit" className={btn("primary")} disabled={saving}>
+              </Button>
+              <Button type="submit"  disabled={saving}>
                 {saving ? "Saving…" : editing?.id ? "Save announcement" : "Create announcement"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -402,17 +402,17 @@ export function SystemAnnouncements({
             </p>
           )}
           <DialogFooter>
-            <button type="button" className={btn("ghost")} onClick={() => setDeleting(null)} disabled={rowBusy !== null}>
+            <Button type="button" variant="ghost" onClick={() => setDeleting(null)} disabled={rowBusy !== null}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={cn(btn("primary"), "bg-[var(--error)] text-[var(--on-error)] hover:bg-[var(--error-ink)]")}
+              variant="destructive"
               onClick={() => void confirmDelete()}
               disabled={rowBusy !== null}
             >
               {rowBusy !== null ? "Deleting…" : "Delete announcement"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

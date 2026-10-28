@@ -14,17 +14,18 @@ import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
-import { StatusChip } from "@/components/ui/status-chip";
+import { WORKSPACE_STEPS } from "@/lib/applications/constants";
 import type { QaItem, QaVerdict } from "@/lib/applications/qa";
 import { cn } from "@/lib/utils";
 
 import { shortDate } from "@/components/app/applications/parts";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
-import { StepCard } from "@/components/app/applications/workspace/step-card";
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
 
 type Tone = "fail" | "warn" | "pass" | "neutral";
 type Frozen = { submissionId: string; submittedAt: string; verdict: QaVerdict | null };
 
+const STEP_LABEL = new Map<string, string>(WORKSPACE_STEPS.map((s) => [s.key, s.label]));
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const count = (n: number) => WORDS[n] ?? String(n);
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -57,20 +58,10 @@ function Banner({ tone, title, text, actions }: { tone: Tone; title: string; tex
   );
 }
 
-/** A grey strip inside the card that heads one group, like the card's own header. */
-function GroupHeader({ title, n, tone }: { title: string; n: number; tone: "danger" | "warning" | "good" }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-y border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 first:border-t-0">
-      <h3 className="text-sm font-semibold text-[var(--ink)]">{title}</h3>
-      <StatusChip tone={tone}>{n}</StatusChip>
-    </div>
-  );
-}
-
 function ItemRow({ item, level }: { item: QaItem; level: "block" | "warn" }) {
   const { goTo } = useWorkspace();
   return (
-    <div className="m-row flex flex-wrap items-start gap-3 border-t border-[var(--border)] px-[22px] py-3.5 first:border-t-0">
+    <div className={cn("flex h-full flex-wrap items-start gap-3 rounded-[14px] border p-3", level === "block" ? "border-[color-mix(in_srgb,var(--error)_45%,transparent)] bg-[var(--error-surface)]" : "border-[var(--border)] bg-[var(--surface-alt)]")}>
       <span aria-hidden="true" className={cn("mt-[7px] size-2 shrink-0 rounded-full", level === "block" ? "bg-[var(--error)]" : "bg-[var(--warning)]")} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className={cn("text-sm font-semibold", level === "block" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]")}>
@@ -79,8 +70,8 @@ function ItemRow({ item, level }: { item: QaItem; level: "block" | "warn" }) {
         {item.detail && <span className="text-sm text-[var(--body)]">{item.detail}</span>}
         {item.fieldKey && <span className="truncate font-mono text-xs text-[var(--muted)]">{item.fieldKey}</span>}
       </span>
-      <Button type="button" variant="ghost" onClick={() => goTo(item.step, item.fieldKey)} aria-label={`Go to the field: ${item.message}`}>
-        Go to the field<ArrowRight aria-hidden="true" />
+      <Button type="button" variant="ghost" onClick={() => goTo(item.step, item.fieldKey)} aria-label={`Fix on ${STEP_LABEL.get(item.step) ?? "its step"}: ${item.message}`}>
+        Fix on {STEP_LABEL.get(item.step) ?? "its step"}<ArrowRight aria-hidden="true" />
       </Button>
     </div>
   );
@@ -92,23 +83,25 @@ function passedSentence(passed: string[]) {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
+/**
+ * The verdict's three groups as sections (owner 2026-10-28, like the other steps): "Must fix" and
+ * "Worth a look" fold away when they are empty, each item a card with the step it is fixed on;
+ * "Passed" folds to its count.
+ */
 function Groups({ qa, actions }: { qa: QaVerdict; actions?: ReactNode }) {
+  const nb = qa.blocking.length;
+  const nw = qa.warnings.length;
   return (
-    <StepCard title="Must fix" chips={<StatusChip tone="danger">{qa.blocking.length}</StatusChip>} bodyClassName="gap-0 p-0" actions={actions}>
-      <div className="flex flex-col">
-        {qa.blocking.length
-          ? qa.blocking.map((item, n) => <ItemRow key={`b-${item.code}-${item.fieldKey ?? n}-${n}`} item={item} level="block" />)
-          : <p className="px-[22px] py-3.5 text-sm text-[var(--muted)]">Nothing blocks this application.</p>}
-      </div>
-      <GroupHeader title="Worth a look" n={qa.warnings.length} tone="warning" />
-      <div className="flex flex-col">
-        {qa.warnings.length
-          ? qa.warnings.map((item, n) => <ItemRow key={`w-${item.code}-${item.fieldKey ?? n}-${n}`} item={item} level="warn" />)
-          : <p className="px-[22px] py-3.5 text-sm text-[var(--muted)]">Nothing to look at.</p>}
-      </div>
-      <GroupHeader title="Passed" n={qa.passed.length} tone="good" />
-      <p className="px-[22px] py-3.5 text-sm text-[var(--muted)]">{passedSentence(qa.passed)}</p>
-    </StepCard>
+    <section aria-label="The checks" className="m-glass flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--border)] p-[18px]">
+      <FoldSection heading="Must fix" done={0} total={nb} complete={nb === 0} progressLabel={`${nb} to fix`} completeLabel="Nothing to fix">
+        {qa.blocking.map((item, n) => <ItemRow key={`b-${item.code}-${item.fieldKey ?? n}-${n}`} item={item} level="block" />)}
+      </FoldSection>
+      <FoldSection heading="Worth a look" done={0} total={nw} complete={nw === 0} progressLabel={`${nw} to look at`} completeLabel="Nothing to look at">
+        {qa.warnings.map((item, n) => <ItemRow key={`w-${item.code}-${item.fieldKey ?? n}-${n}`} item={item} level="warn" />)}
+      </FoldSection>
+      <FoldSection heading="Passed" done={qa.passed.length} total={qa.passed.length} complete progressLabel="" completeLabel={`${qa.passed.length} check${qa.passed.length === 1 ? "" : "s"} passed`} footer={<p className="m-0 px-1 text-sm text-[var(--muted)]">{passedSentence(qa.passed)}</p>} />
+      {actions && <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border)] pt-3">{actions}</div>}
+    </section>
   );
 }
 
@@ -218,7 +211,7 @@ export function ReviewStep() {
           <Button type="button" variant="outline" onClick={() => { void rerun(); }} disabled={rerunning || sample} title={sample ? "Sample data — the checks already run as you type." : rerunning ? "Re-running…" : undefined}>
             <RefreshCw aria-hidden="true" className={cn(rerunning && "animate-spin")} />Re-run checks
           </Button>
-          {primary}
+          {/* Owner 2026-10-28: one "Mark ready to submit", at the foot beside Back, like every step. */}
         </>}
       />
       <Groups

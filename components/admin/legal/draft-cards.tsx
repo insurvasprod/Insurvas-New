@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { btn, Callout, control, Field } from "@/components/app/settings/primitives";
+import { Callout, control, Field } from "@/components/app/settings/primitives";
 import { LEGAL_DOC_LABELS, type LegalDocType } from "@/lib/legal/constants";
 import { legalDay, type LegalDraft } from "@/lib/legal/adminTypes";
 import { type EditorState, type Lookup, plural } from "./model";
@@ -113,9 +113,9 @@ export function DraftTextCard({
         <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Version {version} &mdash; draft</span>
         <span className="flex items-center gap-2.5">
           {canEdit && (
-            <button type="button" onClick={() => setPreview((p) => !p)} className={btn("row", "h-7 px-2.5")} aria-pressed={preview}>
+            <Button type="button" onClick={() => setPreview((p) => !p)} variant="ghost" size="sm" className="h-7 px-2.5" aria-pressed={preview}>
               {preview ? "Edit" : "Preview"}
-            </button>
+            </Button>
           )}
           <StatusChip tone="warning" dot>
             Not visible to customers

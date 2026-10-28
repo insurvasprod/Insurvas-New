@@ -15,13 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   BUILDABLE_PLAN_TYPES,
   PLAN_CODE_RULE,
   PLAN_TYPES,
@@ -30,6 +23,7 @@ import {
   type PlanListRow,
   type PlanType,
 } from "@/lib/plans/constants";
+import { inputControl } from "@/components/ui/field";
 
 export function PlanDialog({
   mode,
@@ -138,19 +132,14 @@ export function PlanDialog({
             {!isEdit && (
               <div className="col-span-2 space-y-1.5">
                 <Label htmlFor="plan-type">Plan type</Label>
-                <Select value={planType} onValueChange={(v) => setPlanType(v as PlanType)}>
-                  <SelectTrigger id="plan-type" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select id="plan-type" className={inputControl} value={planType} onChange={(event) => { const v = event.target.value; setPlanType(v as PlanType); }}>
                     {PLAN_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} disabled={!BUILDABLE_PLAN_TYPES.includes(t)}>
+                      <option key={t} value={t} disabled={!BUILDABLE_PLAN_TYPES.includes(t)}>
                         {PLAN_TYPE_LABELS[t]}
                         {!BUILDABLE_PLAN_TYPES.includes(t) && " — not built yet"}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
                 <p className="text-xs text-muted-foreground">{PLAN_TYPE_DESCRIPTIONS[planType]}</p>
               </div>
             )}
@@ -178,15 +167,10 @@ export function PlanDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="plan-public">Visibility</Label>
-              <Select value={isPublic ? "public" : "private"} onValueChange={(v) => setIsPublic(v === "public")}>
-                <SelectTrigger id="plan-public" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="private">Private</SelectItem>
-                  <SelectItem value="public">Public</SelectItem>
-                </SelectContent>
-              </Select>
+              <select id="plan-public" className={inputControl} value={isPublic ? "public" : "private"} onChange={(event) => { const v = event.target.value; setIsPublic(v === "public"); }}>
+                  <option value="private">Private</option>
+                  <option value="public">Public</option>
+                </select>
               <p className="text-xs text-muted-foreground">Public plans appear on the pricing page.</p>
             </div>
           </div>

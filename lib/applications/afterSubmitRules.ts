@@ -6,7 +6,10 @@
 
 // ── confirmation uploads (LA-3.15) ─────────────────────────────────────────
 
-export const MAX_CONFIRMATION_BYTES = 10 * 1024 * 1024;
+// Owner 2026-10-28: a carrier's confirmation can run up to 25 MB (was 10). The bucket's own limit is
+// raised to match in 20261028100000_confirmations_25mb.sql.
+export const MAX_CONFIRMATION_BYTES = 25 * 1024 * 1024;
+export const MAX_CONFIRMATION_LABEL = "25 MB";
 
 const CONFIRMATION_TYPES: Record<string, "png" | "jpg" | "pdf"> = {
   "image/png": "png",

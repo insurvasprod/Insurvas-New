@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { InfoTip } from "@/components/ui/info-tip";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { TableCard } from "@/components/ui/table-card";
 import { LA5_OWNER_ROLE_LABELS, LA5_OWNER_ROLES, LA5_QUEUE_LABELS, LA5_QUEUES, type La5OwnerRole, type La5Queue } from "@/lib/retention/assignment";
 import { PLATFORM_TALK_TRACK } from "@/lib/retention/campaign";
@@ -15,6 +16,7 @@ import { SORT_LABELS, SORTS } from "@/lib/retention/queue";
 import { AFFORDABILITY_CONFIRMATION, FIELDS, HOLDOUT_EXPLANATION, HUB_SECTION_LABELS, thresholdConsequence, WINBACK_LABELS, WINBACK_LIMITS, weightTotal, type HubSection } from "@/lib/retention/settingsHub";
 import type { Hub } from "@/lib/retention/settingsHubStore";
 import { notify } from "@/lib/notify";
+import { fieldLabel } from "@/components/ui/field";
 
 type Preview = { moved: number; up: number; down: number; intoCritical: number; total: number };
 
@@ -25,7 +27,8 @@ async function post(body: Record<string, unknown>) {
   return json;
 }
 
-const field = "flex flex-col gap-1 text-sm";
+// The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
 const n = (v: string) => (v.trim() === "" ? NaN : Number(v));
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -122,8 +125,12 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
   const affordabilityShorter = draft.winbackDays.affordability < saved.winbackDays.affordability;
   const turningHoldoutOn = draft.holdoutEnabled && !saved.holdoutEnabled;
 
+  // Each section saves on its own, so the guard offers Discard or Stay, not one Save for all.
+  const unsaved = !sameJson(draft, saved);
+
   return (
     <div className="flex flex-col gap-6">
+      <LeaveGuard dirty={unsaved} onDiscard={() => setDraft(saved)} what="the retention settings" />
       {!canEdit ? <p className="text-sm text-muted-foreground">Read only: your plan is paused.</p> : null}
 
       {section("weights", HUB_SECTION_LABELS.weights, (

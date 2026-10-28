@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { CustomInvoiceDialog } from "@/components/admin/custom-invoice-dialog";
-import { btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
+import { st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { buttonVariants } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -88,7 +88,7 @@ export function TenantInvoicesCard({
                   </td>
                   <td className={st.td}>{shortDate(row.paidAt, now)}</td>
                   <td className={st.td}>
-                    <Link href={`/admin/invoices/${row.id}`} className={btn("row")} aria-label={`Open ${row.number}`}>
+                    <Link href={`/admin/invoices/${row.id}`} className={buttonVariants({ variant: "ghost", size: "sm" })} aria-label={`Open ${row.number}`}>
                       Open
                     </Link>
                   </td>

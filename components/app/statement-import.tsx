@@ -46,6 +46,7 @@ import {
   type StatementPreview,
 } from "@/lib/ledger/statementConstants";
 import { readStatementHeaders, sanitizeStatementMapping, statementMappingProblem, suggestStatementMapping } from "@/lib/ledger/statementParse";
+import { notify } from "@/lib/notify";
 
 type Step = "file" | "map" | "preview";
 const selectClass = `${toolbarControl} w-full`;
@@ -225,7 +226,16 @@ export function StatementImportButton({
       form.set("period_start", period.start);
       form.set("period_end", period.end);
       form.set("mapping", JSON.stringify(fileKind === "pdf" ? {} : mapping));
-      const data = await postForm<{ statementId: string }>("/api/app/statements", form);
+      // One toast from the upload to the statement (2026-10-28): the dialog closes on success, so the
+      // toast is what says it landed. A refusal stays in the dialog, where it can be fixed.
+      const lines = preview?.totalLines;
+      const data = await notify.promise(postForm<{ statementId: string }>("/api/app/statements", form), {
+        loading: fileKind === "pdf" ? `Storing ${fileName}…` : `Importing ${fileName}…`,
+        done: fileKind === "pdf" || lines === undefined
+          ? { title: "Statement stored", detail: "Enter its lines on the statement." }
+          : { title: `Statement imported: ${lines.toLocaleString("en-US")} ${lines === 1 ? "line" : "lines"}`, detail: "Nothing posts until a match is accepted." },
+        fail: null,
+      });
       setOpen(false); reset();
       router.push(`/app/statements/${data.statementId}`);
     } catch (reason) {

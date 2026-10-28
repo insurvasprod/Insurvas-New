@@ -26,7 +26,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Callout, KeyValues, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import {
   AssignDialog,
@@ -45,6 +44,7 @@ import { formatCentsAsCurrency } from "@/lib/money";
 import type { SubscriptionRow } from "@/lib/subscriptions/queries";
 import type { VersionPinning } from "@/lib/subscriptions/tenantBilling";
 import { countsTowardMrr, fullDate, listOf, priceCopy } from "./billing-format";
+import { inputControl } from "@/components/ui/field";
 
 export type SubscriptionCardsProps = {
   tenantId: string;
@@ -559,18 +559,13 @@ function CouponDialog({
             </DialogHeader>
             <div className="space-y-1.5 py-2">
               <Label htmlFor="coupon-pick">Coupon</Label>
-              <Select value={couponId} onValueChange={setCouponId} disabled={options.length === 0}>
-                <SelectTrigger id="coupon-pick" className="w-full">
-                  <SelectValue placeholder={options.length ? "Choose…" : "No usable coupons"} />
-                </SelectTrigger>
-                <SelectContent>
+              <select id="coupon-pick" className={inputControl} value={couponId} onChange={(event) => setCouponId(event.target.value)} disabled={options.length === 0}><option value="" disabled>{options.length ? "Choose…" : "No usable coupons"}</option>
                   {options.map((o) => (
-                    <SelectItem key={o.id} value={o.id}>
+                    <option key={o.id} value={o.id}>
                       {o.label}
-                    </SelectItem>
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
               {options.length === 0 && (
                 <p className="text-xs text-muted-foreground">
                   No coupon is active, unexpired and valid on this billing cycle. Coupons are created under Billing.

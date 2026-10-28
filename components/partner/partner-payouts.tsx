@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
-import { DetailPanel } from "@/components/ui/detail-panel";
+import { Sheet } from "@/components/ui/sheet";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -55,7 +55,7 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
     }
   };
   return (
-    <DetailPanel mode="overlay" title={s ? `Statement ${s.periodStart} to ${s.periodEnd}` : "Statement"} subtitle={s ? `Net payable ${money(s.totals.netCents)}` : undefined}
+    <Sheet title={s ? `Statement ${s.periodStart} to ${s.periodEnd}` : "Statement"} subtitle={s ? `Net payable ${money(s.totals.netCents)}` : undefined}
       status={s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid ${s.paidOn ?? ""}` : "Published"}</StatusChip> : undefined} onClose={onClose}
       footer={s && !dispute ? <Button variant="outline" onClick={() => setDispute({ itemId: null, reason: "", amount: "" })}>Dispute this statement</Button> : undefined}>
       {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
@@ -106,7 +106,7 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
         </>
       )}
-    </DetailPanel>
+    </Sheet>
   );
 }
 

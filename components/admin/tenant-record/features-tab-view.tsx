@@ -4,7 +4,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useRouter } from "next/navigation";
 import { Fragment, useId, useMemo, useState, type FormEvent } from "react";
 
-import { Field, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
+import { Field, SettingsCard, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -252,9 +252,9 @@ function OverridesTable({
                     </td>
                     {mayRemove && (
                       <td className={cn(st.td, "text-right")}>
-                        <button
+                        <Button
                           type="button"
-                          className={btn("danger-row")}
+                          variant="ghost" size="sm" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]"
                           aria-expanded={open}
                           aria-label={`Remove the override on ${row.label}`}
                           onClick={() => {
@@ -264,7 +264,7 @@ function OverridesTable({
                           }}
                         >
                           Remove
-                        </button>
+                        </Button>
                       </td>
                     )}
                   </tr>

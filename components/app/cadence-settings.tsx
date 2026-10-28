@@ -16,6 +16,8 @@ import { Callout, Field, LockIcon, SettingsSectionHeader, SettingsStack, control
 import { DAY_PARTS, MAX_ATTEMPTS_RANGE, SLOTS, parseInterval, type CadenceRow } from "@/lib/cadence/engine";
 import { LAST_DIALLED_ATTEMPT, builtInRule, effectiveLadder, ladderSummary } from "@/lib/cadence/ladder";
 import { cn } from "@/lib/utils";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 /**
  * LA-2.7 · the cadence editor.
@@ -301,9 +303,10 @@ export function CadenceSettings() {
               value={campaignId}
               disabled={busy}
               title={ready ? "A campaign cadence replaces the tenant default entirely." : "A campaign rule wins over the tenant default for the same attempt."}
-              onChange={(event) => {
-                if (dirty && !window.confirm("Switching scope drops the unsaved changes to this cadence. Continue?")) return;
-                setCampaignId(event.target.value);
+              onChange={async (event) => {
+                const next = event.target.value;
+                if (dirty && !(await confirmAction({ title: "Switch scope?", description: "Switching scope drops the unsaved changes to this cadence.", confirmLabel: "Switch and discard", cancelLabel: "Keep editing" }))) return;
+                setCampaignId(next);
               }}
             >
               <option value="">Every campaign (tenant default)</option>
@@ -426,6 +429,7 @@ export function CadenceSettings() {
         )}
       </TableCard>
 
+      {!readOnly && <LeaveGuard dirty={dirty} onDiscard={() => { setDraft(withKeys(loaded.rows)); setMaxDraft(savedMax); setSaveError(""); setOpenKey(null); }} what="the cadence" />}
       {!readOnly && (
         <SettingsSaveBar visible={dirty} note={campaignName ? `Unsaved changes to ${campaignName}'s cadence` : "Unsaved changes to the cadence"}>
           <Button type="button" variant="outline" onClick={() => { setDraft(withKeys(loaded.rows)); setMaxDraft(savedMax); setSaveError(""); setOpenKey(null); }} disabled={busy}>Discard</Button>

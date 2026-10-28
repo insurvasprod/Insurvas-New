@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Download, ExternalLink, LayoutGrid, List, Lock, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -187,16 +187,16 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
     >
       <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search customer" />
       <select aria-label="Product" className={toolbarControl} value={filters.product} onChange={(event) => setFilter("product", event.target.value)}><option value="">All products</option>{data?.facets.products.map((item) => <option key={item} value={item}>{productLineLabel(item)}</option>)}</select>
-      <FilterButton open={moreFilters} onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
+      <FilterButton open={moreFilters} controls="partner-lead-filters" onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
     </DataToolbar>
-    {moreFilters && <div className="flex w-full flex-wrap items-center gap-2">
+    <FilterPanel id="partner-lead-filters" open={moreFilters} className="flex w-full flex-wrap items-center gap-2 border-b-0 px-0 py-0">
       <select aria-label="Stage" className={toolbarControl} value={filters.stage_id} onChange={(event) => setFilter("stage_id", event.target.value)}><option value="">All stages</option>{boardStages.map((item) => <option key={item.id} value={item.id}>{manyPipelines ? `${item.pipelineName} · ${item.name}` : item.name}</option>)}</select>
       {role === "partner_admin" && <select aria-label="Submitted by" className={toolbarControl} value={filters.closer_id} onChange={(event) => setFilter("closer_id", event.target.value)}><option value="">Submitted by anyone</option>{data?.facets.closers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
       <select aria-label="Outcome" className={toolbarControl} value={filters.outcome} onChange={(event) => setFilter("outcome", event.target.value)}><option value="">Any outcome</option>{data?.facets.outcomes.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select>
       <label className="flex items-center gap-1.5 text-sm text-muted-foreground">From<input type="date" className={toolbarControl} value={filters.date_from} onChange={(event) => setFilter("date_from", event.target.value)} /></label>
       <label className="flex items-center gap-1.5 text-sm text-muted-foreground">To<input type="date" className={toolbarControl} value={filters.date_to} onChange={(event) => setFilter("date_to", event.target.value)} /></label>
       <Button type="button" variant="ghost" disabled={!hasFilters} onClick={() => { setFilters(EMPTY_FILTERS); setPage(1); }}>Reset</Button>
-    </div>}
+    </FilterPanel>
   </>;
 
   const empty = search.trim() || hasFilters

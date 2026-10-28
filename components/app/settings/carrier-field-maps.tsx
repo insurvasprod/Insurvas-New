@@ -31,6 +31,8 @@ import { EDITABLE_FIELD_MAP_STATUSES, FIELD_MAP_INPUT_KINDS, type FieldMapInputK
 import { CANONICAL_OPTIONS, INPUT_KIND_LABEL, PAGE_LABEL, fieldLabel, listOf, mapRequest, newEntry, savePayload, unverifiedSensitive } from "@/lib/extension/mapEditing";
 import { FIELD_MAP_TRANSFORMS, TRANSFORM_LABEL, isTransform } from "@/lib/extension/transforms";
 import type { FieldMapCarrierOption, FieldMapEntryView, FieldMapView } from "@/lib/extension/types";
+import { cardInset } from "@/components/ui/card";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 export type MapsCarrier = { id: string; name: string; dot: string; level: string | null; products: string[]; states: number };
 
@@ -43,7 +45,7 @@ const LOOK: Record<Autofill, { label: string; fg: string; tint: string; line: st
   none: { label: "No map", fg: "text-[var(--error-ink)]", tint: "bg-[color-mix(in_srgb,var(--error)_14%,transparent)]", line: "border-[var(--border)]" },
 };
 const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
-const TILE = "rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_40%,transparent)] px-3 py-2.5";
+const tile = `${cardInset} px-3 py-2.5`;
 const CHIP = "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--border-strong)] px-3 text-xs font-semibold text-[var(--body)] hover:border-[var(--accent-ink)] disabled:cursor-not-allowed disabled:opacity-50";
 const DAY = 24 * 60 * 60 * 1000;
 const PAGE_ORDER = ["applicant", "health", "coverage", "payment"];
@@ -130,9 +132,9 @@ export function CarrierFieldMaps({ carriers, currentId, onPick, listCard, listBo
           <>
             <h3 className="m-0 flex items-center gap-2.5 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]"><span className={cn("size-3 rounded-full", current.dot)} aria-hidden="true" />{current.name}</h3>
             <div className="grid gap-2.5 sm:grid-cols-3">
-              <div className={TILE}><span className={KICKER}>Contract level</span><strong className="mt-1 block text-base font-semibold text-[var(--ink)]">{current.level ? `${current.level}%` : "Not set"}</strong></div>
-              <div className={TILE}><span className={KICKER}>Products</span><strong className="mt-1 block truncate text-sm font-semibold text-[var(--ink)]" title={current.products.join(" · ")}>{current.products.length ? current.products.join(" · ") : "None yet"}</strong></div>
-              <div className={TILE}><span className={KICKER}>Appointed</span><strong className="mt-1 block text-sm font-semibold text-[var(--ink)]">{current.states} state{current.states === 1 ? "" : "s"}</strong></div>
+              <div className={tile}><span className={KICKER}>Contract level</span><strong className="mt-1 block text-base font-semibold text-[var(--ink)]">{current.level ? `${current.level}%` : "Not set"}</strong></div>
+              <div className={tile}><span className={KICKER}>Products</span><strong className="mt-1 block truncate text-sm font-semibold text-[var(--ink)]" title={current.products.join(" · ")}>{current.products.length ? current.products.join(" · ") : "None yet"}</strong></div>
+              <div className={tile}><span className={KICKER}>Appointed</span><strong className="mt-1 block text-sm font-semibold text-[var(--ink)]">{current.states} state{current.states === 1 ? "" : "s"}</strong></div>
             </div>
             <div className="h-px bg-[var(--border)]" />
             {error ? <Callout tone="error" title={error} /> : !maps ? <SectionLoading label="Loading field maps" /> : (
@@ -242,7 +244,7 @@ function Autofill({ carrier, map, option, canEdit, now, onChanged }: {
         {map && <button type="button" onClick={() => setSelectors(!selectors)} aria-pressed={selectors} className={CHIP}>{selectors ? "Hide selectors" : "Show selectors"}</button>}
       </div>
 
-      <p className={cn("m-0 rounded-[12px] border bg-[color-mix(in_srgb,var(--color-card)_30%,transparent)] px-3.5 py-3 text-sm leading-[1.5] text-[var(--body)]", look.line)}>{blurb}</p>
+      <p className={cn("m-0 rounded-[12px] border m-glass-inset px-3.5 py-3 text-sm leading-[1.5] text-[var(--body)]", look.line)}>{blurb}</p>
 
       <div className="flex flex-wrap items-center gap-2">
         {state === "ready" && <>{openSite("Check in the extension")}<Button type="button" variant="outline" disabled={busy || !canEdit} title={ownerOnly ?? "Starts the next version as a draft; this one keeps filling until it is published"} onClick={() => void newVersion()}>New version</Button></>}
@@ -269,14 +271,14 @@ function Autofill({ carrier, map, option, canEdit, now, onChanged }: {
       {map && (
         <>
           <div className="grid gap-2.5 sm:grid-cols-4">
-            <div className={TILE}><span className={KICKER}>Fills<Hint id="hint-fm-fills" label="About fills" text="How many of the application's fields the extension puts in for the agent." /></span><strong className="mt-1 block text-xl font-semibold text-[var(--ink)]">{fills} of {entries.length}</strong></div>
-            <div className={TILE}>
+            <div className={tile}><span className={KICKER}>Fills<Hint id="hint-fm-fills" label="About fills" text="How many of the application's fields the extension puts in for the agent." /></span><strong className="mt-1 block text-xl font-semibold text-[var(--ink)]">{fills} of {entries.length}</strong></div>
+            <div className={tile}>
               <span className={KICKER}>Last 30 days<Hint id="hint-fm-rate" label="About the fill rate" text="Of the fields agents needed, the share the map found on the carrier's page. A drop means the carrier changed its form." /></span>
               <strong className={cn("mt-1 block text-xl font-semibold", rate === null ? "text-[var(--muted)]" : rate >= 90 ? "text-[var(--accent-ink)]" : "text-[var(--warning-ink)]")}>{rate === null ? "Not used yet" : `${rate}%`}</strong>
               {rate !== null && <span className="mt-1.5 block h-1 rounded-full bg-[var(--surface-alt)]"><span className={cn("block h-1 rounded-full", rate >= 90 ? "bg-[var(--primary)]" : "bg-[var(--warning)]")} style={{ width: `${rate}%` }} /></span>}
             </div>
-            <div className={TILE}><span className={KICKER}>Version<Hint id="hint-fm-version" label="About versions" text="A published map never changes. Fixing it publishes the next version; the old one is kept." /></span><strong className="mt-1 block text-base font-semibold text-[var(--ink)]">v{map.version} · {frozen ? "published" : "draft"}</strong></div>
-            <div className={TILE}><span className={KICKER}>Checked</span><strong className="mt-1 block text-sm font-semibold text-[var(--ink)]">{day(map.approvedAt ?? map.updatedAt)}{map.platform ? " · Insurvas" : ""}</strong></div>
+            <div className={tile}><span className={KICKER}>Version<Hint id="hint-fm-version" label="About versions" text="A published map never changes. Fixing it publishes the next version; the old one is kept." /></span><strong className="mt-1 block text-base font-semibold text-[var(--ink)]">v{map.version} · {frozen ? "published" : "draft"}</strong></div>
+            <div className={tile}><span className={KICKER}>Checked</span><strong className="mt-1 block text-sm font-semibold text-[var(--ink)]">{day(map.approvedAt ?? map.updatedAt)}{map.platform ? " · Insurvas" : ""}</strong></div>
           </div>
 
           {editable && selectors && (
@@ -337,7 +339,8 @@ function Autofill({ carrier, map, option, canEdit, now, onChanged }: {
           {editable && (dirty || (selectors && !frozen)) && (
             <div className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[color-mix(in_srgb,var(--warning)_45%,var(--border))] px-3.5 py-2.5">
               <span className="mr-auto text-sm text-[var(--body)]">{dirty ? (frozen ? `Unsaved changes. Saving makes version ${nextVersion}, a draft.` : "Unsaved changes to this draft.") : `Draft v${map.version} is saved. Publish it to use it.`}</span>
-              {dirty && <Button type="button" variant="outline" disabled={busy} onClick={() => setEntries(map.entries.map((e) => ({ ...e })))}>Discard</Button>}
+              <LeaveGuard dirty={dirty} onDiscard={() => setEntries(map.entries.map((e) => ({ ...e })))} what="this field map" />
+            {dirty && <Button type="button" variant="outline" disabled={busy} onClick={() => setEntries(map.entries.map((e) => ({ ...e })))}>Discard</Button>}
               <Button type="button" variant="outline" disabled={!dirty || busy} onClick={() => void save(false)}>Save draft</Button>
               <Button type="button" disabled={Boolean(publishBlock) || busy} title={publishBlock ?? undefined} onClick={() => void save(true)}>Publish version {nextVersion}</Button>
             </div>

@@ -11,6 +11,7 @@ import { BILLING_CYCLE_LABELS, BILLING_CYCLES, formatCentsAsCurrency, type Billi
 import { ADDON_CODE_RULE, type AddonRow } from "@/lib/addons/constants";
 import type { PlanListRow } from "@/lib/plans/constants";
 import { Callout } from "@/components/app/settings/primitives";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 export type AddonFeatureOption = { key: string; label: string; module: string };
 export type AddonMeterOption = { key: string; label: string; unit: string };
@@ -69,7 +70,7 @@ export function AddonDialog({
       notify.block("Enter a valid non-negative price with no more than two decimals.");
       return;
     }
-    if (edit && active !== addon?.is_active && !window.confirm(`${active ? "Restore" : "Archive"} ${name}? This changes whether it can be attached to subscriptions.`)) return;
+    if (edit && active !== addon?.is_active && !(await confirmAction({ title: `${active ? "Restore" : "Archive"} ${name}?`, description: "This changes whether it can be attached to subscriptions.", confirmLabel: active ? "Restore add-on" : "Archive add-on", cancelLabel: "Keep as it is", destructive: !active }))) return;
     setLoading(true);
     const payload = {
       ...(edit ? {} : { code }),

@@ -5,6 +5,7 @@ import { CarriersSettings } from "@/components/app/settings/carriers-settings";
 import { PipelinesOutcomesSettings } from "@/components/app/settings/pipelines-outcomes";
 import { QueueSlaSettings } from "@/components/app/queue-sla-settings";
 import { CalendarAvailabilitySettings } from "@/components/app/calendar-availability-settings";
+import { ProductsSettings } from "@/components/app/settings/products-settings";
 import { CadenceSettings } from "@/components/app/cadence-settings";
 import { CallingWindowSettingsPanel } from "@/components/app/calling-window-settings";
 import { LeadPostKeysSettings } from "@/components/app/lead-post-keys-settings";
@@ -40,6 +41,7 @@ export type SettingsPanelContext = { team: TeamSnapshot | null; workspace: Works
 export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => ReactNode> = {
   "my-profile": () => <MyProfileSettings />,
   "business-identity": ({ team, workspace }) => <BusinessIdentitySettings team={team} workspace={workspace} />,
+  products: () => <ProductsSettings />,
   // Owner, 2026-10-28: Carriers has no Carrier rules tab.
   carriers: () => <CarriersSettings />,
   "team-access": ({ team, workspace }) => (team && workspace ? <TeamSettings initial={team} workspace={workspace} /> : null),

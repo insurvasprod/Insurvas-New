@@ -3,7 +3,6 @@ import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AssignmentWorkspace } from "@/components/app/assignment-workspace";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { isAgencyTenant } from "@/lib/agency/audience";
 
 export default async function AssignmentsPage() {
@@ -15,5 +14,5 @@ export default async function AssignmentsPage() {
   const agency = await isAgencyTenant(guard.context.tenantId);
   if (agency && guard.role !== "owner") return <RoleGateNotice reason="agency" featureLabel="Lead assignment" detail="In an agency the owner or an admin routes leads. Your assigned leads are in your queue." />;
   // One page with the agency's Lead routing (2026-10-26): in an agency the unassigned pool is a tab.
-  return <DashboardStage><AssignmentWorkspace canManage={holdsAnyRole(guard.roles, ["owner", "producer"])} pool={agency} /></DashboardStage>;
+  return <><AssignmentWorkspace canManage={holdsAnyRole(guard.roles, ["owner", "producer"])} pool={agency} /></>;
 }

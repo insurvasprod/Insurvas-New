@@ -3,7 +3,7 @@ import "server-only";
 import { audit } from "@/lib/audit/log";
 import { effectiveCarrierFacts } from "@/lib/salesSettings/carriers";
 import { auditAfterSubmit } from "./afterAudit";
-import { confirmationExtension, confirmationPath, magicMatches, MAX_CONFIRMATION_BYTES, normaliseReference, patternExample, referencePatternCheck } from "./afterSubmitRules";
+import { confirmationExtension, confirmationPath, magicMatches, MAX_CONFIRMATION_BYTES, MAX_CONFIRMATION_LABEL, normaliseReference, patternExample, referencePatternCheck } from "./afterSubmitRules";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from "./db";
 import { attemptHead, fail, type Actor } from "./requirements";
 
@@ -39,7 +39,7 @@ export async function attachConfirmation(actor: Actor, applicationId: string, su
   const s = guardTenant(await submissionHead(submissionId), actor.tenantId, applicationId);
   if (s.confirmation_path) throw new ApplicationError("CONFIRMATION_ATTACHED", "A confirmation is already attached to this submission — it is kept as it was.", 409);
   if (file.size <= 0) throw new ApplicationError("CONFIRMATION_EMPTY", "That file is empty.");
-  if (file.size > MAX_CONFIRMATION_BYTES) throw new ApplicationError("CONFIRMATION_TOO_LARGE", "The confirmation must be 10 MB or smaller.", 413);
+  if (file.size > MAX_CONFIRMATION_BYTES) throw new ApplicationError("CONFIRMATION_TOO_LARGE", `The confirmation must be ${MAX_CONFIRMATION_LABEL} or smaller.`, 413);
   const ext = confirmationExtension(file.type);
   if (!ext) throw new ApplicationError("CONFIRMATION_TYPE", "Attach a PNG or JPEG screenshot, or a PDF.", 415);
   const bytes = new Uint8Array(await file.arrayBuffer());

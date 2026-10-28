@@ -29,6 +29,8 @@ import {
 import type { InvoiceDetail, InvoiceListRow } from "@/lib/accounting/invoiceStore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-7.2 · what the agency paid for leads, one invoice at a time. Each line carries its campaign;
@@ -118,7 +120,8 @@ function InvoiceForm({ sources, initial, onClose, onSaved }: { sources: Sources;
     }
   };
 
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   const vendorId = f.source.startsWith("vendor:") ? f.source.slice(7) : null;
   const campaigns = vendorId ? sources.campaigns.filter((c) => c.vendorId === vendorId || !c.vendorId) : sources.campaigns;
   return (
@@ -208,7 +211,7 @@ function FromTemplate({ templates, onClose, onSaved, onRemoved }: { templates: T
     }
   };
   const remove = async (templateId: string, name: string) => {
-    if (!window.confirm(`Delete the template “${name}”? Invoices already entered from it stay as they are.`)) return;
+    if (!(await confirmAction({ title: `Delete the template “${name}”?`, description: "Invoices already entered from it stay as they are.", confirmLabel: "Delete template", cancelLabel: "Keep template" }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -221,7 +224,8 @@ function FromTemplate({ templates, onClose, onSaved, onRemoved }: { templates: T
       setBusy(false);
     }
   };
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[560px]">

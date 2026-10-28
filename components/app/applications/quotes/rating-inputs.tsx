@@ -9,6 +9,7 @@
  */
 
 import { Field, control } from "@/components/app/settings/primitives";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { TIER_LABEL } from "@/lib/applications/constants";
 import type { FieldValue } from "@/lib/applications/types";
 import { US_STATES } from "@/lib/appointments/constants";
@@ -142,14 +143,14 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
                 {options.length === 0 ? (
                   <p className="mt-1.5 flex h-9 items-center text-sm text-muted-foreground">None on this product</p>
                 ) : (
-                  <div className="mt-1.5 flex min-h-9 flex-wrap items-center gap-x-5 gap-y-1">
+                  // Buttons in one line, each switched on or off (owner 2026-10-28), not checkboxes.
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {options.map((r) => {
-                      const rid = `rate.rider.${r.toLowerCase().replace(/\W+/g, "_")}`;
+                      const on = value.riders.includes(r);
                       return (
-                        <label key={r} htmlFor={rid} className="inline-flex items-center gap-2 text-sm">
-                          <input id={rid} type="checkbox" className="size-4 accent-[var(--primary)]" checked={value.riders.includes(r)} disabled={readOnly} onChange={(e) => onChange({ riders: e.target.checked ? [...value.riders, r] : value.riders.filter((x) => x !== r) })} />
+                        <ToggleChip key={r} selected={on} disabled={readOnly} onClick={() => onChange({ riders: on ? value.riders.filter((x) => x !== r) : [...value.riders, r] })}>
                           {r}
-                        </label>
+                        </ToggleChip>
                       );
                     })}
                   </div>

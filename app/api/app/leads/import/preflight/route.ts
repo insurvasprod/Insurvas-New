@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { getAgentTemplate } from "@/lib/agentTemplates/service";
+import { PRODUCT_CODE } from "@/lib/agentTemplates/service";
+import { importProductRefusal, importTemplateFor } from "@/lib/products/importProduct";
 import { recordImportFailure } from "@/lib/agentTemplates/errors";
 import {
   advancePreflightScreening,
@@ -9,6 +10,7 @@ import {
   ImportConflictError,
   ImportNeedsDatabaseUpdateError,
   MAX_STEP_NUMBERS,
+  batchProductCode,
   preflightImport,
   type ImportDecisions,
 } from "@/lib/agentTemplates/importPreflight";
@@ -38,6 +40,8 @@ export const maxDuration = 60;
 
 const preflightSchema = z.object({
   csv: z.string().min(1),
+  // The product the file is for, one the agency sells (Settings › Products). Omitted: Term Life, as before.
+  product_code: z.string().regex(/^[a-z][a-z0-9_]{1,79}$/).optional(),
   // Required. Every lead knows its campaign, and every campaign knows its cost (§5) — a list with
   // no campaign is invisible to every cost report, and the importer no longer offers that.
   campaign_id: z.string().uuid(),
@@ -80,12 +84,24 @@ type LooseQuery = PromiseLike<{ data: unknown; error: { message: string } | null
   in(column: string, values: string[]): LooseQuery;
 };
 
-async function context() {
+/**
+ * `product`: the product the file is for (Settings › Products, 2026-10-28). The first step names it;
+ * the later steps of a batch pass `{ batchId }` and read it from the staged batch.
+ */
+async function context(product: { code?: string | null; batchId?: string | null } = {}) {
   const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
   const refused = await refuseNarrowInAgency(auth.context, "Lead import");
   if (refused) return refused;
-  const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
+  const code = product.code ?? (product.batchId ? await batchProductCode(auth.context.tenantId, product.batchId) ?? PRODUCT_CODE : null);
+  let template;
+  try {
+    ({ template } = await importTemplateFor(auth.context.tenantId, auth.context.userId, code));
+  } catch (error) {
+    const refusal = importProductRefusal(error);
+    if (refusal) return refusal;
+    throw error;
+  }
   const pipelines = await listPipelines(auth.context.tenantId);
   const pipeline =
     pipelines.find((item) => item.partner_type === null && item.is_default) ??
@@ -104,9 +120,10 @@ function conflict(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const result = await context();
+  const raw = (await request.json().catch(() => null)) as { product_code?: unknown } | null;
+  const result = await context({ code: typeof raw?.product_code === "string" && raw.product_code ? raw.product_code : null });
   if (result instanceof NextResponse) return result;
-  const parsed = preflightSchema.safeParse(await request.json().catch(() => null));
+  const parsed = preflightSchema.safeParse(raw);
   if (!parsed.success) {
     const field = parsed.error.issues[0]?.path[0];
     const message =
@@ -187,9 +204,10 @@ export async function POST(request: NextRequest) {
  * an answer and the file has been sent to build the plan from.
  */
 export async function PATCH(request: NextRequest) {
-  const result = await context();
+  const raw = (await request.json().catch(() => null)) as { batch_id?: unknown } | null;
+  const result = await context({ batchId: typeof raw?.batch_id === "string" ? raw.batch_id : null });
   if (result instanceof NextResponse) return result;
-  const parsed = stepSchema.safeParse(await request.json().catch(() => null));
+  const parsed = stepSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "Name the import to carry on checking" }, { status: 400 });
   try {
     const step = await advancePreflightScreening({
@@ -218,9 +236,10 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const result = await context();
+  const raw = (await request.json().catch(() => null)) as { batch_id?: unknown } | null;
+  const result = await context({ batchId: typeof raw?.batch_id === "string" ? raw.batch_id : null });
   if (result instanceof NextResponse) return result;
-  const parsed = commitSchema.safeParse(await request.json().catch(() => null));
+  const parsed = commitSchema.safeParse(raw);
   if (!parsed.success)
     return NextResponse.json({ error: "Choose what to do with each group before importing" }, { status: 400 });
 

@@ -2,6 +2,7 @@ import "server-only";
 
 import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
 import { switchedOffCarrierIds } from "@/lib/carriers/service";
+import { soldProductCodes } from "@/lib/products/agencyProducts";
 import { bandFallback } from "@/lib/quotes/math";
 import { pickQuotationTemplate, quotationFieldsOf, type QuotationField } from "@/lib/quotes/quotationTemplate";
 import { preferTenantCopies } from "@/lib/salesSettings/carriers";
@@ -62,7 +63,7 @@ export async function quoteCatalog(tenantId: string, clientState: string | null,
   const carrierIds = [...new Set(rows<{ carrier_id: string }>(contracts.data).map((c) => c.carrier_id))].filter((id) => !switchedOff.has(id));
   if (!carrierIds.length) return { carriers: [], quotationTemplate: null };
   const today = new Date().toISOString().slice(0, 10);
-  const [carriers, products, appointments, template, settings] = await Promise.all([
+  const [carriers, allProducts, appointments, template, settings, sold] = await Promise.all([
     client.from("carriers").select("id, name").in("id", carrierIds).order("name"),
     readProducts(tenantId, carrierIds),
     client.from("appointments").select("carrier_id, state, status, effective_from, terminated_at, expires_at").eq("tenant_id", tenantId).in("carrier_id", carrierIds),
@@ -70,8 +71,12 @@ export async function quoteCatalog(tenantId: string, clientState: string | null,
     // pickQuotationTemplate keeps only the general ones and the carrier's own.
     client.from("sales_templates").select("id, version, definition, tenant_id, carrier_id, product_code").eq("kind", "quotation").eq("status", "published").in("product_code", [productLine ?? "final_expense", "final_expense"]).or(`tenant_id.is.null,tenant_id.eq.${tenantId}`).order("version", { ascending: false }),
     client.from("tenant_sales_settings").select("settings").eq("tenant_id", tenantId).maybeSingle(),
+    soldProductCodes(tenantId),
   ]);
-  const apps = rows<{ carrier_id: string; state: string; status: "pending" | "active" | "terminated"; effective_from: string; terminated_at: string | null; expires_at: string | null }>(appointments.data);
+  // Settings › Products (2026-10-27): quote only lines the agency sells, plus the case's own line so
+  // a lead from before a product was switched off can still be quoted.
+  const products = allProducts.filter((p) => sold.has(p.product_code) || p.product_code === productLine);
+  const apps =rows<{ carrier_id: string; state: string; status: "pending" | "active" | "terminated"; effective_from: string; terminated_at: string | null; expires_at: string | null }>(appointments.data);
   // A platform product the agency copied (LA-3.6) is offered as its copy, never twice.
   const productRows = preferTenantCopies(products);
   // The case's own product's template first (Term Life's for a term case), then the carrier's own over

@@ -9,11 +9,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { DollarSign, FileText, PhoneCall, PhoneOutgoing } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import type { AgentLine, DialFunnel } from "@/lib/dealFlow/dialFunnel";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
+import type { AgentLine, DialFunnel, FunnelStep } from "@/lib/dealFlow/dialFunnel";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +73,7 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
   }
   if (!data) {
     return (
-      <section className="overflow-hidden rounded-lg border border-border bg-card">
+      <section className="m-glass overflow-hidden rounded-lg border border-border">
         <SectionLoading rows={2} columns={5} label="Loading the dial funnel" />
       </section>
     );
@@ -79,41 +81,35 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
 
   const served = data.steps[0]?.count ?? 0;
   const leak = data.leak;
-  const spendFoot = data.spendCents == null
-    ? "no list cost is recorded for the leads served"
-    : `of list spent on the ${data.servedWithCost} ${data.servedWithCost === 1 ? "lead" : "leads"} served${data.servedWithCost < served ? ` (${served - data.servedWithCost} with no cost recorded)` : ""}`;
+
+  // Foundation v3 §4a (2026-10-27): the five steps and the money as one row of glossy stat cards.
+  // Each card carries the step before it in its footer, so every count and every rate is still on
+  // screen: served → dialed on Dialed, dialed → reached on Reached, quoted on Applications.
+  const step = (key: FunnelStep["key"]) => data.steps.find((item) => item.key === key) ?? null;
+  const servedStep = step("served");
+  const dialedStep = step("dialed");
+  const reachedStep = step("contacts");
+  const quotedStep = step("quoted");
+  const appsStep = step("applications");
+  const period = `${when} · ${data.timeZone}`;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <section aria-labelledby="dial-funnel-title" className="min-w-0 rounded-lg border border-border bg-card p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 id="dial-funnel-title" className="m-0 text-lg leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Dial funnel</h2>
-          <span className="text-xs leading-[1.5] text-[var(--muted)]">Distinct leads at each step, {when} · {data.timeZone}</span>
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-          {/* Joined cells, as the stat strip draws figures: one object, not a row of boxes. */}
-          <ol className="m-0 grid list-none grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border p-0 sm:grid-cols-5">
-            {data.steps.map((step) => (
-              <li key={step.key} className="min-w-0 bg-card px-3.5 py-3">
-                <span className={label12}>{step.label}</span>
-                <span className="mt-1 block text-2xl leading-[1.2] font-semibold tracking-[-0.02em] tabular-nums text-[var(--ink)]">{step.count ?? "—"}</span>
-                <span className="mt-0.5 block text-xs leading-[1.5] text-[var(--muted)]">
-                  {step.key === "quoted" && step.count == null ? "no Quoted stage in your pipelines" : step.key === "applications" ? "opened" : step.toNext == null ? " " : `${percent(step.toNext)} to the next step`}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <div className="rounded-lg border border-border px-4 py-3">
-            <span className={label12}>Annualised premium</span>
-            <span className="mt-1 block text-2xl leading-[1.2] font-semibold tracking-[-0.02em] tabular-nums text-[var(--ink)]">{formatCentsAsCurrency(data.annualisedCents)}</span>
-            <span className="mt-0.5 block text-xs leading-[1.5] text-[var(--muted)]">
-              from {data.deals} {data.deals === 1 ? "deal" : "deals"}{data.unpricedDeals > 0 ? ` · ${data.unpricedDeals} with no premium yet` : ""}
-            </span>
-            <span className="mt-3 block text-sm leading-[1.5] font-semibold tabular-nums text-[var(--ink)]">{data.spendCents == null ? "—" : formatCentsAsCurrency(data.spendCents)}</span>
-            <span className="block text-xs leading-[1.5] text-[var(--muted)]">{spendFoot}</span>
-          </div>
-        </div>
-        {data.capped && <p className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--warning-ink)]">Narrow the dates for exact counts — these are a floor.</p>}
+      <section aria-labelledby="dial-funnel-title" className="flex min-w-0 flex-col gap-3">
+        <h2 id="dial-funnel-title" className="sr-only">Dial funnel</h2>
+        <StatRow label="Dial funnel, distinct leads at each step">
+          <StatCard icon={PhoneOutgoing} label={dialedStep?.label ?? "Dialed"} period={period} value={dialedStep?.count ?? "—"}
+            fact={{ label: `Of ${served} ${served === 1 ? "lead" : "leads"} served`, value: percent(servedStep?.toNext ?? null) }} />
+          <StatCard icon={PhoneCall} label={reachedStep?.label ?? "Reached"} period={when} value={reachedStep?.count ?? "—"}
+            fact={{ label: "Of dials", value: percent(dialedStep?.toNext ?? null) }} />
+          <StatCard icon={FileText} label={appsStep?.label ?? "Applications"} period={`opened ${when}`} value={appsStep?.count ?? "—"}
+            fact={quotedStep?.count == null ? { label: "No Quoted stage in your pipelines" } : { label: `${quotedStep.count} quoted`, value: `${percent(quotedStep.toNext)} to an app` }} />
+          <StatCard icon={DollarSign} label="Annualised premium" period={`${data.deals} ${data.deals === 1 ? "deal" : "deals"}`} value={formatCentsAsCurrency(data.annualisedCents)}
+            labelTitle={data.unpricedDeals > 0 ? `${data.unpricedDeals} ${data.unpricedDeals === 1 ? "deal has" : "deals have"} no premium yet.` : undefined}
+            fact={data.spendCents == null ? { label: "No list cost recorded for the leads served" } : { label: "List spent", value: formatCentsAsCurrency(data.spendCents) }} />
+        </StatRow>
+        {data.spendCents != null && data.servedWithCost < served && <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">List spent counts the {data.servedWithCost} {data.servedWithCost === 1 ? "lead" : "leads"} with a cost recorded; {served - data.servedWithCost} served had none.</p>}
+        {data.capped && <p className="m-0 text-xs leading-[1.5] text-[var(--warning-ink)]">Narrow the dates for exact counts — these are a floor.</p>}
       </section>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -143,7 +139,7 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
           )}
         </PagedTableCard>
 
-        <section aria-labelledby="dial-leak-title" className="min-w-0 rounded-lg border border-border bg-card p-5">
+        <section aria-labelledby="dial-leak-title" className={cn("m-glass min-w-0 rounded-lg border border-border p-5", leak.servedNeverDialed > 0 && "border-l-[3px] border-l-[var(--warning)]")}>
           <h2 id="dial-leak-title" className="m-0 text-lg leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
             {leak.servedNeverDialed === 0 ? (served === 0 ? "No leads were served" : "Every lead served was dialed") :`${leak.servedNeverDialed} ${leak.servedNeverDialed === 1 ? "lead was" : "leads were"} served and never dialed`}
           </h2>

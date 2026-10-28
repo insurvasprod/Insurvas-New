@@ -76,9 +76,10 @@ export const AGENT_MENU: MenuSection[] = [
     id: "today",
     label: "Today",
     items: [
-      // One Transfers entry (2026-10-25): the floor is its second view, reached from the switch on the
-      // page, so it leaves the rail but keeps its path, gate and title for links and search.
-      item("Today", { key: "leads.floor", label: "Inbound floor", path: "/app/floor", icon: "radio-tower", built: true, sidebar: false, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
+      // Inbound A (2026-10-27): the Agent Floor is Inbound's Team view, reached from the Team button
+      // on Inbound. It stays off the rail but keeps its key, gate and a title for links and search.
+      // /app/floor forwards here.
+      item("Today", { key: "leads.floor", label: "Inbound team", path: "/app/inbound/team", icon: "radio-tower", built: true, sidebar: false, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
       item("Today", { key: "leads.inbound", label: "Inbound", navLabel: "Inbound", path: "/app/inbound", icon: "inbox", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
       item("Today", { key: "leads.dialer", label: "Dialer", path: "/app/dialer", icon: "phone-call", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
       item("Today", { key: "sell.callbacks", label: "Callbacks", path: "/app/callbacks", icon: "calendar-check", required_feature: "callback_calendar", required_roles: ["owner", "producer", "assistant"], built: true }),

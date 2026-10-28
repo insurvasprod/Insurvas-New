@@ -27,7 +27,8 @@ import { useExtensionDetected, useFillOnCarrierSite } from "@/components/app/app
 import { Warning } from "@/components/app/applications/submit/warning-line";
 import { WelcomePackPanel } from "@/components/app/applications/submit/welcome-pack-panel";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
-import { StepCard } from "@/components/app/applications/workspace/step-card";
+import { BareStepCards, StepCard } from "@/components/app/applications/workspace/step-card";
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
 
 type Site = { carrierId: string; name: string; origin: string; fieldMap: "none" | "draft" | "published" | "needs_review" };
 
@@ -114,9 +115,13 @@ function SubmitBody() {
   const subs = [...attempt.submissions].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   return (
-    <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
-      <div className="flex min-w-0 flex-1 flex-col gap-5">
-        <StepCard title="Fill on the carrier site" chips={mapChip}>
+    <section aria-label="Submit" className="m-glass flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--border)] p-[18px]">
+      {/* Three numbered sections (owner pick C, 2026-10-28; folding like the other steps): fill their form,
+          submit on their site, record it. Each folds once the submission is captured. */}
+      <BareStepCards>
+        <FoldSection heading={`1 · Fill ${carrier}’s form`} done={submitted ? 1 : 0} total={1} complete={submitted} progressLabel={ready ? "Ready to fill" : "Mark it ready on Review first"} completeLabel="Done">
+        <div className="flex flex-col gap-1.5">
+        <StepCard title={`1 · Fill ${carrier}’s form`} chips={mapChip} footerNote="The extension fills it for you; without it, copy each field from copy-assist below.">
           <div className="flex flex-wrap items-center gap-3">
             <span title={fillTip}>
               <Button type="button" onClick={fill.start} disabled={Boolean(fillBlocked)}>
@@ -132,8 +137,19 @@ function SubmitBody() {
           )}
         </StepCard>
 
+        <CopyAssistPanel attempt={attempt} caseId={caseView.caseId} sample={sample} />
+        </div>
+        </FoldSection>
+
+        <FoldSection heading={`2 · Submit it on ${carrier}’s site`} done={submitted ? 1 : 0} total={1} complete={submitted} progressLabel="On their site" completeLabel="Submitted">
+        <StepCard title={`2 · Submit it on ${carrier}’s site`} chips={submitted ? <StatusChip tone="good">Submitted</StatusChip> : undefined}>
+          <p className="m-0 text-sm text-[var(--body)]">Check the form on their site and press their submit button. Insurvas never submits for you. Keep their confirmation screen open: the next step needs what it says.</p>
+        </StepCard>
+        </FoldSection>
+
+        <FoldSection heading="3 · Record what they gave you" done={submitted ? 1 : 0} total={1} complete={false} progressLabel={submitted ? "Captured" : "Not captured yet"}>
         <StepCard
-          title="After you press submit on their site"
+          title="3 · Record what they gave you"
           chips={submitted ? <StatusChip tone="good">Captured</StatusChip> : <StatusChip tone="action" dot={false}>Not captured yet</StatusChip>}
           footerNote={submitted ? "Recorded. The QA verdict was frozen with it." : `Submit on ${carrier}'s own site first, then capture what its confirmation says.`}
           actions={<>
@@ -196,13 +212,12 @@ function SubmitBody() {
             </div>
           )}
         </StepCard>
+        </FoldSection>
 
-        <WelcomePackPanel attempt={attempt} sample={sample} readOnly={readOnly} />
-      </div>
-
-      <div className="w-full shrink-0 xl:w-[340px]">
-        <CopyAssistPanel attempt={attempt} caseId={caseView.caseId} sample={sample} />
-      </div>
+        <FoldSection heading="Welcome pack" done={0} total={0} complete={false} progressLabel="For the client">
+          <WelcomePackPanel attempt={attempt} sample={sample} readOnly={readOnly} />
+        </FoldSection>
+      </BareStepCards>
 
       <SubmissionDialog
         open={capturing}
@@ -211,6 +226,6 @@ function SubmitBody() {
         extensionDetected={extension}
         seed={editing ? null : seed}
       />
-    </div>
+    </section>
   );
 }

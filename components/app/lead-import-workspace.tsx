@@ -24,7 +24,7 @@ import type { TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
 
 type SavedMap = { id: string; vendor_id: string; product_code: string; mapping: Record<string, string | null>; updated_at: string; date_order?: ImportDateOrder | null };
-type ImportInfo = { product: { name: string }; productCode: string; fields: Array<{ key: string; label: string; type: TemplateFieldType; required: boolean; options: string[]; sort_order: number }>; stages: Array<{ id: string; name: string }>; campaigns: Array<{ id: string; vendor_id: string; name: string; status: string }>; vendors: Array<{ id: string; name: string; lead_type: string; status: string }>; mappings: SavedMap[]; limits: Array<{ key: string; label: string; usage: number; limit: number | null; hardCap: boolean; allowed: boolean }>; maxRows: number; canCreateCampaigns?: boolean };
+type ImportInfo = { product: { name: string }; productCode: string; products?: Array<{ code: string; name: string }>; fields: Array<{ key: string; label: string; type: TemplateFieldType; required: boolean; options: string[]; sort_order: number }>; stages: Array<{ id: string; name: string }>; campaigns: Array<{ id: string; vendor_id: string; name: string; status: string }>; vendors: Array<{ id: string; name: string; lead_type: string; status: string }>; mappings: SavedMap[]; limits: Array<{ key: string; label: string; usage: number; limit: number | null; hardCap: boolean; allowed: boolean }>; maxRows: number; canCreateCampaigns?: boolean };
 
 /** Key-sorted, so two maps with the same entries compare equal. */
 const mapKey = (mapping: Record<string, string | null>) => JSON.stringify(Object.entries(mapping).sort(([left], [right]) => left.localeCompare(right)));
@@ -131,6 +131,8 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
   const [sheetNote, setSheetNote] = useState<string | null>(null);
   /** The import settings could not be read; the page offers a retry instead of loading forever. */
   const [loadFailed, setLoadFailed] = useState(false);
+  /** The agency sells no product yet (Settings › Products): the reason to show instead of the importer. */
+  const [noProducts, setNoProducts] = useState<string | null>(null);
   /** The product's lead record, on demand rather than as a table under the form. */
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const router = useRouter();
@@ -199,14 +201,28 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
   // Upload until the mapping is open or confirmed; Scrub from a confirmed mapping onwards.
   const step: ImportStep = !csv ? 1 : saving ? 3 : mapOpen && info && !preview.error ? 2 : mapConfirmed ? 3 : 1;
 
-  const loadInfo = useCallback(() => {
+  // `product`: the product the list is for (Settings › Products, 2026-10-28). Unnamed, the server picks
+  // Term Life when the agency sells it, else the first product it sells.
+  const loadInfo = useCallback((product?: string) => {
     setLoadFailed(false);
-    void fetch("/api/app/leads/import", { cache: "no-store" }).then(async (response) => {
+    setNoProducts(null);
+    void fetch(`/api/app/leads/import${product ? `?product=${encodeURIComponent(product)}` : ""}`, { cache: "no-store" }).then(async (response) => {
       const body = await response.json().catch(() => null);
+      if (response.status === 409 && body?.code === "product_not_sold" && !product) { setNoProducts(body.error ?? "Choose the products your agency sells first."); return; }
+      // A product with no lead form yet (or no longer sold): say so and stay on the product already open.
+      if (response.status === 409 && product) { notify.block(body?.error ?? "That product cannot be imported yet."); return; }
       if (!response.ok) throw new Error(body?.error ?? "Could not load import settings");
       setInfo(body);
     }).catch((error) => { setLoadFailed(true); notify.fail("Could not load the import screen", { detail: error.message }); });
   }, []);
+  /** Another product means another form: its fields and saved maps, so this file is mapped again. */
+  function chooseProduct(code: string) {
+    if (!code || code === info?.productCode) return;
+    setMapping({});
+    setConfirmedKey(null);
+    setPickedDateOrder(null);
+    loadInfo(code);
+  }
   // The first read of the import settings; loadInfo owns the loading and failure state.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadInfo(); }, [loadInfo]);
@@ -322,6 +338,7 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           csv,
+          product_code: info?.productCode,
           campaign_id: campaign.id,
           vendor_id: campaign.vendor_id,
           mapping: Object.keys(effectiveMapping).length ? effectiveMapping : undefined,
@@ -372,6 +389,13 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
   const vendorName = info?.vendors.find((vendor) => vendor.id === vendorId)?.name ?? null;
   const canMap = Boolean(csv && info && mappingRows.length > 0 && !preview.error);
 
+  if (noProducts) {
+    return (
+      <DashedCard icon={<Store className="size-4" aria-hidden />} title="Choose the products you sell first" action={<Button asChild variant="outline"><Link href="/app/settings#products">Open Settings › Products</Link></Button>}>
+        Every imported lead is for a product your agency sells.
+      </DashedCard>
+    );
+  }
   if (!info && !loadFailed) return <PageLoading rows={6} />;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
@@ -384,7 +408,7 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
 
     {loadFailed && !info && <p role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
       The import settings could not be loaded.
-      <Button type="button" variant="outline" onClick={loadInfo}>Try again</Button>
+      <Button type="button" variant="outline" onClick={() => loadInfo()}>Try again</Button>
     </p>}
 
     {usage.length > 0 && <StatStrip label="Plan usage">
@@ -513,6 +537,12 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
                 : "Every import is attributed to a campaign. Ask an owner or producer to create one."}
             </DashedCard>
           : <SettingsCard pad={20} title="Attribution" bodyClassName="flex flex-col gap-3.5">
+              {/* Settings › Products (2026-10-28): the list is for one product the agency sells. */}
+              <Field label="Product" htmlFor="lead-product" required hint={(info?.products?.length ?? 0) > 1 ? "The leads are for this product: its form decides the columns." : undefined}>
+                <select id="lead-product" className={control} required value={info?.productCode ?? ""} disabled={(info?.products?.length ?? 0) < 2} onChange={(event) => chooseProduct(event.target.value)}>
+                  {(info?.products ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
+                </select>
+              </Field>
               <Field label="Vendor" htmlFor="lead-vendor" hint={vendorId ? "Reuses this vendor's saved mapping." : undefined}>
                 <select id="lead-vendor" className={control} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
                   <option value="">Any vendor</option>

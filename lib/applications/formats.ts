@@ -38,6 +38,26 @@ export function passesLuhn(value: string) {
 
 export type CardBrand = "visa" | "mastercard" | "discover" | "amex";
 
+/** The card brands we accept, in the order the payment form shows them. */
+export const CARD_BRANDS: CardBrand[] = ["visa", "mastercard", "discover", "amex"];
+
+/** How many digits a card of this brand carries: 15 for American Express, 16 for the others we accept. */
+export const cardDigitsFor = (brand: CardBrand | null) => (brand === "amex" ? 15 : 16);
+
+/**
+ * What is wrong with a typed card number, or null when it is one we accept (owner 2026-10-28): spaces
+ * and dashes are fine, the brand must be one we take, the length must be that brand's, and the
+ * checksum must pass.
+ */
+export function cardNumberProblem(value: string): "brand" | "length" | "checksum" | null {
+  const digits = digitsOnly(value);
+  if (digits.length !== value.replace(/[\s-]/g, "").length) return "checksum";
+  const brand = cardBrand(digits);
+  if (digits.length >= 4 && !brand) return "brand";
+  if (digits.length !== cardDigitsFor(brand)) return "length";
+  return passesLuhn(digits) ? null : "checksum";
+}
+
 /** The brand a card number's leading digits imply, or null when they match none we accept. */
 export function cardBrand(value: string): CardBrand | null {
   const d = digitsOnly(value);

@@ -63,7 +63,7 @@ async function withOutcomeContext(tenantId: string, userId: string, wizard: Disp
         label: outcome.label,
         closes_as: outcome.closes_as,
         description: outcomeDescription(outcome, outcome.mapped_stage, current),
-        stage: { id: outcome.mapped_stage.id, name: outcome.mapped_stage.name, pipeline_name: outcome.mapped_stage.pipeline_name, is_current: outcome.mapped_stage.id === current.stageId },
+        stage: { id: outcome.mapped_stage.id, name: outcome.mapped_stage.name, pipeline_name: outcome.mapped_stage.pipeline_name, is_current: outcome.mapped_stage.id === current.stageId, color: outcome.mapped_stage.color ?? null },
         application,
         needs_verification: application && verification?.complete !== true,
         adds_to_do_not_call: outcome.disposition_key === DO_NOT_CALL_DISPOSITION_KEY,

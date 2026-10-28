@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { st } from "@/components/app/settings/primitives";
@@ -227,7 +227,7 @@ export function AuditLogTable({
                   )}
                 </select>
               )}
-              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={filterCount} />
+              <FilterButton open={filtersOpen} controls="audit-log-filters" onClick={() => setFiltersOpen((open) => !open)} count={filterCount} />
               {target && (
                 <span className="inline-flex h-9 max-w-full items-center gap-2 rounded-md border border-border bg-background pr-1.5 pl-3 text-xs text-muted-foreground">
                   <span className="truncate">
@@ -245,8 +245,7 @@ export function AuditLogTable({
                 </span>
               )}
             </DataToolbar>
-            {filtersOpen && (
-              <div id="audit-log-filters" className="flex w-full flex-wrap items-center gap-2 border-t border-border pt-3">
+            <FilterPanel id="audit-log-filters" open={filtersOpen} className="flex w-full flex-wrap items-center gap-2 border-t border-b-0 px-0 pb-0 pt-3">
                 <select
                   aria-label="Action"
                   className={cn(toolbarControl, "w-[260px]")}
@@ -282,8 +281,7 @@ export function AuditLogTable({
                     Clear all filters
                   </Button>
                 )}
-              </div>
-            )}
+              </FilterPanel>
           </>
         }
       >

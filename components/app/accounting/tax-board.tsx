@@ -14,6 +14,7 @@ import { ViewTabs } from "@/components/ui/view-tabs";
 import { ENTITY_TYPES, EXEMPT_LABELS, EXEMPT_REASONS, maskTaxId, TAX_CATEGORIES, TAX_CATEGORY_LABELS, TAX_NOTICE, type ExemptReason, type TaxCategory } from "@/lib/accounting/taxCore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-7.8 · January, without a spreadsheet: what each contractor was paid in the year (by payment
@@ -63,7 +64,8 @@ function ProfileDialog({ row, onClose, onSaved }: { row: Row; onClose: () => voi
       setBusy(false);
     }
   };
-  const field = "flex flex-col gap-1 text-sm";
+  // The shared stacked label (foundation v3: 13/500 over the control).
+  const field = fieldLabel;
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[620px]">

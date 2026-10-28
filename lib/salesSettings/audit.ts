@@ -15,6 +15,7 @@ export const SALES_SETTINGS_AUDIT_ACTIONS = {
   "tenant.sales_template_copied": "Sales template copied",
   "tenant.sales_template_published": "Sales template published",
   "tenant.sales_template_retired": "Sales template retired",
+  "tenant.sales_template_deleted": "Sales template deleted",
   "tenant.carrier_settings_saved": "Carrier portal, reference pattern or descriptor changed",
   "tenant.carrier_product_created": "Carrier product added",
   "tenant.carrier_product_updated": "Carrier product changed",

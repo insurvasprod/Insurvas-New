@@ -9,7 +9,7 @@
 
 import { StatusChip } from "@/components/ui/status-chip";
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash2 } from "lucide-react";
 
 import { Field, SettingsCard, ToggleRow, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { feedOfQuestionKey, INTERVIEW_FEEDS, type InterviewFeed } from "@/lib/ap
 import type { UwFieldType } from "@/lib/salesSettings/templateSchemas";
 import { cn } from "@/lib/utils";
 
+import { QuestionBank } from "./question-bank";
 import { WithReason } from "./shared";
 
 const PERSISTENCY_LABEL = "Keeps the policy on the books";
@@ -56,13 +57,15 @@ type Props = {
   title: ReactNode;
   sub?: ReactNode;
   children?: ReactNode;
+  /** Owner pick C (2026-10-28): lay the builder out beside the question bank. */
+  bank?: { templateName: string };
 };
 
 /**
  * Two cards, one after the other in the stack: the template's sections and questions, then the
  * question picked. Neither sits inside the other (UI-CONSISTENCY §8).
  */
-export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSelect, title, sub, children }: Props) {
+export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSelect, title, sub, children, bank }: Props) {
   const ordered = orderBySection(draft);
   const qs = ordered.questions;
   const selected = qs.find((q) => q.key === selectedKey) ?? null;
@@ -103,8 +106,7 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
   const removeSection = (key: string) => set(qs, draft.sections.filter((s) => s.key !== key));
 
   const numberOf = new Map(qs.map((q, i) => [q.key, i + 1]));
-  return (
-    <>
+  const listCard = (
     <SettingsCard
       title={title}
       sub={sub}
@@ -197,20 +199,45 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
       </div>
       </div>
     </SettingsCard>
+  );
+  const editor = selected && (
+    <QuestionCard
+      q={selected}
+      index={qs.findIndex((q) => q.key === selected.key) + 1}
+      total={qs.length}
+      all={qs}
+      sections={draft.sections}
+      readOnly={readOnly}
+      onPatch={(p) => patch(selected.key, p)}
+      onQuestions={(list) => set(list)}
+      onRekey={(to) => rekey(selected.key, to)}
+    />
+  );
 
-      {selected && (
-        <QuestionCard
-          q={selected}
-          index={qs.findIndex((q) => q.key === selected.key) + 1}
-          total={qs.length}
-          all={qs}
-          sections={draft.sections}
-          readOnly={readOnly}
-          onPatch={(p) => patch(selected.key, p)}
-          onQuestions={(list) => set(list)}
-          onRekey={(to) => rekey(selected.key, to)}
-        />
-      )}
+  // Owner 2026-10-28 (after pick C): the template's own questions are the page — wide, on the left;
+  // the question bank is the side tool on the right. A question clicked in the list opens its editor
+  // in the bank's place, with the way back to the bank.
+  if (bank) {
+    return (
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
+        <div className="min-w-0">{listCard}</div>
+        <div className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)]">
+          {selected ? (
+            <>
+              <span><Button type="button" variant="outline" size="sm" onClick={() => onSelect(null)}><ArrowLeft aria-hidden="true" />Question bank</Button></span>
+              {editor}
+            </>
+          ) : (
+            <QuestionBank draft={draft} onChange={(next) => onChange(orderBySection(next))} readOnly={readOnly} templateName={bank.templateName} />
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      {listCard}
+      {editor}
     </>
   );
 }

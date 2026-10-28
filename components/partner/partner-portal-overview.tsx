@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { BarChart3, BellRing, CheckCircle2, Hand, Inbox, MessageSquare, Send, ShieldX, Users, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { DashTile } from "@/components/ui/dash-tile";
 import { Launchpad, type LaunchCell } from "@/components/ui/launchpad";
 import { LiveStamp } from "@/components/ui/live-stamp";
@@ -132,7 +131,7 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
   }
 
   return (
-    <DashboardStage>
+    <>
       <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
         <PageHeader
           title="Overview"
@@ -144,6 +143,6 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
         {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
         <Launchpad storageKey={`insurvas:partner-home:${role}`} spaces={[{ key: "today", label: `${partnerName ?? "Your organization"} at a glance`, cells }]} />
       </div>
-    </DashboardStage>
+    </>
   );
 }

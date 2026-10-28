@@ -10,7 +10,9 @@ import { z } from "zod";
  */
 export const REVEAL_REASON_MIN = 4;
 export const REVEAL_REASON_MAX = 200;
-export const REVEAL_REASON_REQUIRED = "Say why you need the full value (a few words), then reveal it.";
+/** Owner 2026-10-28: the screens no longer ask; every reveal from them carries this reason. */
+export const REVEAL_REASON_ON_SCREEN = "Revealed on screen by the agent";
+export const REVEAL_REASON_REQUIRED ="Say why you need the full value (a few words), then reveal it.";
 
 export const revealReasonField = z
   .string({ error: REVEAL_REASON_REQUIRED })

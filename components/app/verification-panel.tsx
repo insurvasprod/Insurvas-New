@@ -1,22 +1,21 @@
 "use client";
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, ChevronLeft, Loader2 } from "lucide-react";
+import { ArrowRight, Bell, Check, ChevronDown, ChevronLeft, Loader2, Pencil } from "lucide-react";
 
-import { Callout, KeyValues, SettingsMeter, Timeline, type PillTone, pillTone } from "@/components/app/settings/primitives";
-import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
-import type { RecordedOutcome } from "@/components/app/use-disposition-walk";
-import { InboundSteps, LiveTransfersColumn, OutcomeEffects, ScreeningCard, useTakeNext } from "@/components/app/inbound/call-cockpit-parts";
-import { Ring } from "@/components/app/inbound/stream-parts";
+import { Callout, pillTone } from "@/components/app/settings/primitives";
+import { CallerCard, callerFacts, elapsed } from "@/components/app/inbound/caller-card";
+import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
+import { callHref } from "@/components/app/inbound/use-floor";
 import { SamePersonPrompt, type SamePersonCheck } from "@/components/app/same-person-prompt";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PageLoading } from "@/components/ui/page-loading";
 import { withFrom } from "@/lib/applications/backLink";
-import { productLineLabel } from "@/lib/format/productLine";
 import { notify } from "@/lib/notify";
 import type { TemplateField } from "@/lib/templates/constants";
 import type { VerificationState } from "@/lib/verification/progress";
@@ -47,27 +46,19 @@ function isEmpty(value: unknown) { return value === null || value === undefined 
 function displayValue(value: unknown) { return Array.isArray(value) ? value.join(", ") : isEmpty(value) ? "nothing" : String(value); }
 function sameValue(a: unknown, b: unknown) { return JSON.stringify(a ?? null) === JSON.stringify(b ?? null) || (isEmpty(a) && isEmpty(b)); }
 function inputValue(value: unknown, type: TemplateField["type"]) { if (type === "multi_select") return Array.isArray(value) ? value : []; if (type === "boolean") return typeof value === "boolean" ? String(value) : ""; if (type === "currency" && typeof value === "number") return String(value / 100); return value === null || value === undefined ? "" : String(value); }
-function clock(value: string | null | undefined) { return value ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"; }
-function elapsed(from: string, now: number) {
-  const total = Math.max(0, Math.round((now - new Date(from).getTime()) / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(s).padStart(2, "0")}s`;
-}
-
-/* ── local controls: a text link and a flat 16px editor ─ */
+/* ── local controls: a text link and a 16px editor that looks like a field ─ */
 
 const b = {
   link: "cursor-pointer border-0 bg-transparent p-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
 };
-const FLAT = "box-border w-full rounded-[6px] border border-transparent bg-transparent px-2 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] hover:border-[var(--border)] focus:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+const FLAT = "box-border w-full rounded-[8px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] px-2.5 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none transition-colors placeholder:text-[var(--muted)] hover:border-[var(--border-strong)] focus:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
-const STATE_PILL: Record<VerificationState, { tone: PillTone; label: string }> = {
-  confirmed: { tone: "success", label: "Confirmed" },
-  corrected: { tone: "warning", label: "Corrected" },
-  outstanding: { tone: "error", label: "Outstanding" },
+/** One detail's state, said the way the agent acts on it (owner 2026-10-27: self-explanatory rows). */
+const STATE_LOOK: Record<VerificationState, { label: string; mark: string; row: string }> = {
+  outstanding: { label: "To check", mark: "border-[1.5px] border-dashed border-[var(--border-strong)] text-[var(--muted)]", row: "" },
+  confirmed: { label: "Confirmed", mark: "bg-[var(--primary)] text-[var(--on-primary)]", row: "bg-[color-mix(in_srgb,var(--success)_6%,transparent)]" },
+  corrected: { label: "Changed", mark: "bg-[var(--warning)] text-white", row: "bg-[color-mix(in_srgb,var(--warning)_7%,transparent)]" },
 };
 
 function FieldEditor({ id, field, value, onChange, disabled, placeholder }: { id: string; field: TemplateField; value: unknown; onChange: (value: unknown) => void; disabled: boolean; placeholder: string }) {
@@ -108,15 +99,6 @@ function sectionComplete(fields: Array<{ is_required: boolean; state: Verificati
   return counted.every((field) => field.state !== "outstanding");
 }
 
-function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
-  return (
-    <section className={cn("min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5", className)}>
-      <h2 className="m-0 text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</h2>
-      <div className="mt-3">{children}</div>
-    </section>
-  );
-}
-
 export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workItemId: string; readOnly: boolean; canHandoff: boolean }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [drafts, setDrafts] = useState<Record<string, unknown>>({});
@@ -132,12 +114,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const [handoffSaving, setHandoffSaving] = useState(false);
   const [handoffError, setHandoffError] = useState("");
   const [nudgeSaving, setNudgeSaving] = useState(false);
-  const [showAllHistory, setShowAllHistory] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [outcomeOpen, setOutcomeOpen] = useState(false);
-  // What the recorded outcome did (Inbound A): shown in the call dock instead of leaving for Deal flow.
-  const [recorded, setRecorded] = useState<RecordedOutcome | null>(null);
-  const { taking, takeNext } = useTakeNext();
   // "Same person?" (Module 1 simplified): a re-check replaces the stored result; an existing customer
   // holds Continue to underwriting until the agent says they checked.
   const [preflight, setPreflight] = useState<SamePersonCheck | null | undefined>(undefined);
@@ -237,7 +214,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     const body = await response.json().catch(() => null);
     setHandoffSaving(false);
     if (!response.ok) { const message = body?.error ?? "Could not offer this handoff"; setHandoffError(message); notify.block(message); return; }
-    notify.arrive("Handoff offered; the licensed agent can see verification progress before accepting");
+    notify.arrive("Call passed. The licensed agent sees what you checked before taking over; stay on until they join");
     setHandoffContext(null);
   }
 
@@ -246,11 +223,9 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     const response = await fetch("/api/app/agent-floor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "nudge", work_item_id: workItemId, idempotency_key: crypto.randomUUID() }) });
     const body = await response.json().catch(() => null);
     setNudgeSaving(false);
-    if (!response.ok) { const message = body?.error ?? "Could not nudge the team."; setError(message); notify.block(message); return; }
-    notify.done(body.nudge?.alreadySent ? "That nudge was already sent" : "Team nudged");
+    if (!response.ok) { const message = body?.error ?? "Could not ask the team."; setError(message); notify.block(message); return; }
+    notify.done(body.nudge?.alreadySent ? "The team was already asked" : "The team was asked to help");
   }
-
-  const labels = useMemo(() => new Map((panel?.sections ?? []).flatMap((section) => section.fields.map((field) => [field.field_key, field.label] as const))), [panel?.sections]);
 
   async function continueToUnderwriting() {
     setContinuing(true);
@@ -294,7 +269,8 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     return (
       <div className="flex w-full min-w-0 flex-col gap-6">
         {backLink}
-        <PageHeader title="Verification" />
+        <PageHeader title="Call" />
+        <InboundStepBar current={1} />
         <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "Verification is unavailable"}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></span>} />
       </div>
     );
@@ -305,44 +281,40 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const heldAsCustomer = samePerson?.status === "already_customer" && !customerChecked;
   const allFields = panel.sections.flatMap((section) => section.fields);
   const requiredConfirmed = allFields.filter((field) => field.is_required && ["confirmed", "corrected"].includes(field.state)).length;
-  const progressText = `${requiredConfirmed} of ${panel.requiredCount} required fields confirmed`;
-  const leadName = String(panel.lead.values.full_name ?? panel.lead.values.name ?? ([panel.lead.values.first_name, panel.lead.values.last_name].filter(Boolean).join(" ") || "Customer"));
-  const leadState = String(panel.lead.carrier_state ?? panel.lead.values.state ?? panel.lead.values.address_state ?? "State not provided");
-  const source = String(panel.lead.values.source ?? panel.lead.values.lead_source ?? "Partner transfer");
+  const progressText = `${requiredConfirmed} of ${panel.requiredCount} required details checked`;
+  const left = Math.max(0, panel.requiredCount - requiredConfirmed);
+  const percent = panel.requiredCount ? Math.round((requiredConfirmed / panel.requiredCount) * 100) : 100;
+  const facts = callerFacts(panel);
+  const leadName = facts.name;
   const sensitive = new Set(panel.sensitiveKeys ?? []);
   const context = panel.context ?? null;
-  const history = context?.history ?? [];
-  const historyShown = showAllHistory ? history : history.slice(0, 8);
-  const historyTitle = (entry: HistoryEntry) => {
-    if (entry.kind === "claimed") return "Claimed";
-    const label = (entry.fieldKey && labels.get(entry.fieldKey)) || "A field";
-    return entry.kind === "corrected" ? `${label} corrected` : entry.kind === "outstanding" ? `${label} marked outstanding` : `${label} confirmed`;
-  };
+  // A typed value not yet saved, in any field: the same test each row makes for "Save new value".
+  const unsavedKeys = readOnly ? [] : allFields.map((field) => field.field_key).filter((key) => (
+    !sensitive.has(key) ? !sameValue(drafts[key], panel.lead.values[key]) : key in revealed ? !sameValue(drafts[key], revealed[key]) : !isEmpty(drafts[key])
+  ));
+  const dropUnsaved = () => setDrafts((current) => {
+    const next = { ...current };
+    for (const key of unsavedKeys) next[key] = sensitive.has(key) ? (key in revealed ? revealed[key] : "") : panel.lead.values[key];
+    return next;
+  });
 
-  // Inbound A (redesign 2026-10-25): the Dialer A cockpit for a transfer — who else is waiting on the
-  // left, this caller and their verification in the middle, the call dock on the right. The fields,
-  // their folding and every write are unchanged (LA-1.11); the outcome is still the disposition walk.
+  // Inbound A, step 2 (owner 2026-10-27). One caller card on the left that stays put while the
+  // details scroll; the details in one glass table whose header carries the next steps. The fields,
+  // their folding and every write are unchanged (LA-1.11); the outcome is step 3 (?step=finish).
+  const onTheCall = callStartedAt ? elapsed(callStartedAt, now) : null;
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+      <LeaveGuard dirty={unsavedKeys.length > 0} onDiscard={dropUnsaved} what={unsavedKeys.length === 1 ? "a caller detail" : `${unsavedKeys.length} caller details`} />
       {revealReasonDialog}
       {backLink}
+      <PageHeader
+        title={`Call with ${leadName}`}
+        actions={<StatusChip tone={onTheCall ? "info" : "neutral"} dot>{onTheCall ? `On the call ${onTheCall}` : "No open call"}</StatusChip>}
+      />
+      <InboundStepBar current={1} />
       <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="max-lg:order-3 lg:sticky lg:top-[calc(var(--top-bar-h,56px)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h,56px)-48px)] lg:w-[280px] lg:shrink-0 lg:flex lg:flex-col">
-          <LiveTransfersColumn canTake={Boolean(recorded)} onTake={() => void takeNext()} taking={taking} />
-          {/* Inbound A3 (2026-10-25): what was checked before the call sits under the line. */}
-          <div className="mt-4"><ScreeningCard workItemId={workItemId} /></div>
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1">
-          <section aria-label="Caller" className="m-glass flex min-w-0 flex-col gap-4 rounded-[16px] border border-[var(--border)] p-4">
-            <div className="flex items-center gap-4">
-              <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">{leadName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
-              <div className="min-w-0 flex-1">
-                <PageHeader title={leadName} description={[panel.template.product_name || productLineLabel(panel.workItem.productLine), leadState, context?.partnerName ?? source].filter(Boolean).join(" · ")} />
-              </div>
-            </div>
-            <InboundSteps verified={requiredDone} recorded={Boolean(recorded)} />
-          </section>
+        <aside aria-label="The caller" className="flex min-w-0 flex-col gap-4 max-lg:order-2 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h)-32px)] lg:w-[320px] lg:shrink-0 lg:self-start lg:overflow-y-auto">
+          <CallerCard workItemId={workItemId} facts={facts} now={now} />
           <SamePersonPrompt
             check={samePerson}
             duplicateFlagged={panel.lead.values?.duplicate_warning === true}
@@ -351,30 +323,62 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
             acknowledged={customerChecked}
             onAcknowledge={() => setCustomerChecked(true)}
           />
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1">
           {continueError && <Callout tone="error" title={continueError} />}
           {context?.claim.at && new Date(panel.session.started_at).getTime() < new Date(context.claim.at).getTime() - 5_000 && (
-            <Callout tone="info" title="Resumed from an earlier call: fields confirmed or corrected then are kept below." />
+            <Callout tone="info" title="Picked up from an earlier call: details checked then are kept below." />
           )}
-          {readOnly && <Callout tone="info" title="Your account is read-only: field changes are disabled." />}
+          {readOnly && <Callout tone="info" title="Your agency’s account is paused: details cannot be changed." />}
           {error && <Callout tone="error" title={error} />}
 
           {canHandoff && handoffContext && (
-            <section aria-label="Hand off to a licensed agent" className="flex min-w-0 flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-              <label htmlFor="handoff-agent" className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Hand off to a licensed agent</label>
+            <section aria-label="Pass to a licensed agent" className="m-glass flex min-w-0 flex-wrap items-center gap-3 rounded-[16px] border border-[var(--border)] px-4 py-3">
+              <label htmlFor="handoff-agent" className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Pass to a licensed agent</label>
               <select id="handoff-agent" className={cn(toolbarControl, "min-w-56 flex-1 sm:flex-none")} value={handoffTarget} disabled={readOnly || handoffSaving} onChange={(event) => setHandoffTarget(event.target.value)}>
                 <option value="">Choose an agent…</option>
-                {handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}
+                {handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role === "owner" ? "owner" : "agent"})</option>)}
               </select>
-              <Button type="button" onClick={() => void offerHandoff()} disabled={readOnly || handoffSaving || !handoffTarget}>{handoffSaving ? "Offering…" : "Offer handoff"}</Button>
+              <Button type="button" onClick={() => void offerHandoff()} disabled={readOnly || handoffSaving || !handoffTarget}>{handoffSaving ? "Passing…" : "Pass the call"}</Button>
+              <p className="m-0 w-full text-xs leading-[1.5] text-[var(--muted)]">They see what you checked before they take over. Stay on the line until they join.</p>
               {handoffError && <p role="alert" className="m-0 w-full text-sm leading-[1.5] text-[var(--error-ink)]">{handoffError}</p>}
             </section>
           )}
-          {canHandoff && handoffError && !handoffContext && <Callout tone="error" title={`Handoff is unavailable: ${handoffError}`} />}
+          {canHandoff && handoffError && !handoffContext && <Callout tone="error" title={`Passing the call is unavailable: ${handoffError}`} />}
 
-          <section aria-label="Application fields" className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-              <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Application fields</span>
-              <StatusChip dot={false} tone={pillTone(requiredDone ? "success" : "brand")}>{progressText}</StatusChip>
+          <section aria-label="Verification" className="m-glass flex min-w-0 flex-col overflow-hidden rounded-[16px] border border-[var(--border)]">
+            {/* The header carries the progress and the next steps (owner 2026-10-27: no bar under the table). */}
+            <div className="flex flex-col gap-2.5 border-b border-[var(--border)] px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="flex min-w-0 flex-wrap items-center gap-3">
+                  <h2 className="m-0 text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Verification</h2>
+                  <StatusChip dot={false} tone={pillTone(requiredDone ? "success" : "brand")}>{progressText}</StatusChip>
+                </span>
+                <span className="flex flex-wrap items-center gap-2">
+                  {!readOnly && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => void nudgeTeam()} disabled={nudgeSaving}>
+                      {nudgeSaving ? <Loader2 aria-hidden className="animate-spin" /> : <Bell aria-hidden />}Ask the team
+                    </Button>
+                  )}
+                  {!readOnly && !canHandoff && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => void continueToUnderwriting()} disabled={continuing || heldAsCustomer} title={heldAsCustomer ? "They are already a customer. Check it under Same person? first." : undefined}>
+                      {continuing && <Loader2 aria-hidden className="animate-spin" />}Continue to underwriting
+                    </Button>
+                  )}
+                  {!canHandoff && (
+                    <Button asChild size="sm">
+                      <Link href={callHref(workItemId, "finish")} title={requiredDone ? undefined : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Next: finish the call<ArrowRight aria-hidden /></Link>
+                    </Button>
+                  )}
+                </span>
+              </div>
+              <div aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_8%,transparent)]">
+                <div className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-300" style={{ width: `${percent}%` }} />
+              </div>
+              <p className="m-0 text-sm leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+                Read each detail back to the caller. Right? Press <strong className="font-semibold text-[var(--ink)]">It’s right</strong>. Wrong? Type the right one and press <strong className="font-semibold text-[var(--ink)]">Save new value</strong>.
+              </p>
             </div>
             {panel.sections.map((section, sectionIndex) => {
               const complete = sectionComplete(section.fields);
@@ -384,7 +388,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
               <Fragment key={section.section_key}>
                 {/* Each template section is a sub-group row inside the one card. A complete one folds (LA-1.11-7). */}
                 {complete ? (
-                  <button type="button" aria-expanded={!folded} aria-controls={`verify-section-${section.section_key}`} onClick={() => setReopened((current) => ({ ...current, [section.section_key]: !current[section.section_key] }))} className={cn("flex w-full cursor-pointer items-center justify-between gap-3 border-0 bg-[var(--canvas)] px-4 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--ring-color)]", sectionIndex > 0 && "border-t border-solid border-[var(--border)]", label12)}>
+                  <button type="button" aria-expanded={!folded} aria-controls={`verify-section-${section.section_key}`} onClick={() => setReopened((current) => ({ ...current, [section.section_key]: !current[section.section_key] }))} className={cn("flex w-full cursor-pointer items-center justify-between gap-3 border-0 bg-[color-mix(in_srgb,var(--ink)_4%,transparent)] px-4 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--ring-color)]", sectionIndex > 0 && "border-t border-solid border-[var(--border)]", label12)}>
                     <span>{section.label}</span>
                     <span className="inline-flex items-center gap-2 normal-case tracking-[-0.01em]">
                       <StatusChip tone="good" dot>Complete · {done} of {section.fields.length}</StatusChip>
@@ -392,7 +396,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                     </span>
                   </button>
                 ) : (
-                  <div className={cn("bg-[var(--canvas)] px-4 py-2", sectionIndex > 0 && "border-t border-[var(--border)]", label12)}>{section.label}</div>
+                  <div className={cn("bg-[color-mix(in_srgb,var(--ink)_4%,transparent)] px-4 py-2", sectionIndex > 0 && "border-t border-[var(--border)]", label12)}>{section.label}</div>
                 )}
                 {!folded && section.fields.length === 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-3.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No fields apply to this section with the answers so far.</p>}
                 <div id={`verify-section-${section.section_key}`} hidden={folded}>
@@ -401,16 +405,21 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                   const isSensitive = sensitive.has(key);
                   const isRevealed = key in revealed;
                   const busy = readOnly || saving === key;
-                  const pill = STATE_PILL[field.state];
+                  const look = STATE_LOOK[field.state];
                   const stored = panel.lead.values[key];
-                  const placeholder = isSensitive && !isRevealed ? (isEmpty(stored) ? "not yet given" : String(stored)) : isEmpty(stored) ? "not yet given" : "";
+                  const placeholder = isSensitive && !isRevealed ? (isEmpty(stored) ? "Not given yet: type it here" : String(stored)) : isEmpty(stored) ? "Not given yet: type it here" : "";
                   const inputId = `verify-${key}`;
-                  // An edit that has not been saved yet: Confirm would confirm the stored value, so say so.
+                  // An edit that has not been saved yet: the row offers Save new value instead of It's right.
                   const dirty = !isSensitive ? !sameValue(drafts[key], stored) : isRevealed ? !sameValue(drafts[key], revealed[key]) : !isEmpty(drafts[key]);
+                  const undoEdit = () => setDrafts((current) => ({ ...current, [key]: isSensitive ? (isRevealed ? revealed[key] : "") : stored }));
                   return (
-                    <div key={key} className="border-t border-[var(--border)] px-4 py-3.5">
-                      <div className="flex flex-wrap items-center gap-4">
-                        <label htmlFor={inputId} className="w-[190px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
+                    // Enter in the field saves an edit; it never confirms on its own.
+                    <form key={key} onSubmit={(event) => { event.preventDefault(); if (dirty && !busy) void update(field, "corrected"); }} className={cn("border-t border-[var(--border)] px-4 py-3 transition-colors", !dirty && look.row)}>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <span aria-hidden="true" className={cn("grid size-6 shrink-0 place-items-center rounded-full", dirty ? "border-[1.5px] border-[var(--primary)] text-[var(--accent-ink)]" : look.mark)}>
+                          {dirty ? <Pencil className="size-3" /> : field.state === "confirmed" ? <Check className="size-3.5" /> : field.state === "corrected" ? <Pencil className="size-3" /> : null}
+                        </span>
+                        <label htmlFor={inputId} className="w-[170px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
                           {field.label}{field.is_required && <span className="text-[var(--error-ink)]" aria-label="required"> *</span>}
                         </label>
                         <div className="flex min-w-[200px] flex-1 basis-[220px] items-center gap-2">
@@ -423,32 +432,34 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                               : <button type="button" onClick={() => void reveal(key, field.label)} disabled={revealing === key} className={b.link} aria-label={`Reveal ${field.label}`}>{revealing === key ? "Revealing…" : "Reveal"}</button>
                           )}
                         </div>
-                        <div className="ml-auto flex items-center gap-4">
-                          <StatusChip tone={pillTone(pill.tone)} dot>{pill.label}</StatusChip>
-                          <span className="flex gap-2">
-                            {field.state === "outstanding" ? (
-                              <>
-                                <Button type="button" size="sm" variant="outline" onClick={() => void update(field, "confirmed")} disabled={busy}>{saving === key ? <Loader2 aria-hidden className="animate-spin" /> : null}Confirm</Button>
-                                <Button type="button" size="sm" variant={dirty ? "default" : "outline"} onClick={() => void update(field, "corrected")} disabled={busy}>Save correction</Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button type="button" size="sm" variant={dirty ? "default" : "outline"} onClick={() => void update(field, "corrected")} disabled={busy}>{saving === key ? <Loader2 aria-hidden className="animate-spin" /> : null}Save correction</Button>
-                                <Button type="button" size="sm" variant="outline" onClick={() => void update(field, "outstanding")} disabled={busy}>Mark outstanding</Button>
-                              </>
-                            )}
-                          </span>
+                        <div className="ml-auto flex items-center justify-end gap-2 sm:min-w-[232px]">
+                          {dirty ? (
+                            <>
+                              <Button type="button" size="sm" variant="ghost" onClick={undoEdit} disabled={busy}>Undo edit</Button>
+                              <Button type="submit" size="sm" disabled={busy}>{saving === key ? <Loader2 aria-hidden className="animate-spin" /> : <Check aria-hidden />}Save new value</Button>
+                            </>
+                          ) : field.state === "outstanding" ? (
+                            <>
+                              <span className="text-xs leading-[1.5] font-semibold text-[var(--muted)]">{look.label}</span>
+                              <Button type="button" size="sm" variant="outline" className="border-[color-mix(in_srgb,var(--primary)_55%,transparent)] text-[var(--accent-ink)]" onClick={() => void update(field, "confirmed")} disabled={busy}>{saving === key ? <Loader2 aria-hidden className="animate-spin" /> : <Check aria-hidden />}It’s right</Button>
+                            </>
+                          ) : (
+                            <>
+                              <StatusChip tone={field.state === "confirmed" ? "good" : "warning"} dot>{look.label}</StatusChip>
+                              <button type="button" onClick={() => void update(field, "outstanding")} disabled={busy} className={b.link}>{saving === key ? "Saving…" : "Check again"}</button>
+                            </>
+                          )}
                         </div>
                       </div>
                       {(field.help_text || fieldErrors[key] || dirty || (isSensitive && isRevealed)) && (
-                        <div className="mt-1.5 flex flex-col gap-1 lg:pl-[206px]">
+                        <div className="mt-1.5 flex flex-col gap-1 lg:pl-[226px]">
                           {field.help_text && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{field.help_text}</p>}
                           {isSensitive && isRevealed && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Shown in full for reading back. This reveal was recorded in the audit log.</p>}
-                          {dirty && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">{isSensitive ? "Unsaved correction." : `Changed from ${displayValue(stored)}, not saved yet.`} Save correction to keep it.</p>}
+                          {dirty && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">{isSensitive ? "New value, not saved yet." : `Was ${displayValue(stored)}. Not saved yet.`} Press Save new value or Enter to keep it.</p>}
                           {fieldErrors[key] && <p role="alert" className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{fieldErrors[key]}</p>}
                         </div>
                       )}
-                    </div>
+                    </form>
                   );
                 })}
                 </div>
@@ -457,75 +468,6 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
             })}
           </section>
         </div>
-
-        {/* The call dock: the clock, how far verification is, and the call's next step. */}
-        <aside aria-label="Call" className="flex min-w-0 flex-col gap-4 max-lg:order-2 lg:sticky lg:top-[calc(var(--top-bar-h,56px)+16px)] lg:w-[340px] lg:shrink-0">
-          <section className="m-glass flex flex-col gap-3 rounded-[16px] border border-[var(--border)] p-4">
-            {/* Inbound A3: the clock inside a ring that fills as the required fields are confirmed. */}
-            <div className="flex justify-center py-1">
-              <Ring value={panel.session.progress_percentage / 100} tone={requiredDone ? "success" : "brand"} size={132} thickness={8} label={`${progressText}${callStartedAt ? `, on the call ${elapsed(callStartedAt, now)}` : ""}`}>
-                <span className="block text-center">
-                  <span className="block text-2xl leading-[1.1] font-semibold tracking-[-0.02em]">{callStartedAt ? elapsed(callStartedAt, now) : "—"}</span>
-                  <span className="block text-xs font-medium text-muted-foreground">{callStartedAt ? "on the call" : "no open call"}</span>
-                </span>
-              </Ring>
-            </div>
-            <SettingsMeter value={panel.session.progress_percentage} max={100} tone={requiredDone ? "success" : "primary"} caption={progressText} ariaLabel={progressText} />
-            {recorded ? (
-              <>
-                <OutcomeEffects outcome={recorded} />
-                <Button type="button" onClick={() => void takeNext()} disabled={taking} className="h-12 w-full text-base">{taking ? "Claiming…" : "Take the next transfer"}</Button>
-              </>
-            ) : (
-              <>
-                <Button type="button" onClick={() => setOutcomeOpen(true)} className="h-12 w-full text-base">Record call outcome</Button>
-                {!readOnly && !canHandoff && (
-                  <Button type="button" variant="outline" onClick={() => void continueToUnderwriting()} disabled={continuing || heldAsCustomer} title={heldAsCustomer ? "They are already a customer. Check it under Same person? first." : undefined}>
-                    {continuing && <Loader2 aria-hidden className="animate-spin" />}Continue to underwriting
-                  </Button>
-                )}
-                {!readOnly && (
-                  <Button type="button" variant="outline" onClick={() => void nudgeTeam()} disabled={nudgeSaving}>
-                    {nudgeSaving ? <Loader2 aria-hidden className="animate-spin" /> : <Bell aria-hidden />}Nudge team
-                  </Button>
-                )}
-              </>
-            )}
-            <DispositionWizardDialog workItemId={workItemId} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} onBackToVerification={() => setOutcomeOpen(false)} onRecorded={(result) => { setOutcomeOpen(false); setRecorded(result); notify.done(result.label ? `Recorded: ${result.label}` : "Call outcome recorded"); }} />
-          </section>
-          <Card title="This call">
-            <div>
-              <KeyValues items={[
-                { label: "Claimed by", value: context?.claim.byName ? `${context.claim.byName}, ${clock(context.claim.at)}` : "—" },
-                { label: "Partner", value: context?.partnerName ?? "—" },
-                { label: "Since claim", value: callStartedAt ? elapsed(callStartedAt, now) : "No open call record" },
-                { label: "Product", value: panel.template.product_name || productLineLabel(panel.workItem.productLine) },
-              ]} />
-            </div>
-          </Card>
-
-          <Card title="Change history">
-            {history.length === 0 ? (
-              <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{context ? "No changes recorded yet." : "The change history could not be loaded."}</p>
-            ) : (
-              <>
-                <Timeline items={historyShown.map((entry) => ({ title: historyTitle(entry), sub: `${entry.actorName} · ${clock(entry.at)}`, tone: entry.kind === "corrected" ? "warning" : entry.kind === "confirmed" ? "success" : entry.kind === "outstanding" ? "error" : "muted" }))} />
-                {history.length > historyShown.length && <button type="button" onClick={() => setShowAllHistory(true)} className={cn(b.link, "mt-3")}>Show all {history.length}</button>}
-              </>
-            )}
-          </Card>
-
-          <Card title="Call context">
-            <KeyValues items={[
-              { label: "Lead ID", value: panel.workItem.leadId },
-              { label: "Product", value: productLineLabel(panel.workItem.productLine) },
-              { label: "Lead source", value: source },
-              { label: "State", value: leadState },
-              { label: "Template", value: `v${panel.template.definition_version ?? "default"}` },
-              { label: "Started", value: new Date(panel.session.started_at).toLocaleString() },
-            ]} />
-          </Card>
-        </aside>
       </div>
     </div>
   );

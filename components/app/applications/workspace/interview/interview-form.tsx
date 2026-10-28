@@ -11,6 +11,8 @@
 
 import { Fragment, type ReactNode } from "react";
 
+import { FoldSection } from "@/components/app/applications/workspace/fold-section";
+
 import type { InterviewQuestion, InterviewView, MedicationRow } from "@/lib/applications/types";
 
 import { answerText, FollowUps, isAnswered, isKnockedOut, QuestionRow, type AnswerValue, type ChipTone } from "./question-input";
@@ -75,16 +77,43 @@ const PERSISTENCY_HEADING = "Before we start";
 const sectionHeading = (q: InterviewQuestion) => (q.persistency ? PERSISTENCY_HEADING : q.section);
 const sectionKey = (q: InterviewQuestion) => sectionHeading(q).trim().toLowerCase();
 
-export function InterviewQuestionList({ questions, answers, readOnly, onAnswers }: {
+/**
+ * A top-level question and every follow-up it opened are answered (the client card folds these to one line).
+ * Medications are not in the flow, so they never count here.
+ */
+export function rootDone(q: InterviewQuestion, questions: InterviewQuestion[], answers: Answers): boolean {
+  const byKey = new Map(questions.map((x) => [x.key, x]));
+  const { childrenOf } = interviewLayout(questions);
+  const done = (x: InterviewQuestion): boolean => isAnswered(x, answers[x.key], []) && (childrenOf.get(x.key) ?? []).filter((k) => isVisible(k, byKey, answers)).every(done);
+  return done(q);
+}
+
+/** The first top-level question still to ask, in the order the list draws them. */
+export function nextToAsk(questions: InterviewQuestion[], answers: Answers): InterviewQuestion | null {
+  const byKey = new Map(questions.map((x) => [x.key, x]));
+  return interviewLayout(questions).roots.filter((q) => isVisible(q, byKey, answers)).find((q) => !rootDone(q, questions, answers)) ?? null;
+}
+
+export function InterviewQuestionList({ questions, answers, readOnly, onAnswers, collapse, beforeNotes }: {
   questions: InterviewQuestion[];
   answers: Answers;
   readOnly: boolean;
   /** The whole answer set after a change, hidden follow-ups already removed. */
   onAnswers: (next: Answers) => void;
+  /**
+   * The client card (owner pick C, 2026-10-28): a question answered with its follow-ups folds to one line
+   * showing the answer; a click opens it again. The next question to ask is marked "Ask now". A knockout
+   * answer never folds. Omitted (the Settings preview): every question drawn in full.
+   */
+  collapse?: { openKey: string | null; onOpen: (key: string | null) => void };
+  /** A section drawn just above the Notes section (or last, with no Notes): the interview's Medications. */
+  beforeNotes?: ReactNode;
 }) {
   const byKey = new Map(questions.map((q) => [q.key, q]));
   const { roots, childrenOf } = interviewLayout(questions);
   const visible = (q: InterviewQuestion) => isVisible(q, byKey, answers);
+  const next = collapse ? nextToAsk(questions, answers) : null;
+  const knockedAnywhere = (q: InterviewQuestion): boolean => isKnockedOut(q, answers[q.key]) || (childrenOf.get(q.key) ?? []).filter(visible).some(knockedAnywhere);
 
   const setAnswer = (key: string, value: AnswerValue) => onAnswers(pruneHidden(questions, { ...answers, [key]: { ...answers[key], value } }));
   const setNotes = (key: string, notes: string) => onAnswers({ ...answers, [key]: { value: answers[key]?.value ?? null, ...(notes ? { notes } : {}) } });
@@ -121,6 +150,60 @@ export function InterviewQuestionList({ questions, answers, readOnly, onAnswers 
 
   const shown = roots.filter(visible);
   const sections = new Set(shown.map(sectionKey)).size;
+
+  if (collapse) {
+    // Owner, 2026-10-28: sections that fold like the call's verification (FoldSection), two questions to
+    // a line. The section holding the question asked for (a fact on the client card, a Review fix) stays
+    // open, and one with a knockout answer never folds. The next question to ask is marked "Ask now".
+    const groups: { key: string; heading: string; items: { q: InterviewQuestion; n: number }[] }[] = [];
+    shown.forEach((q, i) => {
+      const key = sectionKey(q);
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) last.items.push({ q, n: i + 1 });
+      else groups.push({ key, heading: sectionHeading(q), items: [{ q, n: i + 1 }] });
+    });
+    const done = (q: InterviewQuestion) => rootDone(q, questions, answers);
+    const notesAt = groups.findIndex((g) => g.key === "notes");
+    return (
+      <div className="flex flex-col gap-2">
+        {groups.map((g, gi) => (
+          <Fragment key={g.key}>
+          {gi === notesAt && beforeNotes}
+          <FoldSection
+            key={g.key}
+            heading={g.heading}
+            done={g.items.filter((x) => done(x.q)).length}
+            total={g.items.length}
+            complete={g.items.every((x) => done(x.q)) && !g.items.some((x) => knockedAnywhere(x.q))}
+            keepOpen={g.items.some((x) => x.q.key === collapse.openKey)}
+          >
+            {g.items.map(({ q, n: number }) => (
+              <QuestionRow
+                key={q.key}
+                q={q}
+                number={number}
+                answer={answers[q.key]}
+                readOnly={readOnly}
+                card={{ isNext: next?.key === q.key }}
+                onAnswer={(v) => setAnswer(q.key, v)}
+                onNotes={(note) => setNotes(q.key, note)}
+                toneFor={toneFor(q)}
+              >
+                {(childrenOf.get(q.key) ?? []).filter(visible).length > 0 && (
+                  <FollowUps because={answerText(answers[q.key]?.value)}>
+                    {(childrenOf.get(q.key) ?? []).filter(visible).map((k) => row(k, null, true))}
+                  </FollowUps>
+                )}
+              </QuestionRow>
+            ))}
+          </FoldSection>
+          </Fragment>
+        ))}
+        {notesAt === -1 && beforeNotes}
+      </div>
+    );
+  }
+
   return (
     <>
       {shown.map((q, i) => (

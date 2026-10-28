@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Callout, btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
-import { Button } from "@/components/ui/button";
+import { Callout, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -179,11 +179,11 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
                   </td>
                   <td className={st.td}>
                     {member.revocable && can.revoke ? (
-                      <button type="button" className={btn("row", "px-4")} onClick={() => setRevoking(member)}>
+                      <Button type="button" variant="ghost" size="sm" className="px-4" onClick={() => setRevoking(member)}>
                         Revoke
-                      </button>
+                      </Button>
                     ) : can.openUser ? (
-                      <Link href={`/admin/users/${member.id}`} className={btn("row", "px-4")}>
+                      <Link href={`/admin/users/${member.id}`} className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-4")}>
                         Open
                       </Link>
                     ) : null}

@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, X } from "lucide-react";
+import { ArrowRight, Download } from "lucide-react";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
@@ -20,33 +19,25 @@ import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { HELD_STATUSES, SALE_DISPOSITIONS } from "@/lib/partnerLeads/lanes";
 import type { PartnerLeadRow } from "@/lib/partnerLeads/types";
 import { durationLabel } from "@/lib/partnerTeamReview/pulse";
+import { Sheet } from "@/components/ui/sheet";
 
 type PartnerUser = { user_id: string; name: string; email: string; role: "partner_admin" | "partner_user"; status: "active" | "revoked"; accepted_at: string | null; last_login_at: string | null };
 type MemberStats = { submitted: number; progress: number; applications: number; lastActivity: string };
 type SelectedMember = { user: PartnerUser; stats: MemberStats };
 
-function initials(name: string) { return name.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "?"; }
 // The team's leads load in an effect, so the viewer's zone is safe here.
 function formatDate(value: string) { return dayMonthYear(value, viewerTimeZone()); }
 
+/**
+ * A teammate's leads, in the shared sheet (foundation v3): it owns the backdrop, Escape, the click
+ * outside and focus, so this no longer listens for pointers itself.
+ */
 function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: SelectedMember; leads: PartnerLeadRow[]; onClose: () => void }) {
-  const drawerRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    function handleOutsidePointer(event: PointerEvent) {
-      const target = event.target;
-      if (target instanceof Node && !drawerRef.current?.contains(target)) onClose();
-    }
-    document.addEventListener("pointerdown", handleOutsidePointer);
-    return () => document.removeEventListener("pointerdown", handleOutsidePointer);
-  }, [onClose]);
-
-  return <aside ref={drawerRef} className="portal-team-review-detail" aria-label={`${selected.user.name} lead activity`}>
-    <div className="portal-team-review-detail-header justify-end"><button type="button" className="portal-team-review-detail-close" aria-label="Close teammate details" onClick={onClose}><X className="size-5" aria-hidden="true" /></button></div>
-    <div className="portal-team-review-detail-person"><span>{initials(selected.user.name)}</span><div><h2>{selected.user.name}</h2><p>{selected.user.role === "partner_admin" ? "Partner admin" : "Partner user"}</p></div></div>
+  return <Sheet title={selected.user.name} subtitle={selected.user.role === "partner_admin" ? "Partner admin" : "Partner user"} onClose={onClose} closeLabel="Close teammate details" bodyClassName="portal-team-review-sheet flex flex-col gap-4 p-4">
     <dl><div><dt>Leads this period</dt><dd>{selected.stats.submitted}</dd></div><div><dt>Application rate</dt><dd>{selected.stats.submitted ? `${((selected.stats.applications / selected.stats.submitted) * 100).toFixed(1)}%` : "—"}</dd></div><div><dt>In progress</dt><dd>{selected.stats.progress}</dd></div></dl>
     <div className="portal-team-review-detail-leads"><div className="portal-team-review-detail-leads-heading"><strong>Submitted leads</strong><span>{leads.length} total</span></div>{leads.length ? leads.map((lead) => <article className="portal-team-review-detail-lead" key={lead.id}><div className="portal-team-review-detail-lead-heading"><div><strong>{lead.customer}</strong><span>{lead.product}</span></div><StatusChip>{lead.stageName || lead.status || "Submitted"}</StatusChip></div><dl><div><dt>Outcome</dt><dd>{lead.outcome ?? lead.disposition ?? "Awaiting update"}</dd></div><div><dt>Submitted</dt><dd>{formatDate(lead.submittedAt)}</dd></div><div><dt>Last update</dt><dd>{formatDate(lead.updatedAt)}</dd></div></dl></article>) : <p className="portal-team-review-detail-empty">No leads submitted in this period.</p>}</div>
     <Link href={`/partner/pipeline?closer_id=${selected.user.user_id}`} className="portal-team-review-detail-link">View partner pipeline <ArrowRight className="size-4" aria-hidden="true" /></Link>
-  </aside>;
+  </Sheet>;
 }
 
 /** Below this many leads a member's conversion rate is noise, and showing it would rank people on it. */
@@ -280,8 +271,6 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
           </TableBody>
         </Table>}
     </TableCard>
-    {/* On the body, not in the page: the page animates in with a transform, and a transformed
-        ancestor turns position: fixed into position: absolute. */}
-    {detailOpen && selected && createPortal(<><div className="portal-partner-review-backdrop" aria-hidden="true" /><SelectedTeammateDrawer selected={selected} leads={selectedLeads} onClose={() => { setDetailOpen(false); setSelectedUserId(null); }} /></>, document.body)}
+    {detailOpen && selected && <SelectedTeammateDrawer selected={selected} leads={selectedLeads} onClose={() => { setDetailOpen(false); setSelectedUserId(null); }} />}
   </div>;
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
 import { saveSalesTemplateSchema } from "@/lib/salesSettings/templateSchemas";
-import { saveSalesTemplate } from "@/lib/salesSettings/templates";
+import { deleteSalesTemplate, saveSalesTemplate } from "@/lib/salesSettings/templates";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -18,6 +18,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (input instanceof NextResponse) return input;
   try {
     return NextResponse.json(await saveSalesTemplate(actorOf(auth, request), id, input));
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/**
+ * Delete one of the agency's template versions (2026-10-28). A version an interview or quote already
+ * loaded is refused (409) and stays; retire it instead. Owners only.
+ */
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeatureRole("applications", ["owner"], { write: true });
+  if (auth instanceof NextResponse) return auth;
+  const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "That template could not be found." }, { status: 404 });
+  try {
+    return NextResponse.json(await deleteSalesTemplate(actorOf(auth, request), id));
   } catch (error) {
     return failure(error);
   }

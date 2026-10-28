@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Check, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -123,8 +124,12 @@ export function InboundSteps({ verified, recorded }: { verified: boolean; record
 
 type Ladder = { checked: boolean; summary: string; checkedAt: string | null; steps: Array<{ key: string; label: string; state: "passed" | "match" | "not_reached" | "unknown" }> };
 
-/** The screening that ran before the transfer reached the agent (lib/transferInbox/screeningLadder.ts). */
-export function ScreeningCard({ workItemId }: { workItemId: string }) {
+/**
+ * The screening that ran before the transfer reached the agent (lib/transferInbox/screeningLadder.ts).
+ * `embedded` draws it inside another card (the call's caller card) without its own frame. The
+ * all-clear summary is left off (owner 2026-10-27): the ticks say it; a match still explains itself.
+ */
+export function ScreeningCard({ workItemId, embedded = false }: { workItemId: string; embedded?: boolean }) {
   const [ladder, setLadder] = useState<Ladder | null | undefined>(undefined);
   useEffect(() => {
     let cancelled = false;
@@ -134,23 +139,30 @@ export function ScreeningCard({ workItemId }: { workItemId: string }) {
       .then((value) => { if (!cancelled) setLadder(value); });
     return () => { cancelled = true; };
   }, [workItemId]);
+  const clear = ladder?.steps.filter((step) => step.state === "passed").length ?? 0;
+  const allClear = !!ladder && ladder.steps.length > 0 && clear === ladder.steps.length;
   return (
-    <section aria-label="Screening" className={cn(card, "p-4")}>
-      <h2 className="m-0 mb-3 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-foreground">Screening · checked before the transfer reached you</h2>
+    <section aria-label="Screening" className={embedded ? "min-w-0" : cn(card, "p-4")}>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <h2 className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-foreground">Screening</h2>
+        {ladder && ladder.steps.length > 0 && <StatusChip dot={false} tone={allClear ? "good" : "danger"}>{clear} of {ladder.steps.length} clear</StatusChip>}
+      </div>
       {ladder === undefined && <p className="m-0 text-xs leading-[1.5] text-muted-foreground">Reading the checks…</p>}
       {ladder === null && <p className="m-0 text-xs leading-[1.5] text-muted-foreground">The screening checks could not be read.</p>}
       {ladder && (
         <>
-          <ul className="m-0 grid list-none grid-cols-1 gap-1.5 p-0">
+          <ul className="m-0 grid list-none grid-cols-1 gap-1 p-0">
             {ladder.steps.map((step) => (
-              <li key={step.key} className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm leading-[1.5]">
-                <span className={cn("size-1.5 shrink-0 rounded-full", step.state === "match" ? "bg-[var(--error)]" : step.state === "passed" ? "bg-[var(--success)]" : "bg-[var(--muted)]")} aria-hidden="true" />
+              <li key={step.key} className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-sm leading-[1.5]">
+                <span aria-hidden="true" className={cn("grid size-[18px] shrink-0 place-items-center rounded-full", step.state === "match" ? "bg-[var(--error)] text-white" : step.state === "passed" ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] text-muted-foreground")}>
+                  {step.state === "match" ? <X className="size-3" /> : step.state === "passed" ? <Check className="size-3" /> : null}
+                </span>
                 <span className="min-w-0 flex-1 truncate text-[var(--body)]">{step.label}</span>
-                {step.state === "match" ? <StatusChip dot={false} tone="danger">Match</StatusChip> : <span className={cn("text-xs font-semibold", step.state === "passed" ? "text-[var(--success-ink)]" : "text-muted-foreground")}>{step.state === "passed" ? "Clear" : step.state === "not_reached" ? "Not reached" : "Unknown"}</span>}
+                {step.state === "match" ? <StatusChip dot={false} tone="danger">Match</StatusChip> : step.state !== "passed" && <span className="text-xs font-semibold text-muted-foreground">{step.state === "not_reached" ? "Not reached" : "Unknown"}</span>}
               </li>
             ))}
           </ul>
-          <p className="m-0 mt-2 text-xs leading-[1.5] text-muted-foreground">{ladder.summary}</p>
+          {!allClear && ladder.summary && <p className="m-0 mt-2 text-xs leading-[1.5] text-muted-foreground">{ladder.summary}</p>}
         </>
       )}
     </section>

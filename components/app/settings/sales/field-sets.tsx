@@ -34,6 +34,7 @@ import {
 } from "./shared";
 import { liveOf, useSalesTemplates } from "./templates-data";
 import { PairDialog, PublishDialog, RetireDialog } from "./templates-dialogs";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type SetRow = {
   key: string;
@@ -296,6 +297,7 @@ export function SalesFieldSets() {
             </TableCard>
           )}
 
+          <LeaveGuard dirty={Boolean(editing && !readOnly && dirty)} onDiscard={discard} what="this field set" />
           <SettingsSaveBar
             visible={Boolean(editing && !readOnly && dirty)}
             note={editing?.status === "draft" ? `Unsaved changes to the ${selected?.carrierName ?? ""} field set` : "Unsaved changes — saving makes a new draft version"}
@@ -314,7 +316,7 @@ export function SalesFieldSets() {
           productLines={payload.productLines}
           allowGeneral={false}
           withName={false}
-          initial={{ productCode: payload.productLines[0]?.code ?? "final_expense", carrierId: payload.carriers[0]?.id ?? null, name: "" }}
+          initial={{ productCode: (payload.productLines.find((p) => p.sold !== false) ?? payload.productLines[0])?.code ?? "final_expense", carrierId: payload.carriers[0]?.id ?? null, name: "" }}
           problem={(c) => (all.some((x) => x.tenantOwned && x.productCode === c.productCode && x.carrierId === c.carrierId) ? "That pair already has its own set. Edit it from the table." : null)}
           onClose={() => setDialog(null)}
           onSubmit={async (c) => {

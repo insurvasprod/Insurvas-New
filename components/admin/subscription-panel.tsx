@@ -18,13 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   SUBSCRIPTION_STATUS_LABELS,
   accessLevelForStatus,
   availableActions,
@@ -38,6 +31,7 @@ import {
   type PlanPrices,
 } from "@/lib/money";
 import type { SubscriptionRow } from "@/lib/subscriptions/queries";
+import { inputControl } from "@/components/ui/field";
 
 /** SA-2.7: every subscription change is audit-logged with a reason; the server refuses one under 5 characters. */
 const REASON_MIN = 5;
@@ -348,40 +342,25 @@ export function AssignDialog({
         <div className="space-y-4 py-4">
           <div className="space-y-1.5">
             <Label htmlFor="assign-plan">Plan</Label>
-            <Select
-              value={planId}
-              onValueChange={(v) => {
-                setPlanId(v);
-                setCycle("");
-              }}
-            >
-              <SelectTrigger id="assign-plan" className="w-full">
-                <SelectValue placeholder="Choose…" />
-              </SelectTrigger>
-              <SelectContent>
+            <select id="assign-plan" className={inputControl} value={planId} onChange={(event) => { const v = event.target.value; setPlanId(v);
+                setCycle(""); }}><option value="" disabled>Choose…</option>
                 {plans.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id}>
                     {p.name} v{p.version}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="assign-cycle">Billing cycle</Label>
-            <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)} disabled={!plan}>
-              <SelectTrigger id="assign-cycle" className="w-full">
-                <SelectValue placeholder={plan ? "Choose…" : "Pick a plan first"} />
-              </SelectTrigger>
-              <SelectContent>
+            <select id="assign-cycle" className={inputControl} value={cycle} onChange={(event) => { const v = event.target.value; setCycle(v as BillingCycle); }} disabled={!plan}><option value="" disabled>{plan ? "Choose…" : "Pick a plan first"}</option>
                 {cycles.map((c) => (
-                  <SelectItem key={c} value={c}>
+                  <option key={c} value={c}>
                     {BILLING_CYCLE_LABELS[c]} — {formatCentsAsCurrency(priceForCycle(plan!.prices, c) ?? 0)}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
             {plan && cycles.length === 0 && (
               <p className="text-xs text-[var(--color-danger)]">
                 This plan has no prices set, so it can&apos;t be sold.
@@ -480,31 +459,21 @@ export function ChangePlanDialog({
           {note && <div className="text-sm text-muted-foreground">{note}</div>}
           <div className="space-y-1.5">
             <Label htmlFor="change-plan">New plan</Label>
-            <Select
-              value={planId}
-              onValueChange={(v) => {
-                setPlanId(v);
-                setOverride(null);
-              }}
-            >
-              <SelectTrigger id="change-plan" className="w-full">
-                <SelectValue placeholder="Choose…" />
-              </SelectTrigger>
-              <SelectContent>
+            <select id="change-plan" className={inputControl} value={planId} onChange={(event) => { const v = event.target.value; setPlanId(v);
+                setOverride(null); }}><option value="" disabled>Choose…</option>
                 {plans.map((p) => {
                   const price = priceForCycle(p.prices, cycle);
                   return (
-                    <SelectItem key={p.id} value={p.id} disabled={price === null}>
+                    <option key={p.id} value={p.id} disabled={price === null}>
                       {p.name} v{p.version}
                       {price === null
                         ? ` — not sold ${BILLING_CYCLE_LABELS[cycle].toLowerCase()}`
                         : ` — ${formatCentsAsCurrency(price)}`}
                       {seatsFor(p.id)}
-                    </SelectItem>
+                    </option>
                   );
                 })}
-              </SelectContent>
-            </Select>
+              </select>
           </div>
 
           {plan && sellableOnCycle && (

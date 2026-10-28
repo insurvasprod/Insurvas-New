@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { IMPORT_DATE_ORDERS, sanitizeImportMapping } from "@/lib/agentTemplates/csv";
-import { getAgentTemplate } from "@/lib/agentTemplates/service";
+import { importProductRefusal, importTemplateFor } from "@/lib/products/importProduct";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
@@ -28,8 +28,15 @@ export async function PUT(request: NextRequest) {
   const body = schema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: body.error.issues[0]?.message ?? "Enter a valid import mapping" }, { status: 400 });
   try {
-    const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
-    if (body.data.product_code !== template.template.product_code) return NextResponse.json({ error: "This product is not assigned to the current workspace" }, { status: 400 });
+    // A map is saved for a product the agency sells (Settings › Products, 2026-10-28), against that product's form.
+    let template;
+    try {
+      ({ template } = await importTemplateFor(auth.context.tenantId, auth.context.userId, body.data.product_code));
+    } catch (error) {
+      const refusal = importProductRefusal(error);
+      if (refusal) return refusal;
+      throw error;
+    }
     const db = getSupabaseServiceClient() as unknown as Db;
     const vendor = await db.from("tenant_lead_vendors").select("id").eq("tenant_id", auth.context.tenantId).eq("id", body.data.vendor_id).maybeSingle();
     if (vendor.error || !vendor.data) return NextResponse.json({ error: "Choose a vendor from this workspace" }, { status: 400 });

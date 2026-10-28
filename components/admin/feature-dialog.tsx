@@ -14,14 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { FEATURE_KEY_RULE, type FeatureModuleRow, type FeatureRow } from "@/lib/features/constants";
+import { inputControl } from "@/components/ui/field";
 
 export function FeatureDialog({
   mode,
@@ -118,18 +112,13 @@ export function FeatureDialog({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="feature-module">Module</Label>
-                  <Select value={moduleKey} onValueChange={setModuleKey}>
-                    <SelectTrigger id="feature-module" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
+                  <select id="feature-module" className={inputControl} value={moduleKey} onChange={(event) => setModuleKey(event.target.value)}>
                       {modules.map((m) => (
-                        <SelectItem key={m.key} value={m.key}>
+                        <option key={m.key} value={m.key}>
                           {m.label}
-                        </SelectItem>
+                        </option>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </select>
                 </div>
               </>
             )}

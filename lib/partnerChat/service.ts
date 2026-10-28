@@ -309,8 +309,43 @@ async function enrichCards<T extends MessageRow>(supabase: ReturnType<typeof get
  * thread and of the unread count. Omitted / null = every message, as before.
  */
 type PreloadedChat = { messages: Array<MessageRow & Record<string, unknown>>; readAt: string | null };
+const PREPARE_CHUNK = 150;
+/** The list's lookups, done once for every channel (2026-10-28): enriched rows, shared notes, attachments. */
+type PreparedChat = { enriched: Array<MessageRow & Record<string, unknown>>; visibleNoteIds: Set<string>; attachments: Map<string, PartnerMessageAttachment[]> };
 
-async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, allowArchived = false, accessVerified = false, scope: ProducerScope = null, preloaded?: PreloadedChat) {
+/**
+ * The per-channel reads chatForLoadedChannel would make (card facts, shared-note visibility, attachments
+ * and their signed links), as three reads for the whole list instead of three per channel. On the demo
+ * agency's 33 channels that was ~100 round trips and most of the 2–4 s the list took.
+ */
+async function prepareChats(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, channels: ChatChannel[], latest: Map<string, PreloadedChat>): Promise<Map<string, PreparedChat>> {
+  const own = channels.map((channel) => {
+    const stored = [...(latest.get(channel.id)?.messages ?? [])].reverse();
+    return { channel, rows: channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored };
+  });
+  const all = own.flatMap((item) => item.rows);
+  const partnerRows = own.filter((item) => item.channel.channel_type === "partner").flatMap((item) => item.rows);
+  // The ids ride in the request URL, so they go in slices of PREPARE_CHUNK rows, the slices in parallel.
+  const chunks = <T,>(list: T[]) => Array.from({ length: Math.ceil(list.length / PREPARE_CHUNK) }, (_, i) => list.slice(i * PREPARE_CHUNK, (i + 1) * PREPARE_CHUNK));
+  const [enrichedParts, noteParts, attachmentParts] = await Promise.all([
+    Promise.all(chunks(all).map((part) => enrichCards(supabase, tenantId, part))),
+    Promise.all(chunks(partnerRows).map((part) => visibleToPartner(supabase, tenantId, part))),
+    Promise.all(chunks(all).map((part) => attachmentViews(supabase, part.map((row) => row.id)))),
+  ]);
+  const enriched = enrichedParts.flat();
+  const visibleNoteIds = new Set(noteParts.flatMap((part) => [...part]));
+  const attachments = new Map(attachmentParts.flatMap((part) => [...part]));
+  // enrichCards keeps the order it was given, so each channel takes back its own slice.
+  const prepared = new Map<string, PreparedChat>();
+  let at = 0;
+  for (const item of own) {
+    prepared.set(item.channel.id, { enriched: enriched.slice(at, at + item.rows.length), visibleNoteIds, attachments });
+    at += item.rows.length;
+  }
+  return prepared;
+}
+
+async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, allowArchived = false, accessVerified = false, scope: ProducerScope = null, preloaded?: PreloadedChat, prepared?: PreparedChat) {
   const tenantId = channel.tenant_id;
   if (!accessVerified) await assertChannelAccess(supabase, channel, userId, allowArchived);
   else if (!allowArchived && channel.status !== "active") throw new Error("Chat channel is archived");
@@ -326,14 +361,16 @@ async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServi
   // "nobody_claimed → Ray only" (LA-1.16-4): cards posted to a partner channel before the writer
   // routed them to the owners stay stored, but the channel no longer shows them to anyone.
   const stored = [...(messages.data ?? [])].reverse();
-  const enriched = await enrichCards(supabase, tenantId, channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored);
+  const enriched = prepared ? prepared.enriched : await enrichCards(supabase, tenantId, channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored);
   const visibleItems = scope === null ? null : await visibleWorkItemIds(tenantId, scope, enriched.map((row) => row.work_item_id).filter((id): id is string => Boolean(id)), userId);
   const rows = visibleItems === null ? enriched : enriched.filter((row) => !row.work_item_id || visibleItems.has(row.work_item_id));
   // Attachments are fetched alongside the note filter; hidden notes' entries are simply never attached below.
-  const [visibleNoteIds, attachments] = await Promise.all([
-    channel.channel_type === "partner" ? visibleToPartner(supabase, tenantId, rows) : Promise.resolve(new Set<string>()),
-    attachmentViews(supabase, rows.map((row) => row.id)),
-  ]);
+  const [visibleNoteIds, attachments] = prepared
+    ? [channel.channel_type === "partner" ? prepared.visibleNoteIds : new Set<string>(), prepared.attachments]
+    : await Promise.all([
+      channel.channel_type === "partner" ? visibleToPartner(supabase, tenantId, rows) : Promise.resolve(new Set<string>()),
+      attachmentViews(supabase, rows.map((row) => row.id)),
+    ]);
   const visibleMessages = filterNoteMessages(rows, visibleNoteIds);
   const parsed = mapMessages(visibleMessages.map((row) => ({ ...row, attachments: attachments.get(row.id) ?? [] })));
   const readAt = read.data?.read_at ? new Date(read.data.read_at).getTime() : 0;
@@ -519,9 +556,30 @@ export async function getAgentChatChannels(tenantId: string, userId: string, sco
   // which resolved their tenant_users membership for this tenant — exactly what isChannelMember
   // accepts for a partner channel — and an internal channel is in `visible` only because
   // `memberIds` holds this user's partner_channel_members row for it.
-  const latest = await latestMessagesByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id));
-  const results = await Promise.all(visible.map(async (channel) => { try { return await chatForLoadedChannel(supabase, channel, userId, true, true, scope, latest?.get(channel.id)); } catch { return null; } }));
+  const [latest, othersRead] = await Promise.all([
+    latestMessagesByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id)),
+    othersReadAtByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id)),
+  ]);
+  // With every channel's messages in hand, the remaining lookups run once for the list; if that fails,
+  // each channel falls back to its own reads, as before.
+  const prepared = latest ? await prepareChats(supabase, tenantId, visible, latest).catch(() => null) : null;
+  const results = await Promise.all(visible.map(async (channel) => { try { return { ...(await chatForLoadedChannel(supabase, channel, userId, true, true, scope, latest?.get(channel.id), prepared?.get(channel.id))), othersReadAt: othersRead.get(channel.id) ?? null }; } catch { return null; } }));
   return results.filter(Boolean);
+}
+
+/**
+ * When anyone else in each channel last read it: a message of this user's sent before then shows "Read",
+ * after it "Delivered" (owner, 2026-10-27). One read for every channel; a failure only hides the marks.
+ */
+async function othersReadAtByChannel(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, userId: string, channelIds: string[]): Promise<Map<string, string>> {
+  const latest = new Map<string, string>();
+  if (!channelIds.length) return latest;
+  const { data, error } = await supabase.from("partner_message_reads").select("channel_id, read_at").eq("tenant_id", tenantId).in("channel_id", channelIds).neq("user_id", userId);
+  if (error) return latest;
+  for (const row of (data ?? []) as { channel_id: string; read_at: string | null }[]) {
+    if (row.read_at && (!latest.has(row.channel_id) || row.read_at > (latest.get(row.channel_id) as string))) latest.set(row.channel_id, row.read_at);
+  }
+  return latest;
 }
 
 let latestMessagesMissingAt = -Infinity;

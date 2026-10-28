@@ -31,6 +31,7 @@ import {
 import type { ComplianceSettings } from "@/lib/compliance/settingsStore";
 import type { Hold, Run } from "@/lib/compliance/retentionStore";
 import { notify } from "@/lib/notify";
+import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-6.8 · compliance settings, one section at a time. Every save goes to /api/app/compliance/settings,
@@ -51,7 +52,7 @@ type Bundle = {
 };
 
 const STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
-const field = "flex flex-col gap-1 text-sm";
+const field = fieldLabel;
 const area = "min-h-16 rounded-md border border-input bg-background px-3 py-2 text-sm";
 const alertWarn = "rounded-lg border border-[var(--warning)] bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]";
 

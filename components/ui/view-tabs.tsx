@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
@@ -25,6 +25,10 @@ export type ViewTab<K extends string> = {
   tone?: "danger";
   /** Server pages: the tab is a link to this URL instead of a button. */
   href?: string;
+  /** UnderlineTabs only: drawn before the label, e.g. a step's number or a done tick. */
+  marker?: ReactNode;
+  /** UnderlineTabs only: read after the label by screen readers, e.g. "(done)". */
+  srSuffix?: string;
 };
 
 const TRACK = "inline-flex h-9 w-fit max-w-full gap-0.5 overflow-x-auto rounded-md bg-[var(--canvas)] p-0.5";
@@ -39,7 +43,7 @@ const item = (selected: boolean, padding = "px-3") =>
 function Count({ value, tone }: { value: number | null | undefined; tone?: "danger" }) {
   if (value == null) return null;
   return (
-    <span className={cn("rounded-full px-1.5 text-xs tabular-nums", tone === "danger" && value > 0 ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>
+    <span className={cn("rounded-badge px-1.5 text-xs tabular-nums", tone === "danger" && value > 0 ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>
       {value.toLocaleString("en-US")}
     </span>
   );
@@ -63,28 +67,100 @@ export function ViewTabs<K extends string>({
   actions?: ReactNode;
   /** Gives each tab an id (`${idPrefix}-${key}`) for a tabpanel's aria-labelledby. */
   idPrefix?: string;
-  /** The id of the panel the tabs switch, when there is one. */
-  controls?: string;
+  /** The id of the panel the tabs switch, when there is one; a function when each tab has its own panel. */
+  controls?: string | ((key: K) => string);
 }) {
   const list = (
-    <TabTrack role="tablist" aria-label={label} className={TRACK}>
+    <TabTrack role="tablist" aria-label={label} className={TRACK} data-page-lead={actions ? undefined : ""}>
       {tabs.map((tab) => {
         const selected = tab.key === value;
         const body = <>{tab.label}<Count value={tab.count} tone={tab.tone} /></>;
-        const id = idPrefix ? `${idPrefix}-${tab.key}` : controls ? `${controls}-tab-${tab.key}` : undefined;
+        const panel = typeof controls === "function" ? controls(tab.key) : controls;
+        const id = idPrefix ? `${idPrefix}-${tab.key}` : panel ? `${panel}-tab-${tab.key}` : undefined;
         return tab.href ? (
-          <Link key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={controls} scroll={false} className={item(selected)}>{body}</Link>
+          <Link key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={panel} scroll={false} className={item(selected)}>{body}</Link>
         ) : (
-          <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={controls} onClick={() => onChange?.(tab.key)} className={item(selected)}>{body}</button>
+          <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={panel} onClick={() => onChange?.(tab.key)} className={item(selected)}>{body}</button>
         );
       })}
     </TabTrack>
   );
   if (!actions) return list;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    // data-page-lead: right after a PageHeader, the page's actions join this row (page-header.tsx).
+    <div data-page-lead className="flex flex-wrap items-center justify-between gap-3">
       {list}
       <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>
+    </div>
+  );
+}
+
+/**
+ * The sections of one record (foundation v3, 2026-10-27): underline tabs, for a lead's or a case's
+ * parts and a sheet's sections, where segmented tabs would read as page views. A 2px brand line
+ * under the chosen one, 13/500 labels, an optional count. The row draws its own bottom rule.
+ *
+ * The tab pattern's keys: the chosen tab is the one stop in the Tab order, and the arrow keys
+ * (Home and End too) move to and choose another.
+ */
+export function UnderlineTabs<K extends string>({
+  label,
+  tabs,
+  value,
+  onChange,
+  idPrefix,
+  controls,
+  className,
+}: {
+  label: string;
+  tabs: ReadonlyArray<ViewTab<K>>;
+  value: K;
+  onChange: (key: K) => void;
+  idPrefix?: string;
+  /** The panel the tabs switch; a function when each tab has its own panel. */
+  controls?: string | ((key: K) => string);
+  /** Layout only (margins, padding). */
+  className?: string;
+}) {
+  const move = (event: KeyboardEvent<HTMLButtonElement>, from: number) => {
+    const to = event.key === "ArrowRight" ? (from + 1) % tabs.length
+      : event.key === "ArrowLeft" ? (from - 1 + tabs.length) % tabs.length
+        : event.key === "Home" ? 0
+          : event.key === "End" ? tabs.length - 1
+            : -1;
+    if (to < 0) return;
+    event.preventDefault();
+    onChange(tabs[to].key);
+    const row = event.currentTarget.parentElement;
+    (row?.children[to] as HTMLElement | undefined)?.focus();
+  };
+  return (
+    <div role="tablist" aria-label={label} data-page-lead className={cn("flex max-w-full gap-4 overflow-x-auto overflow-y-hidden border-b border-border", className)}>
+      {tabs.map((tab, index) => {
+        const selected = tab.key === value;
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => onChange(tab.key)}
+            onKeyDown={(event) => move(event, index)}
+            id={idPrefix ? `${idPrefix}-${tab.key}` : undefined}
+            role="tab"
+            aria-selected={selected}
+            aria-controls={typeof controls === "function" ? controls(tab.key) : controls}
+            tabIndex={selected ? 0 : -1}
+            className={cn(
+              "-mb-px inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-1 text-label outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              selected ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {tab.marker}
+            {tab.label}
+            {tab.srSuffix && <span className="sr-only"> {tab.srSuffix}</span>}
+            <Count value={tab.count} tone={tab.tone} />
+          </button>
+        );
+      })}
     </div>
   );
 }

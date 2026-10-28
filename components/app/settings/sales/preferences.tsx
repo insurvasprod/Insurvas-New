@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { PanelState, useSalesSettings } from "./prefs-settings";
 import { ProductBands } from "./product-bands";
 import { CardFact, DiscardSave, ReadOnlyNotice, SalesPanelTop, changedLine } from "./shared";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Draft = { min: string; max: string; appointmentBlocks: boolean; buffer: 2 | 3 | 4; ageing: string; autoSend: boolean };
 
@@ -118,6 +119,7 @@ function Editor({ saved, canEdit, strip, save }: { saved: SalesSettings; canEdit
         </div>
       </SettingsCard>
 
+      <LeaveGuard dirty={canEdit && dirty} onDiscard={() => { setDraft(toDraft(saved)); setSaveError(null); }} what="the quote and QA rules" />
       <SettingsSaveBar visible={canEdit && dirty} note="Unsaved changes to the quote and QA rules">
         <DiscardSave saving={saving} problem={problem} onDiscard={() => { setDraft(toDraft(saved)); setSaveError(null); }} onSave={() => { void onSave(); }} />
       </SettingsSaveBar>

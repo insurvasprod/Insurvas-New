@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { ClipboardCheck, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -91,11 +91,22 @@ export function RequirementsCard({ now }: { now: number }) {
       title="Pending requirements"
       chips={onClient > 0 ? <StatusChip tone="warning">{onClient} waiting on the client</StatusChip> : open.length ? <StatusChip tone="neutral">{open.length} open</StatusChip> : <StatusChip tone="good">None open</StatusChip>}
       bodyClassName="gap-0 p-0"
-      footerNote={`Amber after ${ageing} days, red after ${ageing * 2}.`}
-      actions={canWrite ? <Button type="button" variant="outline" onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add requirement</Button> : undefined}
+      // Owner 2026-10-28: the ageing rule as a small legend beside the rows it colours; nothing to show, no foot.
+      footerNote={open.length > 0 ? (
+        <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-2 rounded-full bg-[var(--warning)]" />{ageing}+ days open</span>
+          <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-2 rounded-full bg-[var(--error)]" />{ageing * 2}+ days open</span>
+        </span>
+      ) : undefined}
+      actions={canWrite && (open.length > 0 || closed.length > 0) ? <Button type="button" variant="outline" onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add requirement</Button> : undefined}
     >
       {open.length === 0 && closed.length === 0 && (
-        <p className="px-[22px] py-4 text-sm text-[var(--muted)]">{readOnly ? "The carrier asked for nothing after submission." : "Nothing yet. Add one when the carrier asks for something — an interview, records, a signature, an exam."}</p>
+        <div className="flex flex-col items-center gap-1.5 rounded-[12px] border-[1.5px] border-dashed border-[var(--border)] px-4 py-6 text-center">
+          <ClipboardCheck className="size-5 text-[var(--accent-ink)]" aria-hidden="true" />
+          <strong className="text-sm font-semibold text-[var(--ink)]">The carrier isn&apos;t waiting on anything</strong>
+          <span className="max-w-[460px] text-sm text-[var(--muted)]">{readOnly ? "Nothing was asked for after submission." : "When they ask for something — a phone interview, medical records, a signature, an exam — add it here and chase it."}</span>
+          {canWrite && <Button type="button" variant="outline" className="mt-2" onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add requirement</Button>}
+        </div>
       )}
       <ul>
         {open.map((r) => {
@@ -104,7 +115,7 @@ export function RequirementsCard({ now }: { now: number }) {
           const cb = callbackFor(r.id);
           const why = busy === r.id ? "Saving…" : undefined;
           return (
-            <li key={r.id} className="flex flex-wrap items-center gap-3.5 border-t border-[var(--border)] px-[22px] py-3.5 first:border-t-0">
+            <li key={r.id} className="flex flex-wrap items-center gap-3.5 border-t border-[var(--border)] px-1 py-3.5 first:border-t-0">
               <div className="min-w-[200px] flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-sm font-semibold text-[var(--ink)]">{REQUIREMENT_KIND_LABEL[r.kind]}</span>
@@ -132,7 +143,7 @@ export function RequirementsCard({ now }: { now: number }) {
           );
         })}
         {closed.map((r) => (
-          <li key={r.id} className={cn("flex flex-wrap items-center gap-3.5 border-t border-[var(--border)] px-[22px] py-3 text-[var(--muted)]", open.length === 0 && "first:border-t-0")}>
+          <li key={r.id} className={cn("flex flex-wrap items-center gap-3.5 border-t border-[var(--border)] px-1 py-3 text-[var(--muted)]", open.length === 0 && "first:border-t-0")}>
             <div className="min-w-[200px] flex-1">
               <span className="text-sm font-semibold">{REQUIREMENT_KIND_LABEL[r.kind]}</span>
               {r.description && <span className="block text-xs">{r.description}</span>}

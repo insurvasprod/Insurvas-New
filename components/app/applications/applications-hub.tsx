@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calculator, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DetailPanel } from "@/components/ui/detail-panel";
+import { Sheet } from "@/components/ui/sheet";
 import { PageHeader } from "@/components/ui/page-header";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { DraftDateCalculator } from "@/components/app/applications/draft-dates/draft-date-calculator";
@@ -59,9 +59,9 @@ export function ApplicationsHub({ view, tabs, calculator, calculatorOpen = false
       )}
       <div className="flex min-w-0 flex-col gap-6" style={{ animation: "none" }}>{children}</div>
       {mounted && open && createPortal(
-        <DetailPanel mode="overlay" title="Draft-date calculator" subtitle="The safest day to draft the premium. Nothing here is saved." onClose={() => setOpen(false)} className="lg:w-[min(100%,620px)]">
+        <Sheet title="Draft-date calculator" subtitle="The safest day to draft the premium. Nothing here is saved." onClose={() => setOpen(false)} className="lg:w-[min(100%,620px)]">
           <DraftDateCalculator sheet />
-        </DetailPanel>,
+        </Sheet>,
         document.body,
       )}
     </div>

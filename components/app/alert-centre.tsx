@@ -58,7 +58,7 @@ function OpenAlertRow({ entry, canClaim }: { entry: CentreEntry; canClaim: boole
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) {
-        notify.block(body?.error ?? "That lead could not be claimed.");
+        notify.block(body?.error ?? "That caller could not be taken.");
         // Someone else may have claimed it: the list is re-read so the row moves to resolved.
         router.refresh();
         return;
@@ -66,7 +66,7 @@ function OpenAlertRow({ entry, canClaim }: { entry: CentreEntry; canClaim: boole
       notify.done("Claimed. The lead is yours.");
       router.push(entry.link);
     } catch {
-      notify.fail("That lead could not be claimed. Nothing has changed; try again.");
+      notify.fail("That caller could not be taken. Nothing has changed; try again.");
     } finally {
       setClaiming(false);
     }
@@ -83,7 +83,7 @@ function OpenAlertRow({ entry, canClaim }: { entry: CentreEntry; canClaim: boole
         <span className="inline-flex items-center gap-2">
           {claimable && (
             <Button type="button" size="sm" onClick={() => void claim()} disabled={claiming} aria-busy={claiming} {...{ [KBD_ITEM_ATTRIBUTE]: "" }}>
-              {claiming ? "Claiming…" : "Claim this lead"}
+              {claiming ? "Taking…" : "Take this call"}
             </Button>
           )}
           <Button asChild variant="outline" size="sm">

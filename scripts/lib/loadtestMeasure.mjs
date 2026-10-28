@@ -113,7 +113,7 @@ export async function measure({ db, ID, EMAIL, uid, setTransfers, only, out }) {
     const empty = mint("tenant", EMAIL.emptyOwner);
     const errorText = /Application error|Something went wrong|Unhandled Runtime Error|Could not load/i;
     const pageCheck = (r) => `${r.location ? `redirect ${r.location}, ` : ""}${errorText.test(r.text) ? "ERROR TEXT IN PAGE" : "no error text"}`;
-    const floor = await timeRoute("LA-1.15-7 page /app/floor (empty tenant)", "GET", "/app/floor", empty, { check: pageCheck });
+    const floor = await timeRoute("LA-1.15-7 page /app/inbound/team (empty tenant)", "GET", "/app/inbound/team", empty, { check: pageCheck });
     const floorApi = await timeRoute("LA-1.15-7 GET /api/app/agent-floor", "GET", "/api/app/agent-floor", empty, { check: (r) => `waiting ${r.json?.waiting?.length}, onCalls ${r.json?.onCalls?.length}, members ${r.json?.members?.length}${r.json?.error ? `, error ${r.json.error}` : ""}` });
     const dashboard = await timeRoute("LA-1.15-7 page /app/dashboard (empty tenant)", "GET", "/app/dashboard", empty, { check: pageCheck });
     // A brand-new owner who has not accepted the current legal documents is sent here first (SA-5.4).

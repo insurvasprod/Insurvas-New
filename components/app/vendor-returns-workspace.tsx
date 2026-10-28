@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Download } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -31,8 +31,10 @@ import {
   type VendorReturnsPageData,
 } from "@/lib/vendorScorecard/returnModel";
 import { Pager } from "@/components/ui/pager";
-import { cn } from "@/lib/utils";
 import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ViewTabs } from "@/components/ui/view-tabs";
+import { inputControl } from "@/components/ui/field";
 
 /** One view at a time (2026-10-06 redesign): the three stacked tables became tabs. */
 type View = "claims" | "claimable" | "undialable";
@@ -61,26 +63,13 @@ const unreconciled = (claim: VendorReturnClaim) => claim.status === "draft" || c
 // Calendar days in the tenant's zone, counted by the service (LA-2.19-2): 1 is "Closes tomorrow".
 const daysText = (days: number | null) => closesLabel(days);
 
-const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-2.5 text-sm text-foreground";
-const panel = "absolute top-[calc(100%+6px)] z-20 grid gap-2 rounded-xl border border-border bg-card p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.16)]";
-const panelLabel = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
-const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
-const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
+// The shared control (foundation v3), without the gap a stacked Field puts above it.
+const field = inputControl;
+// The v3 table (40px sentence-case head at 13/500, 44px rows), as the settings `st` classes draw it.
+const th = "h-[40px] bg-[var(--surface-alt)] px-3 py-2 text-label text-muted-foreground";
+const td = "h-[44px] border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 const label = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 const tfootTd = "border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-sm font-semibold tabular-nums text-foreground";
-
-function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) close(); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
-  }, [open, close]);
-  return ref;
-}
 
 /** A campaign's cost per issued policy: undefined while not asked, "loading", null when the scorecard cannot answer. */
 type CostState = CampaignCostPerPolicy | null | "loading";
@@ -267,7 +256,6 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
   const [costs, setCosts] = useState<Record<string, CostState>>({});
   const [newOpen, setNewOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const newRef = useDismiss(newOpen, useCallback(() => setNewOpen(false), []));
 
   const load = useCallback(async () => {
     setError(null);
@@ -431,25 +419,21 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
 
     {/* Views on the left, New claim on the right — one row (2026-10-06 redesign). */}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="tablist" aria-label="Vendor return views" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
-        {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" id={`returns-tab-${item.key}`} aria-controls="returns-view" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
-            {item.label}
-            {item.count !== null && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count(item.count)}</span>}
-          </button>
-        ))}
-      </div>
-      <div className="relative" ref={newRef}>
-        <Button aria-expanded={newOpen} disabled={!report || Boolean(busy)} onClick={() => setNewOpen((open) => !open)}>New claim<ChevronDown aria-hidden="true" /></Button>
-        {newOpen && <div className={`${panel} right-0 w-[340px]`} role="menu" aria-label="Draft a claim for">
-          <span className={panelLabel}>Review a claim for</span>
-          {draftable.length === 0 ? <p className="text-sm leading-normal text-muted-foreground">Nothing is claimable right now{vendorId ? " for this vendor" : ""}.</p>
-            : draftable.map((entry) => <button key={entry.campaign_id} type="button" role="menuitem" className="flex items-baseline justify-between gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--surface-alt)]" onClick={() => openPreview(entry.campaign_id)}>
+      <ViewTabs label="Vendor return views" tabs={tabs} value={view} onChange={setView} idPrefix="returns-tab" controls="returns-view" />
+      {/* The shared menu (foundation v3): Radix handles focus, Escape and the click outside. */}
+      <DropdownMenu open={newOpen} onOpenChange={setNewOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button disabled={!report || Boolean(busy)}>New claim<ChevronDown aria-hidden="true" /></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" aria-label="Draft a claim for" className="w-[340px]">
+          <DropdownMenuLabel>Review a claim for</DropdownMenuLabel>
+          {draftable.length === 0 ? <p className="px-2 py-1.5 text-sm leading-normal text-muted-foreground">Nothing is claimable right now{vendorId ? " for this vendor" : ""}.</p>
+            : draftable.map((entry) => <DropdownMenuItem key={entry.campaign_id} className="h-auto items-baseline justify-between gap-3 py-2" onSelect={() => openPreview(entry.campaign_id)}>
               <span className="min-w-0"><span className="block truncate text-sm font-semibold text-foreground">{entry.vendor_name} &middot; {entry.campaign_name}</span><span className="block text-xs text-muted-foreground">{count(entry.claimable_rows)} claimable row{entry.claimable_rows === 1 ? "" : "s"}{entry.unit_cost_cents == null ? "" : ` · ${dollars(entry.claimable_cents)}`}</span></span>
               <span className={`shrink-0 text-xs font-semibold tabular-nums ${entry.days_left !== null && entry.days_left <= 3 ? "text-[var(--error-ink)]" : "text-muted-foreground"}`}>{entry.days_left === 0 ? "closes today" : entry.days_left === 1 ? "closes tomorrow" : `${entry.days_left}d left`}</span>
-            </button>)}
-        </div>}
-      </div>
+            </DropdownMenuItem>)}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
 
     {/* The selected view, as the tab panel: it fades in when the tab changes (2026-10-09). */}

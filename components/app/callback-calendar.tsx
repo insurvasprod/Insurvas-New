@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection, type RowSelection } from "@/components/ui/bulk-bar";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
-import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -487,7 +487,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       >
         {searchBox}
       </DataToolbar>
-      {filtersOpen && <div id="callbacks-filters" role="group" aria-label="Filters" className="flex w-full min-w-0 flex-col gap-2">{whenFilter}{dateFilter}</div>}
+      <FilterPanel id="callbacks-filters" open={filtersOpen} className="w-full min-w-0 border-b-0 px-0 py-0">{whenFilter}{dateFilter}</FilterPanel>
     </>
   );
 
@@ -528,7 +528,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       onClose={() => setPanelOpen(false)}
       bodyClassName="flex flex-col gap-5 p-4"
       // Stays in view while the page scrolls; long content scrolls inside it.
-      className="xl:sticky xl:top-[calc(var(--top-bar-h)+16px)] xl:max-h-[calc(100dvh-var(--top-bar-h)-32px)] xl:bg-[color-mix(in_srgb,var(--color-card)_var(--glass-alpha),transparent)] xl:backdrop-blur-[16px]"
+      className="xl:sticky xl:top-[calc(var(--top-bar-h)+16px)] xl:max-h-[calc(100dvh-var(--top-bar-h)-32px)]"
     >
       <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-3">
         {fact("Their time", longTime(selected.scheduledAtUtc, selected.customerTimezone))}

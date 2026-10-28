@@ -33,6 +33,7 @@ import { DNC_EXEMPTION_BASIS_LABELS, type DncExemption } from "@/lib/suppression
 import { TcpaDncExemptions } from "@/components/app/tcpa-dnc-exemptions";
 import { TcpaScreeningAudit } from "@/components/app/tcpa-screening-audit";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { inputControl } from "@/components/ui/field";
 
 type Loaded = {
   entries: SuppressionEntry[];
@@ -53,7 +54,8 @@ const SOURCE_LABELS: Record<string, string> = {
   import: "Found during an import",
 };
 
-const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
+// The shared control (foundation v3), without the gap a stacked Field puts above it.
+const field = inputControl;
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 /** The tab's one card reaches the bottom of the window, so a short list never leaves half a page empty. */

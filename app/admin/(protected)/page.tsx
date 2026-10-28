@@ -3,7 +3,6 @@ import {
   Activity, BadgeDollarSign, Building2, ClipboardCheck, Compass, FileText, Hourglass, KeyRound, Megaphone, ScrollText, ShieldCheck, ToggleLeft, UserCog, UserPlus, Users, Wrench,
 } from "lucide-react";
 
-import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { DashTile, DashTileLoading, type TileRow, type TileTone } from "@/components/ui/dash-tile";
 import { Launchpad, type LaunchCell, type LaunchSpace } from "@/components/ui/launchpad";
 import { LiveStamp } from "@/components/ui/live-stamp";
@@ -159,12 +158,12 @@ export default async function AdminDashboardPage() {
   ];
 
   return (
-    <DashboardStage>
+    <>
       <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
         <PageHeader title="Platform administration" actions={<LiveStamp updatedAt={renderedAt} />} />
 
         <Launchpad storageKey={`insurvas:admin-home:${admin?.id ?? "staff"}`} spaces={spaces} />
       </div>
-    </DashboardStage>
+    </>
   );
 }

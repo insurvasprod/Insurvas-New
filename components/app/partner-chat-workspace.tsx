@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/lib/notify";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { CheckCircle2, FileText, Info, Loader2, MessageCircle, Paperclip, PhoneOff, Plus, Search, SendHorizontal, Users, X, Zap } from "lucide-react";
+import { Check, CheckCheck, CheckCircle2, FileText, Info, Loader2, MessageCircle, PanelLeftClose, PanelLeftOpen, Paperclip, PhoneOff, Plus, Search, SendHorizontal, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cardTitle, type PartnerMessage } from "@/lib/partnerChat/cards";
+import { LEAD_STATE_LABEL, LEAD_STEPS, leadLanes, type LeadLane, type LeadState, type LeadStep } from "@/lib/partnerChat/leadLanes";
 import { cn } from "@/lib/utils";
 import { MONTHS } from "@/lib/format/dates";
 
@@ -27,13 +28,13 @@ import { MONTHS } from "@/lib/format/dates";
  * lead updates land, and the server refuses to post into an archived one.
  */
 
-type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string };
+type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string; othersReadAt: string | null };
 type DirectoryUser = { id: string; name: string; email: string; label: string; scope: "agent" | "partner"; partnerId?: string; partnerName?: string; role?: string };
-type ChatResponse = { channels: Array<{ channel: Channel; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string }>; directory: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; partner_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> }; partnerFacts?: PartnerFacts[]; viewerId?: string };
+type ChatResponse = { channels: Array<{ channel: Channel; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string; othersReadAt?: string | null }>; directory: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; partner_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> }; partnerFacts?: PartnerFacts[]; viewerId?: string };
 type PartnerFacts = { partnerId: string; status: string; transfersToday: number; completedToday: number; droppedToday: number; payout: string | null };
 
 function normalize(data: ChatResponse): { channels: Channel[]; directory: DirectoryUser[]; facts: Record<string, PartnerFacts> } {
-  const channels = data.channels.map((item) => ({ ...item.channel, messages: item.messages, unreadCount: item.unreadCount, realtimeTopic: item.realtimeTopic }));
+  const channels = data.channels.map((item) => ({ ...item.channel, messages: item.messages, unreadCount: item.unreadCount, realtimeTopic: item.realtimeTopic, othersReadAt: item.othersReadAt ?? null }));
   const tenantUsers = data.directory.tenantUsers.map((item) => ({ id: item.users.id, name: item.users.name, email: item.users.email, label: `${item.users.name} · ${item.users.email}`, scope: "agent" as const, role: item.role }));
   const partnerUsers = data.directory.partnerUsers.map((item) => ({ id: item.users.id, name: item.users.name, email: item.users.email, label: `${item.users.name} · ${item.partners.name}`, scope: "partner" as const, partnerId: item.partner_id, partnerName: item.partners.name, role: item.role }));
   const facts = Object.fromEntries((data.partnerFacts ?? []).map((item) => [item.partnerId, item]));
@@ -140,6 +141,119 @@ function UpdateRow({ message }: { message: PartnerMessage }) {
   );
 }
 
+/** Each lead's progress bar: one segment per step, coloured as the thread colours its update. */
+const STEP_TONE: Record<LeadStep, string> = { new_lead: "bg-[var(--info)]", connected: "bg-[var(--primary)]", transferred: "bg-[var(--cat-2)]", outcome: "bg-[var(--primary)]" };
+const STATE_TONE: Record<LeadState, string> = { waiting: "text-[var(--info-ink)]", live: "text-[var(--accent-ink)]", won: "text-[var(--success-ink)]", dropped: "text-[var(--error-ink)]", closed: "text-muted-foreground" };
+
+/**
+ * The partner's leads (owner pick B, 2026-10-27): one card per lead built from the channel's automatic
+ * updates — its progress, where it is now, and on click the steps that got it there.
+ */
+function LeadLanesPane({ lanes, facts, name, onCollapse }: { lanes: LeadLane[]; facts: PartnerFacts | undefined; name: string; onCollapse: () => void }) {
+  const today = new Date().toDateString();
+  const todays = lanes.filter((lane) => new Date(lane.lastAt).toDateString() === today);
+  // A quiet day opens on every lead rather than on an empty list.
+  const [showAll, setShowAll] = useState(() => todays.length === 0);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const shown = showAll ? lanes : todays;
+  return (
+    <>
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border px-3 pt-3 pb-2.5">
+        <div className="flex items-center gap-2">
+          <h2 className="m-0 min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">{name} · Leads {showAll ? "" : "today"}</h2>
+          <button type="button" onClick={onCollapse} aria-label="Collapse the leads" title="Collapse" className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground"><PanelLeftClose className="size-4" aria-hidden="true" /></button>
+        </div>
+        {facts && (
+          <p className="m-0 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+            <span><strong className="text-base font-semibold text-foreground tabular-nums">{facts.transfersToday}</strong> transfers</span>
+            <span><strong className="text-base font-semibold text-[var(--success-ink)] tabular-nums">{facts.completedToday}</strong> completed</span>
+            <span><strong className="text-base font-semibold text-[var(--error-ink)] tabular-nums">{facts.droppedToday}</strong> dropped</span>
+          </p>
+        )}
+        {lanes.length > todays.length && (
+          <div className="flex gap-0.5 rounded-md bg-[var(--surface-alt)] p-0.5" role="group" aria-label="Which leads">
+            {([[false, `Today · ${todays.length}`], [true, `All · ${lanes.length}`]] as const).map(([all, label]) => (
+              <button key={label} type="button" aria-pressed={showAll === all} onClick={() => setShowAll(all)} className={cn("inline-flex h-7 flex-1 items-center justify-center rounded px-2 text-xs font-semibold", showAll === all ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "text-muted-foreground hover:text-foreground")}>{label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+        {shown.length === 0 ? (
+          <p className="m-0 px-2 py-3 text-sm text-muted-foreground">{lanes.length ? "No leads today. Earlier ones are under All." : "No leads yet. Each lead this partner sends appears here as it moves."}</p>
+        ) : shown.map((lane) => {
+          const open = openId === lane.workItemId;
+          return (
+            <article key={lane.workItemId} className={cn("rounded-xl border transition-colors", open ? "border-[color-mix(in_srgb,var(--primary)_50%,transparent)] bg-[var(--primary-soft)]" : "border-border bg-[var(--surface-alt)] hover:border-[var(--border-strong)]")}>
+              <button type="button" onClick={() => setOpenId(open ? null : lane.workItemId)} aria-expanded={open} className="flex w-full flex-col gap-2 p-3 text-left">
+                <span className="flex items-baseline justify-between gap-2"><strong className="truncate text-sm font-semibold text-foreground">{lane.customer ?? "Lead"}</strong><span className="shrink-0 text-xs tabular-nums text-muted-foreground">{listTime(lane.lastAt)}</span></span>
+                <span className="grid grid-cols-4 gap-1" aria-hidden="true">
+                  {LEAD_STEPS.map((step) => <span key={step} className={cn("h-1.5 rounded-full", lane.reached[step] ? (step === "outcome" && lane.state === "dropped" ? "bg-[var(--error)]" : STEP_TONE[step]) : "bg-[var(--surface-alt)]")} />)}
+                </span>
+                <span className="flex items-baseline justify-between gap-2 text-xs"><span className={cn("font-semibold", STATE_TONE[lane.state])}>{lane.latest.cardType === "call_dropped" ? "Call dropped" : cardTitle(lane.latest)}</span><span className="text-muted-foreground">{LEAD_STATE_LABEL[lane.state]}</span></span>
+              </button>
+              {open && (
+                <ol className="m-0 flex list-none flex-col gap-1.5 border-t border-border px-3 py-2.5">
+                  {lane.steps.map((step) => {
+                    const payload = step.cardPayload;
+                    const detail = [payload.product, payload.disposition, payload.agent && `by ${String(payload.agent)}`].filter((value) => typeof value === "string" && value).join(" · ");
+                    return <li key={step.id} className="flex gap-2 text-xs leading-snug"><span className="w-11 shrink-0 tabular-nums text-muted-foreground">{clock(step.createdAt)}</span><span><strong className="font-semibold text-foreground">{step.cardType === "call_dropped" ? "Call dropped" : cardTitle(step)}</strong>{detail ? <span className="text-muted-foreground"> · {detail}</span> : null}</span></li>;
+                  })}
+                </ol>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/** A column folded to a slim rail: its name on its side, a badge, and the way back open. */
+function CollapsedRail({ label, badge, onExpand }: { label: string; badge?: number; onExpand: () => void }) {
+  return (
+    <button type="button" onClick={onExpand} aria-label={`Show ${label.toLowerCase()}`} title={`Show ${label.toLowerCase()}`} className="m-glass hidden min-h-0 flex-col items-center gap-3 rounded-xl border border-border py-3 text-muted-foreground hover:text-foreground md:flex">
+      <PanelLeftOpen className="size-4" aria-hidden="true" />
+      {badge ? <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--primary)] px-1 text-xs font-semibold text-[var(--primary-foreground)]">{badge}</span> : null}
+      <span className="text-xs font-semibold tracking-[0.04em] uppercase [writing-mode:vertical-rl]">{label}</span>
+    </button>
+  );
+}
+
+/** Drag to resize the column on its left; the arrow keys nudge it. */
+function ResizeHandle({ label, width, min, max, onWidth }: { label: string; width: number; min: number; max: number; onWidth: (width: number) => void }) {
+  function start(event: React.PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const from = event.clientX;
+    const base = width;
+    const move = (e: PointerEvent) => onWidth(Math.min(max, Math.max(min, base + e.clientX - from)));
+    const end = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", end); document.body.style.cursor = ""; };
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+  }
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize ${label}`}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={width}
+      tabIndex={0}
+      onPointerDown={start}
+      onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); onWidth(Math.min(max, Math.max(min, width + (event.key === "ArrowRight" ? 16 : -16)))); } }}
+      className="group absolute top-0 -right-[9px] z-10 hidden h-full w-3 cursor-col-resize items-center justify-center md:flex"
+    >
+      <span className="h-12 w-1 rounded-full bg-transparent transition-colors group-hover:bg-[var(--primary)] group-focus-visible:bg-[var(--primary)]" />
+    </div>
+  );
+}
+
+type ChatLayout = { listWidth: number; leadsWidth: number; listCollapsed: boolean; leadsCollapsed: boolean };
+const DEFAULT_LAYOUT: ChatLayout = { listWidth: 290, leadsWidth: 320, listCollapsed: false, leadsCollapsed: false };
+const LAYOUT_KEY = "insurvas.partnerChat.layout";
+
 /** Conversation filters above the list. */
 type ListFilter = "all" | "partner" | "direct" | "group" | "unread";
 const LIST_FILTERS: Array<[ListFilter, string]> = [["all", "All"], ["unread", "Unread"], ["partner", "Partners"], ["direct", "Direct"], ["group", "Team"]];
@@ -224,6 +338,30 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
   // The details pane is closed until asked for: the thread gets the room.
   // Esc closes it: DetailPanel's own handler (2026-10-09 detail panel).
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Owner pick B (2026-10-27): the conversations and the partner's leads each fold to a rail, and each
+  // column's width can be dragged. Kept per browser; a blocked storage just starts from the defaults.
+  const [layout, setLayout] = useState<ChatLayout>(DEFAULT_LAYOUT);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { const saved = JSON.parse(window.localStorage.getItem(LAYOUT_KEY) ?? "null") as Partial<ChatLayout> | null; if (saved) setLayout((current) => ({ ...current, ...saved })); } catch { /* defaults */ }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const updateLayout = (patch: Partial<ChatLayout>) => setLayout((current) => {
+    const next = { ...current, ...patch };
+    try { window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)); } catch { /* not kept */ }
+    return next;
+  });
+  const lanes = selected?.channel_type === "partner" ? leadLanes(selected.messages) : [];
+  const showLeads = selected?.channel_type === "partner";
+  const unreadTotal = data.channels.reduce((sum, channel) => sum + channel.unreadCount, 0);
+  const columns = [
+    layout.listCollapsed ? "52px" : `${layout.listWidth}px`,
+    ...(showLeads ? [layout.leadsCollapsed ? "52px" : `${layout.leadsWidth}px`] : []),
+    "minmax(0,1fr)",
+  ].join(" ");
+  // From xl the details are a column of their own; narrower, they open over the thread.
+  const columnsXl = detailsOpen && selected ? `${columns} 300px` : columns;
   const selectedUsers = useMemo(() => data.directory.filter((user) => recipientIds.includes(user.id)), [data.directory, recipientIds]);
   // Mirrors the server rule: one agency channel may hold people from one partner at most.
   const mixedPartners = new Set(selectedUsers.filter((user) => user.scope === "partner").map((user) => user.partnerId)).size > 1;
@@ -262,10 +400,18 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
       />
       {error && <p role="alert" className="m-0 rounded-md border border-[var(--error)]/40 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      <div className={cn("relative grid min-h-0 flex-1 gap-3.5 md:grid-cols-[300px_minmax(0,1fr)]", detailsOpen && selected && "xl:grid-cols-[300px_minmax(0,1fr)_300px]")}>
+      {/* Columns: conversations, the partner's leads (partner channels only), the thread, then details from xl.
+          Widths come from the layout, so the grid template is set inline from md up. */}
+      <div className="relative grid min-h-0 flex-1 gap-3.5 md:[grid-template-columns:var(--chat-cols)] xl:[grid-template-columns:var(--chat-cols-xl)]" style={{ "--chat-cols": columns, "--chat-cols-xl": columnsXl } as React.CSSProperties}>
         {/* Conversations */}
-        <section className="m-glass rounded-xl border border-border flex max-h-80 min-h-0 min-w-0 flex-col overflow-hidden md:max-h-none" aria-label="Conversations">
+        {layout.listCollapsed ? <CollapsedRail label="Conversations" badge={unreadTotal} onExpand={() => updateLayout({ listCollapsed: false })} /> : (
+        <section className="m-glass relative rounded-xl border border-border flex max-h-80 min-h-0 min-w-0 flex-col md:max-h-none" aria-label="Conversations">
+          <ResizeHandle label="conversations" width={layout.listWidth} min={220} max={440} onWidth={(listWidth) => updateLayout({ listWidth })} />
           <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-3 pt-3 pb-2.5">
+            <div className="flex items-center gap-2">
+              <h2 className="m-0 flex-1 text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">Conversations</h2>
+              <button type="button" onClick={() => updateLayout({ listCollapsed: true })} aria-label="Collapse the conversations" title="Collapse" className="hidden size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground md:inline-flex"><PanelLeftClose className="size-4" aria-hidden="true" /></button>
+            </div>
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <span className="sr-only">Search conversations</span>
@@ -317,6 +463,17 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
             )}
           </div>
         </section>
+        )}
+
+        {/* The partner's leads: a partner channel only (direct and team conversations carry no lead updates). */}
+        {showLeads && selected && (layout.leadsCollapsed
+          ? <CollapsedRail label="Leads" badge={lanes.filter((lane) => lane.state === "waiting" || lane.state === "live").length} onExpand={() => updateLayout({ leadsCollapsed: false })} />
+          : (
+            <section className="m-glass relative rounded-xl border border-border flex max-h-96 min-h-0 min-w-0 flex-col md:max-h-none" aria-label="Leads">
+              <ResizeHandle label="leads" width={layout.leadsWidth} min={240} max={480} onWidth={(leadsWidth) => updateLayout({ leadsWidth })} />
+              <LeadLanesPane key={selected.id} lanes={lanes} facts={selectedFacts} name={selected.name} onCollapse={() => updateLayout({ leadsCollapsed: true })} />
+            </section>
+          ))}
 
         {/* Thread: the messages scroll, the composer stays at the bottom of the pane. */}
         <section className="m-glass rounded-xl border border-border flex h-[70dvh] min-h-0 min-w-0 flex-col overflow-hidden md:h-auto" aria-label="Selected conversation">
@@ -395,19 +552,31 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                     </div>
                   );
                   // The viewer's own messages: on the right, tinted, no face — the thread reads as a conversation.
-                  if (viewerId && item.createdBy === viewerId) return (
-                    <div key={item.id}>
-                      {divider}
-                      <div className={cn("group flex flex-col items-end pl-12", continued ? "mt-0.5" : "mt-2")}>
-                        {!continued && <span className="mb-0.5 text-xs tabular-nums text-muted-foreground">You · {clock(item.createdAt)}</span>}
-                        <div className="flex max-w-full items-end gap-2">
-                          {continued && <span className="shrink-0 pb-1 text-xs tabular-nums text-muted-foreground opacity-0 group-hover:opacity-100">{clock(item.createdAt)}</span>}
-                          <p className="m-0 max-w-[560px] whitespace-pre-wrap break-words rounded-lg rounded-br-sm bg-[var(--primary-soft)] px-3 py-1.5 text-sm leading-normal text-foreground">{item.message}</p>
+                  if (viewerId && item.createdBy === viewerId) {
+                    // Delivered once stored; Read once anyone else in the conversation has opened it since.
+                    // Shown under the last of a run of my messages, as one line for the run.
+                    const next = shownMessages[index + 1];
+                    const lastOfRun = !next || next.createdBy !== viewerId || next.messageKind === "system_card";
+                    const read = Boolean(selected.othersReadAt && new Date(selected.othersReadAt).getTime() >= new Date(item.createdAt).getTime());
+                    return (
+                      <div key={item.id}>
+                        {divider}
+                        <div className={cn("group flex flex-col items-end pl-12", continued ? "mt-0.5" : "mt-2")}>
+                          {!continued && <span className="mb-0.5 text-xs tabular-nums text-muted-foreground">You · {clock(item.createdAt)}</span>}
+                          <div className="flex max-w-full items-end gap-2">
+                            {continued && <span className="shrink-0 pb-1 text-xs tabular-nums text-muted-foreground opacity-0 group-hover:opacity-100">{clock(item.createdAt)}</span>}
+                            <p className="m-0 max-w-[560px] whitespace-pre-wrap break-words rounded-lg rounded-br-sm bg-[var(--primary-soft)] px-3 py-1.5 text-sm leading-normal text-foreground">{item.message}</p>
+                          </div>
+                          {attachments}
+                          {lastOfRun && (
+                            <span className={cn("mt-0.5 inline-flex items-center gap-1 text-xs", read ? "text-[var(--accent-ink)]" : "text-muted-foreground")} title={read ? `Read ${listTime(selected.othersReadAt as string)}` : "Delivered, not read yet"}>
+                              {read ? <CheckCheck className="size-3.5" aria-hidden="true" /> : <Check className="size-3.5" aria-hidden="true" />}{read ? "Read" : "Delivered"}
+                            </span>
+                          )}
                         </div>
-                        {attachments}
                       </div>
-                    </div>
-                  );
+                    );
+                  }
                   return (
                     <div key={item.id}>
                       {divider}

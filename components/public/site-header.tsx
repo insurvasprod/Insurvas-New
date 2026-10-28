@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ViewTransition, useEffect, useRef, useState } from "react";
+import { ViewTransition, useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import styles from "@/components/public/site-header.module.css";
 import { ThemeSwitch } from "@/components/public/theme-switch";
@@ -17,8 +18,8 @@ import { ThemeSwitch } from "@/components/public/theme-switch";
  *
  * `floating` (the landing page) lets the hero run underneath it; the other public pages keep it in
  * the flow. The section links are anchors on the landing page (/#…), so they work from every public
- * page. Below xl the nav folds into a native <details> menu — no script needed to open it; a tap on
- * one of its links, or anywhere outside it, closes it again.
+ * page. Below xl the nav folds into the shared Popover (foundation v3): a tap on one of its links,
+ * Escape, or anywhere outside it closes it again, and focus returns to the menu button.
  *
  * Phones (2026-10-22): the pill tightens below sm and the logo steps down below 380px, so logo, trial
  * button and menu fit a 320px screen; below that (fold covers) the trial button moves into the
@@ -34,16 +35,8 @@ const NAV: Array<{ href: string; label: string; key?: "home" | "pricing" }> = [
 
 export function SiteHeader({ current, floating = false }: { current?: "home" | "pricing"; floating?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
-  const menuRef = useRef<HTMLDetailsElement>(null);
-  const closeMenu = () => menuRef.current?.removeAttribute("open");
-  useEffect(() => {
-    const onPointer = (event: PointerEvent) => {
-      const menu = menuRef.current;
-      if (menu?.open && !menu.contains(event.target as Node)) menu.removeAttribute("open");
-    };
-    document.addEventListener("pointerdown", onPointer);
-    return () => document.removeEventListener("pointerdown", onPointer);
-  }, []);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 24);
     update();
@@ -97,11 +90,13 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
           <Button asChild className="h-10 rounded-full px-3 text-sm max-[319px]:hidden sm:px-5">
             <Link href="/signup"><span className="sm:hidden">Try free</span><span className="hidden sm:inline">Start free trial</span></Link>
           </Button>
-          <details ref={menuRef} className="relative xl:hidden">
-            <summary aria-label="Menu" className="flex size-10 cursor-pointer list-none items-center justify-center rounded-full border border-[var(--border-strong)] text-foreground [&::-webkit-details-marker]:hidden">
-              <Menu className="size-4" aria-hidden="true" />
-            </summary>
-            <div className="absolute right-0 top-14 max-h-[calc(100dvh-5rem)] w-56 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-[var(--shadow-overlay)]">
+          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Menu" className="flex size-10 cursor-pointer items-center justify-center rounded-full border border-[var(--border-strong)] text-foreground xl:hidden">
+                <Menu className="size-4" aria-hidden="true" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={10} className="w-56 p-2">
               {NAV.map((item) => (
                 <Link key={item.href} href={item.href} onClick={closeMenu} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-[var(--surface-alt)]">
                   {item.label}
@@ -114,8 +109,8 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
                 <span className="text-sm font-semibold text-foreground">Theme</span>
                 <ThemeSwitch />
               </div>
-            </div>
-          </details>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
     </header>

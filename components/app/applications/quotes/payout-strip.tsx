@@ -29,6 +29,8 @@ export function PayoutStrip({ quotes }: { quotes: QuoteView[] }) {
   const unpaid = quotes.filter((q) => q.payout === null);
   const sorted = [...paid].sort((a, b) => (desc ? b.payout.fycCents - a.payout.fycCents : a.payout.fycCents - b.payout.fycCents));
   const [top, ...rest] = sorted;
+  // No commission schedule covers any quote: nothing to compare, so the strip stays away (owner 2026-10-28).
+  if (!top) return null;
 
   return (
     <section aria-label="Estimated first-year commission" className="flex flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-[18px]">

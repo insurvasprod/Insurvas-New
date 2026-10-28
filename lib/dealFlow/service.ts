@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
+import { assertSoldProduct } from "@/lib/products/agencyProducts";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { csvCell } from "@/lib/csv/cell";
 import { resolveRuntimeStage, partnerTypeForLead } from "@/lib/pipelines/service";
@@ -518,6 +519,8 @@ export async function updateDealFlow(tenantId: string, dealId: string, input: { 
 
 export async function createManualDeal(tenantId: string, userId: string, input: { product_line: unknown; insured_name: unknown; phone?: unknown; partner_id?: unknown; local_date: unknown; carrier?: unknown; product_type?: unknown; monthly_premium_cents?: unknown; face_amount_cents?: unknown; draft_date?: unknown; status?: unknown; call_result?: unknown; notes?: unknown; initial_quote?: unknown }) {
   const productLine = text(input.product_line, "Product", 120) as string;
+  // Settings › Products (2026-10-27): a new deal is only for a product the agency sells.
+  await assertSoldProduct(tenantId, productLine);
   const name = text(input.insured_name, "Insured name", 160) as string;
   const phone = text(input.phone, "Phone", 40, false);
   const partnerId = input.partner_id == null || input.partner_id === "" ? null : assertUuid(input.partner_id, "partner");

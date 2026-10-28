@@ -20,6 +20,10 @@ import { allMenuItems } from "@/lib/menu/definition";
 import { OPEN_ALERT_SETTINGS_EVENT } from "@/lib/agentAlerts/openAlertSettings";
 import { KBD_ITEM_ATTRIBUTE, KBD_LIST_ATTRIBUTE, isTypingTarget, listKeyDirection, nextListIndex } from "@/lib/keyboard/listNavigation";
 import { notify } from "@/lib/notify";
+import { OPEN_WORKSPACES_EVENT } from "@/lib/menu/navEvents";
+import { ViewTabs } from "@/components/ui/view-tabs";
+import type { MenuSection } from "@/lib/menu/definition";
+import { TopBarCrumb, TopBarNew, TopBarPresence } from "@/components/app/nav/top-bar-nav";
 
 /**
  * The top bar.
@@ -224,7 +228,20 @@ export function TopBarShell({
   switchWorkspaceEndpoint,
   accountHostId,
   accountExtra,
+  leading,
+  actions,
+  inbox = false,
 }: {
+  /** Drawn before the search: the agent shell's breadcrumb (Navigation A). */
+  leading?: ReactNode;
+  /** Drawn first on the right: the agent shell's Inbound pill and New menu. */
+  actions?: ReactNode;
+  /**
+   * One Inbox button in place of the bell and the triangle (Navigation A, agent shell): one count,
+   * and the two lists as tabs in its panel. Notifications and alerts keep their own rules inside it —
+   * a notification clears when read, an alert when fixed.
+   */
+  inbox?: boolean;
   /**
    * The id of an element in the side rail that holds the account button instead of the bar (agent
    * shell, owner ask 2026-10-26: "the account goes bottom left, in the sidebar"). Its menu then opens
@@ -284,6 +301,8 @@ export function TopBarShell({
   // The rail's account slot, found once mounted (the rail renders before the bar).
   const [accountHost, setAccountHost] = useState<HTMLElement | null>(null);
   const [accountFromRail, setAccountFromRail] = useState(false);
+  // Opened from the sidebar's workspace card (Navigation A): the same menu, drawn at the top.
+  const [accountFromWorkspace, setAccountFromWorkspace] = useState(false);
   useEffect(() => {
     if (accountHostId) setAccountHost(document.getElementById(accountHostId)); // eslint-disable-line react-hooks/set-state-in-effect
   }, [accountHostId]);
@@ -366,6 +385,21 @@ export function TopBarShell({
     return () => controller.abort();
   }, [workspacesEndpoint]);
 
+  // ---- the sidebar's workspace card opens the account menu at the workspace switch ----
+  const several = workspaces.length > 1 && Boolean(switchWorkspaceEndpoint);
+  useEffect(() => {
+    if (!accountHostId) return;
+    const open = () => {
+      setQuery("");
+      setAccountFromRail(true);
+      setAccountFromWorkspace(true);
+      setChoosingWorkspace(several);
+      setMenu((current) => (current === "account" ? null : "account"));
+    };
+    window.addEventListener(OPEN_WORKSPACES_EVENT, open);
+    return () => window.removeEventListener(OPEN_WORKSPACES_EVENT, open);
+  }, [accountHostId, several]);
+
   // ---- one menu at a time, and a click outside closes it ------------------
   const close = useCallback(() => { setMenu(null); setChoosingWorkspace(false); }, []);
 
@@ -391,8 +425,10 @@ export function TopBarShell({
     function onPointerDown(event: MouseEvent) {
       // An InfoTip inside a panel opens in a portal; reading it is not a click outside the bar.
       if ((event.target as Element | null)?.closest?.("[data-radix-popper-content-wrapper]")) return;
-      // The rail's account button and its menu sit outside the bar but belong to it.
+      // The rail's account button and its menu sit outside the bar but belong to it, as does the
+      // sidebar's workspace card that opens the same menu.
       if (accountHost?.contains(event.target as Node)) return;
+      if ((event.target as Element | null)?.closest?.("[data-account-trigger]")) return;
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
         close();
         setQuery("");
@@ -499,10 +535,32 @@ export function TopBarShell({
   const alertsOpen = menu === "alerts" || (menu === "preferences" && preferencesOrigin === "alerts");
   const accountOpen = menu === "account" || (menu === "preferences" && preferencesOrigin === "account");
 
+  // The Inbox (Navigation A): one button, the two lists as tabs. It opens on alerts only when there
+  // is nothing addressed to you and something is wrong with the queue.
+  const inboxCount = notifications.length + alerts.length;
+  function toggleInbox() {
+    if (bellOpen || alertsOpen) { close(); return; }
+    toggle(!notifications.length && alerts.length ? "alerts" : "notifications");
+  }
+  const inboxTabs = inbox && feed ? (
+    <div className="portal-top-inbox-tabs">
+      <ViewTabs
+        label="Inbox"
+        value={menu === "alerts" ? "alerts" : "notifications"}
+        onChange={(key) => { setQuery(""); setMenu(key); }}
+        tabs={[
+          { key: "notifications", label: "Notifications", count: notifications.length || null },
+          { key: "alerts", label: "Alerts", count: alerts.length || null, tone: "danger" },
+        ]}
+      />
+    </div>
+  ) : null;
+
   let flatIndex = -1;
 
   return (
-    <div ref={rootRef} className="portal-top-bar" data-open={menu ?? undefined}>
+    <div ref={rootRef} className="portal-top-bar" data-open={menu ?? undefined} data-inbox={inbox || undefined}>
+      {leading}
       {/* ---------------------------------------------------------- search */}
       <form role="search" className="portal-top-search" onSubmit={(event) => event.preventDefault()}>
         <Search className="portal-top-search-icon size-[15px]" aria-hidden="true" />
@@ -592,10 +650,24 @@ export function TopBarShell({
 
       {/* ------------------------------------------------------- the right */}
       <div className="portal-top-actions">
+        {actions}
         {/* Light / dark, the landing page's switch and reveal, in front of the bell (owner, 2026-10-13). */}
-        <ThemeSwitch compact />
+        {!inbox && <ThemeSwitch compact />}
         {feed?.doNotDisturb && <span className="hidden text-xs leading-[1.5] font-semibold text-[var(--warning-ink)] sm:inline" title="Sound and browser alerts are muted. Escalation emails are still sent.">Do not disturb</span>}
-        {feed && <button
+        {feed && inbox && <button
+          type="button"
+          aria-label={`Inbox${notifications.length ? `, ${notifications.length} unread` : ""}${alerts.length ? `, ${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"} open` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
+          aria-haspopup="true"
+          aria-expanded={bellOpen || alertsOpen}
+          onClick={toggleInbox}
+          className="portal-top-icon"
+          data-alert={alerts.length > 0 || undefined}
+        >
+          {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
+          {inboxCount > 0 && <span className="portal-top-badge">{inboxCount > 99 ? "99+" : inboxCount}</span>}
+        </button>}
+        {inbox && <ThemeSwitch compact />}
+        {feed && !inbox && <button
           type="button"
           aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
           aria-haspopup="true"
@@ -607,7 +679,7 @@ export function TopBarShell({
           {notifications.length > 0 && <span className="portal-top-badge">{notifications.length}</span>}
         </button>}
 
-        {feed && <button
+        {feed && !inbox && <button
           type="button"
           aria-label={`Alerts${alerts.length ? `, ${alerts.length} open` : ""}`}
           aria-haspopup="true"
@@ -625,7 +697,7 @@ export function TopBarShell({
           type="button"
           aria-haspopup="true"
           aria-expanded={accountOpen && !accountFromRail}
-          onClick={() => { setAccountFromRail(false); toggle("account"); }}
+          onClick={() => { setAccountFromRail(false); setAccountFromWorkspace(false); toggle("account"); }}
           className="portal-top-account"
         >
           <span className="portal-top-avatar" aria-hidden="true"><AvatarFace user={user} /></span>
@@ -636,11 +708,13 @@ export function TopBarShell({
         {/* ------------------------------------------- notifications panel */}
         {feed?.renderNotifications && menu === "notifications" && (
           <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
+            {inboxTabs}
             {feed.renderNotifications({ close, openPreferences: feed.preferences ? () => openPreferences("notifications") : null })}
           </section>
         )}
         {feed && !feed.renderNotifications && menu === "notifications" && (
           <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
+            {inboxTabs}
             <header className="portal-top-panel-head">
               <span>Notifications</span>
               <span>{notifications.length ? `${notifications.length} unread` : "Nothing unread"}</span>
@@ -690,7 +764,8 @@ export function TopBarShell({
 
         {/* -------------------------------------------------- alerts panel */}
         {feed && menu === "alerts" && (
-          <section aria-label="Alerts" className="portal-top-panel portal-top-panel-alerts m-swap">
+          <section aria-label="Alerts" className={`portal-top-panel m-swap ${inbox ? "portal-top-panel-notif" : "portal-top-panel-alerts"}`}>
+            {inboxTabs}
             <header className="portal-top-panel-head">
               <span>Alerts</span>
               <span>Clears when fixed, not when read</span>
@@ -753,18 +828,22 @@ export function TopBarShell({
             type="button"
             aria-haspopup="true"
             aria-label="Your account"
-            aria-expanded={accountOpen && accountFromRail}
-            onClick={() => { setAccountFromRail(true); toggle("account"); }}
+            aria-expanded={accountOpen && accountFromRail && !accountFromWorkspace}
+            onClick={() => { setAccountFromRail(true); setAccountFromWorkspace(false); toggle("account"); }}
             className="portal-rail-account"
             title={`${user.name} · ${user.roleLabel}`}
           >
             <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
-            <span className="portal-rail-account-name">{user.name}</span>
+            {/* The labelled sidebar shows who you are beside the face; the icon rail hides it (CSS). */}
+            <span className="portal-rail-account-text" aria-hidden="true">
+              <span className="portal-rail-account-name">{user.name}</span>
+              <span className="portal-rail-account-meta">{user.roleLabel}</span>
+            </span>
           </button>,
           accountHost,
         )}
         {menu === "account" && (accountFromRail && accountHost ? (panel: ReactNode) => createPortal(panel, accountHost) : (panel: ReactNode) => panel)(
-          <section aria-label="Your account" className={`portal-top-panel portal-top-panel-account m-swap ${accountFromRail && accountHost ? "portal-top-panel-rail" : ""}`}>
+          <section aria-label="Your account" className={`portal-top-panel portal-top-panel-account m-swap ${accountFromRail && accountHost ? "portal-top-panel-rail" : ""} ${accountFromWorkspace && accountHost ? "portal-top-panel-rail-top" : ""}`}>
             <div className="portal-top-identity">
               <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
               <span>
@@ -930,7 +1009,14 @@ function PlanLine({ plan, onNavigate }: { plan: TopBarPlan; onNavigate?: () => v
   );
 }
 
-export function AppTopBar({ user, userId, plan }: { user: TopBarUser; /** Keys this browser's snoozes to the person. */ userId?: string; plan?: TopBarPlan }) {
+export function AppTopBar({ user, userId, plan, menu }: {
+  user: TopBarUser;
+  /** Keys this browser's snoozes to the person. */
+  userId?: string;
+  plan?: TopBarPlan;
+  /** The same server-filtered menu as the sidebar: the breadcrumb and the New menu read it. */
+  menu?: MenuSection[];
+}) {
   const source = useAgentAlertFeed();
   const lists = useMemo(() => agentFeedLists(source.alerts), [source.alerts]);
   // The notification centre (2026-10-09): the same feed, grouped, filtered and snoozable. Snoozed
@@ -957,7 +1043,7 @@ export function AppTopBar({ user, userId, plan }: { user: TopBarUser; /** Keys t
       user={user}
       feed={feed}
       searchEndpoint="/api/app/search"
-      searchPlaceholder="Search leads, policies, lists, partners…"
+      searchPlaceholder="Search or jump to…"
       searchScope="Search covers this workspace only. A lead another agency owns will never appear here."
       profileHref="/app/settings#my-profile"
       profileLabel="Your profile"
@@ -968,6 +1054,9 @@ export function AppTopBar({ user, userId, plan }: { user: TopBarUser; /** Keys t
       switchWorkspaceEndpoint="/api/app/auth/switch-workspace"
       accountHostId="agent-rail-account"
       accountExtra={plan ? <PlanLine plan={plan} /> : undefined}
+      leading={menu ? <TopBarCrumb menu={menu} /> : undefined}
+      actions={menu ? <><TopBarPresence /><TopBarNew menu={menu} /></> : undefined}
+      inbox
     />
   );
 }

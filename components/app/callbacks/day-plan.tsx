@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CallbackView } from "@/lib/callbacks/service";
 import { dayTitle, localParts, shortTime } from "./time";
+import { cardSurface } from "@/components/ui/card";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 
 /**
  * Callbacks C, "Day plan" (owner pick 2026-10-25, canvas M2 · Calendar, Cb4C): a numbered "do this
@@ -17,12 +19,12 @@ import { dayTitle, localParts, shortTime } from "./time";
 export type ChipTone = "neutral" | "success" | "warning" | "error" | "accent";
 export type RowState = { label: string; tone: ChipTone };
 
-export function Chip({ tone, children, dot = true }: { tone: ChipTone; children: ReactNode; dot?: boolean }) {
-  return <span className={`portal-status-chip is-${tone}`}>{dot && <span aria-hidden="true" />}{children}</span>;
-}
+const TONE: Record<ChipTone, StatusTone> = { neutral: "neutral", success: "good", warning: "warning", error: "danger", accent: "action" };
 
-// m-glass: frosted over the page's static stage backdrop, like the other redesigned pages.
-const CARD = "m-glass rounded-xl border border-border";
+/** A callback's state as the shared chip (foundation v3), in this page's tone names. */
+export function Chip({ tone, children, dot = true }: { tone: ChipTone; children: ReactNode; dot?: boolean }) {
+  return <StatusChip tone={TONE[tone]} dot={dot}>{children}</StatusChip>;
+}
 
 function hourLabel(hour: number) {
   const twelve = hour % 12 === 0 ? 12 : hour % 12;
@@ -98,7 +100,7 @@ export function DayTimeline({ day, today, yourZone, items, stateOf, settledOf, s
   const last = Math.max(17, ...hours);
   const zone = new Intl.DateTimeFormat("en-US", { timeZone: yourZone, timeZoneName: "long" }).formatToParts(new Date()).find((part) => part.type === "timeZoneName")?.value;
   return (
-    <section className={cn(CARD, "flex min-w-0 flex-1 flex-col")} aria-label="Callbacks by hour">
+    <section className={cn(cardSurface, "flex min-w-0 flex-1 flex-col")} aria-label="Callbacks by hour">
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
         <span className="flex items-center gap-2">
           <Button type="button" size="icon-sm" variant="outline" aria-label="Previous day" onClick={() => onDay(-1)}><ChevronLeft aria-hidden="true" /></Button>
@@ -160,14 +162,14 @@ export function PlanColumn({ className, title, left, total, steps, earlier, more
   const done = Math.max(0, total - left);
   return (
     <div className={cn("flex w-full shrink-0 flex-col gap-4 xl:w-[300px]", className)}>
-      <section className={cn(CARD, "flex flex-col gap-3 p-5")}>
+      <section className={cn(cardSurface, "flex flex-col gap-3 p-5")}>
         <span className="text-xs font-semibold text-muted-foreground">{title}</span>
         <span className="flex items-baseline gap-2"><strong className="text-2xl tracking-[-0.02em]">{left} left</strong><span className="text-sm text-muted-foreground">of {total}</span></span>
         <span className="block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-label="Callbacks done today">
           <span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
         </span>
       </section>
-      <section className={cn(CARD, "py-2")} aria-label="What to do next">
+      <section className={cn(cardSurface, "py-2")} aria-label="What to do next">
         <ol className="m-0 list-none p-0">
           {steps.map((step, index) => (
             <li key={step.label}>
@@ -181,7 +183,7 @@ export function PlanColumn({ className, title, left, total, steps, earlier, more
         </ol>
       </section>
       {earlier.length > 0 && (
-        <section className={cn(CARD, "flex flex-col gap-2 p-4")} aria-label="From earlier days">
+        <section className={cn(cardSurface, "flex flex-col gap-2 p-4")} aria-label="From earlier days">
           <span className="text-xs font-semibold text-[var(--error-ink)]">From earlier</span>
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {earlier.map((callback) => {

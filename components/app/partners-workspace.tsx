@@ -33,7 +33,7 @@ import { AffiliateLinksPanel } from "@/components/app/affiliate-links-panel";
 import { PartnerUsersPanel } from "@/components/app/partner-users-panel";
 import { PartnerFormStudio } from "@/components/app/partner-form-studio";
 import { PartnerMarketAccessPanel } from "@/components/app/partner-market-access-panel";
-import { StatusChip } from "@/components/ui/status-chip";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -75,6 +75,7 @@ import { productLineLabel } from "@/lib/format/productLine";
 import { PARTNER_LIMIT_KEYS, capacityLabel } from "@/lib/partners/limits";
 import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
 import { cn } from "@/lib/utils";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
 
 type Term = {
   id: string;
@@ -169,11 +170,11 @@ const detailTabLabel = (tab: DetailTab) =>
       ? "Commercial terms"
       : tab.charAt(0).toUpperCase() + tab.slice(1);
 
-const STATUS_CHIP: Record<PartnerStatus, string> = {
-  active: "bg-[var(--success-surface)] text-[var(--success-ink)]",
-  draft: "bg-[var(--info-surface)] text-[var(--info-ink)]",
-  paused: "bg-[var(--warning-surface)] text-[var(--warning-ink)]",
-  offboarded: "bg-[var(--surface-alt)] text-[var(--body)]",
+const STATUS_TONE: Record<PartnerStatus, StatusTone> = {
+  active: "good",
+  draft: "info",
+  paused: "warning",
+  offboarded: "neutral",
 };
 
 function PartnerFact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -185,13 +186,9 @@ function PartnerFact({ label, children }: { label: string; children: React.React
   );
 }
 
+/** Whether a product is open to the partner, as the shared chip (foundation v3). */
 function ProductChip({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabel: string }) {
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold", on ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>
-      <span className={cn("size-1.5 rounded-full", on ? "bg-[var(--success)]" : "bg-[var(--muted-foreground)]")} aria-hidden="true" />
-      {on ? onLabel : offLabel}
-    </span>
-  );
+  return <StatusChip tone={on ? "good" : "neutral"} dot>{on ? onLabel : offLabel}</StatusChip>;
 }
 
 const emptyDraft: PartnerDraft = {
@@ -481,14 +478,6 @@ export function PartnersWorkspace({
     }
   }
 
-  async function toggleTenantProduct(product: Product) {
-    await send(
-      `/api/app/products/${encodeURIComponent(product.code)}`,
-      "PATCH",
-      { is_enabled: !product.is_enabled },
-      `${product.name} ${product.is_enabled ? "disabled" : "enabled"}`,
-    );
-  }
   async function togglePartnerProduct(
     partnerId: string,
     product: PartnerProduct,
@@ -897,14 +886,11 @@ export function PartnersWorkspace({
             {/* The key facts in one compact block (2026-10-06 redesign): state chips, then the figures. */}
             <section aria-label="Partner facts" className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-2">
-                <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", STATUS_CHIP[selectedPartner.status])}>
-                  <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />
-                  {PARTNER_STATUS_LABELS[selectedPartner.status]}
-                </span>
-                <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--surface-alt)] px-2.5 py-0.5 text-xs font-semibold text-[var(--body)]">{PARTNER_TYPE_LABELS[selectedPartner.partner_type]}</span>
-                <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--primary-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-ink)]">
+                <StatusChip tone={STATUS_TONE[selectedPartner.status]} dot>{PARTNER_STATUS_LABELS[selectedPartner.status]}</StatusChip>
+                <StatusChip>{PARTNER_TYPE_LABELS[selectedPartner.partner_type]}</StatusChip>
+                <StatusChip tone="action" dot={false}>
                   {selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}
-                </span>
+                </StatusChip>
               </div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Submitted">{selectedPartner.lead_volume_this_month.toLocaleString()} this month</PartnerFact></div>
@@ -917,25 +903,7 @@ export function PartnersWorkspace({
 
             <div className="flex min-w-0 flex-col gap-6">
               <section className="m-glass rounded-xl border border-border min-w-0 overflow-visible">
-                <div role="tablist" className="flex flex-wrap items-center gap-x-6 border-b border-border px-5" aria-label="Partner detail sections">
-                  {shownTabs.map((tab) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      id={`partner-detail-tab-${tab}`}
-                      aria-controls="partner-detail-view"
-                      aria-selected={detailTab === tab}
-                      key={tab}
-                      onClick={() => setDetailTab(tab)}
-                      className={cn(
-                        "-mb-px h-9 shrink-0 border-b-2 px-1 text-sm font-semibold tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        detailTab === tab ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {detailTabLabel(tab)}
-                    </button>
-                  ))}
-                </div>
+                <UnderlineTabs label="Partner detail sections" className="px-5" tabs={shownTabs.map((tab) => ({ key: tab, label: detailTabLabel(tab) }))} value={detailTab} onChange={setDetailTab} idPrefix="partner-detail-tab" controls="partner-detail-view" />
             {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
             <div key={detailTab} role="tabpanel" id="partner-detail-view" aria-labelledby={`partner-detail-tab-${detailTab}`} className="space-y-5 p-5">
               {detailTab === "overview" && (
@@ -1107,86 +1075,37 @@ export function PartnersWorkspace({
                 </section>
               )}
               {detailTab === "products" && (
-                <section className="space-y-5">
-                  <div>
-                    <h3 className="text-sm font-semibold">
-                      Products you sell
-                    </h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Enable for the business, then approve per partner.
-                    </p>
-                  </div>
+                <section className="space-y-4">
+                  {/* Settings › Products (2026-10-27) decides what the agency sells; this tab only says
+                      which of those this partner may send. */}
+                  <p className="m-0 text-sm text-muted-foreground">
+                    {products.some((product) => product.is_enabled)
+                      ? <>Your agency sells {products.filter((product) => product.is_enabled).map((product) => product.name).join(", ")}.</>
+                      : <>Your agency does not sell any product yet.</>}{" "}
+                    {canManageProductConfig && <Link href="/app/settings#products" className="font-semibold text-foreground underline underline-offset-2">Change in Settings › Products</Link>}
+                  </p>
                   {canManageProductConfig ? (
-                    <div className="space-y-2">
-                      {products.map((product) => (
-                        <label
-                          key={product.code}
-                          className="flex items-start gap-3 rounded-lg border p-3 text-sm"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 size-4"
-                            checked={product.is_enabled}
-                            disabled={readOnly || busy !== null}
-                            onChange={() => void toggleTenantProduct(product)}
-                          />
-                          <span>
-                            <span className="block font-medium">
-                              {product.name}
-                            </span>
-                            <span className="block text-xs text-muted-foreground">
-                              {product.category} · {product.code}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                      Product availability is managed by the account owner.
-                    </p>
-                  )}
-                  {canManageProductConfig && (
-                    <div className="border-t pt-4">
-                      <h3 className="text-sm font-semibold">
-                        Approved for this partner
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Only enabled products can be approved.
-                      </p>
+                    <div>
+                      <h3 className="text-sm font-semibold">Approved for this partner</h3>
                       <div className="mt-3 space-y-2">
-                        {selectedProducts.map((product) => (
-                          <label
-                            key={product.code}
-                            className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm ${!product.is_enabled ? "opacity-50" : ""}`}
-                          >
+                        {selectedProducts.filter((product) => product.is_enabled).map((product) => (
+                          <label key={product.code} className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
                             <input
                               type="checkbox"
                               className="size-4"
                               checked={product.approved}
-                              disabled={
-                                readOnly ||
-                                !product.is_enabled ||
-                                busy !== null ||
-                                selectedPartner.status === "offboarded"
-                              }
-                              onChange={() =>
-                                void togglePartnerProduct(
-                                  selectedPartner.id,
-                                  product,
-                                )
-                              }
+                              disabled={readOnly || busy !== null || selectedPartner.status === "offboarded"}
+                              onChange={() => void togglePartnerProduct(selectedPartner.id, product)}
                             />
                             <span>{product.name}</span>
-                            {!product.is_enabled && (
-                              <span className="ml-auto text-xs text-muted-foreground">
-                                Business disabled
-                              </span>
-                            )}
                           </label>
                         ))}
                       </div>
                     </div>
+                  ) : (
+                    <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                      Product approvals are managed by the account owner.
+                    </p>
                   )}
                 </section>
               )}

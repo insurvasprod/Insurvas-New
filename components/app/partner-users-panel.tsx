@@ -32,6 +32,7 @@ import { TableCard } from "@/components/ui/table-card";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { capacityLabel } from "@/lib/partners/limits";
 import { cn } from "@/lib/utils";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
 
 const PAGE_SIZE = 10;
 const TIMEOUT_MS = 10000;
@@ -767,27 +768,7 @@ function PartnerUserWorkspace({
         </span>
       </div>
 
-      <nav className="portal-team-config-tabs" role="tablist" aria-label="Member configuration">
-        {(
-          [
-            ["overview", "Overview"],
-            ["lead", "Lead form"],
-            ["markets", "Markets"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            id={`member-config-tab-${value}`}
-            aria-controls="member-config-view"
-            aria-selected={tab === value}
-            onClick={() => setTab(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      <UnderlineTabs label="Member configuration" tabs={[{ key: "overview", label: "Overview" }, { key: "lead", label: "Lead form" }, { key: "markets", label: "Markets" }]} value={tab} onChange={setTab} idPrefix="member-config-tab" controls="member-config-view" />
 
       <div key={tab} role="tabpanel" id="member-config-view" aria-labelledby={`member-config-tab-${tab}`} className="portal-team-config-body">
         {tab === "overview" ? (

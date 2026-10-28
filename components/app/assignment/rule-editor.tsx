@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Field, PlusIcon, control } from "@/components/app/settings/primitives";
+import { ProductChips } from "@/components/app/products/use-sold-products";
 import { CONDITION_TYPES, MATCH_LABEL, MATCH_TYPES, MAX_EXTRA_CONDITIONS, RULE_STRATEGIES, SCHEMA_PENDING_MESSAGE, STRATEGY_LABEL, nobodySentence, type AssignmentMember, type ConditionType, type MatchType, type PreviewRow, type RuleStrategy } from "@/lib/assignment/constants";
 import { cn } from "@/lib/utils";
 import { type ConditionDraft, type RuleDraft, conditionProblem, roleLabel } from "./model";
@@ -86,9 +87,12 @@ export function RuleEditor({
               label={draft.matchType === "language" ? "Languages" : draft.matchType === "product" ? "Product codes" : "States"}
               htmlFor={`${id}-values`}
               error={problem ?? undefined}
-              hint="Comma-separated."
+              hint={draft.matchType === "product" ? undefined : "Comma-separated."}
             >
-              <input id={`${id}-values`} className={control} value={draft.listText} disabled={!canManage} onChange={(event) => onChange({ listText: event.target.value })} placeholder={draft.matchType === "language" ? "spanish, english" : draft.matchType === "product" ? "final_expense, term_life" : "TX, NM"} />
+              {/* Products come from Settings › Products (2026-10-27), not typed codes. */}
+              {draft.matchType === "product"
+                ? <ProductChips label="Products" value={draft.listText} disabled={!canManage} onChange={(listText) => onChange({ listText })} />
+                : <input id={`${id}-values`} className={control} value={draft.listText} disabled={!canManage} onChange={(event) => onChange({ listText: event.target.value })} placeholder={draft.matchType === "language" ? "spanish, english" : "TX, NM"} />}
             </Field>
           )}
           {draft.matchType === "product" && (
@@ -214,14 +218,18 @@ export function ConditionsEditor({
               ) : (
                 <>
                   <label htmlFor={`${cid}-values`} className="sr-only">Condition {position + 2} values</label>
-                  <input
-                    id={`${cid}-values`}
-                    className={cn(control, "mt-0")}
-                    value={condition.listText}
-                    disabled={!canManage}
-                    onChange={(event) => update(condition.key, { listText: event.target.value })}
-                    placeholder={condition.type === "language" ? "spanish, es" : condition.type === "product" ? "final_expense" : "TX, NM"}
-                  />
+                  {condition.type === "product" ? (
+                    <ProductChips label={`Condition ${position + 2} products`} value={condition.listText} disabled={!canManage} onChange={(listText) => update(condition.key, { listText })} />
+                  ) : (
+                    <input
+                      id={`${cid}-values`}
+                      className={cn(control, "mt-0")}
+                      value={condition.listText}
+                      disabled={!canManage}
+                      onChange={(event) => update(condition.key, { listText: event.target.value })}
+                      placeholder={condition.type === "language" ? "spanish, es" : "TX, NM"}
+                    />
+                  )}
                   {condition.type === "product" && (
                     <label className="mt-2 flex items-center gap-2 text-sm text-[var(--body)]">
                       <input type="checkbox" checked={condition.licensedOnly} disabled={!canManage} onChange={(event) => update(condition.key, { licensedOnly: event.target.checked })} />

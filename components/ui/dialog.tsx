@@ -39,7 +39,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50 bg-[rgba(16,24,32,0.42)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -47,13 +47,27 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Widths by task (UI-CONSISTENCY §11, foundation v3): `sm` 400 for a step that loses something
+ * (use ConfirmDialog), `md` 440 for a short edit (the default), `lg` 560 and `xl` 720 for a form
+ * with two columns or a table. Pass a size, not a max-w class.
+ */
+const DIALOG_SIZE = {
+  sm: "sm:max-w-[400px]",
+  md: "sm:max-w-[440px]",
+  lg: "sm:max-w-[560px]",
+  xl: "sm:max-w-[720px]",
+} as const
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "md",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  size?: keyof typeof DIALOG_SIZE
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -61,7 +75,8 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-card p-6 shadow-[0_24px_64px_rgba(0,0,0,0.24)] duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-card p-6 shadow-[0_24px_64px_rgba(0,0,0,0.24)] duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          DIALOG_SIZE[size],
           className
         )}
         {...props}
@@ -125,7 +140,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-[1.28] font-semibold tracking-[-0.015em]", className)}
+      className={cn("text-[1.0625rem] leading-[1.3] font-semibold tracking-[-0.015em] text-[var(--ink)]", className)}
       {...props}
     />
   )

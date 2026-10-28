@@ -42,6 +42,8 @@ import {
   REST_PRESETS, RETRY_PRESETS, shortDuration, STAGE_SWATCHES, TIME_ALLOWED_PRESETS, WHY_CLOSES, WHY_KIND, WHY_NEXT, WHY_WORKED,
   type BoardDoc, type BoardOutcome, type BoardPipeline, type BoardStage, type Destination, type OutcomeIcon, type SaveOp, type StageType,
 } from "@/lib/pipelines/outcomesBoard";
+import { cardSurface } from "@/components/ui/card";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Loaded = { doc: BoardDoc; agency: Record<string, string>; rowIds: Record<string, string>; leadCounts: Record<string, number>; rulesReady: boolean; nextActionReady: boolean; pipelineOutcomesReady: boolean };
 type Picked = { kind: "outcome"; key: string } | { kind: "stage"; id: string } | { kind: "pipeline" } | null;
@@ -65,7 +67,6 @@ const PARTNER_TYPES: Array<{ value: string | null; label: string }> = [
   { value: null, label: "No partner type" }, { value: "publisher", label: "Publisher / transfer" }, { value: "marketing", label: "Marketing" }, { value: "affiliate", label: "Affiliate" },
 ];
 const SCROLL = "overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:color-mix(in_srgb,var(--primary)_45%,transparent)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--primary)_45%,transparent)]";
-const CARD = "rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
 const KICKER = "inline-flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
 const CHIP = (on: boolean) => cn("inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold tracking-[-0.01em] transition-colors disabled:cursor-not-allowed disabled:opacity-50", on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border-strong)] bg-transparent text-[var(--body)] hover:border-[var(--accent-ink)]");
 const BIG = (on: boolean) => cn("relative flex w-[84px] flex-col items-center gap-1 rounded-[12px] border-[1.5px] px-1 py-2 text-xs font-bold transition-colors", on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border-strong)] bg-transparent text-[var(--body)] hover:border-[var(--accent-ink)]");
@@ -227,7 +228,7 @@ export function PipelinesOutcomesSettings() {
   if (!loaded || !draft) {
     return (
       <SettingsStack>
-        {loadError ? <Callout tone="error" title={loadError} /> : <div className={CARD}><SectionLoading label="Loading pipelines and outcomes" /></div>}
+        {loadError ? <Callout tone="error" title={loadError} /> : <div className={cardSurface}><SectionLoading label="Loading pipelines and outcomes" /></div>}
       </SettingsStack>
     );
   }
@@ -417,6 +418,7 @@ export function PipelinesOutcomesSettings() {
             {dirty ? <span className="size-2 rounded-full bg-[var(--warning)]" aria-hidden="true" /> : <span className="grid size-4 place-items-center rounded-full bg-[var(--primary)] text-[var(--on-primary)]"><Check className="size-3" aria-hidden="true" /></span>}
             {dirty ? `${ops.length} unsaved change${ops.length === 1 ? "" : "s"}` : savedNote ? "Saved" : "All saved"}
           </span>
+          <LeaveGuard dirty={dirty} onDiscard={() => { setDraft(clone(loaded.doc)); setPicked(null); setSaveError(null); }} what="the pipelines and outcomes" />
           <Button type="button" variant="outline" onClick={() => { setDraft(clone(loaded.doc)); setPicked(null); setSaveError(null); }} disabled={!dirty || saving}>Discard</Button>
           <Button type="button" onClick={() => void save()} disabled={!dirty || saving || problems.length > 0} title={dirty ? "Saving updates the lead workspace and the dialer right away" : "Changes wait here until you save them"}>{saving ? "Saving…" : "Save changes"}</Button>
         </span>
@@ -425,7 +427,7 @@ export function PipelinesOutcomesSettings() {
       {problems.length > 0 && dirty && <Callout tone="warning" title={problems[0]} />}
       {saveError && <Callout tone="error" title={saveError} />}
 
-      <div className={cn(CARD, "px-4 pt-3 pb-3.5")}>
+      <div className={cn(cardSurface, "px-4 pt-3 pb-3.5")}>
         <div className="mb-2.5 grid grid-cols-[minmax(0,300px)_1fr_minmax(0,300px)] items-center border-b border-[var(--border)] pb-2">
           <span data-guide="pipeline-outcomes" className={KICKER}>Outcomes · {draft.outcomes.filter((o) => o.active).length}<Hint id="hint-outcomes" label="About outcomes" text="What an agent can pick after a call." /></span>
           {/* The map's title sits in the middle, between the two columns it joins (owner, 2026-10-27). */}
@@ -459,7 +461,7 @@ export function PipelinesOutcomesSettings() {
                     draggable
                     onDragStart={startDrag("outcome", outcome.key)}
                     aria-pressed={on}
-                    className={cn("flex h-[46px] cursor-grab items-center gap-2.5 rounded-[12px] border-[1.5px] px-2.5 text-left text-sm font-semibold text-[var(--ink)]", on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_40%,transparent)] hover:border-[var(--border-strong)]", !outcome.active && "opacity-50")}
+                    className={cn("flex h-[46px] cursor-grab items-center gap-2.5 rounded-[12px] border-[1.5px] px-2.5 text-left text-sm font-semibold text-[var(--ink)]", on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] m-glass-inset hover:border-[var(--border-strong)]", !outcome.active && "opacity-50")}
                   >
                     <span className={cn("grid size-[30px] shrink-0 place-items-center rounded-[9px]", on && "bg-[var(--primary)] text-[var(--on-primary)]")} style={on ? undefined : tint(lineColor(outcome.key), reachedSomeone(outcome.next) ? 20 : 12)} title={on ? undefined : "Coloured by where it sends the lead"}><Icon className="size-4" aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1 truncate">{outcome.label || "New outcome"}</span>
@@ -502,7 +504,7 @@ export function PipelinesOutcomesSettings() {
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (pickedOutcome) route(pickedOutcome.key, stage.id); else setPicked({ kind: "stage", id: stage.id }); } }}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={onDrop(stage.id)}
-                    className={cn("box-border flex h-[52px] cursor-grab touch-pan-y items-center gap-2 rounded-[12px] border-[1.5px] border-l-4 py-0 pr-2.5 pl-1.5 select-none active:cursor-grabbing", on || target ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_40%,transparent)] hover:border-[var(--border-strong)]")}
+                    className={cn("box-border flex h-[52px] cursor-grab touch-pan-y items-center gap-2 rounded-[12px] border-[1.5px] border-l-4 py-0 pr-2.5 pl-1.5 select-none active:cursor-grabbing", on || target ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] m-glass-inset hover:border-[var(--border-strong)]")}
                     style={{ borderLeftColor: KIND_COLOR[stage.stage_type] }}
                   >
                     <StageFace stage={stage} count={count} />
@@ -523,7 +525,7 @@ export function PipelinesOutcomesSettings() {
                 onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && pickedOutcome) { event.preventDefault(); route(pickedOutcome.key, null); } }}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={onDrop(null)}
-                className={cn("box-border flex h-[52px] cursor-pointer items-center gap-2 rounded-[12px] border-[1.5px] border-l-4 px-3", pickedOutcome && dest.get(pickedOutcome.key)?.dest.kind === "stays" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_40%,transparent)]")}
+                className={cn("box-border flex h-[52px] cursor-pointer items-center gap-2 rounded-[12px] border-[1.5px] border-l-4 px-3", pickedOutcome && dest.get(pickedOutcome.key)?.dest.kind === "stays" ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] m-glass-inset")}
                 style={{ borderLeftColor: STAY_COLOR }}
               >
                 <span className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-[var(--ink)]">Stays where it is</strong><span className="text-xs text-[var(--muted)]">the lead does not move</span></span>
@@ -535,7 +537,7 @@ export function PipelinesOutcomesSettings() {
       </div>
 
       {(pickedOutcome || pickedStage || picked?.kind === "pipeline") && (
-      <div ref={editorRef} className={cn(CARD, "flex min-h-[300px] scroll-mt-4 scroll-mb-4 flex-col gap-3 border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] px-4 py-4")}>
+      <div ref={editorRef} className={cn(cardSurface, "flex min-h-[300px] scroll-mt-4 scroll-mb-4 flex-col gap-3 border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] px-4 py-4")}>
         {pickedOutcome ? (
           <OutcomeEditor
             key={pickedOutcome.key}

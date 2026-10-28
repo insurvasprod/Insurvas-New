@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
  * lets the palette shift every chip in one place, and it stops a table inventing a seventh shade of
  * amber.
  *
- * `info` is its own teal, not the action colour and not grey: "verifying", "in review" and
+ * `info` is its own blue (UI-CONSISTENCY §12), not the action colour and not grey: "verifying", "in review" and
  * "scheduled" were all being told in the same grey as "nothing is happening", and a column of
  * ORANGE chips would put the loudest thing in the product on rows nobody needs to act on.
  *
@@ -21,6 +21,9 @@ import type { ReactNode } from "react";
  * UX-5 (2026-10-03): the one chip. The settings `Pill` is a thin alias over this, and `Badge` is
  * being retired call site by call site (lib/design/uiConsistency.test.mjs counts both down). Text is
  * 12px, the smallest size the type scale allows; it was 11px.
+ *
+ * Foundation v3 (2026-10-27): the badge shape, 22px tall with 6px corners and 12/500 type (§5a), not a
+ * pill. A chip someone can select or remove is `ToggleChip` (components/ui/toggle-chip.tsx).
  */
 export type StatusTone = "neutral" | "good" | "info" | "warning" | "danger" | "action";
 
@@ -55,7 +58,7 @@ export function StatusChip({
   return (
     <span
       title={title}
-      className={`inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs leading-[1.5] font-semibold tracking-[-0.01em] ${TONE[tone].chip}${className ? ` ${className}` : ""}`}
+      className={`inline-flex h-[22px] w-fit items-center gap-1.5 whitespace-nowrap rounded-badge px-2 text-xs leading-none font-medium tracking-[-0.01em] ${TONE[tone].chip}${className ? ` ${className}` : ""}`}
     >
       {showDot && (
         <span className={`size-1.5 shrink-0 rounded-full ${TONE[tone].dot}`} aria-hidden="true" />

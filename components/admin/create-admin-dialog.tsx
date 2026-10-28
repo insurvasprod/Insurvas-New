@@ -15,14 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ADMIN_ROLES, ADMIN_ROLE_LABELS, type AdminRole } from "@/lib/adminAuth/roles";
+import { inputControl } from "@/components/ui/field";
 
 const EMPTY_FORM = { email: "", name: "", role: "support_agent" as AdminRole, password: "" };
 
@@ -109,18 +103,13 @@ export function CreateAdminDialog({ onCreated }: { onCreated?: () => void }) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-role">Role</Label>
-              <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as AdminRole }))}>
-                <SelectTrigger id="new-role" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
+              <select id="new-role" className={inputControl} value={form.role} onChange={(event) => { const v = event.target.value; setForm((f) => ({ ...f, role: v as AdminRole })); }}>
                   {ADMIN_ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
+                    <option key={r} value={r}>
                       {ADMIN_ROLE_LABELS[r]}
-                    </SelectItem>
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-password">Temporary password</Label>

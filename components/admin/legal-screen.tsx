@@ -13,13 +13,14 @@ import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { btn } from "@/components/app/settings/primitives";
 import { LEGAL_DOC_LABELS, type LegalDocType } from "@/lib/legal/constants";
 import { LEGAL_MIN_CONTENT_LENGTH, legalDay, nextLegalVersion, type AdminLegalVersion, type LegalDraft } from "@/lib/legal/adminTypes";
 import { CARD_TITLE, DRAFT_KEY, type EditorState, type Lookup, type Stat, VISIBLE_VERSIONS, fromDraft, plural, post, sameEditor } from "@/components/admin/legal/model";
 import { DocSwitch, HistoryTable, VersionRow, VersionView } from "@/components/admin/legal/versions";
 import { DraftSummaryCard, DraftTextCard, LookupCard } from "@/components/admin/legal/draft-cards";
 import { ClearDialog, PublishDialog } from "@/components/admin/legal/dialogs";
+import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 type Props = {
   canPublish: boolean;
@@ -140,7 +141,7 @@ export function LegalScreen({
       setEditors((prev) => ({ ...prev, [doc]: undefined }));
       return;
     }
-    if (!window.confirm(`Discard the draft of version ${nextVersion}? Its text is deleted; nothing published changes.`)) return;
+    if (!(await confirmAction({ title: `Discard the draft of version ${nextVersion}?`, description: "Its text is deleted; nothing published changes.", confirmLabel: "Discard draft", cancelLabel: "Keep draft" }))) return;
     setBusy("discard");
     const result = await post({ action: "discard_draft", docType: doc, expectedUpdatedAt: draft.updated_at });
     setBusy(null);
@@ -286,9 +287,9 @@ export function LegalScreen({
 
               {docVersions.length > VISIBLE_VERSIONS && (
                 <div className="px-4 py-2.5">
-                  <button type="button" onClick={() => setShowAll((v) => !v)} className={btn("row", "px-0 text-[var(--accent-ink)]")}>
+                  <Button type="button" onClick={() => setShowAll((v) => !v)} variant="ghost" size="sm" className="px-0 text-[var(--accent-ink)]">
                     {showAll ? "Show fewer versions" : `Show all ${docVersions.length} versions`}
-                  </button>
+                  </Button>
                 </div>
               )}
 

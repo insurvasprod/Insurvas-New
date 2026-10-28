@@ -13,6 +13,7 @@
  */
 
 import { StatusChip } from "@/components/ui/status-chip";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -280,6 +281,8 @@ export function SalesDisclosures() {
     return (
       <SettingsStack>
         <SalesPanelTop sample={sample} />
+        {/* A click away from an unsaved document asks first, like Back does (foundation v3). */}
+        <LeaveGuard dirty={dirty && !readOnly} onDiscard={revert} what={open?.title || "this document"} />
         <BackButton onClick={leave}>All documents</BackButton>
         {saveError && <Callout tone="error" title={saveError} />}
         {!canEdit && <ReadOnlyNotice what="disclosures" />}
