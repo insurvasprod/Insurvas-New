@@ -267,7 +267,7 @@ export function BillingSettings() {
       {tab === "overview" && (
         // Two rows that both end level (owner, 2026-10-29: no empty space beside a short column): the
         // plan beside the charge and the last invoice, then usage across the whole width.
-        <div className="grid items-stretch gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid items-stretch gap-3.5 @3xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-w-0 flex-col gap-3.5 [&>section]:flex-1">
             {sub && view.plan ? (
               <Card>
@@ -321,7 +321,7 @@ export function BillingSettings() {
 
             <Card
               id="billing-limits"
-              className="lg:col-span-2"
+              className="@3xl:col-span-2"
               title={view.limits.length ? `Usage · ${warned.length ? `${warned.length} limit${warned.length === 1 ? "" : "s"} close to full` : "all limits comfortable"}` : "Usage"}
               hint={`Warnings come at ${view.warnPercent}% and ${Math.round(USAGE_CRITICAL_FRACTION * 100)}%, with the plan change one click away. Metered limits reset each billing period.`}
             >
@@ -468,8 +468,8 @@ export function BillingSettings() {
 
       {tab === "invoices" && (
         // Side by side, like Overview: the invoice list beside the one payment method (2026-10-29).
-        <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <Card id="billing-invoices" title="Invoices" className="lg:order-1">
+        <div className="grid items-start gap-3.5 @3xl:grid-cols-[minmax(0,1fr)_320px]">
+          <Card id="billing-invoices" title="Invoices" className="@3xl:order-1">
             {view.invoices.length ? (
               <ul className="m-0 flex list-none flex-col p-0">
                 {view.invoices.map((inv) => (
@@ -490,7 +490,7 @@ export function BillingSettings() {
               </ul>
             ) : <p className="m-0 text-sm text-[var(--muted)]">No invoices yet.</p>}
           </Card>
-          <Card id="billing-card" title="Payment method" className="lg:order-2">{paymentMethod}</Card>
+          <Card id="billing-card" title="Payment method" className="@3xl:order-2">{paymentMethod}</Card>
         </div>
       )}
     </SettingsStack>

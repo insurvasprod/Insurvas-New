@@ -31,19 +31,23 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MoreHorizontal, Plus } from "lucide-react";
 
-import { Callout, SettingsSectionHeader, SettingsStack, control } from "@/components/app/settings/primitives";
+import { Callout, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { HoverHint } from "@/components/ui/hover-hint";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SectionLoading } from "@/components/ui/page-states";
-import { StatusChip } from "@/components/ui/status-chip";
 import { CarrierCard, ProgressLine, carrierProgress } from "@/components/app/settings/carrier-card";
 import { CarrierFieldMaps } from "@/components/app/settings/carrier-field-maps";
+import { ContractingDetail, type DetailTarget } from "@/components/app/settings/contracting-detail";
 import { ContractingSetup, setupProgress } from "@/components/app/settings/contracting-setup";
+import { Pager } from "@/components/ui/pager";
+import { ToolbarSearch } from "@/components/ui/data-toolbar";
+import { SelectMenu } from "@/components/ui/select-menu";
+import { NoMatches } from "@/components/ui/page-states";
+import { parseLookup, statesStartingWith } from "@/lib/appointments/contractingLookup";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { CheckCircle2, CircleDashed, Clock, SlidersHorizontal } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { parseSettingsHash } from "@/lib/settings/registry";
 import { cn } from "@/lib/utils";
@@ -52,8 +56,7 @@ import type { AppointmentRow, LicenseRow } from "@/lib/appointments/service-type
 import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
 import type { TenantCarrierRow } from "@/lib/carriers/service";
 import {
-  applyAppointmentChanges, appointedStatesFor, appointmentChange, bpToLevel, carriersIn, coverage, currentAppointment, forServer, pendingStatesFor, statesFor, todayIso,
-  type AppointmentChange,
+  appointedStatesFor, bpToLevel, carriersIn, pendingStatesFor, todayIso,
 } from "@/lib/appointments/tickModel";
 import type { CarriersPayload } from "@/lib/salesSettings/views";
 
@@ -67,9 +70,7 @@ type Vault = {
 };
 type Sales = (Omit<CarriersPayload, "canEdit"> & { canEdit: boolean }) | null;
 type Step = "setup" | "carriers" | "states" | "maps";
-type Filter = "all" | "yes" | "no";
 
-const STATE_NAME = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
 /** Each carrier's dot, by its place in your list. Tokens only. */
 const DOTS = ["bg-[var(--primary)]", "bg-[var(--info)]", "bg-[var(--warning)]", "bg-[var(--error)]", "bg-[var(--accent-ink)]", "bg-[var(--muted)]"];
 /** A quiet scrollbar for the long lists (owner, 2026-10-26: not the browser's white one). */
@@ -78,29 +79,16 @@ const SCROLL =
 /** The two panes fill the screen on desktop; on a phone they stack and the list scrolls in place. */
 // Each pane is only as tall as what is in it, up to the screen's height, where it scrolls
 // (owner, 2026-10-29: no empty card when a list is short).
-const PANES = "grid items-start gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-250px)] lg:grid-cols-[360px_minmax(0,1fr)] lg:[&>*]:max-h-full";
+const PANES = "grid items-start gap-4 @3xl:h-[calc(100dvh-var(--top-bar-h)-250px)] @3xl:grid-cols-[300px_minmax(0,1fr)] @5xl:grid-cols-[360px_minmax(0,1fr)] [&>*]:max-h-[26rem] @3xl:[&>*]:max-h-full";
 /** The kit's glass card (UI-CONSISTENCY §5b), not a local copy of it. */
 const PANE = cardSurface;
-const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
-const CHIP = (on: boolean) =>
-  cn("inline-flex h-8 items-center gap-2 whitespace-nowrap rounded-full border px-3 text-xs font-semibold tracking-[-0.01em] transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-    on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border-strong)] bg-transparent text-[var(--body)] hover:border-[var(--accent-ink)]");
-const tickBox = (state: "all" | "some" | "none") =>
-  cn("inline-grid size-5 shrink-0 place-items-center rounded-[6px] border-[1.5px] text-xs font-bold leading-none",
-    state === "all" ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : state === "some" ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border-strong)] bg-transparent text-transparent");
-
+/** A card that opens the side panel: it lifts its border on hover; the open one keeps a ring. */
+const CLICKABLE = "cursor-pointer transition-colors hover:border-[color-mix(in_srgb,var(--primary)_45%,var(--border))]";
+const OPEN = "border-[var(--primary)] ring-1 ring-[var(--primary)]";
 async function send(url: string, method: string, body?: unknown): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await response.json().catch(() => null);
   return response.ok ? { ok: true, data } : { ok: false, error: (data as { error?: string } | null)?.error ?? "That could not be saved" };
-}
-
-function Label({ id, text, hint }: { id: string; text: string; hint: string }) {
-  return <span className="flex items-center gap-0.5">{text}<HoverHint id={id} label={`What ${text.toLowerCase()} needs`}>{hint}</HoverHint></span>;
-}
-
-function Kicker({ id, text, hint }: { id: string; text: string; hint?: string }) {
-  return <span className={KICKER}>{text}{hint && <HoverHint id={id} label={`About ${text.toLowerCase()}`}>{hint}</HoverHint>}</span>;
 }
 
 // Owner, 2026-10-28: no Carrier rules tab here ("we don't need them"). The page itself stays for the money screens that link to it.
@@ -108,20 +96,34 @@ export function CarriersSettings() {
   const [vault, setVault] = useState<Vault | null>(null);
   const [sales, setSales] = useState<Sales>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Set up first until it is complete; decided once, when the data first arrives.
-  const [step, setStep] = useState<Step>("carriers");
-  const decided = useRef(false);
+  // Set Up opens first, every time (owner, 29 Oct: people had to press a button for it each time);
+  // a link to Carriers, States or Field maps opens that tab instead (the hash effect below).
+  const [step, setStep] = useState<Step>("setup");
   // The states Set up ticked since the last sync of licences.
   const touched = useRef(new Set<string>());
-  // The States tab's background saves: how many edits so far, the queue, and how many are waiting.
-  const edits = useRef(0);
-  const saveQueue = useRef<Promise<void>>(Promise.resolve());
-  const pendingSaves = useRef(0);
   const [carrierId, setCarrierId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
+  // The carrier open in the Edit dialog (Carriers is a read-only grid; editing opens on demand).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // The side panel a Carriers or States card opens; the last entry is on screen, the ones before are Back.
+  const [trail, setTrail] = useState<DetailTarget[]>([]);
+  // One search for both tabs (owner, 29 Oct: "a search bar … to check if they have something or not"):
+  // a carrier, a state, or both ("aetna tx"). Each tab has its own quick filter.
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [busy, setBusy] = useState(false);
+  // Set Up's search sits in the same bar; it searches carriers on step 1 and states on step 2, and
+  // starts empty on each step.
+  const [setupSearch, setSetupSearch] = useState("");
+  const [setupStep, setSetupStep] = useState<1 | 2>(1);
+  // Set Up's two step bars are drawn here, above the tab bar (owner, 29 Oct).
+  const [stepsSlot, setStepsSlot] = useState<HTMLDivElement | null>(null);
+  const onSetupStep = useCallback((next: 1 | 2) => { setSetupStep(next); setSetupSearch(""); }, []);
+  const [carrierFilter, setCarrierFilter] = useState<"all" | "ready" | "setup" | "off">("all");
+  // States opens on all 51 (owner, 29 Oct: "it should show all the states … to check if I have any
+  // carrier or not there"); a state with none says so on its card.
+  const [stateFilter, setStateFilter] = useState<"with" | "none" | "all">("all");
+  // The States filter's second question: which carrier ("where am I missing Aetna?").
+  const [stateCarrier, setStateCarrier] = useState<string>("any");
+  const openDetail = (next: DetailTarget) => setTrail((current) => [...current, next]);
+  const detail = trail.at(-1) ?? null;
   const today = todayIso();
 
   // The two panes fill exactly what is left of the screen, so the page itself does not scroll
@@ -130,7 +132,8 @@ export function CarriersSettings() {
   const [paneHeight, setPaneHeight] = useState<number | null>(null);
   const fit = useCallback(() => {
     const element = panes.current;
-    if (!element || window.innerWidth < 1024) { setPaneHeight(null); return; }
+    // Only while the two panes sit side by side (48rem of content); stacked, each is as tall as it is.
+    if (!element || (element.parentElement?.clientWidth ?? 0) < 768) { setPaneHeight(null); return; }
     // From the panes' own top to the bottom of the window, less the page's 32px bottom padding (lg:p-8).
     // Not from the document height, which other columns (the settings rail) can stretch.
     const top = element.getBoundingClientRect().top + window.scrollY;
@@ -157,13 +160,6 @@ export function CarriersSettings() {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the section's external data, loaded once
   useEffect(() => { void loadVault(); void loadSales(); }, [loadVault, loadSales]);
   const loaded = vault !== null;
-  useEffect(() => {
-    if (!vault || decided.current) return;
-    decided.current = true;
-    const { anchor } = parseSettingsHash(window.location.hash);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the opening view, chosen once from the first data
-    if (!anchor && !setupProgress(vault, today).complete) setStep("setup");
-  }, [vault, today]);
   useEffect(() => {
     if (!loaded) return;
     // Whatever sits above the panes (the header, the rail's badges) settles after this mounts, so
@@ -203,7 +199,6 @@ export function CarriersSettings() {
   }, [vault]);
   const dotOf = (id: string) => DOTS[Math.max(0, yours.findIndex((carrier) => carrier.id === id)) % DOTS.length];
   const salesOf = (id: string) => sales?.carriers.find((row) => row.id === id) ?? null;
-  const licences = useMemo(() => new Map((vault?.licenses ?? []).map((row) => [row.state, row])), [vault]);
 
   if (!vault) {
     return (
@@ -217,9 +212,8 @@ export function CarriersSettings() {
   const appointedStates = new Set(vault.appointments.filter((row) => carriersIn([row], row.state, today).length).map((row) => row.state));
   // Ready means appointed (active), not applied for: pending is shown but never counts (eligibility.ts).
   const progressOf = (carrierId: string) => carrierProgress(vault.tenantCarriers.find((row) => row.carrier_id === carrierId && row.is_active) ?? null, salesOf(carrierId), sales !== null, appointedStatesFor(vault.appointments, carrierId, today), pendingStatesFor(vault.appointments, carrierId, today));
-  const readyCount = yours.filter((carrier) => progressOf(carrier.id).ready).length;
   const current = yours.find((carrier) => carrier.id === carrierId) ?? yours[0] ?? null;
-  const pickedStates = selected.length ? selected : [];
+  const editing = editingId ? yours.find((carrier) => carrier.id === editingId) ?? null : null;
 
   /**
    * One click (owner, 2026-10-28: "if it means I am clicking it and also clicking the carrier I am
@@ -250,37 +244,6 @@ export function CarriersSettings() {
     await loadVault(isStale);
   }
 
-  // A tick shows at once; its save joins one queue, in order, and the screen never waits on it.
-  function saveInBackground(changes: AppointmentChange[], states: string[]) {
-    if (!changes.length) return;
-    edits.current += 1;
-    setVault((current) => (current ? { ...current, appointments: applyAppointmentChanges(current.appointments, changes, today) } : current));
-    states.forEach((code) => touched.current.add(code));
-    setBusy(true);
-    pendingSaves.current += 1;
-    saveQueue.current = saveQueue.current.then(async () => {
-      const result = await send("/api/app/appointment-vault/appointments", "POST", { appointments: forServer(changes) });
-      if (!result.ok) { notify.block(result.error); await loadVault(); }
-    }).finally(() => {
-      pendingSaves.current -= 1;
-      if (pendingSaves.current === 0) {
-        const at = edits.current;
-        void afterSetupSaves(() => edits.current !== at).finally(() => { if (pendingSaves.current === 0) setBusy(false); });
-      }
-    });
-  }
-
-  function tick(carrier: string, on: boolean) {
-    if (!vault) return;
-    const states = [...pickedStates];
-    saveInBackground(states.flatMap((state) => appointmentChange(vault.appointments, carrier, state, on, today)), states);
-  }
-
-  function tickAll(on: boolean) {
-    if (!vault) return;
-    const states = [...pickedStates];
-    saveInBackground(yours.flatMap((carrier) => states.flatMap((state) => appointmentChange(vault.appointments, carrier.id, state, on, today))), states);
-  }
 
   // Saves run in a queue; once it is empty the lists are read again, and the licences follow the
   // states that were ticked (one sync for the batch, not one per click). A read that newer ticks
@@ -292,32 +255,71 @@ export function CarriersSettings() {
     await loadSales();
   }
 
-  const needle = query.trim().toLowerCase();
-  const matchState = (code: string, name: string) => !needle || code.toLowerCase() === needle || name.toLowerCase().startsWith(needle) || name.toLowerCase().includes(` ${needle}`);
-  const keepState = (code: string) => filter === "all" || (filter === "yes") === appointedStates.has(code);
-  const states = US_STATES.filter(([code, name]) => matchState(code, name) && keepState(code));
   const nAppointed = appointedStates.size;
   const setup = setupProgress(vault, today);
   const setupDone = setup.complete;
-  const total = US_STATES.length;
 
-  const filters = (yes: string, no: string, nYes: number) => (
-    <div className="flex flex-wrap gap-1.5">
-      {([["all", `All ${total}`], ["yes", `${yes} · ${nYes}`], ["no", `${no} · ${total - nYes}`]] as const).map(([key, text]) => (
-        <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={filter === key} className={CHIP(filter === key)}>{text}</button>
-      ))}
+  /* ── find: the search and the quick filters ──────────────────────────────────────────────── */
+  const lookup = parseLookup(query, yours);
+  const isOff = (id: string) => Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === id && row.contracted === false));
+  const statusOf = (id: string): "ready" | "setup" | "off" => (isOff(id) ? "off" : progressOf(id).ready ? "ready" : "setup");
+  const inState = (code: string) => carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id));
+  const carrierCounts = { all: yours.length, ready: 0, setup: 0, off: 0 };
+  for (const carrier of yours) carrierCounts[statusOf(carrier.id)] += 1;
+  const carriersShown = lookup.nothing ? [] : yours
+    .filter((carrier) => carrierFilter === "all" || statusOf(carrier.id) === carrierFilter)
+    .filter((carrier) => !lookup.carrierIds || lookup.carrierIds.includes(carrier.id))
+    .filter((carrier) => !lookup.state || inState(lookup.state.code).includes(carrier.id));
+  const allStates = US_STATES.map(([code, name]) => ({ code: code as string, name, ids: inState(code) }));
+  // "With" and "No" read against the chosen carrier when there is one, else against any carrier.
+  const covered = (row: { ids: string[] }) => (stateCarrier === "any" ? row.ids.length > 0 : row.ids.includes(stateCarrier));
+  // A searched state or carrier shows whatever matches, whichever quick filter is on: a search for
+  // Texas shows Texas even when it has no carrier yet.
+  const partialStates = lookup.nothing ? statesStartingWith(query) : [];
+  const statesShown = lookup.state ? allStates.filter((row) => row.code === lookup.state?.code)
+    : lookup.nothing ? allStates.filter((row) => partialStates.includes(row.code))
+    : lookup.carrierIds ? allStates.filter((row) => row.ids.some((id) => lookup.carrierIds?.includes(id)))
+    : allStates.filter((row) => (stateFilter === "all" ? true : stateFilter === "with" ? covered(row) : !covered(row)));
+  const searched = query.trim().length > 0;
+  const clearFind = () => { setQuery(""); setCarrierFilter("all"); setStateFilter("all"); setStateCarrier("any"); };
+  const carrierFiltered = carrierFilter !== "all";
+  const stateFiltered = stateFilter !== "all" || stateCarrier !== "any";
+  // "aetna tx": one carrier and one state is a question, answered in one line above the cards.
+  const asked = lookup.state && lookup.carrierIds?.length === 1 ? { state: lookup.state, carrier: yours.find((carrier) => carrier.id === lookup.carrierIds?.[0]) ?? null } : null;
+  const answer = asked?.carrier ? (() => {
+    const { state, carrier } = asked;
+    if (!carrier) return null;
+    const granted = appointedStatesFor(vault.appointments, carrier.id, today).includes(state.code);
+    const pending = !granted && pendingStatesFor(vault.appointments, carrier.id, today).includes(state.code);
+    const tone = granted ? "border-[var(--success)] bg-[var(--success-surface)] text-[var(--success-ink)]" : pending ? "border-[var(--info)] bg-[var(--info-surface)] text-[var(--info-ink)]" : "border-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]";
+    const Icon = granted ? CheckCircle2 : pending ? Clock : CircleDashed;
+    return (
+      <div role="status" className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-l-[3px] px-4 py-2.5", tone)}>
+        <Icon aria-hidden="true" className="size-4 shrink-0" />
+        <p className="m-0 min-w-0 flex-1 text-sm font-semibold">
+          {granted ? `Yes, ${carrier.name} is appointed in ${state.name}.` : pending ? `${carrier.name} is applied for in ${state.name}, not granted yet.` : `No, ${carrier.name} is not appointed in ${state.name}.`}
+        </p>
+        <span className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setTrail([{ kind: "state", id: state.code }])}>Open {state.name}</Button>
+          {!granted && !pending && <Button type="button" size="sm" onClick={() => pickStep("setup")}>Add in Set Up</Button>}
+        </span>
+      </div>
+    );
+  })() : null;
+  const noMatch = (noun: string) => (
+    <div className={cn(PANE, "flex flex-col items-center")}>
+      <NoMatches noun={noun} by={carrierFiltered || stateFiltered ? "filters" : "search"} onClear={clearFind} />
     </div>
   );
-  const search = (placeholder: string) => (
-    <input className={cn(control, "mt-0")} aria-label={placeholder} placeholder={placeholder} value={query} onChange={(event) => setQuery(event.target.value)} />
-  );
+
   const listCard = (children: ReactNode) => <div className={cn(PANE, "flex min-h-0 flex-col gap-2.5 p-3.5")}>{children}</div>;
   const listBody = (children: ReactNode) => <div className={cn(SCROLL, "-mx-1.5 max-h-[420px] min-h-0 flex-1 px-1.5 lg:max-h-none")}>{children}</div>;
 
-  const openStep = (next: Step) => { setStep(next); setQuery(""); setFilter("all"); };
+  const openStep = (next: Step) => { setStep(next); };
   // A tab the person picks is written to the address too, so the Get set up bar (which reads the
   // hash) knows the States half is open (owner, 2026-10-28). Same anchors as the deep links above.
   const pickStep = (next: Step) => {
+    setTrail([]);
     openStep(next);
     const hash = next === "states" ? "#carriers/carriers-states" : next === "maps" ? "#carriers/carriers-maps" : next === "setup" ? "#carriers/carriers-setup" : "#carriers";
     if (window.location.hash !== hash) window.location.hash = hash;
@@ -331,35 +333,80 @@ export function CarriersSettings() {
       {(["setup", "states", "maps"] as const).map((target) => (
         <button key={target} id={`carriers-${target}`} type="button" tabIndex={-1} aria-hidden="true" className="sr-only" onClick={() => openStep(target)} onFocus={() => openStep(target)} />
       ))}
-      <ViewTabs
-        label="Contracting"
-        value={step}
-        onChange={pickStep}
-        tabs={[
-          { key: "setup", label: setupDone ? "Set up" : `Set up · ${setup.percent}%` },
-          { key: "carriers", label: "Carriers", count: yours.length },
-          { key: "states", label: "States", count: nAppointed },
-          // Field maps (browser extension, postponed): opened from More, shown as a tab only while open.
-          ...(step === "maps" ? [{ key: "maps" as const, label: "Field maps" }] : []),
-        ]}
-        actions={
-          <span className="flex items-center gap-2">
-            <Button type="button" variant={step === "setup" ? "secondary" : "default"} data-guide="carrier-library-add" onClick={() => pickStep("setup")}><Plus aria-hidden="true" />Add carriers</Button>
-            {sales !== null && yours.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" size="icon" aria-label="More contracting settings"><MoreHorizontal aria-hidden="true" /></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => pickStep("maps")}>Field maps (browser extension)</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </span>
-        }
-      />
+      {/* Manager review 29 Oct (10:02–11:10): once set up, the wizard goes and Carriers and States are
+          read-only overviews, changed on the Set Up tab, which is always there (owner, 29 Oct). No Add Carriers, no ⋯:
+          a person only ticks the carriers that are there, and Field maps (postponed) has its link. */}
+      {step === "setup" && <div ref={setStepsSlot} />}
+      {/* The tabs, the search and the filter in one bar, the same card as the pager at the foot of
+          the list (owner, 29 Oct), so the list sits between two matching bars. */}
+      <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5">
+        <ViewTabs
+          label="Contracting"
+          value={step}
+          onChange={pickStep}
+          tabs={[
+            // Always a tab, never hidden behind a button once set-up is done.
+            { key: "setup" as const, label: setupDone ? "Set Up" : `Set Up · ${setup.percent}%` },
+            { key: "carriers" as const, label: "Carriers", count: yours.length },
+            { key: "states" as const, label: "States", count: nAppointed },
+            ...(step === "maps" ? [{ key: "maps" as const, label: "Field maps" }] : []),
+          ]}
+          actions={step === "setup" ? (
+            <ToolbarSearch value={setupSearch} onChange={setSetupSearch} placeholder={setupStep === 1 ? "Search carriers" : "Search states"} className="sm:w-60" />
+          ) : step === "carriers" || step === "states" ? (
+            // On the tabs' own line: search first, then the quick filter (UI-CONSISTENCY §6).
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ToolbarSearch value={query} onChange={setQuery} placeholder={step === "carriers" ? "Search carriers" : "Search states"} label="Search carriers and states, or both (like “aetna tx”)" className="sm:w-52" />
+              {/* One dropdown per tab (owner, 29 Oct: "filters as a drop down", with a search at the top):
+                  the kit's SelectMenu, so the toolbar fits beside the tabs even with the menu open. */}
+              {step === "carriers" ? (
+                <SelectMenu
+                  label="Show carriers"
+                  value={carrierFilter}
+                  defaultValue="all"
+                  onChange={setCarrierFilter}
+                  icon={<SlidersHorizontal className="size-4" />}
+                  searchPlaceholder="Search filters"
+                  className="w-48"
+                  options={[
+                    { value: "all", label: "All Carriers", count: carrierCounts.all, group: "Status" },
+                    { value: "ready", label: "Ready to Sell", count: carrierCounts.ready, dot: "bg-[var(--success)]", group: "Status", disabled: carrierCounts.ready === 0 },
+                    { value: "setup", label: "Needs Setup", count: carrierCounts.setup, dot: "bg-[var(--warning)]", group: "Status", disabled: carrierCounts.setup === 0 },
+                    { value: "off", label: "Switched Off", count: carrierCounts.off, dot: "bg-[var(--muted)]", group: "Status", disabled: carrierCounts.off === 0 },
+                  ]}
+                />
+              ) : (
+                <SelectMenu
+                  label="Show states"
+                  value={stateCarrier === "any" ? stateFilter : `${stateFilter === "none" ? "without" : "with"}:${stateCarrier}`}
+                  defaultValue="all"
+                  onChange={(next: string) => {
+                    const [kind, id] = next.split(":");
+                    if (id) { setStateCarrier(id); setStateFilter(kind === "without" ? "none" : "with"); }
+                    else { setStateCarrier("any"); setStateFilter(kind as typeof stateFilter); }
+                  }}
+                  icon={<SlidersHorizontal className="size-4" />}
+                  searchPlaceholder="Search filters or carriers"
+                  className="w-52"
+                  options={[
+                    { value: "all", label: "All States", count: US_STATES.length, group: "States" },
+                    { value: "with", label: "With Carriers", count: allStates.filter((row) => row.ids.length > 0).length, group: "States" },
+                    { value: "none", label: "No Carriers Yet", count: allStates.filter((row) => row.ids.length === 0).length, group: "States" },
+                    // Where a carrier is, and where it is missing ("where am I missing Aetna?").
+                    ...yours.map((carrier) => ({ value: `with:${carrier.id}`, label: carrier.name, triggerLabel: `With ${carrier.name}`, dot: dotOf(carrier.id), group: "Has This Carrier", count: allStates.filter((row) => row.ids.includes(carrier.id)).length })),
+                    ...yours.map((carrier) => ({ value: `without:${carrier.id}`, label: carrier.name, triggerLabel: `Without ${carrier.name}`, dot: dotOf(carrier.id), group: "Missing This Carrier", count: allStates.filter((row) => !row.ids.includes(carrier.id)).length })),
+                  ]}
+                />
+              )}
+            </div>
+          ) : undefined}
+        />
+      </div>
+      {(step === "carriers" || step === "states") && answer}
 
       {step === "setup" && (
+        // The Get set up guide outlines the set-up itself (it outlined the old "Change" button).
+        <div data-guide="carrier-library-add" className="min-w-0">
         <ContractingSetup
           vault={vault}
           setVault={(update) => setVault((current) => (current ? { ...current, ...update(current) } : current))}
@@ -367,57 +414,91 @@ export function CarriersSettings() {
           send={send}
           reload={afterSetupSaves}
           onStatesSaved={async (codes) => { for (const code of codes) touched.current.add(code); }}
+          search={setupSearch}
+          stepsSlot={stepsSlot}
+          onStepChange={onSetupStep}
           onFinish={() => {
             notify.done("Contracting is set up", { detail: "Change a carrier or a state any time on Carriers and States." });
             pickStep("carriers");
           }}
         />
+        </div>
       )}
 
       {step === "carriers" && (
-        <div ref={panes} className={PANES} style={paneHeight ? { height: paneHeight } : undefined}>
-          {listCard(<>
-            <span className="flex items-center justify-between gap-2"><Kicker id="hint-your-carriers" text="Your carriers" hint="The carriers you hold a contract with. Click one to finish its setup or change it." />{yours.length > 1 && <span className="text-xs text-[var(--muted)]">{readyCount} ready · {yours.length - readyCount} to finish</span>}</span>
-            <input className={cn(control, "mt-0")} aria-label="Find a carrier" placeholder="Find a carrier" value={query} onChange={(event) => setQuery(event.target.value)} />
-            {listBody(yours.length === 0
-              ? <p className="m-0 px-2 py-3 text-sm text-[var(--muted)]">No carriers yet. Add the first one you write with.</p>
-              : yours.filter((carrier) => !needle || carrier.name.toLowerCase().includes(needle)).map((carrier) => {
-                const contract = vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active);
-                const on = current?.id === carrier.id;
-                const off = vault.carrierRequirements?.some((row) => row.carrier_id === carrier.id && row.contracted === false);
-                return (
-                  <button key={carrier.id} type="button" onClick={() => setCarrierId(carrier.id)} aria-pressed={on} className={cn("flex w-full items-center gap-2.5 rounded-[10px] px-2 py-2.5 text-left hover:bg-[var(--surface-alt)]", on && "bg-[var(--primary-soft)] hover:bg-[var(--primary-soft)]")}>
-                    <span className={cn("size-2.5 shrink-0 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className={cn("block truncate text-sm font-semibold text-[var(--ink)]", off && "text-[var(--muted)]")}>{carrier.name}</span>
-                      <span className="mt-0.5 block"><ProgressLine progress={progressOf(carrier.id)} switchedOff={Boolean(off)} /></span>
-                    </span>
-                    {contract && <span className="text-xs font-semibold text-[var(--muted)]">{bpToLevel(contract.contract_level_bp)}%</span>}
-                  </button>
-                );
-              }))}
-          </>)}
-          {current ? (
+        yours.length === 0 ? (
+          <div className={cn(PANE, "flex flex-col items-center gap-3 p-8 text-center")}>
+            <p className="m-0 text-sm font-semibold text-[var(--ink)]">No carriers yet</p>
+            <p className="m-0 text-sm text-[var(--muted)]">Tick the carriers you are contracted with, then the states you sell in.</p>
+            <Button type="button" onClick={() => pickStep("setup")}>Start set-up</Button>
+          </div>
+        ) : (
+          carriersShown.length === 0 ? noMatch("carriers") : (
+          <FittedGrid
+            key={`${query}|${carrierFilter}`}
+            items={carriersShown}
+            noun="carriers"
+            rowHeight={144}
+            className="grid-cols-1 @2xl:grid-cols-2 @5xl:grid-cols-3"
+            keyOf={(carrier) => carrier.id}
+            render={(carrier) => {
+              const contract = vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active) ?? null;
+              const off = Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === carrier.id && row.contracted === false));
+              const appointed = appointedStatesFor(vault.appointments, carrier.id, today);
+              return (
+                <div className={cn(PANE, CLICKABLE, "relative flex h-full flex-col gap-3 overflow-hidden p-4", off && "opacity-70", detail?.kind === "carrier" && detail.id === carrier.id && OPEN)}>
+                  <div className="flex items-start justify-between gap-2">
+                    {/* The whole card opens the carrier's states: this button stretches over it (Edit sits above). */}
+                    <button type="button" onClick={() => setTrail([{ kind: "carrier", id: carrier.id }])} aria-label={`${carrier.name}: see its states`} className="flex min-w-0 items-center gap-2 text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-[var(--primary)]">
+                      <span className={cn("size-2.5 shrink-0 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
+                      <span className="truncate text-sm font-semibold text-[var(--ink)]" title={carrier.name}>{carrier.name}</span>
+                    </button>
+                    <ProgressLine progress={progressOf(carrier.id)} switchedOff={off} />
+                  </div>
+                  <dl className="m-0 grid grid-cols-3 gap-2 text-xs">
+                    <div><dt className="text-[var(--muted)]">Level</dt><dd className="m-0 font-semibold tabular-nums text-[var(--ink)]">{contract ? `${bpToLevel(contract.contract_level_bp)}%` : "—"}</dd></div>
+                    <div className="min-w-0"><dt className="text-[var(--muted)]">Writing number</dt><dd className="m-0 truncate font-mono text-[var(--ink)]">{contract?.writing_number || "—"}</dd></div>
+                    <div><dt className="text-[var(--muted)]">States</dt><dd className="m-0 font-semibold tabular-nums text-[var(--ink)]">{appointed.length}</dd></div>
+                  </dl>
+                  {/* Any number of states fits one line: the first few, then "+N" (all of them on hover). */}
+                  <div className="mt-auto flex items-center justify-between gap-3">
+                    {/* A searched state leads the line, so "is it there?" is read at once. */}
+                    <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>
+                      {lookup.state && <span className="mr-2 font-sans font-semibold text-[var(--accent-ink)]">{appointed.includes(lookup.state.code) ? `✓ ${lookup.state.code}` : `${lookup.state.code} applied for`}</span>}
+                      {appointed.length ? firstFew(appointed, 6, " · ") : "No states yet"}
+                    </p>
+                    <Button type="button" variant="outline" size="sm" className="relative z-10 shrink-0" onClick={() => setEditingId(carrier.id)}>Edit</Button>
+                  </div>
+                </div>
+              );
+            }}
+          />
+          )
+        )
+      )}
+      {editing && (
+        <Dialog open onOpenChange={(open) => { if (!open) setEditingId(null); }}>
+          <DialogContent size={"lg"} className="max-h-[90vh] overflow-y-auto p-0">
+            <DialogTitle className="sr-only">{editing.name}</DialogTitle>
             <CarrierCard
-              key={current.id}
-              className={cn(PANE, SCROLL)}
-              carrier={current}
-              dot={dotOf(current.id)}
-              contract={vault.tenantCarriers.find((row) => row.carrier_id === current.id && row.is_active) ?? null}
-              switchedOff={Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === current.id && row.contracted === false))}
-              states={appointedStatesFor(vault.appointments, current.id, today)}
-              pendingStates={pendingStatesFor(vault.appointments, current.id, today)}
-              sales={salesOf(current.id)}
+              key={editing.id}
+              // The header row leaves room for the dialog's X, which sat on the status chip.
+              className="p-5 [&>*:first-child]:pr-9"
+              carrier={editing}
+              dot={dotOf(editing.id)}
+              contract={vault.tenantCarriers.find((row) => row.carrier_id === editing.id && row.is_active) ?? null}
+              switchedOff={Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === editing.id && row.contracted === false))}
+              states={appointedStatesFor(vault.appointments, editing.id, today)}
+              pendingStates={pendingStatesFor(vault.appointments, editing.id, today)}
+              sales={salesOf(editing.id)}
               salesAvailable={sales !== null}
               productLines={sales?.productLines ?? []}
               canEdit={sales?.canEdit ?? true}
-              onSetStates={() => pickStep("states")}
+              onSetStates={() => { setEditingId(null); pickStep("setup"); }}
               onSaved={async () => { await Promise.all([loadVault(), loadSales()]); }}
             />
-          ) : (
-            <div className={cn(PANE, "grid place-items-center p-6 text-sm text-[var(--muted)]")}>Add a carrier to set it up.</div>
-          )}
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {step === "maps" && sales !== null && (
@@ -440,102 +521,141 @@ export function CarriersSettings() {
         </div>
       )}
 
-      {step === "states" && (
-        <div ref={panes} className={PANES} style={paneHeight ? { height: paneHeight } : undefined}>
-          {listCard(<>
-            <Kicker id="hint-pick-state" text="Your states" hint="Tick every state you work in, then mark them all at once on the right. Or click one state to open just that one." />
-            {search("Find a state: Arkansas, AR…")}
-            {filters("Appointed", "Not yet", nAppointed)}
-            {/* Many states, many carriers in one go (owner, 2026-10-28): pick what the list shows, then tick the carriers. */}
-            <span className="flex items-center justify-between gap-2 px-1 text-xs text-[var(--muted)]">
-              <span className="tabular-nums">{selected.length ? `${selected.length} picked` : "Tick the states you sell in"}</span>
-              <span className="flex gap-3">
-                <button type="button" onClick={() => setSelected((picked) => [...new Set([...picked, ...states.map(([code]) => code as string)])])} className="font-semibold text-[var(--accent-ink)] hover:underline">Pick all shown</button>
-                {selected.length > 0 && <button type="button" onClick={() => setSelected([])} className="font-semibold text-[var(--accent-ink)] hover:underline">Clear</button>}
-              </span>
-            </span>
-            {listBody(states.map(([code, name]) => {
-              const on = selected.includes(code);
-              const here = carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id));
-              return (
-                <div key={code} className={cn("flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-[var(--surface-alt)]", on && "bg-[var(--primary-soft)] hover:bg-[var(--primary-soft)]")}>
-                  {/* One look for a picked state (owner, 2026-10-28, S1): the box shows it ticked whether one or several are picked. */}
-                  <button type="button" onClick={() => setSelected((picked) => (picked.includes(code) ? picked.filter((s) => s !== code) : [...picked, code]))} role="checkbox" aria-checked={on} aria-label={`Pick ${name}`} className={tickBox(on ? "all" : "none")}>✓</button>
-                  <button type="button" onClick={() => setSelected([code])} className="flex min-w-0 flex-1 items-center gap-2.5 py-0.5 text-left">
-                    <span className="w-7 text-sm font-semibold text-[var(--ink)]">{code}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm text-[var(--body)]">{name}</span>
-                    {licences.has(code) && <span className="text-xs text-[var(--muted)]">Licensed</span>}
-                    <span className="flex gap-1" aria-hidden="true">{here.map((id) => <span key={id} className={cn("size-2 rounded-full", dotOf(id))} />)}</span>
-                    {yours.length > 1 && here.length > 0 && <span className="min-w-10 text-right text-xs font-semibold text-[var(--accent-ink)]">{here.length} of {yours.length}</span>}
-                  </button>
-                </div>
-              );
-            }))}
-          </>)}
-          {/* One panel (S5): each carrier's state count sits beside its tick, not in a card of its own. */}
-          <div className={cn(PANE, SCROLL, "flex min-h-0 flex-col gap-3 p-5")}>
-            {pickedStates.length === 0 ? (
-              <p className="m-0 text-sm text-[var(--muted)]">Tick the states you work in on the left, or click one, then mark them here.</p>
-            ) : (<>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <h3 className="m-0 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]">{pickedStates.length === 1 ? STATE_NAME.get(pickedStates[0]) : `${pickedStates.length} states: ${pickedStates.join(", ")}`}</h3>
-                {/* S3: only worth showing with more than one carrier. */}
-                {yours.length > 1 && (
-                  <span className="flex gap-1.5">
-                    <button type="button" onClick={() => tickAll(true)} className={CHIP(false)}>All carriers</button>
-                    <button type="button" onClick={() => tickAll(false)} className={CHIP(false)}>None</button>
-                  </span>
-                )}
-              </div>
-
-              <Label id="hint-which-carriers" text="Which of your carriers can you sell here?" hint="Tick each carrier you are licensed and appointed with in this state. One tick covers both; quotes in a state you have not ticked are flagged." />
-              {yours.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">Add your carriers first, on the Your carriers tab.</p>}
-              {yours.map((carrier) => {
-                const state = coverage(vault.appointments, carrier.id, pickedStates, today);
-                const some = state === "some" ? pickedStates.filter((code) => currentAppointment(vault.appointments, carrier.id, code, today)).join(", ") : "";
-                const pending = pickedStates.length === 1 && currentAppointment(vault.appointments, carrier.id, pickedStates[0], today)?.status === "pending";
-                const total = statesFor(vault.appointments, carrier.id, today).length;
-                return (
-                  <button
-                    key={carrier.id}
-                    type="button"
-                    onClick={() => tick(carrier.id, state !== "all")}
-                    role="checkbox"
-                    aria-checked={state === "all" ? true : state === "some" ? "mixed" : false}
-                    className={cn("flex w-full items-center gap-3.5 rounded-[12px] border border-[var(--border)] p-3.5 text-left transition-colors", state !== "none" && "bg-[var(--primary-soft)]")}
-                  >
-                    <span className={tickBox(state)} aria-hidden="true">{state === "some" ? "–" : "✓"}</span>
-                    <span className={cn("size-2.5 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
-                    <span className="flex-1 text-sm font-semibold text-[var(--ink)]">{carrier.name}</span>
-                    {some && <span className="text-xs text-[var(--accent-ink)]">in {some} only</span>}
-                    {pending && <StatusChip tone="info">Pending</StatusChip>}
-                    <span className="text-xs tabular-nums text-[var(--muted)]">{total ? `${total} state${total === 1 ? "" : "s"} in all` : "no states yet"}</span>
-                  </button>
-                );
-              })}
-              <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
-                <span className="text-xs text-[var(--muted)]">{busy ? "Saving…" : "Saved as you tick"}</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    // An empty state: no licence and no carrier yet.
-                    const empty = (code: string) => !appointedStates.has(code) && !licences.has(code);
-                    const order = US_STATES.map(([code]) => code as string);
-                    const from = order.indexOf(pickedStates[pickedStates.length - 1]);
-                    const next = order.slice(from + 1).find(empty) ?? order.find(empty);
-                    if (next) setSelected([next]);
-                  }}
-                >
-                  Next empty state →
-                </Button>
-              </div>
-            </>)}
+      {step === "states" && (() => {
+        const held = statesShown;
+        return allStates.every((row) => row.ids.length === 0) && !searched && !stateFiltered ? (
+          <div className={cn(PANE, "flex flex-col items-center gap-3 p-8 text-center")}>
+            <p className="m-0 text-sm font-semibold text-[var(--ink)]">No states yet</p>
+            <p className="m-0 text-sm text-[var(--muted)]">Pick the states you sell in, in the set-up.</p>
+            <Button type="button" onClick={() => pickStep("setup")}>Open set-up</Button>
           </div>
+        ) : held.length === 0 ? noMatch("states") : (
+          <FittedGrid
+            key={`${query}|${stateFilter}|${stateCarrier}`}
+            items={held}
+            noun="states"
+            rowHeight={80}
+            className="grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4"
+            keyOf={(row) => row.code}
+            render={(row) => {
+              // A searched carrier comes first in its states' cards.
+              const ids = lookup.carrierIds ? [...row.ids].sort((a, b) => Number(lookup.carrierIds?.includes(b)) - Number(lookup.carrierIds?.includes(a))) : row.ids;
+              const names = ids.map((id) => yours.find((carrier) => carrier.id === id)?.name ?? "");
+              return (
+                <button type="button" onClick={() => setTrail([{ kind: "state", id: row.code }])} aria-label={`${row.name}: see its carriers`} className={cn(PANE, CLICKABLE, "flex h-full w-full flex-col justify-center gap-2 overflow-hidden px-4 text-left focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:outline-none", row.ids.length === 0 && "border-dashed bg-transparent", detail?.kind === "state" && detail.id === row.code && OPEN)}>
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]"><span className="mr-2 font-mono text-xs text-[var(--muted)]">{row.code}</span>{row.name}</span>
+                    <span className={cn("shrink-0 text-xs font-semibold tabular-nums", row.ids.length ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>{row.ids.length === yours.length ? "All carriers" : `${row.ids.length} of ${yours.length}`}</span>
+                  </span>
+                  {/* Any number of carriers fits one line: the first two, then "+N more" (all on hover). */}
+                  <span className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap" title={names.join(", ")}>
+                    {ids.length === 0 && <span className="text-xs text-[var(--muted)]">No carriers yet</span>}
+                    {ids.slice(0, 2).map((id, index) => (
+                      <span key={id} className="inline-flex min-w-0 items-center gap-1.5 text-xs text-[var(--body)]"><span className={cn("size-2 shrink-0 rounded-full", dotOf(id))} aria-hidden="true" /><span className="truncate">{names[index]}</span></span>
+                    ))}
+                    {row.ids.length > 2 && <span className="shrink-0 text-xs font-semibold text-[var(--muted)]">+{row.ids.length - 2} more</span>}
+                  </span>
+                </button>
+              );
+            }}
+          />
+        );
+      })()}
+
+      {detail && (step === "carriers" || step === "states") && (
+        <ContractingDetail
+          target={detail}
+          canGoBack={trail.length > 1}
+          onBack={() => setTrail((current) => current.slice(0, -1))}
+          onOpen={openDetail}
+          onClose={() => setTrail([])}
+          carriers={yours}
+          dotOf={dotOf}
+          levelOf={(id) => { const contract = vault.tenantCarriers.find((row) => row.carrier_id === id && row.is_active); return contract ? String(bpToLevel(contract.contract_level_bp)) : null; }}
+          writingNumberOf={(id) => vault.tenantCarriers.find((row) => row.carrier_id === id && row.is_active)?.writing_number || null}
+          progressOf={progressOf}
+          isOff={(id) => Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === id && row.contracted === false))}
+          appointedStatesOf={(id) => appointedStatesFor(vault.appointments, id, today)}
+          pendingStatesOf={(id) => pendingStatesFor(vault.appointments, id, today)}
+          carriersInState={(code) => carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id))}
+          onEditCarrier={setEditingId}
+          onChange={() => pickStep("setup")}
+        />
+      )}
+    </SettingsStack>
+  );
+}
+
+/** "AK · AL · AZ · GA +12": the first `count`, then how many more. */
+function firstFew(list: string[], count: number, joiner: string) {
+  return list.length > count ? `${list.slice(0, count).join(joiner)} +${list.length - count}` : list.join(joiner);
+}
+
+/**
+ * Same-height cards paged to fit the screen (owner, 29 Oct: "we don't want scrolling … what if there
+ * are a lot"). On a desktop, the rows that fit between the grid's top and the window's bottom, less
+ * the pager, make a page; the columns are the grid's own. A phone scrolls anyway, so it shows six rows.
+ */
+function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
+  items: T[];
+  noun: string;
+  rowHeight: number;
+  className: string;
+  keyOf: (item: T) => string;
+  render: (item: T) => ReactNode;
+}) {
+  const grid = useRef<HTMLUListElement | null>(null);
+  const pager = useRef<HTMLDivElement | null>(null);
+  const [perPage, setPerPage] = useState(12);
+  // The rows share whatever height is left over, so the pager sits on the window's bottom margin, in
+  // line with the settings menu, instead of leaving a strip of empty page under it (owner, 2026-10-29).
+  const [height, setHeight] = useState(rowHeight);
+  // Rows on a full page and the gap between them: a short last page keeps a full page's height, so the
+  // pager stays on the bottom margin on every page (owner, 29 Oct: "shown down always").
+  const [frame, setFrame] = useState<{ rows: number; gap: number } | null>(null);
+  // Measured again once the pager appears, so its real height is used.
+  const paged = items.length > perPage;
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    const element = grid.current;
+    if (!element) return;
+    const measure = () => {
+      const style = getComputedStyle(element);
+      const columns = Math.max(1, style.gridTemplateColumns.split(" ").filter(Boolean).length);
+      const gap = parseFloat(style.rowGap) || 0;
+      // 32px: the shell's bottom padding; then the pager bar (its own height once drawn) and the gap above it.
+      const desktop = window.innerWidth >= 1024;
+      const below = (pager.current?.offsetHeight ?? 50) + gap;
+      const room = desktop ? window.innerHeight - element.getBoundingClientRect().top - 32 - below : (rowHeight + gap) * 6;
+      const rows = Math.max(1, Math.floor((room + gap) / (rowHeight + gap)));
+      setPerPage(columns * rows);
+      setFrame(desktop ? { rows, gap } : null);
+      // Only when there is more than one page: a short list keeps its cards at their own height.
+      const filled = desktop && items.length > columns * rows ? Math.floor((room + gap) / rows - gap) : rowHeight;
+      setHeight(Math.max(rowHeight, filled));
+    };
+    const timer = window.setTimeout(measure, 0);
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (pager.current) observer.observe(pager.current);
+    // And every box above it: the settings frame scrolls inside itself, so when the toolbar or the
+    // header grows, the grid moves down without changing size (it ran 20px past the window).
+    for (let node = element.parentElement; node; node = node.parentElement) observer.observe(node);
+    window.addEventListener("resize", measure);
+    return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
+  }, [rowHeight, items.length, paged]);
+  const pages = Math.max(1, Math.ceil(items.length / perPage));
+  const shown = Math.min(page, pages);
+  return (
+    <div className="flex flex-col gap-3">
+      <ul ref={grid} className={cn("m-0 grid list-none content-start gap-3 p-0", className)} style={{ gridAutoRows: `${height}px`, minHeight: paged && frame ? frame.rows * height + (frame.rows - 1) * frame.gap : undefined }}>
+        {items.slice((shown - 1) * perPage, shown * perPage).map((item) => <li key={keyOf(item)} className="min-w-0">{render(item)}</li>)}
+      </ul>
+      {paged && (
+        <div ref={pager} className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--muted)]">
+          <Pager page={shown} total={items.length} noun={noun} pageSize={perPage} onPage={setPage} />
         </div>
       )}
-
-    </SettingsStack>
+    </div>
   );
 }

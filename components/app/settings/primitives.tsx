@@ -96,8 +96,12 @@ export function SettingsSectionHeader({ actions, trail }: {
     // long the purpose line runs, so the text takes what is left rather than pushing them under it.
     <div className="flex flex-wrap items-end justify-between gap-6 lg:flex-nowrap">
       <div className="min-w-0 flex-1">
-        <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{meta.title}</h2>
-        <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{meta.description}</p>
+        {/* The purpose line sits behind an (i), as in the framed header (owner, 29 Oct: remove it from
+            the page opened from Get set up too). */}
+        <h2 className="m-0 flex items-center gap-1.5 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
+          {meta.title}
+          {meta.description ? <InfoTip label={`About ${meta.title}`} side="bottom">{meta.description}</InfoTip> : null}
+        </h2>
         {meta.history && meta.id && <SectionLastChanged sectionKey={meta.id} />}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
@@ -140,7 +144,7 @@ export function SettingsStack({ children, className }: { children: ReactNode; cl
 
 /** Two columns, 24px apart, top-aligned — the boards' grid for paired cards. */
 export function SettingsGrid({ children, className, cols = 2 }: { children: ReactNode; className?: string; cols?: 2 | 3 | 4 }) {
-  const c = { 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "sm:grid-cols-2 lg:grid-cols-4" }[cols];
+  const c = { 2: "@3xl:grid-cols-2", 3: "@4xl:grid-cols-3", 4: "@lg:grid-cols-2 @4xl:grid-cols-4" }[cols];
   // Cards side by side end level (2026-10-29: no ragged gap under the shorter one).
   return <div className={cn("grid items-stretch gap-6", c, className)}>{children}</div>;
 }

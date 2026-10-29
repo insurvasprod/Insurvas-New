@@ -93,9 +93,9 @@ export function ProductsSettings() {
         {/* One grid of products, two across on a wide screen, so each switch sits beside its name and a
             one-product category never leaves half a row empty (2026-10-29). The category is in each
             row's caption. */}
-        <div id="products-list" className="grid lg:grid-cols-2">
+        <div id="products-list" className="grid @2xl:grid-cols-2">
           {groups.flatMap((group) => group.rows).map((row, index) => (
-                <div key={row.code} className={cn("flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-[var(--border)] px-4 py-3 lg:odd:border-r", index > 0 && "border-t", index === 1 && "lg:border-t-0")}>
+                <div key={row.code} className={cn("flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-[var(--border)] px-4 py-3 @2xl:odd:border-r", index > 0 && "border-t", index === 1 && "@2xl:border-t-0")}>
                   <div className={row.inPlan ? "min-w-0 flex-1" : "min-w-0 flex-1 opacity-60"}>
                     <div className="text-sm font-semibold text-[var(--ink)]">{row.name}</div>
                     <div className="text-xs text-[var(--muted)]">
