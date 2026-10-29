@@ -5,8 +5,6 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap, type SchemaGapNotice } from "@/lib/supabase/schemaGap";
 import { audit } from "@/lib/audit/log";
-import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
-import { CAMPAIGN_REFERENCES, VENDOR_REFERENCES, deleteBlocker, isForeignKeyRefusal, type GuardDb } from "@/lib/campaigns/deleteGuards";
 
 /**
  * LA-2.1 · Lead vendors, and the rollup that answers "is this vendor any good".
@@ -30,7 +28,6 @@ type Query = PromiseLike<Result<unknown>> & {
   single<T = unknown>(): Promise<Result<T>>;
 };
 type Db = { from(table: string): Query };
-type DeleteQuery = { delete(): { eq(column: string, value: unknown): { eq(column: string, value: unknown): { select(columns: string): PromiseLike<Result<unknown>> } } } };
 
 // Who to call at the vendor. Three named keys and nothing else: a free-form record let any key in,
 // and the roster can only show what it knows the meaning of. Blank strings are dropped, not stored.
@@ -88,10 +85,7 @@ function withoutUndefined<T extends Record<string, unknown>>(value: T) {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
-export async function GET(request: NextRequest) {
-  // `?deleteCheck=<vendor id>`: what deleting that vendor with its campaigns would take, read only.
-  const checkId = request.nextUrl.searchParams.get("deleteCheck");
-  if (checkId !== null) return deleteCheck(checkId);
+export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", roles);
   if (auth instanceof NextResponse) return auth;
   const db = getSupabaseServiceClient() as unknown as Db;
@@ -263,151 +257,4 @@ export async function PATCH(request: NextRequest) {
     metadata: { operation: "updated", changed: Object.keys(changes), ...(changes.status ? { status: changes.status } : {}) }, request,
   });
   return NextResponse.json({ vendor: data });
-}
-
-type CampaignRef = { id: string; name: string; status: string };
-type CampaignBlock = { id: string; name: string; reason: string };
-type VendorRow = { id: string; name: string; status: string };
-
-/** What holds the vendor apart from its campaigns, which the cascade checks one by one instead. */
-const VENDOR_OWN_REFERENCES = VENDOR_REFERENCES.filter((reference) => reference.table !== "tenant_campaigns");
-
-/** "It has leads — mark it exhausted instead." → "Apex FE Q3 List has leads — mark it exhausted or set the vendor to Inactive instead." */
-function blockText(name: string, reason: string) {
-  const named = reason.startsWith("It ") ? `${name} ${reason.slice(3)}` : `${name}: ${reason}`;
-  return named.replace("mark it exhausted instead", "mark it exhausted or set the vendor to Inactive instead");
-}
-
-/**
- * Delete a vendor with its campaigns (owner 2026-10-29, the two-step confirm): every one of the
- * vendor's campaigns is put through the empty-campaign guard, and the vendor through its own guard
- * apart from its campaigns, BEFORE anything is deleted. One blocked campaign refuses the whole delete.
- */
-async function cascadePlan(service: unknown, tenantId: string, vendorId: string) {
-  const list = await (service as Db).from("tenant_campaigns").select("id, name, status").eq("tenant_id", tenantId).eq("vendor_id", vendorId).order("name");
-  if (list.error) throw new Error(list.error.message);
-  const campaigns = (list.data as CampaignRef[] | null) ?? [];
-  const blocked: CampaignBlock[] = [];
-  for (const campaign of campaigns) {
-    const reason = await deleteBlocker(service as GuardDb, tenantId, campaign.id, CAMPAIGN_REFERENCES);
-    if (reason) blocked.push({ id: campaign.id, name: campaign.name, reason: blockText(campaign.name, reason) });
-  }
-  const vendorBlocker = await deleteBlocker(service as GuardDb, tenantId, vendorId, VENDOR_OWN_REFERENCES);
-  return { campaigns, blocked, vendorBlocker };
-}
-
-/** `GET ?deleteCheck=<id>`: the plan, read only, for the second warning. Gated like the delete. */
-async function deleteCheck(id: string) {
-  const auth = await requireFeatureRole("outbound_dialing", roles, { write: true, prefetchScope: true });
-  if (auth instanceof NextResponse) return auth;
-  const refused = await refuseNarrowInAgency(auth.context, "Vendors");
-  if (refused) return refused;
-  if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Choose a valid vendor" }, { status: 400 });
-  const tenantId = auth.context.tenantId;
-  const service: unknown = getSupabaseServiceClient();
-  try {
-    const current = await (service as Db).from("tenant_lead_vendors").select("id").eq("id", id).eq("tenant_id", tenantId).single<{ id: string }>();
-    if (current.error || !current.data) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
-    const plan = await cascadePlan(service, tenantId, id);
-    return NextResponse.json({
-      campaigns: plan.campaigns.map(({ id: campaignId, name }) => ({ id: campaignId, name })),
-      blocked: plan.blocked,
-      vendorBlocker: plan.vendorBlocker,
-    }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Could not check this vendor" }, { status: 500 });
-  }
-}
-
-/**
- * `withCampaigns: true`. Not one transaction (that would be an RPC, which is DDL): the plan checks
- * every campaign first and refuses with the blocking list; then each campaign is re-checked and
- * deleted one by one, stopping at the first refusal and reporting what was already deleted; the
- * vendor goes last, through its full guard, so a campaign added meanwhile still holds it.
- */
-async function deleteWithCampaigns(request: NextRequest, userId: string, tenantId: string, service: unknown, vendor: VendorRow) {
-  const plan = await cascadePlan(service, tenantId, vendor.id);
-  if (plan.blocked.length > 0)
-    return NextResponse.json({ error: `${vendor.name} cannot be deleted: ${plan.blocked.length === 1 ? "one of its campaigns has" : `${plan.blocked.length} of its campaigns have`} history.`, code: "campaigns_in_use", blocked: plan.blocked }, { status: 409 });
-  if (plan.vendorBlocker) return NextResponse.json({ error: plan.vendorBlocker, code: "vendor_in_use", blocked: [] }, { status: 409 });
-
-  const deleted: CampaignRef[] = [];
-  const stopped = (error: string, status = 409) => NextResponse.json({
-    error: deleted.length > 0 ? `${error} ${deleted.length} of its campaigns ${deleted.length === 1 ? "was" : "were"} deleted before it stopped.` : error,
-    code: "campaigns_in_use",
-    deletedCampaigns: deleted.map(({ id, name }) => ({ id, name })),
-  }, { status });
-  try {
-    for (const campaign of plan.campaigns) {
-      const reason = await deleteBlocker(service as GuardDb, tenantId, campaign.id, CAMPAIGN_REFERENCES);
-      if (reason) return stopped(blockText(campaign.name, reason));
-      const removed = await (service as { from(table: string): DeleteQuery }).from("tenant_campaigns").delete().eq("id", campaign.id).eq("tenant_id", tenantId).select("id");
-      if (isForeignKeyRefusal(removed.error)) return stopped(`Something now points at ${campaign.name} — mark it exhausted or set the vendor to Inactive instead.`);
-      if (removed.error) throw new Error(removed.error.message);
-      if (!Array.isArray(removed.data) || removed.data.length === 0) continue;
-      deleted.push(campaign);
-      await audit({
-        actorType: "tenant", actorId: userId, action: "tenant.campaign_deleted",
-        targetType: "tenant_campaigns", targetId: campaign.id,
-        metadata: { name: campaign.name, status: campaign.status, vendorId: vendor.id, withVendor: true }, request,
-      });
-    }
-
-    const blocker = await deleteBlocker(service as GuardDb, tenantId, vendor.id, VENDOR_REFERENCES);
-    if (blocker) return stopped(blocker);
-    const removed = await (service as { from(table: string): DeleteQuery }).from("tenant_lead_vendors").delete().eq("id", vendor.id).eq("tenant_id", tenantId).select("id");
-    if (isForeignKeyRefusal(removed.error)) return stopped("Something now points at this vendor — set it to Inactive instead.");
-    if (removed.error) throw new Error(removed.error.message);
-    if (!Array.isArray(removed.data) || removed.data.length === 0) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
-
-    await audit({
-      actorType: "tenant", actorId: userId, action: "tenant.lead_vendor_deleted",
-      targetType: "tenant_lead_vendor", targetId: vendor.id,
-      metadata: { name: vendor.name, status: vendor.status, campaignsDeleted: deleted.map(({ id, name }) => ({ id, name })) }, request,
-    });
-    return NextResponse.json({ deleted: vendor.id, deletedCampaigns: deleted.map(({ id, name }) => ({ id, name })) });
-  } catch {
-    return stopped("Could not delete this vendor.", 500);
-  }
-}
-
-/**
- * Lead sources clean-up (owner 2026-10-29): delete a vendor for good, only while it has no campaign
- * at all (any status) and nothing else points at it (lib/campaigns/deleteGuards.ts). Otherwise a 409
- * with the way out, which stays the Inactive status. With `withCampaigns: true` its campaigns go
- * first, only when every one of them is empty (deleteWithCampaigns above). Same gate as PATCH, plus
- * the agency-narrow refusal the campaign delete has; tenant-scoped; audited.
- */
-export async function DELETE(request: NextRequest) {
-  const auth = await requireFeatureRole("outbound_dialing", roles, { write: true, prefetchScope: true });
-  if (auth instanceof NextResponse) return auth;
-  const refused = await refuseNarrowInAgency(auth.context, "Vendors");
-  if (refused) return refused;
-  const parsed = z.object({ id: z.string().uuid(), withCampaigns: z.literal(true).optional() }).strict().safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Choose a valid vendor" }, { status: 400 });
-  const { id, withCampaigns } = parsed.data;
-  const tenantId = auth.context.tenantId;
-  const service: unknown = getSupabaseServiceClient();
-  try {
-    const current = await (service as Db).from("tenant_lead_vendors").select("id, name, status").eq("id", id).eq("tenant_id", tenantId).single<VendorRow>();
-    if (current.error || !current.data) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
-    if (withCampaigns) return await deleteWithCampaigns(request, auth.context.userId, tenantId, service, current.data);
-
-    const blocker = await deleteBlocker(service as GuardDb, tenantId, id, VENDOR_REFERENCES);
-    if (blocker) return NextResponse.json({ error: blocker, code: "vendor_in_use" }, { status: 409 });
-
-    const removed = await (service as { from(table: string): DeleteQuery }).from("tenant_lead_vendors").delete().eq("id", id).eq("tenant_id", tenantId).select("id");
-    if (isForeignKeyRefusal(removed.error)) return NextResponse.json({ error: "Something now points at this vendor — set it to Inactive instead.", code: "vendor_in_use" }, { status: 409 });
-    if (removed.error) throw new Error(removed.error.message);
-    if (!Array.isArray(removed.data) || removed.data.length === 0) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
-
-    await audit({
-      actorType: "tenant", actorId: auth.context.userId, action: "tenant.lead_vendor_deleted",
-      targetType: "tenant_lead_vendor", targetId: id,
-      metadata: { name: current.data.name, status: current.data.status }, request,
-    });
-    return NextResponse.json({ deleted: id });
-  } catch {
-    return NextResponse.json({ error: "Could not delete this vendor" }, { status: 500 });
-  }
 }

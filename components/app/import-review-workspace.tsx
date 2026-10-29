@@ -2,21 +2,17 @@
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Ban, Check, CopyCheck, CopyX, FileText, MapPinOff, Minus, ShieldBan, SkipForward, Trash2, UserCheck, UserPlus, type LucideIcon } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { Card, cardInset } from "@/components/ui/card";
 import { DetailPanel } from "@/components/ui/detail-panel";
-import { ToggleRow } from "@/components/ui/field";
 import { InfoTip } from "@/components/ui/info-tip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TableCard } from "@/components/ui/table-card";
-import { st } from "@/components/app/settings/primitives";
-import { LeadsInSlot } from "@/components/app/lead-sources/leads-in-slot";
-import { discardStagedFile } from "@/components/app/import-discard";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { KeyValues, st } from "@/components/app/settings/primitives";
+import { ImportStepper } from "@/components/app/import-stepper";
 import { normalizeImportState, parseCsv } from "@/lib/agentTemplates/csv";
 import {
   formatCents,
@@ -43,8 +39,6 @@ export type ReviewPlan = {
   dncBreakdown: DncBreakdown;
   /** The older bounded sample, shown only when `rows` is null. */
   samples: Record<Outcome, Row[]>;
-  /** The campaign the file was staged for, so "upload it again" can open Import on it. */
-  campaignId?: string | null;
   campaignName: string | null;
   campaignStatus: string | null;
   vendorName: string | null;
@@ -63,74 +57,35 @@ type Decision = "existing" | "infile" | "dnc" | null;
 /**
  * Module 2 §6 step ④–⑧ · the decision screen.
  *
- * Every check is one bucket of the file. The order is deliberate: what will land first, then who you
- * already have, then what cannot legally be dialled, then what was never a usable row. A bucket that
- * carries a choice is asked as one question (step 3 · Review, owner 2026-10-28: "it's not helping them
- * decide what is the next step"); the rest are what was taken out, or passed.
+ * Every check is one row of the validation table, and every row that carries a choice opens to
+ * show it. The order is deliberate: what will land first, then who you already have, then what
+ * cannot legally be dialled, then what was never a usable row.
  */
-const CHECKS: Array<{ bucket: ReviewBucket; outcome: Outcome; label: string; note: string; blurb: string; decision: Decision }> = [
-  { bucket: "ready", outcome: "ready", label: "Clean and new", note: "imported as new leads", decision: null, blurb: "Clean, scrubbed, and not already in your leads. These are imported." },
-  // "Already in your leads": whether two contacts are one person is step 4 · Clean's question, not this one.
-  { bucket: "duplicate_existing", outcome: "duplicate_existing", label: "Already in your leads", note: "same phone · second source", decision: "existing", blurb: "The number matches a lead you already have. Adding the campaign keeps one lead; anyone already worked is not put back in the dialer." },
-  { bucket: "duplicate_in_file", outcome: "duplicate_in_file", label: "Twice in this file", note: "first kept · repeats to vendor credit", decision: "infile", blurb: "The same number appears more than once. The first is imported; every repeat is left out and recorded against the campaign for a vendor credit — the vendor billed the same person twice." },
-  { bucket: "dnc_tenant", outcome: "dnc", label: "Your own Do Not Call", note: "never dialled", decision: "dnc", blurb: "The number is on your own do-not-call list." },
-  { bucket: "dnc_registry", outcome: "dnc", label: "Do Not Call registry", note: "federal or state list", decision: "dnc", blurb: "The number matched the do-not-call registry your scrub vendor checks." },
-  { bucket: "dnc", outcome: "dnc", label: "On a do-not-call list", note: "source not recorded", decision: "dnc", blurb: "Checked before the source of a do-not-call match was recorded: your own list or the registry." },
-  { bucket: "litigator", outcome: "litigator", label: "TCPA litigator", note: "never imported · vendor credit", decision: null, blurb: "Never importable and never dialable, under any setting. Recorded as evidence so you can claim the money back from the vendor." },
-  { bucket: "invalid_phone", outcome: "invalid_phone", label: "Bad phone", note: "nothing to dial", decision: null, blurb: "Nothing to dial, so these are left out. A number the scrub vendor reports as not real is recorded against the campaign for a vendor credit." },
-  { bucket: "unreadable", outcome: "unreadable", label: "Unreadable", note: "fix it in the file", decision: null, blurb: "These could not be read, so they cannot be imported. Fix them in the file and upload it again." },
+const CHECKS: Array<{ bucket: ReviewBucket; outcome: Outcome; label: string; blurb: string; decision: Decision }> = [
+  { bucket: "ready", outcome: "ready", label: "Clean and new", decision: null, blurb: "Clean, scrubbed, and not already in your leads. These are imported." },
+  { bucket: "duplicate_existing", outcome: "duplicate_existing", label: "Already one of your leads (same phone)", decision: "existing", blurb: "The number matches a lead you already have. Adding the campaign keeps one lead; anyone already worked is not put back in the dialer." },
+  { bucket: "duplicate_in_file", outcome: "duplicate_in_file", label: "Repeated inside this file", decision: "infile", blurb: "The same number appears more than once. The first is imported; every repeat is left out and recorded against the campaign for a vendor credit — the vendor billed the same person twice." },
+  { bucket: "dnc_tenant", outcome: "dnc", label: "On your suppression list", decision: "dnc", blurb: "The number is on your own do-not-call list." },
+  { bucket: "dnc_registry", outcome: "dnc", label: "DNC registry match", decision: "dnc", blurb: "The number matched the do-not-call registry your scrub vendor checks." },
+  { bucket: "dnc", outcome: "dnc", label: "On a do-not-call list", decision: "dnc", blurb: "Checked before the source of a do-not-call match was recorded: your own list or the registry." },
+  { bucket: "litigator", outcome: "litigator", label: "TCPA litigator", decision: null, blurb: "Never importable and never dialable, under any setting. Recorded as evidence so you can claim the money back from the vendor." },
+  { bucket: "invalid_phone", outcome: "invalid_phone", label: "Phone failed validation", decision: null, blurb: "Nothing to dial, so these are left out. A number the scrub vendor reports as not real is recorded against the campaign for a vendor credit." },
+  { bucket: "unreadable", outcome: "unreadable", label: "Unreadable", decision: null, blurb: "These could not be read, so they cannot be imported. Fix them in the file and upload it again." },
 ];
 
-/**
- * The questions, one per decision the import API takes (`decisions` on PUT …/preflight): a short title
- * and its two answers, each a label, one short line and an icon; the first answer is the default and is
- * marked Recommended. Nothing here the API lacks.
- */
-type Answer = { value: string; label: string; help: string; icon: LucideIcon };
-const QUESTIONS: Record<Exclude<Decision, null>, { title: string; note?: string; options: [Answer, Answer] }> = {
-  existing: {
-    title: "Already in your leads",
-    options: [
-      { value: "attach", icon: UserPlus, label: "Add the campaign to them", help: "History kept · nobody re-dialled" },
-      { value: "skip", icon: SkipForward, label: "Skip them", help: "Not imported · cost not attributed" },
-    ],
-  },
-  infile: {
-    title: "Twice in this file",
-    options: [
-      { value: "first", icon: CopyCheck, label: "Keep the first", help: "Repeats left out · vendor credit" },
-      { value: "skip", icon: CopyX, label: "Skip every repeat", help: "Same result, as an explicit choice" },
-    ],
-  },
-  // Said plainly, because the missing option is the one people look for.
-  dnc: {
-    title: "On a do-not-call list",
-    note: "There is no option to dial these.",
-    options: [
-      { value: "exclude", icon: Ban, label: "Leave them out", help: "Not imported · kept on the vendor credit" },
-      { value: "suppress", icon: ShieldBan, label: "Import and suppress", help: "Kept · on your do-not-call list for good" },
-    ],
-  },
-};
-const DECISION_ORDER = ["existing", "infile", "dnc"] as const;
-
 const LIST_PAGE = 10;
-
-/** Settings › Team & access, where the owner records each member's licensed states. */
-const LICENCES_HREF = "/app/settings#team-access";
 
 type ImportSummary = { imported: number; attachedToExisting: number; suppressed: number; rejectionsRecorded: number; servable: boolean; campaignStatus: string | null; spendAddedCents: number; certificatesFiled?: number; noState?: number; warning?: string | null };
 
 /** The server refused the commit (4xx/5xx with a reason), as opposed to the request never landing. */
 class ImportRefused extends Error {
-  constructor(message: string, readonly status: number, readonly code: string | null = null) { super(message); }
+  constructor(message: string, readonly status: number) { super(message); }
 }
 
 const money = (cents: number | null) => (cents === null ? "—" : formatCents(Math.round(cents)));
-const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 /** The parser's header normalization (lib/agentTemplates/csv.ts), so a mapped header is found again. */
-const normalizedHeader = (value: string) => value.replace(/^﻿/, "").trim().toLocaleLowerCase();
+const normalizedHeader = (value: string) => value.replace(/^\uFEFF/, "").trim().toLocaleLowerCase();
 
 export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: string }) {
   const router = useRouter();
@@ -139,7 +94,6 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   const [dnc, setDnc] = useState<"exclude" | "suppress">("exclude");
   const [addSpend, setAddSpend] = useState(true);
   const [committing, setCommitting] = useState(false);
-  const [discarding, setDiscarding] = useState(false);
   const [rowsFor, setRowsFor] = useState<(typeof CHECKS)[number] | "no-state" | null>(null);
   const [listing, setListing] = useState<Partial<Record<ReviewBucket, number>>>({});
   const [noStateShown, setNoStateShown] = useState(0);
@@ -153,7 +107,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
    *
    * Recomputed as the person changes their mind, because a number that moves when you pick an
    * option is the only way to understand what the option does. `reviewOutcome` adds up what is
-   * left out from the buckets themselves, so "every row accounted for" is a real check.
+   * left out from the buckets themselves, so the footer's "every row accounted for" is a check.
    */
   const outcome = useMemo(
     () => reviewOutcome(counts, plan.dncBreakdown, { duplicatesInFile, existingLeads, dnc }),
@@ -162,20 +116,14 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   const willImport = outcome.willImport;
   const accountedFor = outcome.fresh + outcome.added + outcome.leftOut === plan.totalRows;
 
-  // The funnel's boxes, each one a card below: people you already have (with the do-not-call ones
-  // among them once those are imported), then everything else the checks took out.
-  const attach = existingLeads === "attach";
-  const alreadyYours = counts.duplicate_existing + (dnc === "suppress" ? plan.dncBreakdown.existing : 0);
-  const alreadySkipped = attach ? 0 : alreadyYours;
-  const removedByChecks = outcome.leftOut - alreadySkipped;
-
-  // The four kinds of bucket, folded from the checks below, so the summary and the cards can never
-  // disagree.
+  // The artboard's four buckets, folded from the checks below, so the tiles and the table can
+  // never disagree.
   const accepted = counts.ready;
   const duplicates = counts.duplicate_existing + counts.duplicate_in_file;
   const suppressed = counts.dnc_tenant + counts.dnc_registry + counts.dnc + counts.litigator;
   const invalid = counts.invalid_phone + counts.unreadable;
   const fourSum = accepted + duplicates + suppressed + invalid;
+  const pct = (count: number) => (plan.totalRows > 0 ? `${((count / plan.totalRows) * 100).toFixed(1)}%` : undefined);
 
   const perAccepted = perUnitCents(plan.costCents, accepted);
   const perDialable = perUnitCents(plan.costCents, outcome.dialable);
@@ -211,7 +159,6 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
     return { rows, states };
   }, [territory, parsed, plan.stateHeader, plan.rows]);
   const offTerritoryCents = offTerritory && perDialable !== null ? perDialable * offTerritory.rows : null;
-  const outside = offTerritory && offTerritory.rows > 0 ? offTerritory : null;
 
   function openRows(check: (typeof CHECKS)[number]) {
     setRowsFor(check);
@@ -249,7 +196,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
       }),
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok) throw new ImportRefused(body?.error ?? "Could not import these leads", response.status, typeof body?.code === "string" ? body.code : null);
+    if (!response.ok) throw new ImportRefused(body?.error ?? "Could not import these leads", response.status);
     return { summary: body.summary as ImportSummary, redirect: body.redirect };
   }
 
@@ -280,37 +227,20 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
     try {
       // One toast for the whole commit (2026-10-28): a spinner while the rows are written, then the
       // counts or the refusal in the same place.
-      await notify.promise(send(), {
+      const { redirect } = await notify.promise(send(), {
         loading: `Importing ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}…`,
         done: ({ summary }) => outcomeOf(summary),
-        // A plan limit names its way out: Plan & billing.
-        fail: (error) => error instanceof ImportRefused && error.code === "limit_reached"
-          ? { title: error.message, treatment: "block", action: { label: "See plans", onClick: () => router.push("/app/settings#billing") } }
-          : error instanceof ImportRefused
+        fail: (error) => error instanceof ImportRefused
           ? { title: error.message, treatment: "block" }
           : { title: "The import could not be confirmed. You can retry safely.", treatment: "fail" },
       });
       try { sessionStorage.removeItem(`${IMPORT_CSV_KEY}:${plan.batchId}`); } catch { /* the tab keeps it until it closes */ }
-      // On to step 4 · Clean (owner 2026-10-28: continue in order), not the lead list the API names;
-      // Clean's empty state continues to Lists, where these leads are.
-      router.push("/app/duplicates");
+      router.push(typeof redirect === "string" ? redirect : "/app/leads");
     } catch (error) {
       // Already imported — elsewhere, or by a second press. The page shows that state.
       if (error instanceof ImportRefused && error.status === 409) router.refresh();
     } finally {
       setCommitting(false);
-    }
-  }
-
-  /** Clean-up (2026-10-29): drop the staged file without importing it, then back to Import. */
-  async function discard() {
-    setDiscarding(true);
-    try {
-      const result = await discardStagedFile(plan.batchId, plan.fileName);
-      if (result === "done") router.push("/app/import");
-      else if (result === "imported") router.refresh();
-    } finally {
-      setDiscarding(false);
     }
   }
 
@@ -363,252 +293,168 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   }
 
   /**
-   * A question's two answers, as radio cards: an icon, a short label and one short line. The default is
-   * drawn chosen from the start and marked Recommended, so nobody has to wonder what happens if they
-   * press Import untouched. Real radio inputs, so it reads and keys like a fieldset.
+   * A choice, inside the row it decides (2026-10-26, owner: "put it inside the line … less
+   * scrolling"): a two-option switch under the row's explanation, with one line saying what the
+   * chosen option does. Real radio inputs, so it reads and keys like the fieldset it replaced.
    */
   function choiceSwitch(decision: Exclude<Decision, null>) {
-    const { options } = QUESTIONS[decision];
+    const options = {
+      existing: [
+        { value: "attach", label: "Add the campaign", help: "One lead, with this vendor recorded too, so the cost is attributed. Nobody already worked goes back in the dialer." },
+        { value: "skip", label: "Skip them", help: "Ignore these rows. Their cost is not attributed anywhere." },
+      ],
+      infile: [
+        { value: "first", label: "Keep the first", help: "One lead per number; the repeats are dropped." },
+        { value: "skip", label: "Skip every repeat", help: "Same result for the repeats, as an explicit choice." },
+      ],
+      // Said plainly, because the missing option is the one people look for.
+      dnc: [
+        { value: "exclude", label: "Leave them out", help: "Not imported. They stay on the vendor credit claim. There is no option to dial these." },
+        { value: "suppress", label: "Import and suppress", help: "Keep the record and add the number to your do-not-call list for good. There is no option to dial these." },
+      ],
+    }[decision];
     const value = decision === "existing" ? existingLeads : decision === "infile" ? duplicatesInFile : dnc;
     const pick = (next: string) => {
       if (decision === "existing") setExistingLeads(next as typeof existingLeads);
       else if (decision === "infile") setDuplicatesInFile(next as typeof duplicatesInFile);
       else setDnc(next as typeof dnc);
     };
-    return <fieldset className="m-0 grid min-w-0 gap-2 border-0 p-0 sm:grid-cols-2">
+    const chosen = options.find((option) => option.value === value) ?? options[0];
+    return <fieldset className="m-0 mt-2 flex min-w-0 flex-col gap-1.5 border-0 p-0">
       <legend className="sr-only">What to do with these rows</legend>
-      {options.map((option, index) => {
-        const chosen = value === option.value;
-        const Icon = option.icon;
-        return <label key={option.value} className={cn(
-          "flex min-w-0 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--ring-color)]",
-          chosen ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
+      <span className="inline-flex w-fit rounded-full border border-[var(--border)] bg-[var(--surface-alt)] p-0.5">
+        {options.map((option) => <label key={option.value} className={cn(
+          "cursor-pointer rounded-full px-3 py-1 text-xs leading-[1.5] font-semibold whitespace-nowrap transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--ring-color)]",
+          value === option.value ? "bg-[var(--primary)] text-[var(--on-primary)]" : "text-[var(--muted)] hover:text-[var(--ink)]",
         )}>
-          <input type="radio" className="sr-only" name={`choice-${decision}`} value={option.value} checked={chosen} onChange={() => pick(option.value)} />
-          <span aria-hidden className={cn("flex size-8 shrink-0 items-center justify-center rounded-md", chosen ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>
-            <Icon className="size-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]">{option.label}</span>
-              {index === 0 && <StatusChip tone="action" dot={false}>Recommended</StatusChip>}
-            </span>
-            <span className="block text-xs leading-[1.5] text-[var(--body)]">{option.help}</span>
-          </span>
-          <span aria-hidden className={cn("size-3.5 shrink-0 rounded-full", chosen ? "border-[4px] border-[var(--primary)]" : "border-[1.5px] border-[var(--border-strong)]")} />
-        </label>;
-      })}
+          <input type="radio" className="sr-only" name={`choice-${decision}`} value={option.value} checked={value === option.value} onChange={() => pick(option.value)} />
+          {option.label}
+        </label>)}
+      </span>
+      <span className="text-xs leading-[1.5] text-[var(--body)]">{chosen.help}</span>
     </fieldset>;
   }
 
-  // Step 3 · Review of the Lead sources page (owner 2026-10-28, "it's not helping them decide what is
-  // the next step"; /ui-taste pass 2026-10-29): two columns. On the left the funnel, then one question
-  // card per decision the API takes, then the warnings, then what the checks took out; the summary
-  // and the money on the right, sticky. Back and Import in the frame's corner.
+  const description = [plan.fileName ?? "File name not recorded", plan.vendorName, plan.campaignName].filter(Boolean).join(" · ");
+  // 2026-10-26 redesign (canvas M2 · Vendors, "Import, steps 3–4"): the checks are a short list with
+  // their counts, each choice inside the row it decides; the cost and the one Import button sit in a
+  // column beside them; a check's rows open in a side panel instead of a wide table inside the list.
   const found = checks.filter((check) => (counts[check.bucket] ?? 0) > 0);
-  const none = checks.filter((check) => (counts[check.bucket] ?? 0) === 0 && check.bucket !== "ready");
-  const readyCheck = CHECKS[0];
-  // One card per decision: the do-not-call buckets share one, on the first of them found.
-  const questions = DECISION_ORDER
-    .map((decision) => ({ decision, checks: found.filter((check) => check.decision === decision) }))
-    .filter((question) => question.checks.length > 0);
-  const takenOut = found.filter((check) => check.bucket !== "ready" && check.decision === null);
+  const none = checks.filter((check) => (counts[check.bucket] ?? 0) === 0);
+  const card = "m-glass min-w-0 rounded-xl border border-border";
 
-  /** One question: its title and count, the rows on demand, and its two answers. */
-  function questionCard({ decision, checks: asked }: (typeof questions)[number]) {
-    const total = asked.reduce((sum, check) => sum + (counts[check.bucket] ?? 0), 0);
-    const only = asked.length === 1 ? asked[0] : null;
-    const { title, note } = QUESTIONS[decision];
-    return <Card key={decision} aria-labelledby={`question-${decision}`} className="min-w-0 gap-3 p-4">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h2 id={`question-${decision}`} className="m-0 text-card-title text-[var(--ink)]">{title}</h2>
-        <StatusChip tone="neutral" className="tabular-nums">{total.toLocaleString()}</StatusChip>
-        <span className="flex-1" />
-        {only && <Button type="button" size="sm" variant="ghost" onClick={() => openRows(only)}>View {plural(total, "row")}</Button>}
-      </div>
-      {/* Several buckets behind one question (your own list, the registry): each keeps its own rows. */}
-      {!only && <ul className="m-0 flex list-none flex-wrap gap-2 p-0">{asked.map((check) => {
-        const count = counts[check.bucket] ?? 0;
-        return <li key={check.bucket} className={cn(cardInset, "flex items-center gap-2 py-0.5 pr-0.5 pl-3")}>
-          <span className="text-xs leading-[1.5] text-[var(--body)]">{check.label}</span>
-          <strong className="text-sm font-semibold tabular-nums text-[var(--ink)]">{count.toLocaleString()}</strong>
-          <Button type="button" size="sm" variant="ghost" aria-label={`View ${plural(count, "row")}: ${check.label}`} onClick={() => openRows(check)}>View {plural(count, "row")}</Button>
-        </li>;
-      })}</ul>}
-      {choiceSwitch(decision)}
-      {note && <span className="flex items-center gap-1.5 text-xs leading-[1.5] text-[var(--body)]"><Ban aria-hidden className="size-3.5 shrink-0" />{note}</span>}
-    </Card>;
-  }
+  return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+    <PageHeader
+      title="Import a list"
+      description={description}
+      actions={<Button type="button" variant="outline" onClick={() => router.push("/app/import")}>Start over</Button>}
+    />
 
-  /** A check with no choice: its dot, name, short consequence and count; its rows on demand. */
-  function checkRow(check: (typeof CHECKS)[number]) {
-    const count = counts[check.bucket] ?? 0;
-    return <li key={check.bucket} className={cn(cardInset, "flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5")}>
-      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", CHECK_DOT[check.bucket])} />
-      <strong className="min-w-0 flex-1 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]">{check.label}</strong>
-      <span className="text-xs leading-[1.5] text-[var(--body)]">{check.note}</span>
-      <strong className="w-12 text-right text-sm font-semibold tabular-nums text-[var(--ink)]">{count.toLocaleString()}</strong>
-      <Button type="button" size="sm" variant="ghost" aria-label={`View ${plural(count, "row")}: ${check.label}`} onClick={() => openRows(check)}>View {plural(count, "row")}</Button>
-    </li>;
-  }
+    <ImportStepper current={committing ? 4 : 3} />
 
-  /** One box of the funnel: an icon, a label, the number, and anything said under it. */
-  function flowBox({ icon: Icon, label, value, op, opLabel, children, strong = false }: { icon: LucideIcon; label: string; value: number; op?: LucideIcon; opLabel?: string; children?: ReactNode; strong?: boolean }) {
-    const Op = op;
-    return <div key={label} className="flex min-w-0 items-center gap-2">
-      {Op && <><Op aria-hidden className="size-4 shrink-0 text-[var(--muted)]" /><span className="sr-only">{opLabel}</span></>}
-      <span className={cn("flex min-w-[132px] items-center gap-2.5 px-3 py-2", strong ? "rounded-lg border border-[var(--primary)] bg-[var(--primary-soft)]" : cardInset)}>
-        <span aria-hidden className={cn("flex size-8 shrink-0 items-center justify-center rounded-md", strong ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}><Icon className="size-4" /></span>
-        <span className="flex min-w-0 flex-col">
-          <span className="text-xs leading-[1.5] text-[var(--body)]">{label}</span>
-          <strong className="text-xl leading-tight font-semibold tabular-nums text-[var(--ink)]">{value.toLocaleString()}</strong>
-          {children}
-        </span>
-      </span>
-    </div>;
-  }
-
-  const willImportTitle = willImport === 0
-    ? "Nothing in this file will be imported with these choices."
-    : `Imports ${plural(willImport, "lead")}, then you check duplicates. Nothing has been written until you press this: all of it or none of it.`;
-
-  const line = "flex items-baseline justify-between gap-3 text-sm";
-  const lineLabel = "shrink-0 text-[var(--body)]";
-  const lineValue = "m-0 min-w-0 truncate text-right font-semibold tabular-nums text-[var(--ink)]";
-
-  return <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
-    {/* The one way on, in the frame's corner where every other step has "Continue to …". Back, beside
-        it, returns to Import: the same place "Start over" went, so there is one button for it. */}
-    <LeadsInSlot slot="continue">
-      <Button type="button" title={willImportTitle} disabled={committing || discarding || willImport === 0} onClick={() => void commit()}>
-        {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
-      </Button>
-    </LeadsInSlot>
+    <StatStrip label="Import totals">
+      <StatTile label="Rows" value={plan.totalRows.toLocaleString()} footnote={fourSum === plan.totalRows ? "every row counted below" : `${fourSum.toLocaleString()} counted below`} />
+      <StatTile label="Accepted" value={accepted.toLocaleString()} valueTone="good" footnote={pct(accepted)} reserveFootnote />
+      <StatTile label="Duplicates" value={duplicates.toLocaleString()} valueTone="warning" footnote={pct(duplicates)} reserveFootnote />
+      <StatTile label="Suppressed" value={suppressed.toLocaleString()} valueTone="info" footnote={pct(suppressed)} reserveFootnote />
+      <StatTile label="Invalid" value={invalid.toLocaleString()} valueTone="danger" footnote={pct(invalid)} reserveFootnote />
+      <StatTile label="Cost per accepted" value={plan.costCents === null ? "—" : money(perAccepted)} footnote={plan.costCents === null ? "no batch cost entered" : `${formatCents(plan.costCents)} batch`} />
+    </StatStrip>
 
     {fourSum !== plan.totalRows && <Alert tone="warning">
       The four counts add up to <span className="tabular-nums">{fourSum.toLocaleString()}</span>, not the file&rsquo;s <span className="tabular-nums">{plan.totalRows.toLocaleString()}</span> rows.
     </Alert>}
-    {/* Nothing to import with these answers: said where it is seen, with the way out beside it. */}
-    {willImport === 0 && <Alert tone="warning" action={<Button type="button" variant="outline" size="sm" disabled={committing || discarding} onClick={() => void discard()}><Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard this file"}</Button>}>
-      Nothing in this file will be imported{questions.length > 0 ? " with these answers" : ""}.
-    </Alert>}
-    {!accountedFor && <Alert tone="warning">
-      These choices account for <span className="tabular-nums">{(outcome.fresh + outcome.added + outcome.leftOut).toLocaleString()}</span> of the file&rsquo;s <span className="tabular-nums">{plan.totalRows.toLocaleString()}</span> rows.
+
+    {/* LA-2.4-8: flagged before the commit, not discovered on the lead list afterwards. */}
+    {noState.length > 0 && <Alert tone="warning" action={<Button type="button" variant="ghost" size="sm" onClick={() => openNoState()}>View rows</Button>}>
+      {noState.length.toLocaleString()} new {noState.length === 1 ? "lead has" : "leads have"} no state, so the dialer will not call {noState.length === 1 ? "it" : "them"} until one is added.
     </Alert>}
 
-    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-      <div className="flex min-w-0 flex-col gap-4">
-        {/* The funnel, left to right, each box one of the cards below: in the file − already yours −
-            removed by the checks → will be imported. It moves with the answers. */}
-        <Card aria-label="What will be imported" className="min-w-0 flex-row flex-wrap items-center gap-2 p-3">
-          {flowBox({ icon: FileText, label: "In the file", value: plan.totalRows })}
-          {alreadyYours > 0 && flowBox({
-            icon: UserCheck,
-            label: "Already yours",
-            value: alreadyYours,
-            op: attach ? ArrowRight : Minus,
-            opLabel: attach ? "then" : "minus",
-            children: <span className="text-xs leading-[1.5] text-[var(--body)]">{attach ? "added" : "skipped"}</span>,
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+      <section aria-labelledby="every-row" className={card}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3">
+          <h2 id="every-row" className="m-0 text-base font-semibold tracking-[-0.015em]">What we found</h2>
+          {accountedFor ? <StatusChip dot={false} tone="good">every row accounted for</StatusChip> : <StatusChip dot={false} tone="warning">rows do not add up</StatusChip>}
+        </div>
+        <ul className="m-0 list-none p-0">
+          {found.map((check) => {
+            const count = counts[check.bucket] ?? 0;
+            const share = plan.totalRows > 0 ? (count / plan.totalRows) * 100 : 0;
+            // One switch per decision: the do-not-call rows share one, on the first of them.
+            const decision = check.decision && found.find((item) => item.decision === check.decision) === check ? check.decision : null;
+            return <li key={check.bucket} className="flex flex-wrap items-start gap-x-4 gap-y-2 border-t border-[var(--border)] px-5 py-3.5">
+              <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", CHECK_DOT[check.bucket])} />
+              <span className="min-w-0 flex-1 basis-[240px]">
+                <strong className="block text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]">{check.label}</strong>
+                <span className="mt-0.5 block text-xs leading-[1.5] text-[var(--muted)]">{check.blurb}</span>
+                {decision && choiceSwitch(decision)}
+              </span>
+              <span className="w-14 text-right text-sm font-semibold tabular-nums text-[var(--ink)]">{count.toLocaleString()}</span>
+              <span className="hidden w-24 sm:block" aria-hidden>
+                <span className="block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={cn("block h-full rounded-full", CHECK_DOT[check.bucket])} style={{ width: `${Math.max(2, share)}%` }} /></span>
+              </span>
+              <Button type="button" size="sm" variant="outline" onClick={() => openRows(check)}>View rows</Button>
+            </li>;
           })}
-          {removedByChecks > 0 && flowBox({ icon: Ban, label: "Removed by checks", value: removedByChecks, op: Minus, opLabel: "minus" })}
-          {flowBox({
-            icon: Check,
-            label: "Will be imported",
-            value: willImport,
-            op: ArrowRight,
-            opLabel: "equals",
-            strong: true,
-            children: <>
-              {attach && alreadyYours > 0 && <span className="text-xs leading-[1.5] text-[var(--body)]">incl. {alreadyYours.toLocaleString()} already yours</span>}
-              {outside && <span className="flex items-center gap-1 text-xs leading-[1.5] text-[var(--warning-ink)]"><MapPinOff aria-hidden className="size-3.5 shrink-0" />{outside.rows.toLocaleString()} outside your states</span>}
-            </>,
-          })}
-          {accepted > 0 && <Button type="button" size="sm" variant="ghost" onClick={() => openRows(readyCheck)}>
-            {accepted === willImport ? `View ${plural(accepted, "row")} to import` : `View ${plural(accepted, "new row")}`}
-          </Button>}
-          {/* What the checks looked for and did not find, folded into one chip; and the sum, checked. */}
-          {none.length > 0 && <Popover>
-            <PopoverTrigger asChild>
-              <button type="button" className="ml-auto inline-flex items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <StatusChip tone="good" dot={false}><Check aria-hidden className="size-3.5" />{plural(none.length, "check")} passed</StatusChip>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64">
-              <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Checked, none found">
-                {none.map((check) => <li key={check.bucket} className="flex items-center gap-2 text-sm text-[var(--ink)]"><Check aria-hidden className="size-3.5 shrink-0 text-[var(--success-ink)]" />{check.label}</li>)}
-              </ul>
-              {accountedFor && <p className="m-0 mt-2.5 border-t border-[var(--border)] pt-2 text-xs leading-[1.5] text-[var(--body)] tabular-nums">
-                Every row accounted for: {plan.totalRows.toLocaleString()} = {willImport.toLocaleString()} imported + {outcome.leftOut.toLocaleString()} left out
-              </p>}
-            </PopoverContent>
-          </Popover>}
-        </Card>
+        </ul>
+        {none.length > 0 && <p className="m-0 border-t border-[var(--border)] px-5 py-3 text-xs leading-[1.5] text-[var(--muted)]">
+          Also checked, none found: {none.map((check) => check.label).join(" · ")}.
+        </p>}
+        <p className="m-0 border-t border-[var(--border-strong)] px-5 py-3 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">
+          {outcome.fresh.toLocaleString()} new · {outcome.added.toLocaleString()} added to existing · {outcome.leftOut.toLocaleString()} left out <span className="font-normal text-[var(--muted)]">of {plan.totalRows.toLocaleString()} rows</span>
+        </p>
+      </section>
 
-        {/* Needs you: one card per decision. */}
-        {questions.map(questionCard)}
+      <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)]">
+        <section aria-labelledby="cost-allocation" className={cn(card, "p-5")}>
+          <h2 id="cost-allocation" className="mb-3 text-base font-semibold tracking-[-0.015em]">Cost</h2>
+          <KeyValues items={[
+            { label: "Batch cost", value: plan.costCents === null ? "Not entered" : formatCents(plan.costCents) },
+            { label: "Accepted leads", value: accepted.toLocaleString() },
+            { label: "Cost per accepted", value: money(perAccepted) },
+            {
+              label: <>Effective per dialable<InfoTip className="ml-1" label="What effective per dialable means">
+                Batch cost ÷ rows that will be one of your leads and are not suppressed: new leads plus people you already have who get this campaign added. It moves with your choices.
+              </InfoTip></>,
+              value: money(perDialable),
+            },
+            ...(offTerritory
+              ? [{
+                  label: <>Outside your licensed states<InfoTip className="ml-1" label="What outside your licensed states means">
+                    New leads in this file whose state is not one your members are licensed in (Team &amp; access). They import, and nobody here can sell to them. Costed at the effective per dialable; a loss, not a vendor credit.
+                  </InfoTip></>,
+                  value: `${offTerritory.rows.toLocaleString()} ${offTerritory.rows === 1 ? "row" : "rows"}${offTerritoryCents !== null && offTerritory.rows > 0 ? ` · ${money(offTerritoryCents)}` : ""}`,
+                  tone: offTerritory.rows > 0 ? ("warning" as const) : undefined,
+                }]
+              : []),
+          ]} />
+          {offTerritory && offTerritory.rows > 0 && (
+            <p className="mt-3 text-xs leading-[1.5] text-[var(--warning-ink)]">
+              In {offTerritory.states.slice(0, 4).join(", ")}{offTerritory.states.length > 4 ? ` and ${offTerritory.states.length - 4} more` : ""}, outside your {plan.licensedStates?.length ?? 0} licensed states.
+            </p>
+          )}
+          <label htmlFor="add-spend" className={cn("mt-4 flex gap-2.5 border-t border-[var(--border)] pt-4", plan.costCents === null ? "cursor-not-allowed" : "cursor-pointer")}>
+            <input id="add-spend" type="checkbox" className="mt-1 size-4 shrink-0 accent-[var(--primary)]" checked={addSpend && plan.costCents !== null} disabled={plan.costCents === null} onChange={(event) => setAddSpend(event.target.checked)} />
+            <span className="min-w-0">
+              <strong className="block text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]">Add to {campaignLabel}’s spend</strong>
+              <span className="block text-xs leading-[1.5] text-[var(--muted)]">
+                {plan.costCents === null
+                  ? "No batch cost was entered on the upload step."
+                  : `Adds ${formatCents(plan.costCents)} and ${(plan.recordsPurchased ?? plan.totalRows).toLocaleString()} rows purchased to the campaign’s totals. Untick it if the campaign already includes this file’s cost.`}
+              </span>
+            </span>
+          </label>
+        </section>
 
-        {/* Warnings: imported, and not dialled or not sellable. */}
-        {/* New leads in states nobody here may sell in. They import (the API has no choice to leave them
-            out), so the row counts them and their cost and points at where licences are recorded. */}
-        {outside && <WarningRow
-          icon={MapPinOff}
-          action={<Button asChild type="button" variant="ghost" size="sm"><Link href={LICENCES_HREF}>Add a licence<ArrowRight aria-hidden /></Link></Button>}
-        >
-          <strong className="font-semibold">{plural(outside.rows, "new lead")} outside your licensed states</strong>
-          <span> · {outside.states.slice(0, 4).join(", ")}{outside.states.length > 4 ? ` and ${outside.states.length - 4} more` : ""}{offTerritoryCents !== null ? ` · ${money(offTerritoryCents)}` : ""} · imported anyway</span>
-        </WarningRow>}
-
-        {/* LA-2.4-8: flagged before the commit, not discovered on the lead list afterwards. */}
-        {noState.length > 0 && <WarningRow icon={MapPinOff} action={<Button type="button" variant="ghost" size="sm" onClick={() => openNoState()}>View {plural(noState.length, "row")}</Button>}>
-          {noState.length.toLocaleString()} new {noState.length === 1 ? "lead has" : "leads have"} no state, so the dialer will not call {noState.length === 1 ? "it" : "them"} until one is added.
-        </WarningRow>}
-
-        {/* What the checks took out with no choice to make. What they found nothing for is the chip above. */}
-        {takenOut.length > 0 && <Card aria-labelledby="taken-out" className="min-w-0 gap-2.5 p-4">
-          <h2 id="taken-out" className="m-0 text-card-title text-[var(--ink)]">Taken out before anyone dials</h2>
-          <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{takenOut.map(checkRow)}</ul>
-        </Card>}
+        <section aria-label="Import" className={cn(card, "flex flex-col gap-3 p-5")}>
+          <Button type="button" className="w-full" disabled={committing || willImport === 0} onClick={() => void commit()}>
+            {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
+          </Button>
+          <p className="m-0 text-center text-xs leading-[1.5] text-[var(--muted)]">
+            {willImport === 0 ? "Nothing in this file will be imported with these choices." : "Nothing has been written until you press this."}
+          </p>
+        </section>
       </div>
-
-      {/* The summary: where it goes, what it cost, and what it costs per lead with these answers. */}
-      <Card aria-label="Summary" className="min-w-0 gap-3 p-4 lg:sticky lg:top-0">
-        <dl className="m-0 flex flex-col gap-1.5">
-          <div className={line}><dt className={lineLabel}>Campaign</dt><dd className={lineValue} title={campaignLabel}>{campaignLabel}</dd></div>
-          {plan.vendorName && <div className={line}><dt className={lineLabel}>Vendor</dt><dd className={lineValue} title={plan.vendorName}>{plan.vendorName}</dd></div>}
-          <div className={line}><dt className={lineLabel}>File</dt><dd className={lineValue} title={plan.fileName ?? undefined}>{plan.fileName ?? "Not recorded"}</dd></div>
-        </dl>
-        <div className="border-t border-[var(--border)]" />
-        {plan.costCents === null
-          ? <div className={line}>
-              <span className={lineLabel}>Paid</span>
-              {/* The commit takes no cost; it is entered with the file on Import. */}
-              <Button asChild type="button" variant="ghost" size="sm"><Link href="/app/import">Enter what you paid<ArrowRight aria-hidden /></Link></Button>
-            </div>
-          : <>
-              <dl className="m-0 flex flex-col gap-1.5">
-                <div className={line}><dt className={lineLabel}>Paid</dt><dd className={lineValue}>{formatCents(plan.costCents)}</dd></div>
-                {perAccepted !== null && <div className={line}><dt className={lineLabel}>Per accepted lead</dt><dd className={lineValue}>{money(perAccepted)}</dd></div>}
-                {perDialable !== null && <div className={line}>
-                  <dt className={lineLabel}>Per usable lead<InfoTip className="ml-1" label="What effective per dialable means">
-                    Batch cost ÷ rows that will be one of your leads and are not suppressed: new leads plus people you already have who get this campaign added. It moves with your choices.
-                  </InfoTip></dt>
-                  <dd className="m-0 font-semibold tabular-nums text-[var(--accent-ink)]">{money(perDialable)}</dd>
-                </div>}
-              </dl>
-              <ToggleRow
-                id="add-spend"
-                title={`Add to ${campaignLabel}’s spend`}
-                help={`${formatCents(plan.costCents)} · ${(plan.recordsPurchased ?? plan.totalRows).toLocaleString()} rows purchased`}
-                checked={addSpend}
-                onChange={setAddSpend}
-                disabled={committing}
-              />
-            </>}
-        <div className="border-t border-[var(--border)]" />
-        <Button type="button" variant="outline" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={committing || discarding} onClick={() => void discard()}>
-          <Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard this file"}
-        </Button>
-      </Card>
     </div>
 
     {/* A check's rows, beside the page: the file's own columns are wide, and the list stays readable. */}
@@ -647,17 +493,6 @@ function Alert({ tone, action, children }: { tone: "warning" | "error"; action?:
   return (
     <div role="alert" className={cn("flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-2 text-sm", tone === "error" ? "border-[var(--error)]/30 bg-[var(--error-surface)] text-[var(--error-ink)]" : "border-[var(--warning)]/30 bg-[var(--warning-surface)] text-[var(--warning-ink)]")}>
       <p className="m-0 min-w-0">{children}</p>
-      {action}
-    </div>
-  );
-}
-
-/** A compact amber row: a fact about rows that import anyway, and the one thing to do about it. */
-function WarningRow({ icon: Icon, action, children }: { icon: LucideIcon; action?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] py-1.5 pr-1.5 pl-3 text-sm text-[var(--warning-ink)]">
-      <Icon aria-hidden className="size-4 shrink-0" />
-      <p className="m-0 min-w-0 flex-1">{children}</p>
       {action}
     </div>
   );

@@ -7,7 +7,6 @@ import { effectiveFeatures } from "@/lib/features/killSwitch";
 import { searchWorkspace, suggestWorkspace } from "@/lib/search/service";
 import { planHiddenSettingsSections } from "@/lib/tenantTeam/seats";
 import { scopeFor } from "@/lib/agency/visibility";
-import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 
 const querySchema = z.object({
   q: z.string().trim().max(100),
@@ -55,8 +54,6 @@ export async function GET(request: NextRequest) {
       limit: parsed.data.limit,
       // AG-0.5: a narrowed agency session finds its producers' leads and policies only (scope from the session).
       scope: await scopeFor(auth.context),
-      // Solo mode: the team-only pages the menu leaves out are not found either.
-      solo: await isSoloWorkspace(auth.context.tenantId),
     });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {

@@ -23,7 +23,7 @@ import { notify } from "@/lib/notify";
 import { OPEN_WORKSPACES_EVENT } from "@/lib/menu/navEvents";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import type { MenuSection } from "@/lib/menu/definition";
-import { TopBarCrumb, TopBarNew } from "@/components/app/nav/top-bar-nav";
+import { TopBarCrumb, TopBarNew, TopBarPresence } from "@/components/app/nav/top-bar-nav";
 
 /**
  * The top bar.
@@ -1054,7 +1054,7 @@ export function AppTopBar({ user, userId, plan, menu }: {
       switchWorkspaceEndpoint="/api/app/auth/switch-workspace"
       accountExtra={plan ? <PlanLine plan={plan} /> : undefined}
       leading={menu ? <TopBarCrumb menu={menu} /> : undefined}
-      actions={menu ? <TopBarNew menu={menu} /> : undefined}
+      actions={menu ? <><TopBarPresence /><TopBarNew menu={menu} /></> : undefined}
       inbox
     />
   );

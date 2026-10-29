@@ -12,7 +12,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ExternalLink, History, UserPlus } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, History, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
@@ -162,116 +162,6 @@ function StepNav() {
   );
 }
 
-/**
- * Inbound's Underwriting step (owner 2026-10-28): the client's name, and under it the ten steps on a
- * vertical line in their four stages — the same dots, ticks and filling line as the bar, stood up. The
- * agent works from step 1: a step opens once every step before it is done (or it was reached before).
- * Finish the call is always at the foot.
- */
-function InboundRail({ name, onFinish }: { name: string; onFinish: () => void }) {
-  const ws = useWorkspace();
-  const { step, goTo } = ws;
-  const keys = NUMBERED.map((s) => s.key);
-  const done = keys.map((key) => stepDone(key, ws));
-  const firstOpen = done.indexOf(false);
-  const reach = firstOpen === -1 ? keys.length - 1 : firstOpen;
-  const here = keys.indexOf(step as (typeof keys)[number]);
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
-  const doneCount = done.filter(Boolean).length;
-  // Owner 2026-10-28: the rail stands the column's full height — every row shares the space — and the
-  // line runs unbroken from step 1 to After submit, filling green as each step is finished. Steps not
-  // reachable yet are dimmed (their title says why) rather than each wearing a lock.
-  const seg = (green: boolean, hidden = false) => (
-    <span aria-hidden="true" className={cn("w-[3px] flex-1 rounded-full transition-colors duration-700", hidden ? "opacity-0" : green ? "bg-[var(--primary)] shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_45%,transparent)]" : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]")} />
-  );
-  return (
-    <aside aria-label="The client and the application steps" className="m-glass flex min-h-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_30%,var(--border))] p-4 lg:h-full">
-      <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="inline-grid size-11 shrink-0 place-items-center rounded-[12px] bg-[var(--primary-soft)] text-sm font-bold text-[var(--accent-ink)]">{initials || "?"}</span>
-        <span className="min-w-0 flex-1">
-          <strong className="block truncate text-base font-semibold text-[var(--ink)]">{name}</strong>
-          <span className="text-xs text-[var(--body)]">{doneCount} of {keys.length} steps done</span>
-        </span>
-      </div>
-      <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_10%,transparent)]">
-        <span className="block h-full rounded-full bg-[var(--primary)] transition-[width] duration-700 ease-[cubic-bezier(.2,.8,.2,1)]" style={{ width: `${(doneCount / keys.length) * 100}%` }} />
-      </span>
-
-      {/* Room on every side so the step on screen — its pill and its glow — is never cut by the scroll box. */}
-      <nav aria-label="Application steps" className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-1.5">
-
-        {/* Owner 2026-10-28 (round 3, /ui-taste): no stage names — ten steps, one line, one state each. */}
-        <ol className="m-0 flex min-h-full list-none flex-col p-0">
-          {keys.map((key, i) => {
-                  const on = step === key;
-                  const open = i <= Math.max(reach, here) || done[i];
-                  return (
-                    <li key={key} className="flex min-h-[40px] flex-1">
-                      <button
-                        type="button"
-                        aria-current={on ? "step" : undefined}
-                        disabled={!open}
-                        title={open ? STEP_LABEL.get(key) : "Finish the steps before it first"}
-                        onClick={() => goTo(key)}
-                        className="group relative flex w-full items-stretch gap-3 text-left outline-none disabled:cursor-not-allowed"
-                      >
-                        {/* The step on screen is one pill, dot and name together (owner 2026-10-28: not split in two). */}
-                        {on && <span aria-hidden="true" className="absolute top-1/2 -left-[5px] right-0 h-[2.5rem] -translate-y-1/2 rounded-full bg-[var(--primary-soft)] ring-1 ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]" />}
-                        <span className="relative flex w-[30px] shrink-0 flex-col items-center">
-                          {seg(i > 0 && done[i - 1], false)}
-                          <span aria-hidden="true" className={cn(
-                            "my-0.5 inline-grid size-[30px] shrink-0 place-items-center rounded-full border-2 text-xs font-bold transition-all duration-300",
-                            on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)] shadow-[0_0_14px_color-mix(in_srgb,var(--primary)_55%,transparent)]"
-                              : done[i] ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]"
-                              : open ? "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] group-hover:border-[var(--primary)]"
-                              : "border-[color-mix(in_srgb,var(--ink)_14%,transparent)] bg-[var(--surface)] text-[var(--body)] opacity-70",
-                          )}>
-                            {done[i] && !on ? <Check className="size-3.5" strokeWidth={3} /> : i + 1}
-                          </span>
-                          {seg(done[i], i === keys.length - 1)}
-                        </span>
-                        <span className={cn(
-                          "relative my-auto flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full py-1.5 pr-1.5 pl-1 transition-colors group-focus-visible:ring-2 group-focus-visible:ring-ring",
-                          !on && open && "group-hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]",
-                        )}>
-                          <span className={cn("truncate text-sm", on ? "font-semibold text-[var(--ink)]" : open ? "font-medium text-[var(--ink)]" : "font-medium text-[var(--body)] opacity-60")}>{STEP_LABEL.get(key) ?? key}</span>
-                          {on ? <span className="shrink-0 rounded-full bg-[var(--primary)] px-2 py-0.5 text-xs font-bold text-[var(--on-primary)]">Now</span>
-                            : done[i] ? <span className="sr-only"> (done)</span> : null}
-                        </span>
-                      </button>
-                    </li>
-                  );
-          })}
-        </ol>
-      </nav>
-      <Button type="button" className="shrink-0" onClick={onFinish}>Finish the call<ArrowRight aria-hidden="true" /></Button>
-    </aside>
-  );
-}
-
-function InboundWorkspace({ onFinish }: { onFinish: () => void }) {
-  const ws = useWorkspace();
-  const { caseView, step, sample, seatReadOnly } = ws;
-  const Step = STEP_COMPONENT[step];
-  // Owner 2026-10-28: inside the call there is no title, attempt picker, portal, timeline or spouse
-  // button, and no status or product tags — the call page's own bar and this rail are the whole frame.
-  return (
-    // The call page gives this the screen's height: the rail stands it in full, the step scrolls inside.
-    <div className="flex flex-col gap-4 lg:h-full lg:min-h-0">
-      {sample && <SampleDataNotice />}
-      {seatReadOnly && <p role="status" className="m-0 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]">Your plan is read-only: you can read this case, not change it.</p>}
-      <div className="grid min-w-0 items-start gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-stretch">
-        <InboundRail name={caseView.clientName} onFinish={onFinish} />
-        <div role="region" aria-label={STEP_LABEL.get(step)} className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-          <div key={step} className="flex min-w-0 flex-col gap-4 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both]">
-            <Step />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Workspace() {
   const ws = useWorkspace();
   const { caseView, attempt, attemptsForInsured, insured, step, readOnly, seatReadOnly, sample, selectAttempt } = ws;
@@ -359,14 +249,10 @@ function Workspace() {
   );
 }
 
-export function ApplicationWorkspace({ initial, sample, timeZone, seatReadOnly = false, onFinishCall }: {
-  initial: CaseView; sample: boolean; timeZone?: string;
-  /** A read-only plan (2026-10-26): every control off, like Pending cases. */ seatReadOnly?: boolean;
-  /** Inbound's Underwriting step (owner 2026-10-28): the workspace inside the call, starting at Verify. */ onFinishCall?: () => void;
-}) {
+export function ApplicationWorkspace({ initial, sample, timeZone, seatReadOnly = false }: { initial: CaseView; sample: boolean; timeZone?: string; /** A read-only plan (2026-10-26): every control off, like Pending cases. */ seatReadOnly?: boolean }) {
   return (
-    <WorkspaceProvider key={initial.caseId} initial={initial} sample={sample} timeZone={timeZone} seatReadOnly={seatReadOnly} defaultStep={onFinishCall ? "verify" : undefined}>
-      {onFinishCall ? <InboundWorkspace onFinish={onFinishCall} /> : <Workspace />}
+    <WorkspaceProvider key={initial.caseId} initial={initial} sample={sample} timeZone={timeZone} seatReadOnly={seatReadOnly}>
+      <Workspace />
     </WorkspaceProvider>
   );
 }

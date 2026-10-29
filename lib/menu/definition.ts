@@ -40,12 +40,6 @@ export type MenuItem = {
    * card picks pages from the same section.
    */
   meanwhile?: readonly string[];
-  /**
-   * Solo mode (owner 2026-10-29): a page that only makes sense with other callers on the workspace —
-   * routing leads to them, their bookings, who is on the floor. Left out, not greyed, for an individual
-   * agent working alone (lib/tenantTeam/solo.ts); it comes back the moment a setter or agent joins.
-   */
-  teamOnly?: boolean;
 };
 
 export type MenuSection = {
@@ -85,7 +79,7 @@ export const AGENT_MENU: MenuSection[] = [
       // Inbound A (2026-10-27): the Agent Floor is Inbound's Team view, reached from the Team button
       // on Inbound. It stays off the rail but keeps its key, gate and a title for links and search.
       // /app/floor forwards here.
-      item("Today", { key: "leads.floor", label: "Inbound team", path: "/app/inbound/team", icon: "radio-tower", built: true, sidebar: false, teamOnly: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
+      item("Today", { key: "leads.floor", label: "Inbound team", path: "/app/inbound/team", icon: "radio-tower", built: true, sidebar: false, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
       item("Today", { key: "leads.inbound", label: "Inbound", navLabel: "Inbound", path: "/app/inbound", icon: "inbox", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
       item("Today", { key: "leads.dialer", label: "Dialer", path: "/app/dialer", icon: "phone-call", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
       item("Today", { key: "sell.callbacks", label: "Callbacks", path: "/app/callbacks", icon: "calendar-check", required_feature: "callback_calendar", required_roles: ["owner", "producer", "assistant"], built: true }),
@@ -95,7 +89,7 @@ export const AGENT_MENU: MenuSection[] = [
       item("Today", { key: "sell.calendar", label: "Calendar", path: "/app/calendar", icon: "calendar-days", required_feature: "outbound_dialing", required_roles: ["owner", "producer", "assistant", "setter"], built: true }),
       // p-app-setters: the licensed agent's day and the setters who book into it. Owners and producers
       // only — the people Settings › Calendar lists as bookable; setters book from the dialer.
-      item("Today", { key: "sell.setters", label: "Appointments & setters", path: "/app/setters", icon: "headset", teamOnly: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"], built: true }),
+      item("Today", { key: "sell.setters", label: "Appointments & setters", path: "/app/setters", icon: "headset", required_feature: "outbound_dialing", required_roles: ["owner", "producer"], built: true }),
     ],
   },
   {
@@ -111,12 +105,9 @@ export const AGENT_MENU: MenuSection[] = [
       // 2026-10-26 (owner pick, split by job): Lead lists, Vendors & campaigns and List import are one
       // page, Lead sources. The key stays `leads.lists` — team access and saved hidden pages name it.
       item("Leads", { key: "leads.lists", label: "Lead sources", path: "/app/lead-sources", icon: "package", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
-      // 2026-10-28 (owner pick B, "Leads in"): routing, recycling and the duplicate check are steps of
-      // Lead sources, on its rail. They keep their keys, gates and addresses; the sidebar shows them only
-      // to someone who cannot open Lead sources (a setter routes; a plan without import still recycles).
-      item("Leads", { key: "leads.assignments", label: "Lead routing", path: "/app/assignments", icon: "route", built: true, teamOnly: true, sidebar_fallback_for: "leads.lists", required_feature: "outbound_dialing", required_roles: ["owner", "producer", "assistant", "setter"] }),
-      item("Leads", { key: "leads.nurture", label: "Lead recycling", path: "/app/nurture", icon: "recycle", built: true, sidebar_fallback_for: "leads.lists", required_feature: "outbound_dialing", required_roles: ["owner", "producer"] }),
-      item("Leads", { key: "leads.duplicates", label: "Duplicate check", path: "/app/duplicates", icon: "copy-check", built: true, sidebar_fallback_for: "leads.lists", required_feature: "duplicate_detection", required_roles: ["owner", "producer", "assistant"] }),
+      item("Leads", { key: "leads.assignments", label: "Lead routing", path: "/app/assignments", icon: "route", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "assistant", "setter"] }),
+      item("Leads", { key: "leads.nurture", label: "Lead recycling", path: "/app/nurture", icon: "recycle", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"] }),
+      item("Leads", { key: "leads.duplicates", label: "Duplicate check", path: "/app/duplicates", icon: "copy-check", built: true, required_feature: "duplicate_detection", required_roles: ["owner", "producer", "assistant"] }),
       // Owner and producer only. This screen shows what a list cost and what a usable lead cost,
       // which is money — the same boundary the campaigns and vendors routes enforce, and the reason
       // `assistant` is on List import above but not here.
@@ -166,7 +157,7 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       item("Team", { key: "team.producers", label: "Producers", path: "/app/producers", icon: "user-round-check", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Everyone who writes business under your contracts." }),
       item("Team", { key: "team.hierarchy", label: "Hierarchy & Overrides", navLabel: "Hierarchy", path: "/app/hierarchy", icon: "trending-up", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Who reports to whom, and what the agency keeps on each producer." }),
-      item("Team", { key: "team.routing", label: "Lead routing", path: "/app/lead-routing", icon: "route", teamOnly: true, sidebar_fallback_for: "leads.assignments", required_feature: "lead_assignment", required_roles: ["owner"], built: true, blurb: "Give every lead to a producer who can write it, before it goes cold." }),
+      item("Team", { key: "team.routing", label: "Lead routing", path: "/app/lead-routing", icon: "route", sidebar_fallback_for: "leads.assignments", required_feature: "lead_assignment", required_roles: ["owner"], built: true, blurb: "Give every lead to a producer who can write it, before it goes cold." }),
       item("Team", { key: "team.splits", label: "Commission splits", path: "/app/commission-splits", icon: "hand-coins", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Policies two producers share, split after the override." }),
       item("Team", { key: "team.payouts", label: "Payout runs", navLabel: "Producer payouts", path: "/app/producer-payouts", icon: "wallet-cards", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Close a period and pay your producers, with a statement each." }),
       item("Team", { key: "team.scorecards", label: "Producer scorecards", navLabel: "Scorecards", path: "/app/producer-scorecards", icon: "gauge", required_feature: "producer_scorecards", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Who is profitable, not just busy." }),
@@ -301,7 +292,7 @@ export const AGENCY_OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
 export function buildAgentMenu(
   grantedFeatureKeys: Iterable<string>,
   role: MemberRole = "owner",
-  options: { agencyNarrow?: boolean; extraRoles?: readonly MemberRole[]; hiddenPages?: readonly string[]; solo?: boolean } = {},
+  options: { agencyNarrow?: boolean; extraRoles?: readonly MemberRole[]; hiddenPages?: readonly string[] } = {},
 ): MenuSection[] {
   const granted = new Set(grantedFeatureKeys);
   const roles = [role, ...(options.extraRoles ?? [])];
@@ -313,7 +304,6 @@ export function buildAgentMenu(
       (!entry.required_feature || granted.has(entry.required_feature)) &&
       roles.some((held) => menuRoleAdmits(entry.required_roles, held)) &&
       !(options.agencyNarrow && AGENCY_OWNER_ONLY_KEYS.has(entry.key)) &&
-      !(options.solo && entry.teamOnly) &&
       !hidden.has(entry.key),
     ),
   })).filter((section) => section.items.length > 0);

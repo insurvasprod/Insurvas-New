@@ -9,11 +9,9 @@ export type LooseQuery<T = unknown> = PromiseLike<LooseResult<T>> & {
   select(columns: string): LooseQuery<T>;
   eq(column: string, value: unknown): LooseQuery<T>;
   is(column: string, value: null): LooseQuery<T>;
-  in(column: string, values: readonly unknown[]): LooseQuery<T>;
   order(column: string, options?: { ascending?: boolean }): LooseQuery<T>;
   insert(values: unknown): LooseQuery<T>;
   update(values: unknown): LooseQuery<T>;
-  upsert(values: unknown, options?: { onConflict?: string }): LooseQuery<T>;
   delete(): LooseQuery<T>;
   maybeSingle(): Promise<LooseResult<T | null>>;
   single(): Promise<LooseResult<T>>;

@@ -12,7 +12,6 @@ import { TableCard } from "@/components/ui/table-card";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { type AppointmentDetail, type DayRowKind } from "@/lib/setters/dayView";
 import { getSettersOverview } from "@/lib/setters/overview";
-import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 
 /**
  * Appointments & setters (p-app-setters): the licensed agent's view of the appointments setters
@@ -80,9 +79,6 @@ export default async function SettersPage() {
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Appointments & setters" description="Setters book into your real availability." />;
   if (!actAsPage(guard, ["owner", "producer"]))
     return <RoleGateNotice featureLabel="Appointments & setters" detail="Setters book from the dialer and see their numbers on Team activity." />;
-  // Solo mode (owner 2026-10-29): no setter books for an agent working alone; their own bookings are on the calendar.
-  if (await isSoloWorkspace(guard.context.tenantId))
-    return <RoleGateNotice reason="solo" featureLabel="Appointments & setters" detail="You work alone, so nobody books appointments for you." action={{ href: "/app/calendar", label: "Open the calendar" }} />;
 
   const view = await getSettersOverview({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
   const t = view.tiles;

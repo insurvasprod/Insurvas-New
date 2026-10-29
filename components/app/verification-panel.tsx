@@ -1,9 +1,9 @@
 "use client";
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, ChevronDown, ChevronLeft, Loader2, Pencil } from "lucide-react";
+import { ArrowRight, Bell, Check, ChevronDown, ChevronLeft, Loader2, Pencil } from "lucide-react";
 
 import { Callout, pillTone } from "@/components/app/settings/primitives";
 import { CallerCard, callerFacts, elapsed } from "@/components/app/inbound/caller-card";
@@ -52,8 +52,7 @@ const b = {
   link: "cursor-pointer border-0 bg-transparent p-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
 };
 const FLAT = "box-border w-full rounded-[8px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] px-2.5 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none transition-colors placeholder:text-[var(--muted)] hover:border-[var(--border-strong)] focus:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
-// Owner 2026-10-28: no grey type on this screen — headings and labels read in the body and ink colours.
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--body)]";
+const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
 /** One detail's state, said the way the agent acts on it (owner 2026-10-27: self-explanatory rows). */
 const STATE_LOOK: Record<VerificationState, { label: string; mark: string; row: string }> = {
@@ -100,13 +99,7 @@ function sectionComplete(fields: Array<{ is_required: boolean; state: Verificati
   return counted.every((field) => field.state !== "outstanding");
 }
 
-/**
- * `onUnderwrite` / `onFinish` (owner 2026-10-28): inside the call page, which draws the step bar and
- * changes step in place — the panel then has no back link, title or bar of its own, fills the screen's
- * height and scrolls inside its card. Without them it is the standalone screen it was.
- */
-export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwrite, onFinish, onBack }: { workItemId: string; readOnly: boolean; canHandoff: boolean; onUnderwrite?: (caseId: string) => void; onFinish?: () => void; /** Back to Caller profile. */ onBack?: () => void }) {
-  const embedded = Boolean(onFinish);
+export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workItemId: string; readOnly: boolean; canHandoff: boolean }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [drafts, setDrafts] = useState<Record<string, unknown>>({});
   const [revealed, setRevealed] = useState<Record<string, unknown>>({});
@@ -114,15 +107,13 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
   const { ask: askRevealReason, dialog: revealReasonDialog } = useRevealReason();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  // Rows answered on screen whose save is still on its way (see quick()).
-  const [optimistic, setOptimistic] = useState<Record<string, VerificationState>>({});
-  const queue = useRef<Promise<void>>(Promise.resolve());
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [handoffContext, setHandoffContext] = useState<HandoffContext | null>(null);
   const [handoffTarget, setHandoffTarget] = useState("");
   const [handoffSaving, setHandoffSaving] = useState(false);
   const [handoffError, setHandoffError] = useState("");
+  const [nudgeSaving, setNudgeSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // "Same person?" (Module 1 simplified): a re-check replaces the stored result; an existing customer
   // holds Continue to underwriting until the agent says they checked.
@@ -169,35 +160,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
     return () => window.clearInterval(timer);
   }, [callStartedAt]);
 
-  /**
-   * "It's right" and "Check again" answer at once (owner 2026-10-28: speed-clicking down the list was
-   * slow and blocked the next row). The row shows its new state immediately; the saves go to the server
-   * one after another in click order, so a later reply never undoes an earlier click, and a failed save
-   * puts its row back with the reason.
-   */
-  function quick(field: PanelField, state: "confirmed" | "outstanding") {
-    const key = field.field_key;
-    setOptimistic((current) => ({ ...current, [key]: state }));
-    setFieldErrors((current) => ({ ...current, [key]: "" }));
-    queue.current = queue.current.then(async () => {
-      try {
-        const response = await fetch("/api/app/inbound/verification", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId, field_key: key, state }) });
-        const body = await response.json().catch(() => null);
-        if (!response.ok) {
-          const message = body?.error ?? "Could not save this field";
-          setFieldErrors((current) => ({ ...current, [key]: message }));
-          notify.block(message);
-        } else setPanel(body.panel as Panel);
-      } catch {
-        setFieldErrors((current) => ({ ...current, [key]: "Not saved — check the connection and press it again." }));
-      } finally {
-        setOptimistic((current) => { const next = { ...current }; delete next[key]; return next; });
-      }
-    });
-  }
-
   async function update(field: PanelField, state: VerificationState) {
-    if (state !== "corrected") { quick(field, state); return; }
     const key = field.field_key;
     const sensitive = (panel?.sensitiveKeys ?? []).includes(key);
     if (state === "corrected" && sensitive && isEmpty(drafts[key])) {
@@ -223,7 +186,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
       return merged;
     });
     if (sensitive && state === "corrected") setRevealed((current) => ({ ...current, [key]: payload.value }));
-    notify.done("Correction saved");
+    notify.done(state === "outstanding" ? "Field marked outstanding" : state === "corrected" ? "Correction saved" : "Field confirmed");
   }
 
   async function reveal(key: string, label: string) {
@@ -255,16 +218,21 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
     setHandoffContext(null);
   }
 
-  // "Ask the team" was removed from this screen (owner 2026-10-28); Team › Needs you still nudges.
+  async function nudgeTeam() {
+    setNudgeSaving(true);
+    const response = await fetch("/api/app/agent-floor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "nudge", work_item_id: workItemId, idempotency_key: crypto.randomUUID() }) });
+    const body = await response.json().catch(() => null);
+    setNudgeSaving(false);
+    if (!response.ok) { const message = body?.error ?? "Could not ask the team."; setError(message); notify.block(message); return; }
+    notify.done(body.nudge?.alreadySent ? "The team was already asked" : "The team was asked to help");
+  }
 
   async function continueToUnderwriting() {
     setContinuing(true);
     try {
       const response = await fetch("/api/app/applications/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId }) });
-      const result = await response.json().catch(() => null) as { href?: string; caseId?: string; error?: string } | null;
+      const result = await response.json().catch(() => null) as { href?: string; error?: string } | null;
       if (!response.ok || !result?.href) { setContinueError(result?.error ?? "Could not open the application."); return; }
-      // Inside the call page the application opens as its Underwriting step, in place.
-      if (onUnderwrite && result.caseId) { onUnderwrite(result.caseId); return; }
       window.location.assign(withFrom(result.href, window.location.pathname));
     } catch {
       setContinueError("Could not open the application — check your connection.");
@@ -302,19 +270,17 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
       <div className="flex w-full min-w-0 flex-col gap-6">
         {backLink}
         <PageHeader title="Call" />
-        {!embedded && <InboundStepBar current={2} />}
+        <InboundStepBar current={1} />
         <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "Verification is unavailable"}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></span>} />
       </div>
     );
   }
 
-  // What the agent sees: the server's states with the clicks still being saved laid over them.
-  const sections = panel.sections.map((section) => ({ ...section, fields: section.fields.map((field) => (field.field_key in optimistic ? { ...field, state: optimistic[field.field_key] } : field)) }));
+  const requiredDone = panel.session.progress_percentage === 100;
   const samePerson = preflight === undefined ? panel.preflight : preflight;
   const heldAsCustomer = samePerson?.status === "already_customer" && !customerChecked;
-  const allFields = sections.flatMap((section) => section.fields);
+  const allFields = panel.sections.flatMap((section) => section.fields);
   const requiredConfirmed = allFields.filter((field) => field.is_required && ["confirmed", "corrected"].includes(field.state)).length;
-  const requiredDone = Object.keys(optimistic).length ? requiredConfirmed >= panel.requiredCount : panel.session.progress_percentage === 100;
   const progressText = `${requiredConfirmed} of ${panel.requiredCount} required details checked`;
   const left = Math.max(0, panel.requiredCount - requiredConfirmed);
   const percent = panel.requiredCount ? Math.round((requiredConfirmed / panel.requiredCount) * 100) : 100;
@@ -337,21 +303,17 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
   // their folding and every write are unchanged (LA-1.11); the outcome is step 3 (?step=finish).
   const onTheCall = callStartedAt ? elapsed(callStartedAt, now) : null;
   return (
-    <div className={cn("m-stagger flex w-full min-w-0 flex-col gap-4", embedded && "lg:h-full lg:min-h-0")}>
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
       <LeaveGuard dirty={unsavedKeys.length > 0} onDiscard={dropUnsaved} what={unsavedKeys.length === 1 ? "a caller detail" : `${unsavedKeys.length} caller details`} />
       {revealReasonDialog}
-      {!embedded && backLink}
-      {!embedded && (
-        <PageHeader
-          title={`Call with ${leadName}`}
-          actions={<StatusChip tone={onTheCall ? "info" : "neutral"} dot>{onTheCall ? `On the call ${onTheCall}` : "No open call"}</StatusChip>}
-        />
-      )}
-      {!embedded && <InboundStepBar current={2} />}
-      {/* Inside the call page (owner 2026-10-28): the screen's full height, no page scroll — the details
-          scroll inside their card, and the caller card inside its column. */}
-      <div className={cn("flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start", embedded && "lg:min-h-0 lg:flex-1 lg:items-stretch")}>
-        <aside aria-label="The caller" className={cn("flex min-w-0 flex-col gap-4 max-lg:order-2 lg:w-[320px] lg:shrink-0 lg:overflow-y-auto", embedded ? "lg:min-h-0" : "lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h)-32px)] lg:self-start")}>
+      {backLink}
+      <PageHeader
+        title={`Call with ${leadName}`}
+        actions={<StatusChip tone={onTheCall ? "info" : "neutral"} dot>{onTheCall ? `On the call ${onTheCall}` : "No open call"}</StatusChip>}
+      />
+      <InboundStepBar current={1} />
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
+        <aside aria-label="The caller" className="flex min-w-0 flex-col gap-4 max-lg:order-2 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:max-h-[calc(100dvh-var(--top-bar-h)-32px)] lg:w-[320px] lg:shrink-0 lg:self-start lg:overflow-y-auto">
           <CallerCard workItemId={workItemId} facts={facts} now={now} />
           <SamePersonPrompt
             check={samePerson}
@@ -363,7 +325,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
           />
         </aside>
 
-        <div className={cn("flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1", embedded && "lg:min-h-0")}>
+        <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1">
           {continueError && <Callout tone="error" title={continueError} />}
           {context?.claim.at && new Date(panel.session.started_at).getTime() < new Date(context.claim.at).getTime() - 5_000 && (
             <Callout tone="info" title="Picked up from an earlier call: details checked then are kept below." />
@@ -385,27 +347,28 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
           )}
           {canHandoff && handoffError && !handoffContext && <Callout tone="error" title={`Passing the call is unavailable: ${handoffError}`} />}
 
-          <section aria-label="Verification" className={cn("m-glass flex min-w-0 flex-col overflow-hidden rounded-[16px] border border-[var(--border)]", embedded && "lg:min-h-0 lg:flex-1")}>
+          <section aria-label="Verification" className="m-glass flex min-w-0 flex-col overflow-hidden rounded-[16px] border border-[var(--border)]">
             {/* The header carries the progress and the next steps (owner 2026-10-27: no bar under the table). */}
-            <div className="flex shrink-0 flex-col gap-2.5 border-b border-[var(--border)] px-4 py-3">
+            <div className="flex flex-col gap-2.5 border-b border-[var(--border)] px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="flex min-w-0 flex-wrap items-center gap-3">
                   <h2 className="m-0 text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Verification</h2>
                   <StatusChip dot={false} tone={pillTone(requiredDone ? "success" : "brand")}>{progressText}</StatusChip>
                 </span>
-                {/* Owner 2026-10-28: Back, Skip (straight to Finish the call), then Continue to Application. */}
                 <span className="flex flex-wrap items-center gap-2">
-                  {onBack && <Button type="button" size="sm" variant="ghost" onClick={onBack}><ChevronLeft aria-hidden />Back</Button>}
-                  {!canHandoff && (embedded ? (
-                    <Button type="button" size="sm" variant="outline" onClick={onFinish} title={requiredDone ? "Skip the application and record how the call ended" : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Skip · finish the call</Button>
-                  ) : (
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={callHref(workItemId, "finish")} title={requiredDone ? "Skip the application and record how the call ended" : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Skip · finish the call</Link>
+                  {!readOnly && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => void nudgeTeam()} disabled={nudgeSaving}>
+                      {nudgeSaving ? <Loader2 aria-hidden className="animate-spin" /> : <Bell aria-hidden />}Ask the team
                     </Button>
-                  ))}
+                  )}
                   {!readOnly && !canHandoff && (
-                    <Button type="button" size="sm" onClick={() => void continueToUnderwriting()} disabled={continuing || heldAsCustomer} title={heldAsCustomer ? "They are already a customer. Check it under Same person? first." : undefined}>
-                      {continuing && <Loader2 aria-hidden className="animate-spin" />}Continue to Application<ArrowRight aria-hidden />
+                    <Button type="button" size="sm" variant="outline" onClick={() => void continueToUnderwriting()} disabled={continuing || heldAsCustomer} title={heldAsCustomer ? "They are already a customer. Check it under Same person? first." : undefined}>
+                      {continuing && <Loader2 aria-hidden className="animate-spin" />}Continue to underwriting
+                    </Button>
+                  )}
+                  {!canHandoff && (
+                    <Button asChild size="sm">
+                      <Link href={callHref(workItemId, "finish")} title={requiredDone ? undefined : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Next: finish the call<ArrowRight aria-hidden /></Link>
                     </Button>
                   )}
                 </span>
@@ -413,12 +376,11 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
               <div aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_8%,transparent)]">
                 <div className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-300" style={{ width: `${percent}%` }} />
               </div>
-              <p className="m-0 text-sm leading-[1.5] tracking-[-0.01em] text-[var(--ink)]">
+              <p className="m-0 text-sm leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
                 Read each detail back to the caller. Right? Press <strong className="font-semibold text-[var(--ink)]">It’s right</strong>. Wrong? Type the right one and press <strong className="font-semibold text-[var(--ink)]">Save new value</strong>.
               </p>
             </div>
-            <div className={cn("min-w-0", embedded && "lg:min-h-0 lg:flex-1 lg:overflow-y-auto")}>
-            {sections.map((section, sectionIndex) => {
+            {panel.sections.map((section, sectionIndex) => {
               const complete = sectionComplete(section.fields);
               const folded = complete && !reopened[section.section_key];
               const done = section.fields.filter((field) => field.state !== "outstanding").length;
@@ -455,9 +417,9 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
                     <form key={key} onSubmit={(event) => { event.preventDefault(); if (dirty && !busy) void update(field, "corrected"); }} className={cn("border-t border-[var(--border)] px-4 py-3 transition-colors", !dirty && look.row)}>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <span aria-hidden="true" className={cn("grid size-6 shrink-0 place-items-center rounded-full", dirty ? "border-[1.5px] border-[var(--primary)] text-[var(--accent-ink)]" : look.mark)}>
-                          {dirty ? <Pencil className="size-3" /> : field.state === "confirmed" ? <Check className="size-3.5 motion-safe:animate-[m-pulse_.45s_ease-out_1]" /> : field.state === "corrected" ? <Pencil className="size-3" /> : null}
+                          {dirty ? <Pencil className="size-3" /> : field.state === "confirmed" ? <Check className="size-3.5" /> : field.state === "corrected" ? <Pencil className="size-3" /> : null}
                         </span>
-                        <label htmlFor={inputId} className="w-[170px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+                        <label htmlFor={inputId} className="w-[170px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
                           {field.label}{field.is_required && <span className="text-[var(--error-ink)]" aria-label="required"> *</span>}
                         </label>
                         <div className="flex min-w-[200px] flex-1 basis-[220px] items-center gap-2">
@@ -478,7 +440,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
                             </>
                           ) : field.state === "outstanding" ? (
                             <>
-                              <span className="text-xs leading-[1.5] font-semibold text-[var(--body)]">{look.label}</span>
+                              <span className="text-xs leading-[1.5] font-semibold text-[var(--muted)]">{look.label}</span>
                               <Button type="button" size="sm" variant="outline" className="border-[color-mix(in_srgb,var(--primary)_55%,transparent)] text-[var(--accent-ink)]" onClick={() => void update(field, "confirmed")} disabled={busy}>{saving === key ? <Loader2 aria-hidden className="animate-spin" /> : <Check aria-hidden />}It’s right</Button>
                             </>
                           ) : (
@@ -491,8 +453,8 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
                       </div>
                       {(field.help_text || fieldErrors[key] || dirty || (isSensitive && isRevealed)) && (
                         <div className="mt-1.5 flex flex-col gap-1 lg:pl-[226px]">
-                          {field.help_text && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)]">{field.help_text}</p>}
-                          {isSensitive && isRevealed && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)]">Shown in full for reading back. This reveal was recorded in the audit log.</p>}
+                          {field.help_text && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{field.help_text}</p>}
+                          {isSensitive && isRevealed && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Shown in full for reading back. This reveal was recorded in the audit log.</p>}
                           {dirty && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">{isSensitive ? "New value, not saved yet." : `Was ${displayValue(stored)}. Not saved yet.`} Press Save new value or Enter to keep it.</p>}
                           {fieldErrors[key] && <p role="alert" className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{fieldErrors[key]}</p>}
                         </div>
@@ -504,7 +466,6 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
               </Fragment>
               );
             })}
-            </div>
           </section>
         </div>
       </div>

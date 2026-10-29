@@ -4,11 +4,10 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { ImportAlreadyImported, ImportNotUnderReview, ImportReviewBridge, ImportScreeningBridge } from "@/components/app/import-review-bridge";
+import { ImportAlreadyImported, ImportReviewBridge, ImportScreeningBridge } from "@/components/app/import-review-bridge";
 import { loadImportReview, planBuckets } from "@/lib/agentTemplates/importPreflight";
 import { licensedStates } from "@/lib/leadLists/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
 
 /**
  * Module 2 §6 · the review step, on its own route.
@@ -35,16 +34,13 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
   const { batchId } = await params;
   const { plan, state, progress } = await loadImportReview(tenantId, batchId);
   // LA-2.2-10: the scrub is still running. The screen drives it and reloads into the review.
-  if (state === "screening" && progress) return <LeadsInPage step="review" ownContinue><ImportScreeningBridge progress={progress} /></LeadsInPage>;
+  if (state === "screening" && progress) return <ImportScreeningBridge progress={progress} />;
   if (!plan) {
-    // A file this tenant discarded (or whose check was stopped) is a closed job, not a lost one: Back
-    // after "Discard this file" lands here. Asked of this tenant's own row only, like the read above.
-    if (state === "missing" && (await closedBatch(tenantId, batchId))) return <LeadsInPage step="review" ownContinue><ImportNotUnderReview /></LeadsInPage>;
     // An id that was never staged, or is not this tenant's, is genuinely not found. One that was
     // already imported is not — and showing the framework's 404 for it reads as though the import
     // was lost rather than finished.
     if (state !== "committed") return notFound();
-    return <LeadsInPage step="review" ownContinue><ImportAlreadyImported /></LeadsInPage>;
+    return <ImportAlreadyImported />;
   }
 
   // The campaign's and vendor's names, so the screen can say what these leads will be attributed
@@ -78,8 +74,7 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     ? Object.entries(plan.mapping).find(([, field]) => field === "state")?.[0] ?? null
     : "state";
 
-  // Step 3 · Clean of the one Leads page (owner pick B, 2026-10-28): what the file holds, before anything is written.
-  return <LeadsInPage step="review" ownContinue><ImportReviewBridge plan={{
+  return <ImportReviewBridge plan={{
     batchId,
     fileName: plan.fileName ?? null,
     totalRows: plan.totalRows,
@@ -88,7 +83,6 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     rowDetails: plan.rowDetails ?? {},
     dncBreakdown,
     samples: plan.samples,
-    campaignId: plan.campaignId ?? null,
     campaignName: campaign?.name ?? null,
     campaignStatus: campaign?.status ?? null,
     vendorName: vendor?.name ?? null,
@@ -97,15 +91,5 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     licensedStates: territory,
     stateHeader,
     noState: plan.noState ?? null,
-  }} /></LeadsInPage>;
-}
-
-/** Whether this tenant has the batch and it was closed without importing (discarded, or its check stopped). */
-async function closedBatch(tenantId: string, batchId: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(batchId)) return false;
-  type Row = { data: { status?: string } | null; error: unknown };
-  type Query = { select(columns: string): Query; eq(column: string, value: unknown): Query; maybeSingle(): Promise<Row> };
-  const db = getSupabaseServiceClient() as unknown as { from(table: string): Query };
-  const row = await db.from("agent_lead_import_batches").select("status").eq("tenant_id", tenantId).eq("id", batchId).maybeSingle().catch(() => null);
-  return row?.data?.status === "failed";
+  }} />;
 }

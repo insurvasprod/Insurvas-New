@@ -17,7 +17,6 @@ import type { PipelineStage } from "@/lib/pipelines/types";
 import type { MappedDisposition, PipelineViewContext, StageEvent } from "@/lib/pipelines/views";
 import { cn } from "@/lib/utils";
 import { dateTime, dayMonth, viewerTimeZone } from "@/lib/format/dates";
-import { useSolo } from "@/components/app/solo-context";
 
 /**
  * The pipeline views beside the board: Stages (the pipeline's shape and the dispositions that land
@@ -424,8 +423,6 @@ export function ListView({
   onMove: (lead: ViewLead, key: string) => Promise<boolean>;
 }) {
   const [groupBy, setGroupBy] = useState<"stage" | "owner">("stage");
-  // Solo mode (owner 2026-10-29): every lead is the one agent's, so there is no grouping by owner.
-  const solo = useSolo();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // Each group pages on its own, so a long stage does not push the others off the screen.
@@ -474,12 +471,10 @@ export function ListView({
   return (
     <div className="flex flex-col">
       <div className="flex min-h-[3.25rem] flex-wrap items-center gap-3 border-b border-border px-4 py-2 text-sm">
-        {!solo && (
-          <label className="inline-flex items-center gap-2">
-            <span className="text-muted-foreground">Group by</span>
-            <select value={groupBy} onChange={(event) => setGroupBy(event.target.value as "stage" | "owner")} className={toolbarControl}><option value="stage">Stage</option><option value="owner">Owner</option></select>
-          </label>
-        )}
+        <label className="inline-flex items-center gap-2">
+          <span className="text-muted-foreground">Group by</span>
+          <select value={groupBy} onChange={(event) => setGroupBy(event.target.value as "stage" | "owner")} className={toolbarControl}><option value="stage">Stage</option><option value="owner">Owner</option></select>
+        </label>
         <span className="text-xs text-muted-foreground tabular-nums">{leads.length.toLocaleString()} leads{lateCount ? <> · <strong className="text-[var(--error-ink)]">{lateCount} past their stage&rsquo;s time allowed</strong></> : null}</span>
       </div>
       <div className="flex flex-col xl:flex-row xl:items-start">

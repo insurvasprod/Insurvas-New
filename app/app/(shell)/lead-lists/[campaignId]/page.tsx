@@ -9,7 +9,6 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 // LA-8.2: times show in the viewer's own display timezone, else the agency's.
 import { getViewerTimezone } from "@/lib/users/viewerTimezone";
 import { leadListDetail } from "@/lib/leadLists/detail";
-import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -36,10 +35,9 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
   // own feature, kill switch and roles. An assistant sees the inventory, never the economics.
   // Assigning goes through /api/app/assignments, which is Outbound dialing's and managers' only
   // (assign_lead_list refuses anyone else with ASSIGNMENT_MANAGER_REQUIRED).
-  const [trueCpa, dialing, solo] = await Promise.all([guardPage("true_cpa"), guardPage("outbound_dialing"), isSoloWorkspace(guard.context.tenantId)]);
+  const [trueCpa, dialing] = await Promise.all([guardPage("true_cpa"), guardPage("outbound_dialing")]);
   const money = trueCpa.entitled && holdsAnyRole(guard.roles, ["owner", "producer"]);
-  // Solo mode (owner 2026-10-29): an agent working alone has nobody to hand leads to.
-  const manager = holdsAnyRole(guard.roles, ["owner", "producer"]) && !solo;
+  const manager = holdsAnyRole(guard.roles, ["owner", "producer"]);
   const assignBlocked = !dialing.entitled
     ? "Add Outbound dialing to your plan to assign leads."
     : dialing.entitlement.access === "read_only"
