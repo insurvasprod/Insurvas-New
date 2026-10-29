@@ -1,5 +1,6 @@
 "use client";
 
+import { csvCell } from "@/lib/csv/cell";
 import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -27,7 +28,8 @@ type SavedMap = { id: string; vendor_id: string; product_code: string; mapping: 
 type ImportInfo = { product: { name: string }; productCode: string; products?: Array<{ code: string; name: string }>; fields: Array<{ key: string; label: string; type: TemplateFieldType; required: boolean; options: string[]; sort_order: number }>; stages: Array<{ id: string; name: string }>; campaigns: Array<{ id: string; vendor_id: string; name: string; status: string }>; vendors: Array<{ id: string; name: string; lead_type: string; status: string }>; mappings: SavedMap[]; limits: Array<{ key: string; label: string; usage: number; limit: number | null; hardCap: boolean; allowed: boolean }>; maxRows: number; canCreateCampaigns?: boolean };
 
 function downloadFieldTemplate(fields: ImportInfo["fields"]) {
-  const csv = `${fields.map((field) => `"${field.label.replaceAll('"', '""')}"`).join(",")}\r\n`;
+  // The shared cell (lib/csv/cell.ts): the same quoting, plus the formula guard every export has.
+  const csv = `${fields.map((field) => csvCell(field.label)).join(",")}\r\n`;
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
