@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -46,8 +47,31 @@ function keysOf(section: HubSection): Array<keyof RetentionSettings> {
  * saved, and a save is a new version. The holdout's explanation sits above its switch and cannot be
  * edited; switching it on needs the explanation acknowledged.
  */
+/**
+ * Settings redesign R9 (2026-10-29): twelve cards on one 3,650px page became four tabs, each one job.
+ * Every section keeps its anchor (#holdout opens Holdout) and its own Save. The safety limits sit with
+ * the holdout they mostly guard; the in-page change list went (the header's History has it).
+ */
+const RETENTION_TABS = {
+  scoring: { label: "Scoring", sections: ["weights", "thresholds", "signals"] },
+  queue: { label: "Save queue", sections: ["queue", "assignment"] },
+  campaigns: { label: "Campaigns & win-back", sections: ["campaigns", "servicing", "reinstatement", "winback"] },
+  holdout: { label: "Holdout", sections: ["holdout", "locked"] },
+} as const;
+type RetentionTab = keyof typeof RETENTION_TABS;
+const tabOfSection = (id: string): RetentionTab | null =>
+  (Object.keys(RETENTION_TABS) as RetentionTab[]).find((tab) => (RETENTION_TABS[tab].sections as readonly string[]).includes(id)) ?? null;
+
 export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: boolean }) {
   const router = useRouter();
+  const [tab, setTab] = useState<RetentionTab>("scoring");
+  // A link to one section (Settings search: #holdout) opens the tab that holds it.
+  useEffect(() => {
+    const follow = () => { const next = tabOfSection(window.location.hash.replace(/^#/, "").split("/").pop() ?? ""); if (next) setTab(next); };
+    follow();
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
   const [saved, setSaved] = useState<RetentionSettings>(hub.settings);
   const [draft, setDraft] = useState<RetentionSettings>(hub.settings);
   const [busy, setBusy] = useState<string | null>(null);
@@ -92,7 +116,7 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
   };
   const dirty = (section: HubSection) => keysOf(section).some((k) => !sameJson(draft[k], saved[k]));
 
-  const section = (id: HubSection | "locked" | "recent-changes", title: string, children: ReactNode, opts: { save?: boolean; note?: ReactNode } = {}) => (
+  const section = (id: HubSection | "locked" | "recent-changes", title: string, children: ReactNode, opts: { save?: boolean; note?: ReactNode } = {}) => !(RETENTION_TABS[tab].sections as readonly string[]).includes(id) ? null : (
     <TableCard>
       <div id={id} className="flex scroll-mt-24 flex-col gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -132,6 +156,7 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
     <div className="flex flex-col gap-6">
       <LeaveGuard dirty={unsaved} onDiscard={() => setDraft(saved)} what="the retention settings" />
       {!canEdit ? <p className="text-sm text-muted-foreground">Read only: your plan is paused.</p> : null}
+      <ViewTabs label="Retention settings" value={tab} onChange={setTab} tabs={(Object.keys(RETENTION_TABS) as RetentionTab[]).map((key) => ({ key, label: RETENTION_TABS[key].label }))} />
 
       {section("weights", HUB_SECTION_LABELS.weights, (
         <>
@@ -334,9 +359,6 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
         </ul>
       ), { note: <>Insurvas keeps each carrier&apos;s retention windows, grace periods and chargeback rules, never here.</> })}
 
-      {hub.changes.length ? section("recent-changes", "Recent changes", (
-        <ul className="text-sm">{hub.changes.map((c, i) => <li key={i}>{c.at.slice(0, 16).replace("T", " ")} — {c.by} — {c.setting.replace(/_/g, " ")}: {JSON.stringify(c.from)} → {JSON.stringify(c.to)}</li>)}</ul>
-      )) : null}
     </div>
   );
 }
