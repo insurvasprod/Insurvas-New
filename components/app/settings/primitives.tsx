@@ -141,7 +141,8 @@ export function SettingsStack({ children, className }: { children: ReactNode; cl
 /** Two columns, 24px apart, top-aligned — the boards' grid for paired cards. */
 export function SettingsGrid({ children, className, cols = 2 }: { children: ReactNode; className?: string; cols?: 2 | 3 | 4 }) {
   const c = { 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "sm:grid-cols-2 lg:grid-cols-4" }[cols];
-  return <div className={cn("grid items-start gap-6", c, className)}>{children}</div>;
+  // Cards side by side end level (2026-10-29: no ragged gap under the shorter one).
+  return <div className={cn("grid items-stretch gap-6", c, className)}>{children}</div>;
 }
 
 /* ── buttons ────────────────────────────────────────────────────────────── */
