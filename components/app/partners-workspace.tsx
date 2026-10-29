@@ -1195,6 +1195,7 @@ export function PartnersWorkspace({
               )}
               {detailTab === "markets" && (
                 <PartnerMarketAccessPanel
+                  compact
                   partnerId={selectedPartner.id}
                   readOnly={readOnly || selectedPartner.status === "offboarded"}
                 />
