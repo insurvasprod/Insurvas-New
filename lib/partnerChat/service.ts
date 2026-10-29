@@ -9,8 +9,6 @@ import { productLineLabel } from "@/lib/format/productLine";
 import { nobodyClaimedKeyFromPartnerEvent } from "@/lib/queueSla/keys";
 import type { ProducerScope } from "../agency/visibilityCore";
 import { visibleWorkItemIds } from "../transferInbox/scopeCore";
-import { canAddPeople, canChangeRole, canManage, canPost, canRemove, nextOwner, type ChannelMember, type ChannelRole } from "./groupRules";
-import { conversationStates, membersOf, writeConversationState, writeMembers, type ConversationState } from "./groups";
 
 export const PARTNER_CHAT_BUCKET = "partner-chat-attachments";
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -57,14 +55,9 @@ async function isChannelMember(supabase: ReturnType<typeof getSupabaseServiceCli
     if (tenantMember.error) throw new Error("Could not verify partner channel access");
     return Boolean(tenantMember.data);
   }
-  return Boolean(await memberFor(supabase, channel, userId));
-}
-
-/** This person's seat in a direct or group channel (role and switches), or undefined when they are not in it. */
-async function memberFor(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string): Promise<ChannelMember | undefined> {
-  if (channel.channel_type === "partner") return undefined;
-  const members = await membersOf(supabase, channel.tenant_id, [channel]).catch(() => { throw new Error("Could not verify channel access"); });
-  return members.get(channel.id)?.find((member) => member.userId === userId);
+  const { data, error } = await supabase.from("partner_channel_members").select("user_id").eq("tenant_id", channel.tenant_id).eq("channel_id", channel.id).eq("user_id", userId).maybeSingle();
+  if (error) throw new Error("Could not verify channel access");
+  return Boolean(data);
 }
 
 async function assertChannelAccess(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, allowArchived = false) {
@@ -202,7 +195,6 @@ export async function postChannelText(input: { tenantId: string; channelId: stri
   const supabase = getSupabaseServiceClient();
   const channel = await channelById(supabase, input.tenantId, input.channelId);
   await assertChannelAccess(supabase, channel, input.userId);
-  if (channel.channel_type === "group" && !canPost(await memberFor(supabase, channel, input.userId))) throw new Error("You can read this group but not write in it. Ask an admin to change your role.");
   const messageId = randomUUID();
   const uploadedPaths: string[] = [];
   try {
@@ -400,11 +392,7 @@ export async function getPartnerChatChannels(tenantId: string, partnerId: string
     supabase.from("partner_channel_members").select("channel_id").eq("tenant_id", tenantId).eq("user_id", userId),
   ]);
   if (channels.error || memberships.error) throw new Error("Could not load partner chat channels");
-  // A removed member keeps their row (removed_at), so membership is read through membersOf.
-  const rowIds = new Set((memberships.data ?? []).map((row) => row.channel_id));
-  const candidates = (channels.data ?? []).filter((channel) => channel.channel_type !== "partner" && rowIds.has(channel.id)) as ChatChannel[];
-  const seats = await membersOf(supabase, tenantId, candidates);
-  const memberIds = new Set(candidates.filter((channel) => seats.get(channel.id)?.some((member) => member.userId === userId)).map((channel) => channel.id));
+  const memberIds = new Set((memberships.data ?? []).map((row) => row.channel_id));
   const visible = (channels.data ?? []).filter((channel) => channel.channel_type === "partner" ? channel.partner_id === partnerId : memberIds.has(channel.id)) as ChatChannel[];
   const results = await Promise.all(visible.map((channel) => chatForLoadedChannel(supabase, channel, userId, true).catch(() => null)));
   return results.filter((result): result is NonNullable<typeof result> => Boolean(result));
@@ -498,11 +486,7 @@ export async function createAgentChannel(input: { tenantId: string; userId: stri
   const directKey = input.channelType === "direct" ? [input.userId, participants[0]].sort().join(":") : null;
   if (directKey) {
     const existing = await supabase.from("partner_channels").select("id, tenant_id, partner_id, channel_type, name, status, created_by, created_at, archived_at, direct_key").eq("tenant_id", input.tenantId).eq("channel_type", "direct").eq("direct_key", directKey).maybeSingle();
-    if (existing.data) {
-      // Starting a conversation you deleted or archived brings it back into your list.
-      await writeConversationState(supabase, { tenantId: input.tenantId, channelId: existing.data.id, userId: input.userId, patch: { deleted_at: null, archived_at: null } }).catch(() => undefined);
-      return existing.data as ChatChannel;
-    }
+    if (existing.data) return existing.data as ChatChannel;
   }
   const inserted = await supabase.from("partner_channels").insert({ tenant_id: input.tenantId, partner_id: null, channel_type: input.channelType, name: (input.name?.trim() || (input.channelType === "direct" ? "Direct message" : "Team channel")).slice(0, 160), created_by: input.userId, direct_key: directKey }).select("id, tenant_id, partner_id, channel_type, name, status, created_by, created_at, archived_at, direct_key").single();
   if (inserted.error?.code === "23505" && directKey) {
@@ -513,8 +497,6 @@ export async function createAgentChannel(input: { tenantId: string; userId: stri
   const memberRows = [input.userId, ...participants].map((userId) => ({ channel_id: inserted.data.id, tenant_id: input.tenantId, user_id: userId }));
   const members = await supabase.from("partner_channel_members").insert(memberRows);
   if (members.error) { await supabase.from("partner_channels").delete().eq("id", inserted.data.id); throw new Error(`Could not save channel participants: ${members.error.message}`); }
-  // The maker owns it (20261028220000); until that migration membersOf still reads the maker as owner.
-  await writeMembers(supabase, (db) => db.from("partner_channel_members").update({ role: "owner", added_by: input.userId }).eq("tenant_id", input.tenantId).eq("channel_id", inserted.data.id).eq("user_id", input.userId)).catch(() => undefined);
   return inserted.data as ChatChannel;
 }
 
@@ -545,9 +527,7 @@ export async function setAgentChannelArchived(input: { tenantId: string; channel
   const supabase = getSupabaseServiceClient();
   const channel = await channelById(supabase, input.tenantId, input.channelId);
   if (channel.channel_type === "partner") throw new Error("A partner channel carries the automatic lead updates, so it follows the partner and cannot be archived here");
-  const seat = await memberFor(supabase, channel, input.userId);
-  if (!seat) throw new Error("You do not have access to this chat channel");
-  if (channel.channel_type === "group" && !canManage(seat)) throw new Error("Only the group's owner and admins can close it");
+  if (!(await isChannelMember(supabase, channel, input.userId))) throw new Error("You do not have access to this chat channel");
   const { data, error } = await supabase
     .from("partner_channels")
     .update({ status: input.archived ? "archived" : "active", archived_at: input.archived ? new Date().toISOString() : null })
@@ -569,146 +549,22 @@ export async function getAgentChatChannels(tenantId: string, userId: string, sco
     supabase.from("partner_channel_members").select("channel_id").eq("tenant_id", tenantId).eq("user_id", userId),
   ]);
   if (channels.error || memberships.error) throw new Error("Could not load partner channels");
-  // A removed member keeps their row (removed_at), so membership is read through membersOf.
-  const rowIds = new Set((memberships.data ?? []).map((row) => row.channel_id));
-  const candidates = (channels.data ?? []).filter((channel) => channel.channel_type !== "partner" && rowIds.has(channel.id)) as ChatChannel[];
-  const seats = await membersOf(supabase, tenantId, candidates);
-  const memberIds = new Set(candidates.filter((channel) => seats.get(channel.id)?.some((member) => member.userId === userId)).map((channel) => channel.id));
+  const memberIds = new Set((memberships.data ?? []).map((row) => row.channel_id));
   const visible = (channels.data ?? []).filter((channel) => channel.channel_type === "partner" || memberIds.has(channel.id)) as ChatChannel[];
   // Access is already proven for every channel in `visible`, so the per-channel check (two serial
   // queries for a partner channel) is skipped: the caller reached here through requireFeatureRole,
   // which resolved their tenant_users membership for this tenant — exactly what isChannelMember
   // accepts for a partner channel — and an internal channel is in `visible` only because
   // `memberIds` holds this user's partner_channel_members row for it.
-  const [latest, othersRead, states] = await Promise.all([
+  const [latest, othersRead] = await Promise.all([
     latestMessagesByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id)),
     othersReadAtByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id)),
-    conversationStates(supabase, tenantId, userId, visible.map((channel) => channel.id)),
   ]);
   // With every channel's messages in hand, the remaining lookups run once for the list; if that fails,
   // each channel falls back to its own reads, as before.
   const prepared = latest ? await prepareChats(supabase, tenantId, visible, latest).catch(() => null) : null;
-  const results = await Promise.all(visible.map(async (channel) => {
-    try {
-      const chat = await chatForLoadedChannel(supabase, channel, userId, true, true, scope, latest?.get(channel.id), prepared?.get(channel.id));
-      const state = states.get(channel.id) ?? { pinnedAt: null, archivedAt: null, deletedAt: null };
-      const shown = afterDelete(chat.messages, state);
-      // Deleted and nothing new since: gone from this person's list until someone writes again.
-      if (state.deletedAt && shown.length === 0) return null;
-      return { ...chat, messages: shown, unreadCount: Math.min(chat.unreadCount, shown.length), othersReadAt: othersRead.get(channel.id) ?? null, members: seats.get(channel.id) ?? [], state };
-    } catch { return null; }
-  }));
+  const results = await Promise.all(visible.map(async (channel) => { try { return { ...(await chatForLoadedChannel(supabase, channel, userId, true, true, scope, latest?.get(channel.id), prepared?.get(channel.id))), othersReadAt: othersRead.get(channel.id) ?? null }; } catch { return null; } }));
   return results.filter(Boolean);
-}
-
-/** A conversation this person deleted shows only what was written after. */
-function afterDelete(messages: PartnerMessage[], state: ConversationState) {
-  if (!state.deletedAt) return messages;
-  const cut = new Date(state.deletedAt).getTime();
-  return messages.filter((message) => new Date(message.createdAt).getTime() > cut);
-}
-
-/**
- * Pin, archive or delete a conversation for the person asking; nobody else's list changes. Delete
- * hides the conversation and what was in it (history is kept, 20261028220000); a later message brings
- * it back with only what is new. Any conversation the person can open, partner channels included.
- */
-export async function setConversationState(input: { tenantId: string; channelId: string; userId: string; pinned?: boolean; archived?: boolean; deleted?: boolean }) {
-  const supabase = getSupabaseServiceClient();
-  const channel = await channelById(supabase, input.tenantId, input.channelId);
-  await assertChannelAccess(supabase, channel, input.userId, true);
-  const now = new Date().toISOString();
-  const patch: Partial<{ pinned_at: string | null; archived_at: string | null; deleted_at: string | null }> = {};
-  if (input.pinned !== undefined) patch.pinned_at = input.pinned ? now : null;
-  if (input.archived !== undefined) patch.archived_at = input.archived ? now : null;
-  if (input.deleted) Object.assign(patch, { deleted_at: now, pinned_at: null, archived_at: null });
-  await writeConversationState(supabase, { tenantId: input.tenantId, channelId: channel.id, userId: input.userId, patch });
-  if (input.deleted) await markChannelRead(input.tenantId, channel.id, input.userId).catch(() => undefined);
-  return channel;
-}
-
-/** The asking person's seat in a group, with the group; refuses anything that is not a group they are in. */
-async function groupSeat(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, channelId: string, userId: string) {
-  const channel = await channelById(supabase, tenantId, channelId);
-  if (channel.channel_type !== "group") throw new Error("Only a group has members to manage");
-  if (channel.status !== "active") throw new Error("This group is closed. Reopen it first.");
-  const members = (await membersOf(supabase, tenantId, [channel])).get(channel.id) ?? [];
-  const actor = members.find((member) => member.userId === userId);
-  if (!actor) throw new Error("You do not have access to this chat channel");
-  return { channel, members, actor };
-}
-
-/** Add people to a group, as members or another role an admin may give. The one-partner rule still holds. */
-export async function addChannelMembers(input: { tenantId: string; channelId: string; userId: string; userIds: string[]; role?: ChannelRole }) {
-  const supabase = getSupabaseServiceClient();
-  const { channel, members, actor } = await groupSeat(supabase, input.tenantId, input.channelId, input.userId);
-  if (!canAddPeople(actor)) throw new Error("Only the group's owner and admins, or someone they allowed, can add people");
-  const role: ChannelRole = input.role ?? "member";
-  if (role === "owner" || (role === "admin" && actor.role !== "owner") || (role !== "member" && !canManage(actor))) throw new Error("You cannot give that role");
-  const current = new Set(members.map((member) => member.userId));
-  const adding = [...new Set(input.userIds)].filter((id) => !current.has(id));
-  if (!adding.length) throw new Error("Everyone you chose is already in the group");
-  if (members.length + adding.length > 50) throw new Error("A group holds up to 50 people");
-  // allowedUserIds checks tenancy and the one-partner rule; the people already in the group count towards it.
-  await allowedUserIds(supabase, input.tenantId, [...members.map((member) => member.userId), ...adding], input.userId);
-  const now = new Date().toISOString();
-  await writeMembers(supabase, (db) => db.from("partner_channel_members").upsert(adding.map((userId) => ({ channel_id: channel.id, tenant_id: input.tenantId, user_id: userId, role, can_add_members: false, added_by: input.userId, removed_at: null, created_at: now })), { onConflict: "channel_id,user_id" }));
-  await postMembershipNote(supabase, channel, input.userId, `added ${await namesOf(supabase, adding)}`);
-  return adding;
-}
-
-/** Remove someone from a group, or leave it. When the owner leaves, the longest-standing admin (else member) takes over. */
-export async function removeChannelMember(input: { tenantId: string; channelId: string; userId: string; memberId: string }) {
-  const supabase = getSupabaseServiceClient();
-  const { channel, members, actor } = await groupSeat(supabase, input.tenantId, input.channelId, input.userId);
-  const target = members.find((member) => member.userId === input.memberId);
-  if (!target) throw new Error("That person is not in the group");
-  const leaving = target.userId === actor.userId;
-  if (leaving && target.role === "owner") {
-    const heir = nextOwner(members, actor.userId);
-    if (heir) await writeMembers(supabase, (db) => db.from("partner_channel_members").update({ role: "owner", can_add_members: false }).eq("tenant_id", input.tenantId).eq("channel_id", channel.id).eq("user_id", heir.userId));
-    else await supabase.from("partner_channels").update({ status: "archived", archived_at: new Date().toISOString() }).eq("tenant_id", input.tenantId).eq("id", channel.id);
-  } else if (!canRemove(actor, target)) {
-    throw new Error(target.role === "owner" ? "The group's owner cannot be removed" : "Only the group's owner and admins can remove people");
-  }
-  // The note goes in first: the person leaving can still write it.
-  await postMembershipNote(supabase, channel, input.userId, leaving ? "left the group" : `removed ${await namesOf(supabase, [target.userId])}`);
-  await writeMembers(supabase, (db) => db.from("partner_channel_members").update({ removed_at: new Date().toISOString() }).eq("tenant_id", input.tenantId).eq("channel_id", channel.id).eq("user_id", target.userId));
-}
-
-/** Change a member's role, or whether a member may add people. */
-export async function setChannelMember(input: { tenantId: string; channelId: string; userId: string; memberId: string; role: ChannelRole; canAddMembers: boolean }) {
-  const supabase = getSupabaseServiceClient();
-  const { channel, members, actor } = await groupSeat(supabase, input.tenantId, input.channelId, input.userId);
-  const target = members.find((member) => member.userId === input.memberId);
-  if (!target) throw new Error("That person is not in the group");
-  if (target.role === "owner") throw new Error("The owner's role cannot be changed. To hand the group over, the owner leaves it and the longest-standing admin takes over.");
-  if (target.userId === actor.userId) throw new Error("You cannot change your own role");
-  if (!canChangeRole(actor, target, input.role)) throw new Error(input.role === "admin" || target.role === "admin" ?"Only the group's owner can make or unmake admins" : "Only the group's owner and admins can change roles");
-  await writeMembers(supabase, (db) => db.from("partner_channel_members").update({ role: input.role, can_add_members: input.role === "member" && input.canAddMembers }).eq("tenant_id", input.tenantId).eq("channel_id", channel.id).eq("user_id", target.userId));
-}
-
-/** Rename a group: its owner and admins. */
-export async function renameChannel(input: { tenantId: string; channelId: string; userId: string; name: string }) {
-  const supabase = getSupabaseServiceClient();
-  const { channel, actor } = await groupSeat(supabase, input.tenantId, input.channelId, input.userId);
-  if (!canManage(actor)) throw new Error("Only the group's owner and admins can rename it");
-  const name = input.name.trim().slice(0, 160);
-  if (!name) throw new Error("Give the group a name");
-  const { error } = await supabase.from("partner_channels").update({ name }).eq("tenant_id", input.tenantId).eq("id", channel.id);
-  if (error) throw new Error(`Could not rename the group: ${error.message}`);
-}
-
-async function namesOf(supabase: ReturnType<typeof getSupabaseServiceClient>, userIds: string[]) {
-  const { data } = await supabase.from("users").select("id, name").in("id", userIds);
-  const names = userIds.map((id) => data?.find((user) => user.id === id)?.name ?? "someone");
-  return names.length <= 2 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-}
-
-/** "Rinor added Ana and Ben": a line in the group, written as the person who did it and marked so the thread sets it apart. */
-async function postMembershipNote(supabase: ReturnType<typeof getSupabaseServiceClient>, channel: ChatChannel, userId: string, what: string) {
-  const { error } = await supabase.from("partner_messages").insert({ tenant_id: channel.tenant_id, partner_id: channel.partner_id, channel_id: channel.id, work_item_id: null, message: `${await namesOf(supabase, [userId])} ${what}`.slice(0, 2000), message_kind: "text", card_type: null, card_payload: { membership: true }, created_by: userId });
-  if (error) console.error("[partner-chat] membership note failed", error);
 }
 
 /**

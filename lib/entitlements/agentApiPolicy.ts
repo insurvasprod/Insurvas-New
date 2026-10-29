@@ -39,8 +39,6 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // The same for the sidebar's counts: each count is gated on its own page's feature and roles
   // inside lib/menu/navCounts.ts.
   { sourceFile: "app/api/app/nav/counts/route.ts", featureKey: null },
-  // The Lead sources rail's counts: each gated on its own step's feature and roles in lib/leadSources/stepCounts.ts.
-  { sourceFile: "app/api/app/lead-sources/steps/route.ts", featureKey: null },
   { sourceFile: "app/api/app/agency-profile/route.ts", featureKey: null, allowedRoles: ["owner"] },
   // LA-8.3: the audited tax-ID reveal and the logo documents print.
   { sourceFile: "app/api/app/agency-profile/tax-id/route.ts", featureKey: null, allowedRoles: ["owner"] },
@@ -93,8 +91,6 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // cannot see is how two setters put two people in the same hour.
   { sourceFile: "app/api/app/calendar/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant", "setter"] },
   { sourceFile: "app/api/app/leads/import/preflight/route.ts", featureKey: "lead_import", allowedRoles: ["owner", "producer", "assistant"] },
-  // Review clean-up (2026-10-29): a staged file's state for the rail, and "Discard this file". Same gate as the review.
-  { sourceFile: "app/api/app/leads/import/batches/[id]/route.ts", featureKey: "lead_import", allowedRoles: ["owner", "producer", "assistant"] },
   // The inventory of imported lists. Same feature and roles as the import that fills it.
   { sourceFile: "app/api/app/lead-lists/route.ts", featureKey: "lead_import", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/scoring/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
@@ -242,8 +238,6 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/inbound/claim-next/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/inbound/verification/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/inbound/verification/reveal/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
-  // Inbound step 2, Transfer check: the caller's notes, call count and transfers (owner 2026-10-28).
-  { sourceFile: "app/api/app/inbound/caller/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/inbound/handoff/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   // Unassign, put a dropped call back in the queue, end buffer involvement (20260925709860).
   { sourceFile: "app/api/app/inbound/release/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },

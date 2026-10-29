@@ -236,13 +236,11 @@ async function searchPartners(tenantId: string, term: string): Promise<SearchHit
  * search never offers a door that is locked — the gate screens exist for URLs people type, not
  * for suggestions the product made itself.
  */
-function searchPages(term: string, granted: Set<string>, role: TenantRole, solo = false): SearchHit[] {
+function searchPages(term: string, granted: Set<string>, role: TenantRole): SearchHit[] {
   const needle = term.toLowerCase();
   const pages: SearchHit[] = allMenuItems()
     .filter((item) => !item.required_feature || granted.has(item.required_feature))
     .filter((item) => !item.required_roles || item.required_roles.includes(role))
-    // Solo mode: the team-only pages the menu leaves out are not offered here either.
-    .filter((item) => !(solo && item.teamOnly))
     .filter((item) => item.label.toLowerCase().includes(needle) || item.sectionLabel.toLowerCase().includes(needle))
     .map((item) => ({
       group: "Pages" as const,
@@ -298,8 +296,6 @@ export async function searchWorkspace(input: {
    * (and their received/assigned counts, which count every producer's leads) are refused to such a session.
    */
   scope?: ProducerScope;
-  /** Solo mode (lib/tenantTeam/solo.ts): the team-only pages are not offered. */
-  solo?: boolean;
 }): Promise<{ hits: SearchHit[]; total: number; truncated: boolean }> {
   const term = input.query.replace(/\s+/g, " ").trim();
   if (term.length < 2) return { hits: [], total: 0, truncated: false };
@@ -317,7 +313,7 @@ export async function searchWorkspace(input: {
   ]);
 
   const found: SearchHit[] = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-  const pages = searchPages(term, granted, input.role, input.solo === true);
+  const pages = searchPages(term, granted, input.role);
   found.push(...pages, ...searchSettingsHits(term, granted, input.role, pages, input.hiddenSettings));
   found.push(...matchActions(term, granted, input.role).map(actionHit));
 

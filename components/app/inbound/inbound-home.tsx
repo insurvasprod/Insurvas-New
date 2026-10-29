@@ -15,7 +15,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Phone } from "lucide-react";
 
 import { Callout, st } from "@/components/app/settings/primitives";
 import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
@@ -80,7 +79,7 @@ function isPresent(member: Member, now: number) {
   return Boolean(member.lastSeenAt) && now - new Date(member.lastSeenAt!).getTime() <= 60_000;
 }
 
-export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false }: { currentUserId: string; readOnly: boolean; canSeeTeam: boolean; /** Solo mode: no Team page; All callers instead. */ solo?: boolean }) {
+export function InboundHome({ currentUserId, readOnly, canSeeTeam }: { currentUserId: string; readOnly: boolean; canSeeTeam: boolean }) {
   const { floor, error, now, saving, availability, setAvailability, liveLabel, updated, refresh, claim, accept, sendNudge } = useFloor({ readOnly });
   const [pop, setPop] = useState<Pop>("none");
   useEffect(() => {
@@ -135,9 +134,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
       <AvailabilityStatus availability={availability} onCall={onCall} />
       {ready && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("on_break")}>Take a break</Button>}
       {ready && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("off")}>Stop taking calls</Button>}
-      {canSeeTeam && (solo
-        ? <Button asChild variant="outline"><Link href="/app/inbound/team?tab=all">All callers</Link></Button>
-        : <Button asChild variant="outline"><Link href="/app/inbound/team">Team</Link></Button>)}
+      {canSeeTeam && <Button asChild variant="outline"><Link href="/app/inbound/team">Team</Link></Button>}
     </>
   );
 
@@ -153,10 +150,6 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           <div className="min-w-0">
             <span className="text-xs font-semibold tracking-[0.04em] text-[var(--accent-ink)] uppercase">Next caller</span>
             <h2 className="m-0 mt-1 text-title-md font-semibold tracking-[-0.02em] text-[var(--ink)]">{next.customer}</h2>
-            {/* Owner 2026-10-28: the phone number, before anything else about them. */}
-            <p className="m-0 mt-1 inline-flex items-center gap-2 text-lg font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
-              <Phone className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />{next.phone ?? <span className="text-sm font-medium text-[var(--body)]">No phone on the lead</span>}
-            </p>
             <p className="m-0 mt-0.5 text-sm text-[var(--body)]">{facts}</p>
           </div>
           <div className="text-right">
@@ -170,7 +163,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           <Button type="button" data-guide="inbound-claim" className="min-w-56" disabled={Boolean(takeReason) || saving === next.id} title={takeReason} onClick={() => void claim(next.id)}>
             {saving === next.id ? "Taking…" : "Take this call"}
           </Button>
-          <span className="text-sm text-[var(--body)]">{takeReason ?? "Opens the call: what we know about them, then verification."}</span>
+          <span className="text-sm text-[var(--muted)]">{takeReason ?? "Opens the call: verification, then finish it."}</span>
         </div>
       </section>
     );
@@ -254,7 +247,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
                     <strong className="block truncate font-semibold text-[var(--ink)]">{call.customer}</strong>
                     <span className={forgotten ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"}>{forgotten ? `Taken ${shortDuration(age)} ago, no outcome` : `On the call ${shortDuration(age)}`}</span>
                   </span>
-                  <Button asChild variant="outline" size="sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id, "verify")}>{forgotten ? "Finish it" : "Back to it"}</Link></Button>
+                  <Button asChild variant="outline" size="sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id)}>{forgotten ? "Finish it" : "Back to it"}</Link></Button>
                 </div>
               );
             })}

@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
-import { customerName, formatInTimezone, resolveCustomerTimezone, stateFromLeadValues } from "./timezone";
+import { formatInTimezone, stateFromLeadValues } from "./timezone";
 import { NO_PRODUCER, type ProducerScope } from "../agency/visibilityCore";
 
 export type CallbackStatus = "scheduled" | "due" | "completed" | "cancelled" | "missed";
@@ -249,91 +249,6 @@ export async function cancelCallback(params: { tenantId: string; userId: string;
   const result = await getSupabaseServiceClient().rpc("cancel_callback", { p_tenant_id: params.tenantId, p_callback_id: params.callbackId, p_actor: params.userId });
   if (result.error) throw new Error(result.error.message);
   return result.data;
-}
-
-/**
- * What the Callbacks page's "Add callback" needs before it can offer times for a lead: its name and
- * state (whose calling window applies), the customer's timezone when it can be derived (never a
- * guess: a split or unknown state asks the agent), and the open callback it already has, if any.
- * A lead has one open callback at a time, so booking for one that has one moves it.
- */
-export type CallbackBookingFacts = {
-  leadId: string; customerName: string; state: string | null; phone: string | null;
-  timezone: string | null; timezoneProblem: string | null;
-  open: { id: string; scheduledAtUtc: string; customerTimezone: string; note: string | null } | null;
-};
-
-export async function callbackBookingFacts(tenantId: string, leadId: string): Promise<CallbackBookingFacts | null> {
-  const supabase = getSupabaseServiceClient();
-  const [lead, open] = await Promise.all([
-    supabase.from("agent_leads").select("id, values").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle(),
-    supabase.from("tenant_callbacks").select("id, scheduled_at_utc, customer_timezone, note").eq("tenant_id", tenantId).eq("lead_id", leadId).in("status", ["scheduled", "due", "missed"]).order("scheduled_at_utc", { ascending: false }).limit(1).maybeSingle(),
-  ]);
-  if (lead.error) throw new Error(lead.error.message);
-  if (open.error) throw new Error(open.error.message);
-  if (!lead.data) return null;
-  const values = (lead.data.values && typeof lead.data.values === "object" && !Array.isArray(lead.data.values) ? lead.data.values : {}) as Record<string, unknown>;
-  const zone = resolveCustomerTimezone(values);
-  const phone = values.phone ?? values.phone_number ?? values.mobile_phone;
-  return {
-    leadId,
-    customerName: customerName(values),
-    state: stateFromLeadValues(values),
-    phone: typeof phone === "string" && phone ? phone : null,
-    timezone: zone.ok ? zone.zone : null,
-    timezoneProblem: zone.ok ? null : zone.message,
-    open: open.data ? { id: open.data.id, scheduledAtUtc: open.data.scheduled_at_utc, customerTimezone: open.data.customer_timezone, note: open.data.note } : null,
-  };
-}
-
-/** A new callback for a lead, booked from the Callbacks page (book_callback, 20261028300000). */
-export async function bookCallback(params: { tenantId: string; userId: string; leadId: string; local: unknown; timezone: string; note: string | null; idempotencyKey: string }) {
-  // Cast: the generated database types predate book_callback.
-  const supabase = getSupabaseServiceClient();
-  const rpc = supabase.rpc.bind(supabase) as unknown as (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }>;
-  const result = await rpc("book_callback", { p_tenant_id: params.tenantId, p_lead_id: params.leadId, p_actor: params.userId, p_callback_local: localValue(params.local), p_customer_timezone: params.timezone, p_note: params.note, p_idempotency_key: params.idempotencyKey });
-  if (result.error) {
-    // The function is not in this database yet: say so rather than a generic failure.
-    if (result.error.code === "PGRST202" || /could not find the function/i.test(result.error.message)) throw new Error("CALLBACK_BOOKING_UNAVAILABLE");
-    throw new Error(result.error.message);
-  }
-  return result.data;
-}
-
-/**
- * Hand-over (20261028400000): give a callback to another agent, or put its lead in the shared queue.
- * Before that migration the functions are missing and this says so (CALLBACK_HANDOVER_UNAVAILABLE).
- */
-async function handOverRpc(name: "reassign_callback" | "release_callback_to_queue", args: Record<string, unknown>) {
-  const supabase = getSupabaseServiceClient();
-  // Bound and loose: the generated types predate these functions.
-  const rpc = supabase.rpc.bind(supabase) as unknown as (fn: string, params: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { code?: string; message: string } | null }>;
-  const result = await rpc(name, args);
-  if (result.error) {
-    if (result.error.code === "PGRST202" || /could not find the function/i.test(result.error.message)) throw new Error("CALLBACK_HANDOVER_UNAVAILABLE");
-    throw new Error(result.error.message);
-  }
-  return result.data;
-}
-
-export function reassignCallback(params: { tenantId: string; userId: string; callbackId: string; assigneeId: string }) {
-  return handOverRpc("reassign_callback", { p_tenant_id: params.tenantId, p_callback_id: params.callbackId, p_actor: params.userId, p_assignee: params.assigneeId });
-}
-
-export function releaseCallbackToQueue(params: { tenantId: string; userId: string; callbackId: string }) {
-  return handOverRpc("release_callback_to_queue", { p_tenant_id: params.tenantId, p_callback_id: params.callbackId, p_actor: params.userId });
-}
-
-/** Who a callback may be given to: active members holding a calling role (the database decides again). */
-export async function callbackAssignees(tenantId: string): Promise<Array<{ id: string; name: string; role: string }>> {
-  const { data, error } = await getSupabaseServiceClient().from("tenant_users").select("user_id, role, accepted_at, users!inner(id, name, status)").eq("tenant_id", tenantId).in("role", ["owner", "producer", "assistant"]).not("accepted_at", "is", null);
-  if (error) throw new Error(error.message);
-  type Row = { user_id: string; role: string; users: { id: string; name: string | null; status: string } | Array<{ id: string; name: string | null; status: string }> };
-  return ((data ?? []) as unknown as Row[])
-    .map((row) => ({ row, user: Array.isArray(row.users) ? row.users[0] : row.users }))
-    .filter(({ user }) => user && user.status === "active")
-    .map(({ row, user }) => ({ id: row.user_id, name: user.name || "Teammate", role: String(row.role) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function completeCallback(params: { tenantId: string; userId: string; callbackId: string; request: Request }) {

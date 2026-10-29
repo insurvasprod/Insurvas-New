@@ -119,7 +119,7 @@ async function call<T>(url: string, init: { method: string; body?: unknown }): P
 
 const SAVE_DELAY = 600;
 
-export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = false, defaultStep, children }: { initial: CaseView; sample: boolean; timeZone?: string; seatReadOnly?: boolean; /** The step with no ?step= (Inbound's Underwriting starts at Verify, owner 2026-10-28). */ defaultStep?: WorkspaceStep; children: ReactNode }) {
+export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = false, children }: { initial: CaseView; sample: boolean; timeZone?: string; seatReadOnly?: boolean; children: ReactNode }) {
   const router = useRouter();
   const params = useSearchParams();
   const [caseView, setCaseView] = useState(initial);
@@ -135,7 +135,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
   const attemptParam = Number(params.get("attempt")) || null;
   const attempt = pickAttempt(caseView, insured, attemptParam);
   const stepParam = params.get("step");
-  const step: WorkspaceStep = isWorkspaceStep(stepParam) ? stepParam : defaultStep && attempt.status !== "closed" ? defaultStep : attempt.status === "closed" ? "timeline" : attempt.status === "draft" ? "interview" : "after";
+  const step: WorkspaceStep = isWorkspaceStep(stepParam) ? stepParam : attempt.status === "closed" ? "timeline" : attempt.status === "draft" ? "interview" : "after";
   const interview = caseView.interviews[insured] ?? null;
   const readOnly = attempt.status === "closed" || seatReadOnly;
 
@@ -267,32 +267,8 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
   }, [sample, attemptId, attempt.attemptNo, caseView.caseId, insured, run, refresh, navigate]);
 
   // ── autosave: values (per field) and interview answers / medications ─────
-  // "It's right" clicked fast down a list (owner 2026-10-28): the screen ticks each one at once, and the
-  // keys confirmed within a quarter second go to the server as one save instead of one save each.
-  // One batch per attempt, so a switch of attempt mid-burst never mixes them.
-  const reviewBatches = useRef(new Map<string, { keys: Set<string>; timer: ReturnType<typeof setTimeout> }>());
-  const queueReviewed = useCallback((key: string) => {
-    const id = attemptId;
-    const batches = reviewBatches.current;
-    const batch = batches.get(id);
-    const keys = batch?.keys ?? new Set<string>();
-    if (batch) clearTimeout(batch.timer);
-    keys.add(key);
-    unsavedValues.current.add(unsavedValueMark(id, key));
-    batches.set(id, {
-      keys,
-      timer: setTimeout(() => {
-        batches.delete(id);
-        const list = [...keys];
-        void run(() => call(`/api/app/applications/attempts/${id}/values`, { method: "PATCH", body: { reviewed: list } }), { reload: false, quiet: true })
-          .then((saved) => { if (saved !== null) for (const k of list) unsavedValues.current.delete(unsavedValueMark(id, k)); });
-      }, 250),
-    });
-  }, [attemptId, run]);
-
   const queueValue = useCallback((key: string, value: FieldValue["value"], reviewedOnly = false) => {
     if (sample) return;
-    if (reviewedOnly && !valueTimers.current.has(key)) { queueReviewed(key); return; }
     const timers = valueTimers.current;
     const id = attemptId;
     const t = timers.get(key);
@@ -304,7 +280,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
       void run(() => call(`/api/app/applications/attempts/${id}/values`, { method: "PATCH", body: reviewedOnly ? { reviewed: [key] } : { values: [{ key, value }] } }), { reload: false, quiet: true })
         .then((saved) => { if (saved !== null && !timers.has(key)) unsavedValues.current.delete(mark); });
     }, reviewedOnly ? 0 : SAVE_DELAY));
-  }, [sample, attemptId, run, queueReviewed]);
+  }, [sample, attemptId, run]);
 
   const queueInterview = useCallback((next: Partial<InterviewView>) => {
     if (sample || !interview) return;

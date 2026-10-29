@@ -692,8 +692,6 @@ export async function advancePreflightScreening(input: {
   const row = await readBatchById(db, input.tenantId, input.batchId);
   if (!row) return { state: "missing" };
   if (row.status === "completed") return { state: "committed" };
-  // Discarded from Review: not staged any more (see loadImportReview).
-  if (row.status === "failed") return { state: "missing" };
   const response = row.response as PreflightPlan | ScreeningJob | null;
   if (response?.kind === "preflight") return { state: "staged", plan: response };
   if (response?.kind !== "screening" || row.status !== "processing") return { state: "missing" };
@@ -884,9 +882,6 @@ export async function loadImportReview(
     .maybeSingle();
   if (row.error || !row.data) return { state: "missing", plan: null };
   if (row.data.status === "completed") return { state: "committed", plan: null };
-  // A file discarded from Review (2026-10-29) is a failed batch whose plan is still in `response`; it
-  // must never be offered for review or commit again. Uploading the same file re-stages the row.
-  if (row.data.status === "failed") return { state: "missing", plan: null };
   const plan = row.data.response as PreflightPlan | ScreeningJob | null;
   if (plan?.kind === "screening")
     return row.data.status === "processing" ? { state: "screening", plan: null, progress: screeningProgress(batchId, plan) } : { state: "missing", plan: null };

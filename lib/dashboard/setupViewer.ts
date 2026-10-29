@@ -4,7 +4,6 @@ import { contextRoles, type TenantContext } from "@/lib/tenantAuth/requireTenant
 
 import { getEntitlement } from "@/lib/entitlements/get";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 
 import { applicableSetupSteps, setupChecklistForState, type SetupAudience, type SetupChecklist } from "./checklist";
 import {
@@ -103,14 +102,12 @@ export async function loadViewerSetup(
 ): Promise<ViewerSetup & { needsStamp: boolean; stamp: () => Promise<void> }> {
   const audience: SetupAudience = context.role === "owner" ? "owner" : "member";
   if (audience === "owner") {
-    const [progress, profile, guide, solo] = await Promise.all([
+    const [progress, profile, guide] = await Promise.all([
       loadSetupProgress(context.tenantId),
       loadSetupProfile(context.tenantId),
       loadSetupGuideState(context.tenantId, context.userId),
-      // Solo mode: no "Assign leads to your agents" step for an agent working alone.
-      isSoloWorkspace(context.tenantId),
     ]);
-    const checklist = setupChecklistForState("", progress, { features: available, profile, seats, marks: guide, solo });
+    const checklist = setupChecklistForState("", progress, { features: available, profile, seats, marks: guide });
     const finished = progress.finished === true;
     return {
       audience,

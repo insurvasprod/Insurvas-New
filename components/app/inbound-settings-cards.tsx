@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Callout, SettingsCard, SettingsGrid, ToggleRow, control } from "@/components/app/settings/primitives";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { useSolo } from "@/components/app/solo-context";
 import type { LadderValues } from "@/lib/queueSla/ladder";
 import { cn } from "@/lib/utils";
 
@@ -138,8 +137,6 @@ export function useInboundSettings() {
 }
 
 export function InboundSettingsCards({ inbound, disabled }: { inbound: ReturnType<typeof useInboundSettings>; disabled: boolean }) {
-  // Solo mode (owner 2026-10-29): every transfer goes to the one agent, so "who gets the next transfer" is not asked.
-  const solo = useSolo();
   const { draft, loaded } = inbound;
   if (!inbound.available) return null;
   if (!draft || !loaded) return inbound.error ? <Callout tone="error" title={inbound.error} /> : null;
@@ -150,7 +147,7 @@ export function InboundSettingsCards({ inbound, disabled }: { inbound: ReturnTyp
       <LeaveGuard dirty={inbound.dirty} onSave={inbound.save} onDiscard={inbound.reset} what="the inbound settings" />
       {!loaded.ready && <Callout tone="warning" title="Alerts, buffer handoff and routing need a database update before they can be changed. Until then transfers work as they always have." />}
       {inbound.error && <Callout tone="error" title={inbound.error} />}
-      <SettingsGrid cols={solo ? 2 : 3}>
+      <SettingsGrid cols={3}>
         <SettingsCard title="Who hears about it" info="When a transfer arrives or waits too long.">
           <div className="flex flex-col gap-4">
             <ToggleRow id="inbound-alert-new" title="Agents, when a transfer arrives" help="The “new lead waiting” alert to owners, producers and buffer agents. The claim card shows the wait either way." checked={draft.alertNewTransfer} onChange={(value) => set({ alertNewTransfer: value })} disabled={locked} />
@@ -168,14 +165,12 @@ export function InboundSettingsCards({ inbound, disabled }: { inbound: ReturnTyp
             <span className={cn("text-xs leading-[1.5]", inbound.timeoutProblem ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>{inbound.timeoutProblem ?? "After that the offer lapses and the buffer can offer someone else. 5 to 300 seconds."}</span>
           </div>
         </SettingsCard>
-        {!solo && (
-          <SettingsCard title="Who gets the next transfer" info="Take next and the claim card hand out the longest wait first.">
-            <div className="flex flex-col gap-4">
-              <ToggleRow id="inbound-licensed-only" title="Only agents licensed in the caller’s state" help="Licensed agents are offered only callers in states they hold a live licence for. Buffer agents are not licensed and still take any caller." checked={draft.licensedOnly} onChange={(value) => set({ licensedOnly: value })} disabled={locked} />
-              <ToggleRow id="inbound-skip-break" title="Skip agents on a break" help="Someone set to On break or Off on the floor is not handed a transfer until they are Ready again." checked={draft.skipOnBreak} onChange={(value) => set({ skipOnBreak: value })} disabled={locked} />
-            </div>
-          </SettingsCard>
-        )}
+        <SettingsCard title="Who gets the next transfer" info="Take next and the claim card hand out the longest wait first.">
+          <div className="flex flex-col gap-4">
+            <ToggleRow id="inbound-licensed-only" title="Only agents licensed in the caller’s state" help="Licensed agents are offered only callers in states they hold a live licence for. Buffer agents are not licensed and still take any caller." checked={draft.licensedOnly} onChange={(value) => set({ licensedOnly: value })} disabled={locked} />
+            <ToggleRow id="inbound-skip-break" title="Skip agents on a break" help="Someone set to On break or Off on the floor is not handed a transfer until they are Ready again." checked={draft.skipOnBreak} onChange={(value) => set({ skipOnBreak: value })} disabled={locked} />
+          </div>
+        </SettingsCard>
       </SettingsGrid>
     </>
   );

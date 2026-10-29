@@ -1,4 +1,4 @@
-import { UserLock, UserRound } from "lucide-react";
+import { UserLock } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,6 @@ export async function RoleGateNotice({
   featureLabel,
   detail,
   reason = "role",
-  action,
 }: {
   featureLabel: string;
   detail: string;
@@ -54,14 +53,7 @@ export async function RoleGateNotice({
    * narrowed session is refused whatever its role. Saying "your role does not include" over a table that says the
    * role reaches it would contradict itself, so the heading changes and the reach table is left out.
    */
-  /**
-   * "solo" (owner 2026-10-29): an individual agent working alone, on a page that only makes sense with other
-   * callers (lib/tenantTeam/solo.ts). Not a role and not a plan limit: one line, the page's own way forward
-   * (`action`), and "Add a teammate" when the owner's plan has a seat to fill.
-   */
-  reason?: "role" | "agency" | "solo";
-  /** Solo: where the work this page did happens instead (the dialer, Inbound, the calendar). */
-  action?: { href: string; label: string };
+  reason?: "role" | "agency";
 }) {
   const context = await resolveTenantContext();
   const role: TenantRole | null = context?.role ?? null;
@@ -73,36 +65,6 @@ export async function RoleGateNotice({
   // Only say the agency has it when the plan really grants it; otherwise say only who can help.
   const agencyHasIt = Boolean(closed?.required_feature && entitlement?.features.includes(closed.required_feature));
   const reach = role && reason === "role" ? roleReach(menu, role, featureLabel) : null;
-  if (reason === "solo") {
-    const seats = entitlement?.limits.max_seats;
-    const canInvite = role === "owner" && (seats === null || (typeof seats === "number" && seats > 1));
-    return (
-      <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-        <PageHeader title={featureLabel} />
-        <div className="flex min-h-0 flex-grow items-center justify-center">
-          <div className="portal-gate-card">
-            <div className="portal-gate-lead">
-              <span className="portal-gate-icon is-info">
-                <UserRound className="size-6" aria-hidden="true" />
-              </span>
-              <h2>{featureLabel} is for teams</h2>
-              <p>{detail}</p>
-              <div className="portal-gate-actions">
-                <Button asChild>
-                  <Link href={action?.href ?? "/app/dashboard"}>{action?.label ?? "Back to your dashboard"}</Link>
-                </Button>
-                {canInvite && (
-                  <Button asChild variant="outline">
-                    <Link href="/app/settings#team-access">Add a teammate</Link>
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
   const roleLabel = role ? TENANT_ROLE_LABELS[role].toLowerCase() : null;
   const otherLabel = reach ? TENANT_ROLE_LABELS[reach.otherRole as TenantRole] ?? reach.otherRole : null;
   const askHref = facts.ownerEmail
