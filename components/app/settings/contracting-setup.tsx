@@ -77,7 +77,7 @@ export function setupProgress(vault: SetupVault, today = todayIso()) {
   return { mine, withStates, percent, complete: mine.length > 0 && withStates.length === mine.length };
 }
 
-export function ContractingSetup({ vault, setVault, salesAvailable, send, reload, onStatesSaved, onFinish }: {
+export function ContractingSetup({ vault, setVault, salesAvailable, send, reload, onStatesSaved, onFinish, search = "", onStepChange }: {
   vault: SetupVault;
   setVault: (update: (current: SetupVault) => SetupVault) => void;
   /** Applications is on: a new carrier is also put on the applications list (its products). */
@@ -89,6 +89,13 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   /** After state ticks save: keep licences in step with the states (the parent's existing rule). */
   onStatesSaved: (states: string[]) => Promise<void>;
   onFinish: () => void;
+  /**
+   * What the Contracting bar's search box holds (owner, 29 Oct: the search sits in the bar on every
+   * tab): carriers on step 1, states on step 2.
+   */
+  search?: string;
+  /** Tells the bar which step is open, so its search names what it searches. */
+  onStepChange?: (step: 1 | 2) => void;
 }) {
   const today = todayIso();
   const [step, setStepState] = useState<1 | 2>(1);
@@ -96,6 +103,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   // eslint-disable-next-line react-hooks/set-state-in-effect -- a stored preference, read once on mount
   useEffect(() => { setStepState(readStep()); }, []);
   const setStep = (next: 1 | 2) => { setStepState(next); writeStep(next); document.getElementById("contracting-setup")?.scrollIntoView({ block: "start", behavior: "smooth" }); };
+  useEffect(() => { onStepChange?.(step); }, [step, onStepChange]);
 
   // ── one queue of saves, in order, never blocking the screen ──────────────────────────────────
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -124,7 +132,9 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
 
   /* ── step 1 · carriers ─────────────────────────────────────────────────────────────────────── */
 
-  const [query, setQuery] = useState("");
+  const query = step === 1 ? search : "";
+  // A new search starts on the first page of carriers.
+  const [searchSeen, setSearchSeen] = useState(search);
   const [libraryPage, setLibraryPage] = useState(1);
   // As many carriers as fit above the step's footer on a desktop, so the step needs no scroll
   // (owner, 29 Oct); never more than ten. A phone scrolls anyway and keeps ten.
@@ -170,6 +180,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
     window.addEventListener("resize", measure);
     return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
   }, [step]);
+  if (search !== searchSeen) { setSearchSeen(search); setLibraryPage(1); }
   const needle = query.trim().toLowerCase();
   const library = vault.carriers.filter((carrier) => !needle || carrier.name.toLowerCase().includes(needle));
   const shownPage = Math.min(libraryPage, Math.max(1, Math.ceil(library.length / perPage)));
@@ -191,7 +202,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
 
   /* ── step 2 · states ───────────────────────────────────────────────────────────────────────── */
 
-  const [stateQuery, setStateQuery] = useState("");
+  const stateQuery = step === 2 ? search : "";
   const [open, setOpen] = useState<string | null>(null);
   // How the 51 tiles are laid out on a desktop: the fewest columns whose rows fit above the footer (so
   // each tile is as wide as it can be and its name shows), each row between 36 and 52px tall. A phone
@@ -284,7 +295,6 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
             </h3>
             <span className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-[var(--muted)] tabular-nums">{mine.length} selected</span>
-              <input className={cn(control, "mt-0 w-64 max-w-full")} aria-label="Search carriers" placeholder="Search carriers" value={query} onChange={(event) => { setQuery(event.target.value); setLibraryPage(1); }} />
             </span>
           </div>
           {/* One header for the three optional fields, not a label on every row. */}
@@ -337,7 +347,6 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
               <span className="flex flex-wrap items-center gap-3">
                 {missing.length > 0 && <StatusChip tone="warning">{missing.map((carrier) => carrier.name).join(", ")} {missing.length === 1 ? "has" : "have"} no state yet</StatusChip>}
                 <span className="text-sm text-[var(--muted)] tabular-nums">{chosenStates} state{chosenStates === 1 ? "" : "s"} chosen</span>
-                <input className={cn(control, "mt-0 w-56 max-w-full")} aria-label="Search states" placeholder="Search states" value={stateQuery} onChange={(event) => setStateQuery(event.target.value)} />
               </span>
             )}
           </div>

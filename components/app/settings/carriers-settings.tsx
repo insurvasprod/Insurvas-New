@@ -109,6 +109,11 @@ export function CarriersSettings() {
   // One search for both tabs (owner, 29 Oct: "a search bar … to check if they have something or not"):
   // a carrier, a state, or both ("aetna tx"). Each tab has its own quick filter.
   const [query, setQuery] = useState("");
+  // Set Up's search sits in the same bar; it searches carriers on step 1 and states on step 2, and
+  // starts empty on each step.
+  const [setupSearch, setSetupSearch] = useState("");
+  const [setupStep, setSetupStep] = useState<1 | 2>(1);
+  const onSetupStep = useCallback((next: 1 | 2) => { setSetupStep(next); setSetupSearch(""); }, []);
   const [carrierFilter, setCarrierFilter] = useState<"all" | "ready" | "setup" | "off">("all");
   // States opens on all 51 (owner, 29 Oct: "it should show all the states … to check if I have any
   // carrier or not there"); a state with none says so on its card.
@@ -343,7 +348,9 @@ export function CarriersSettings() {
             { key: "states" as const, label: "States", count: nAppointed },
             ...(step === "maps" ? [{ key: "maps" as const, label: "Field maps" }] : []),
           ]}
-          actions={step === "carriers" || step === "states" ? (
+          actions={step === "setup" ? (
+            <ToolbarSearch value={setupSearch} onChange={setSetupSearch} placeholder={setupStep === 1 ? "Search carriers" : "Search states"} className="sm:w-60" />
+          ) : step === "carriers" || step === "states" ? (
             // On the tabs' own line: search first, then the quick filter (UI-CONSISTENCY §6).
             <div className="flex flex-wrap items-center justify-end gap-2">
               <ToolbarSearch value={query} onChange={setQuery} placeholder={step === "carriers" ? "Search carriers" : "Search states"} label="Search carriers and states, or both (like “aetna tx”)" className="sm:w-52" />
@@ -404,6 +411,8 @@ export function CarriersSettings() {
           send={send}
           reload={afterSetupSaves}
           onStatesSaved={async (codes) => { for (const code of codes) touched.current.add(code); }}
+          search={setupSearch}
+          onStepChange={onSetupStep}
           onFinish={() => {
             notify.done("Contracting is set up", { detail: "Change a carrier or a state any time on Carriers and States." });
             pickStep("carriers");
