@@ -29,6 +29,13 @@ import { applyAppointmentChanges, appointmentChange, bpToLevel, carriersIn, forS
 import type { TenantCarrierRow } from "@/lib/carriers/service";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { InfoTip } from "@/components/ui/info-tip";
+import { Pager } from "@/components/ui/pager";
+
+/** Carriers on one page of step 1 (manager review 29 Oct, 06:09: pages, not one long scroll). */
+const CARRIERS_PER_PAGE = 10;
+/** A step's footer stays at the bottom of the view while the list scrolls, so Next is always there. */
+const STEP_FOOTER = "sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center justify-between gap-3 rounded-b-[12px] border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3";
 
 export type SetupVault = {
   carriers: { id: string; name: string }[];
@@ -117,8 +124,10 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   /* ── step 1 · carriers ─────────────────────────────────────────────────────────────────────── */
 
   const [query, setQuery] = useState("");
+  const [libraryPage, setLibraryPage] = useState(1);
   const needle = query.trim().toLowerCase();
   const library = vault.carriers.filter((carrier) => !needle || carrier.name.toLowerCase().includes(needle));
+  const shownPage = Math.min(libraryPage, Math.max(1, Math.ceil(library.length / CARRIERS_PER_PAGE)));
 
   function toggleCarrier(carrier: { id: string; name: string }) {
     const on = !mineIds.has(carrier.id);
@@ -202,11 +211,13 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
       {step === 1 ? (
         <section aria-labelledby="contracting-step-1" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
           <div>
-            <h3 id="contracting-step-1" className="m-0 text-card-title text-[var(--ink)]">Which carriers are you contracted with?</h3>
-            <p className="mt-1 text-sm text-[var(--muted)]">Tick each one. Contract details are optional: add them now or later, they only feed commission figures.</p>
+            <h3 id="contracting-step-1" className="m-0 flex items-center gap-1 text-card-title text-[var(--ink)]">
+              Which carriers are you contracted with?
+              <InfoTip label="About this step">Tick each one. Contract details are optional: add them now or later, they only feed commission figures.</InfoTip>
+            </h3>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <input className={cn(control, "mt-0 max-w-sm")} aria-label="Search carriers" placeholder="Search carriers" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input className={cn(control, "mt-0 max-w-sm")} aria-label="Search carriers" placeholder="Search carriers" value={query} onChange={(event) => { setQuery(event.target.value); setLibraryPage(1); }} />
             <span className="text-sm text-[var(--muted)] tabular-nums">{mine.length} selected</span>
           </div>
           {/* One header for the three optional fields, not a label on every row. */}
@@ -215,7 +226,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           </div>
           <ul className="-mt-4 m-0 flex list-none flex-col p-0">
             {library.length === 0 && <li className="py-3 text-sm text-[var(--muted)]">No carrier matches. <a className="font-medium text-[var(--accent-ink)] hover:underline" href="mailto:support@insurvas.com?subject=Please%20add%20a%20carrier%20to%20the%20library">Ask Insurvas to add it</a></li>}
-            {library.map((carrier) => (
+            {library.slice((shownPage - 1) * CARRIERS_PER_PAGE, shownPage * CARRIERS_PER_PAGE).map((carrier) => (
               <CarrierRow
                 key={carrier.id}
                 carrier={carrier}
@@ -227,7 +238,9 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
               />
             ))}
           </ul>
-          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+          {library.length > CARRIERS_PER_PAGE && <Pager page={shownPage} total={library.length} noun="carriers" pageSize={CARRIERS_PER_PAGE} onPage={setLibraryPage} />}
+          {/* Always in view while the step is done (manager review 29 Oct, 05:39). */}
+          <footer className={STEP_FOOTER}>
             {status}
             <Button type="button" disabled={mine.length === 0} onClick={() => setStep(2)}>Next: set up states →</Button>
           </footer>
@@ -235,8 +248,10 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
       ) : (
         <section aria-labelledby="contracting-step-2" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
           <div>
-            <h3 id="contracting-step-2" className="m-0 text-card-title text-[var(--ink)]">Which states do you sell in?</h3>
-            <p className="mt-1 text-sm text-[var(--muted)]">A state covers all your carriers. Open a state to choose only some of them.</p>
+            <h3 id="contracting-step-2" className="m-0 flex items-center gap-1 text-card-title text-[var(--ink)]">
+              Which states do you sell in?
+              <InfoTip label="About this step">Tick a state and its carriers appear: untick any you are not appointed with there.</InfoTip>
+            </h3>
           </div>
           {mine.length === 0 ? (
             <p className="m-0 text-sm text-[var(--body)]">Choose your carriers first. <button type="button" className="font-medium text-[var(--accent-ink)] hover:underline" onClick={() => setStep(1)}>Go to step 1</button></p>
@@ -253,15 +268,15 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                 <span className="text-[var(--muted)] tabular-nums">{chosenStates} state{chosenStates === 1 ? "" : "s"} chosen</span>
                 {missing.length > 0 && <StatusChip tone="warning">{missing.map((carrier) => carrier.name).join(", ")} {missing.length === 1 ? "has" : "have"} no state yet</StatusChip>}
               </div>
-              <ul className="m-0 grid list-none grid-cols-1 gap-x-4 p-0 md:grid-cols-2">
+              <ul className="m-0 grid list-none grid-cols-1 items-start gap-x-4 gap-y-0.5 p-0 md:grid-cols-2">
                 {states.map(([code, name]) => {
                   const here = carriersHere(code);
                   const on = here.length > 0;
                   const expanded = open === code;
                   return (
-                    <li key={code} className="border-b border-[var(--border)] py-1.5">
+                    <li key={code} className={cn("rounded-[10px] px-1.5 py-0.5", expanded && "bg-[var(--surface-alt)]")}>
                       <div className="flex items-center gap-3">
-                        <button type="button" role="checkbox" aria-checked={on} aria-label={name} onClick={() => toggleState(code)} className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-1 text-left hover:bg-[var(--surface-alt)]">
+                        <button type="button" role="checkbox" aria-checked={on} aria-label={name} onClick={() => { toggleState(code); if (!on && mine.length > 1) setOpen(code); else if (on && expanded) setOpen(null); }} className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-1.5 text-left">
                           <span aria-hidden="true" className={cn("inline-grid size-[18px] shrink-0 place-items-center rounded-[5px] border", on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)]")}>{on && <Check className="size-3" />}</span>
                           <span className="w-7 font-mono text-xs text-[var(--muted)]">{code}</span>
                           <span className="min-w-0 flex-1 truncate text-sm text-[var(--ink)]">{name}</span>
@@ -273,11 +288,18 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                           </button>
                         )}
                       </div>
-                      {expanded && (
-                        <div role="group" aria-label={`Carriers in ${name}`} className="flex flex-wrap gap-1.5 py-2 pl-8">
+                      {/* Picking a state opens its carriers, one tick each (manager review 29 Oct, 08:05:
+                          "just make a card … showing me all the carriers, tick by tick"). */}
+                      {expanded && on && (
+                        <div role="group" aria-label={`Carriers in ${name}`} className="mt-1 mb-1.5 ml-8 flex flex-col rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
                           {mine.map((carrier) => {
                             const has = here.includes(carrier.id);
-                            return <ToggleChip key={carrier.id} selected={has} onClick={() => setAppointments([code], [carrier.id], !has)}>{carrier.name}</ToggleChip>;
+                            return (
+                              <button key={carrier.id} type="button" role="checkbox" aria-checked={has} onClick={() => setAppointments([code], [carrier.id], !has)} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-alt)]">
+                                <span aria-hidden="true" className={cn("inline-grid size-4 shrink-0 place-items-center rounded-[4px] border", has ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)]")}>{has && <Check className="size-3" />}</span>
+                                <span className={cn("min-w-0 flex-1 truncate", has ? "text-[var(--ink)]" : "text-[var(--muted)]")}>{carrier.name}</span>
+                              </button>
+                            );
                           })}
                         </div>
                       )}
@@ -287,7 +309,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
               </ul>
             </>
           )}
-          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+          <footer className={STEP_FOOTER}>
             <Button type="button" variant="outline" onClick={() => setStep(1)}>← Back</Button>
             <span className="flex flex-wrap items-center gap-3">
               {status}

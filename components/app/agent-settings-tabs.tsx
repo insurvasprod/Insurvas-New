@@ -308,6 +308,7 @@ export function AgentSettingsTabs({
           visible
           title={titleCase(active.label)}
           description={active.short ?? active.description}
+          infoDescription
           breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: titleCase(active.label) }]}
           // Who last changed something here (LA-8.8), under the purpose line; owners only, like the log.
           meta={role === "owner" ? <SectionLastChanged key={active.id} sectionKey={active.id} /> : undefined}
