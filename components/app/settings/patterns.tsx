@@ -5,8 +5,8 @@
  * on top of primitives.tsx and the kit in components/ui. The rules for using them are on
  * /design/settings/patterns, next to each part.
  *
- *  - FormSection   a group of settings: title and help on the left, its fields in a card on the right
- *                  on wide screens; stacked on narrow ones. Halves a long settings page.
+ *  - FormSection   a group of settings: its title (with an (i) for the why) and its fields in a card,
+ *                  either stacked above the card or, in the R3 "split" layout, beside it.
  *  - FieldRow      fields side by side inside a FormSection (short fields share a row).
  *  - Advanced      rarely changed settings, folded away; opens by itself when a link points inside.
  *  - DangerZone    the section's destructive actions, last, each behind a confirmation.
@@ -20,33 +20,66 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { confirmAction, type ConfirmOptions } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 /* ── form section ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * One group of settings. The left column says what the group is for (title, one or two lines of help,
- * optional extra such as a status); the right column holds the fields, on the glass card. Sections
- * sit 32px apart with a hairline between them, so a page reads as a list of decisions.
+ * One group of settings. Its title says what the group is for; why it exists sits behind the (i)
+ * beside the title (`info`, owner 2026-10-29: text across the page is overwhelming). `help` is for
+ * one short line that must be read to fill the group in, and `aside` for a status or a link.
+ *
+ * Two layouts. "stacked" (proposed in the 2026-10-29 pass, opt-in until the owner picks): the title
+ * row above a full-width card, with `aside` at the row's end. "split" (R3): the title on the left,
+ * the card on the right.
  */
-export function FormSection({ id, title, help, aside, children, className }: {
+export function FormSection({ id, title, info, infoLabel, help, aside, layout = "split", children, className }: {
   id?: string;
   title: ReactNode;
+  /** Why the group exists, behind the (i): one or two plain sentences. */
+  info?: ReactNode;
+  /** The (i)'s accessible name when the title is not plain text. */
+  infoLabel?: string;
   help?: ReactNode;
-  /** Under the help: a status chip, a link to where this is used. */
+  /** A status chip or a link to where this is used. */
   aside?: ReactNode;
+  layout?: "split" | "stacked";
   children: ReactNode;
   className?: string;
 }) {
+  const heading = (
+    <div className="flex min-w-0 items-center gap-1">
+      <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>
+      {info && <InfoTip label={infoLabel ?? (typeof title === "string" ? `About ${title.toLowerCase()}` : "About this section")}>{info}</InfoTip>}
+    </div>
+  );
+  const helpLine = help && <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{help}</p>;
+  const card = <div className="m-glass flex min-w-0 flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">{children}</div>;
+
+  if (layout === "stacked") {
+    return (
+      <section id={id} className={cn("flex min-w-0 scroll-mt-24 flex-col gap-2.5", className)}>
+        <div>
+          <div className="flex min-h-6 flex-wrap items-center gap-x-3 gap-y-1">
+            {heading}
+            {aside && <div className="ml-auto flex items-center gap-2">{aside}</div>}
+          </div>
+          {helpLine}
+        </div>
+        {card}
+      </section>
+    );
+  }
   return (
     <section id={id} className={cn("grid scroll-mt-24 gap-3 border-t border-[var(--border)] pt-6 first:border-t-0 first:pt-0 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-8", className)}>
       <div className="min-w-0">
-        <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>
-        {help && <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{help}</p>}
+        {heading}
+        {helpLine}
         {aside && <div className="mt-3">{aside}</div>}
       </div>
-      <div className="m-glass flex min-w-0 flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">{children}</div>
+      {card}
     </section>
   );
 }

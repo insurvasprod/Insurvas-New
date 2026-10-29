@@ -43,7 +43,7 @@ export function SettingsPatternsPreview() {
   );
 }
 
-type View = "form" | "autosave" | "rules";
+type View = "form" | "autosave" | "help" | "rules";
 
 function PatternsBoard() {
   const [view, setView] = useState<View>("form");
@@ -52,12 +52,13 @@ function PatternsBoard() {
       <SettingsSectionHeader />
       <ViewTabs
         label="Examples"
-        tabs={[{ key: "form", label: "A form that saves together" }, { key: "autosave", label: "Switches that save at once" }, { key: "rules", label: "The rules" }]}
+        tabs={[{ key: "form", label: "A form that saves together" }, { key: "autosave", label: "Switches that save at once" }, { key: "help", label: "Help behind (i)" }, { key: "rules", label: "The rules" }]}
         value={view}
         onChange={setView}
       />
       {view === "form" && <DraftExample />}
       {view === "autosave" && <AutosaveExample />}
+      {view === "help" && <HelpExample />}
       {view === "rules" && <Rules />}
     </SettingsStack>
   );
@@ -185,6 +186,7 @@ function SignInRow({ label, value, action }: { label: string; value: React.React
 
 const RULES: { part: string; when: string; never: string }[] = [
   { part: "Form section", when: "Every group of settings. Title and help left, fields right on wide screens; stacked on a phone. Short fields share a row.", never: "A card with its own title over a single-column form as wide as the screen." },
+  { part: "Help text", when: "Why a section exists goes behind the (i) beside its title, in one or two plain sentences. Opens on hover and on click.", never: "A paragraph beside or under the title. Hidden format rules, warnings or legal wording: those stay on screen." },
   { part: "Save bar", when: "A section where you edit several fields and keep them together. Appears at the bottom when something changed, says how many, and stays in view while you scroll. A leave warning catches the rest.", never: "Save in the page header, in a toolbar, floating in a corner, or one Save per card." },
   { part: "Saves at once", when: "Switches and single choices that stand alone. A quiet \"Saving… / Saved\" beside them; an error stays with Retry.", never: "Mixing the two in one section. A section either saves together or saves at once." },
   { part: "Choices", when: "On/off: a switch. Two to five options: a segmented control. More than five: a dropdown.", never: "A dropdown for Warn/Block, or seven buttons for a time zone." },
@@ -193,6 +195,25 @@ const RULES: { part: string; when: string; never: string }[] = [
   { part: "Tabs", when: "A section longer than about a screen and a half, or with separate jobs. At most five, each named for the job. A number only when something needs attention.", never: "Nine tabs that run off the edge, or counts nobody can explain." },
   { part: "History", when: "The page header's \"Last changed · History\" line. Nothing else.", never: "A \"Recent changes\" card or a change-log tab inside a section." },
 ];
+
+/* ── example 3: help behind the (i), in the two layouts (owner, 2026-10-29) ─────────────────── */
+
+function HelpExample() {
+  const fields = (
+    <FieldRow>
+      <Field label="Trading name" htmlFor="h-trading"><input id="h-trading" className={control} defaultValue="Power Policies" /></Field>
+      <Field label="Legal name" htmlFor="h-legal" required><input id="h-legal" className={control} defaultValue="Masood Insurance Services LLC" /></Field>
+    </FieldRow>
+  );
+  const info = "Clients see the trading name on the welcome pack, statements and letters. Tax forms and regulators use the legal name.";
+  return (
+    <FormSections>
+      <p className="m-0 text-sm text-[var(--muted)]">Rest the mouse on the (i), or click it. The same section in each layout:</p>
+      <FormSection layout="stacked" title="Names (stacked)" infoLabel="About names" info={info} aside={<StatusChip tone="good">Complete</StatusChip>}>{fields}</FormSection>
+      <FormSection title="Names (split)" infoLabel="About names" info={info} aside={<StatusChip tone="good">Complete</StatusChip>}>{fields}</FormSection>
+    </FormSections>
+  );
+}
 
 function Rules() {
   return (

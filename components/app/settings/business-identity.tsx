@@ -30,7 +30,6 @@ import { notify } from "@/lib/notify";
 import { formatDay } from "@/lib/carriers/contracts";
 import { BUSINESS_DOCUMENTS, BUSINESS_FIELD_LABELS, DOCUMENT_REQUIREMENTS, missingFor } from "@/lib/agencyProfile/requirements";
 import { ENTITY_TYPE_LABELS, maskTaxId, normalizeTaxId, npnHint, WORKSPACE_TIMEZONES, type AgencyProfileResponse, type AgencyProfileView, type EntityType, type TaxIdType } from "@/lib/agencyProfile/types";
-import { glass } from "@/components/ui/card";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Draft = {
@@ -209,7 +208,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
   const tabs: Array<ViewTab<IdentityTab>> = [
     { key: "business", label: "Business" },
     { key: "address", label: "Contact & address" },
-    { key: "documents", label: "Documents & logo", count: notReady || null, tone: "danger" },
+    { key: "documents", label: "Documents & logo", count: notReady || null },
     { key: "support", label: "Partners & owner" },
   ];
   const cityLine = [draft.city, [draft.state, draft.postalCode].filter(Boolean).join(" ")].filter((part) => part.trim()).join(", ");
@@ -225,9 +224,9 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
       <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex flex-col gap-6">
         {tab === "business" && (
           <FormSections>
-            <FormSection title="Names and licence" help="The trading name is what clients see; the legal name is for tax forms and regulators.">
+            <FormSection layout="stacked" title="Names and licence" info="Clients see the trading name on the welcome pack, statements and letters. Tax forms and regulators use the legal name.">
               <FieldRow>
-                <Field label="Trading name" htmlFor="identity-trading-name" hint="On the welcome pack, statements and letters.">
+                <Field label="Trading name" htmlFor="identity-trading-name">
                   <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
                 </Field>
                 <Field label="Legal name" htmlFor="identity-legal-name" required>
@@ -249,14 +248,13 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
               </FieldRow>
             </FormSection>
 
-            <FormSection title="Tax ID" help="Stored encrypted and shown masked. Each reveal is recorded." aside={p.hasTaxId ? <StatusChip tone="good">On file</StatusChip> : <StatusChip tone="warning">Not added</StatusChip>}>
+            <FormSection layout="stacked" title="Tax ID" info="Stored encrypted and shown masked; each reveal is recorded. A sole proprietor without an EIN uses their Social Security number." aside={p.hasTaxId ? <StatusChip tone="good">On file</StatusChip> : <StatusChip tone="warning">Not added</StatusChip>}>
               <div className="flex flex-col gap-1.5">
                 <span className="text-label text-[var(--body)]">Type</span>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tax ID type">
                   <ToggleChip role="radio" selected={draft.taxIdType === "ein"} onClick={() => pick("taxIdType", "ein")}>EIN</ToggleChip>
                   <ToggleChip role="radio" selected={draft.taxIdType === "ssn"} onClick={() => pick("taxIdType", "ssn")}>Social Security number</ToggleChip>
                 </div>
-                <span className="text-xs text-[var(--muted)]">A sole proprietor without an EIN files under their Social Security number.</span>
               </div>
               {p.hasTaxId && (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -276,8 +274,8 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
               </Field>
             </FormSection>
 
-            <FormSection title="Time zone" help="How times show for your team, and when daily summaries arrive.">
-              <Field label="Business time zone" htmlFor="identity-timezone" hint="It does not set calling hours: those always follow each customer’s own state.">
+            <FormSection layout="stacked" title="Time zone" info="How times show for your team, and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state.">
+              <Field label="Business time zone" htmlFor="identity-timezone">
                 <select id="identity-timezone" className={cn(control, "block max-w-sm")} value={draft.timezone} onChange={set("timezone")}>
                   <option value="">Not set</option>
                   {timezoneOptions.map((zone) => <option key={zone} value={zone}>{ZONE_NAMES[zone] ?? zone}</option>)}
@@ -289,7 +287,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "address" && (
           <FormSections>
-            <FormSection title="Address" help="Your agency's own address, as clients and carriers see it. Letters and statements print it.">
+            <FormSection layout="stacked" title="Address" info="Your agency’s own address, as clients and carriers see it. Letters and statements print it.">
               <FieldRow>
                 <Field label="Address" htmlFor="identity-address-line1">
                   <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
@@ -313,7 +311,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                 </Field>
               </FieldRow>
             </FormSection>
-            <FormSection title="Contact" help="How clients and carriers reach the agency. Your own phone stays on My profile.">
+            <FormSection layout="stacked" title="Contact" info="How clients and carriers reach the agency. Your own phone is on My profile.">
               <FieldRow>
                 <Field label="Business phone" htmlFor="identity-phone">
                   <input id="identity-phone" type="tel" className={control} value={draft.phone} onChange={set("phone")} autoComplete="tel" placeholder="(312) 555-0100" />
@@ -331,7 +329,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "documents" && (
           <FormSections>
-            <FormSection title="Logo" help="PNG or JPEG, up to 512 KB. Without one, documents print your trading name as text.">
+            <FormSection layout="stacked" title="Logo" info="Without a logo, documents print your trading name as text.">
               <div className="flex flex-wrap items-center gap-4">
                 <div id="identity-logo" className="flex h-16 min-w-40 items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] m-glass-inset px-4">
                   {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL from private storage */}
@@ -341,13 +339,15 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                 <input ref={fileRef} type="file" accept="image/png,image/jpeg" className="hidden" aria-label="Choose a logo" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); }} />
                 <Button type="button" variant="outline" disabled={busy || !p.updatedAt} onClick={() => fileRef.current?.click()}>{p.logoUrl ? "Replace" : "Upload logo"}</Button>
                 {p.logoUrl && <Button type="button" variant="ghost" disabled={busy} onClick={() => void removeLogo()}>Remove</Button>}
+                <span className="text-xs text-[var(--muted)]">PNG or JPEG, up to 512 KB</span>
               </div>
               {!p.updatedAt && <p className="m-0 text-sm text-[var(--muted)]">Save the business identity first, then add a logo.</p>}
             </FormSection>
 
             <FormSection
+              layout="stacked"
               title="Documents that use it"
-              help="Each one checks these details before it is made, and says which one is missing."
+              info="Each document checks these details before it is made, and says which one is missing."
               aside={<StatusChip tone={notReady ? "warning" : "good"}>{ready} of {docs.length} ready</StatusChip>}
             >
               <ul className="m-0 flex list-none flex-col p-0">
@@ -363,7 +363,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
             </FormSection>
 
             {/* How a letter prints with what is on screen now (owner, 2026-10-27: keep the letterhead from B). */}
-            <FormSection title="How it prints" help="A live preview of a letter's head and foot, from what is on screen now.">
+            <FormSection layout="stacked" title="How it prints" info="A letter’s head and foot, from what is on screen now. It changes as you type.">
               <div className="rounded-[8px] bg-white p-5 text-[rgb(16,32,27)] shadow-[0_10px_30px_rgba(0,0,0,.25)]">
                 <div className="flex items-start justify-between gap-4 border-b-2 border-[rgb(11,94,72)] pb-3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- the same signed logo URL as above */}
@@ -387,10 +387,10 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
         )}
 
         {tab === "support" && (
-          <>
-            <PartnerSupportCard className={glass} />
-            <OwnershipCard team={team} workspace={workspace} className={glass} />
-          </>
+          <FormSections>
+            <PartnerSupportCard />
+            <OwnershipCard team={team} workspace={workspace} />
+          </FormSections>
         )}
       </div>
 

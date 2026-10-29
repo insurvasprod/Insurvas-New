@@ -203,6 +203,8 @@ const HANDLERS: Record<string, Handler> = {
   // Saves answer with the profile as it now stands (the form keeps its own draft).
   "PUT /api/app/agency-profile": (state) => ok({ profile: agencyProfile(state === "empty").profile }),
   "PATCH /api/app/agency-profile": (state) => ok({ profile: agencyProfile(state === "empty").profile }),
+  "GET /api/app/partner-support-contact": (state) => (state === "error" ? failed("the support contact") : ok({ contact: state === "empty" ? { email: null, phone: null, schemaReady: true } : { email: "partners@powerpolicies.com", phone: "2145550148", schemaReady: true } })),
+  "PUT /api/app/partner-support-contact": () => ok({ contact: { email: "partners@powerpolicies.com", phone: "2145550148", schemaReady: true } }),
   "GET /api/app/settings/products": (state) => (state === "error" ? failed("your products") : ok({ products: state === "empty" ? [] : products })),
   "GET /api/app/profile": (state) => (state === "error" ? failed("your profile") : ok({ profile: ownProfile })),
   "PUT /api/app/profile": () => ok({ profile: ownProfile }),

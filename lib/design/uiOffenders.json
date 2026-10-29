@@ -41,5 +41,10 @@
   "unguarded-dirty": {
     "components/app/form-templates/status-line.tsx": 1
   },
-  "radix-select": {}
+  "radix-select": {},
+  "section-help": {
+    "components/app/own-profile-form.tsx": 3,
+    "components/app/profile/security-settings.tsx": 3,
+    "components/design/settings-patterns.tsx": 6
+  }
 }
