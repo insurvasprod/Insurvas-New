@@ -337,7 +337,7 @@ export function PartnersWorkspace({
   // L8: during Get set up, the form stays open after an add so the next one is one click away.
   const guiding = useSearchParams().has("guide");
   const [justAdded, setJustAdded] = useState<string | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [, setProducts] = useState<Product[]>([]);
   const [partnerProducts, setPartnerProducts] = useState<
     Record<string, PartnerProduct[]>
   >({});
@@ -524,14 +524,6 @@ export function PartnersWorkspace({
     }
   }
 
-  async function toggleTenantProduct(product: Product) {
-    await send(
-      `/api/app/products/${encodeURIComponent(product.code)}`,
-      "PATCH",
-      { is_enabled: !product.is_enabled },
-      `${product.name} ${product.is_enabled ? "disabled" : "enabled"}`,
-    );
-  }
   async function togglePartnerProduct(
     partnerId: string,
     product: PartnerProduct,
@@ -1149,37 +1141,48 @@ export function PartnersWorkspace({
                 </section>
               )}
               {detailTab === "products" && (
-                <section className="space-y-5">
-                  <div>
-                    <h3 className="text-sm font-semibold">
-                      Products you sell
-                    </h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Enable for the business, then approve per partner.
-                    </p>
+                // One list: what this partner may send (2026-10-29). Which products the agency sells
+                // is set once, in Settings › Products, not repeated on every partner.
+                <section className="space-y-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold">What {selectedPartner.name} may send</h3>
+                    <Link href="/app/settings#products" className="text-xs font-medium text-[var(--accent-ink)] hover:underline">
+                      Products your agency sells: Settings › Products
+                    </Link>
                   </div>
-                  {canManageProductConfig ? (
-                    <div className="space-y-2">
-                      {products.map((product) => (
+                  {canManageProductConfig && selectedProducts.length > 0 && !selectedProducts.some((product) => product.is_enabled) ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-3 text-sm">
+                      <span className="text-[var(--body)]">Your agency sells no products yet, so there is nothing to approve for {selectedPartner.name}.</span>
+                      <Button asChild size="sm"><Link href="/app/settings#products">Choose products</Link></Button>
+                    </div>
+                  ) : canManageProductConfig ? (
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {selectedProducts.map((product) => (
                         <label
                           key={product.code}
-                          className="flex items-start gap-3 rounded-lg border p-3 text-sm"
+                          className={cn("flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm transition-colors", product.approved && "border-[var(--primary)] bg-[var(--primary-soft)]", !product.is_enabled && "opacity-50")}
                         >
                           <input
                             type="checkbox"
-                            className="mt-0.5 size-4"
-                            checked={product.is_enabled}
-                            disabled={readOnly || busy !== null}
-                            onChange={() => void toggleTenantProduct(product)}
+                            className="size-4"
+                            checked={product.approved}
+                            disabled={
+                              readOnly ||
+                              !product.is_enabled ||
+                              busy !== null ||
+                              selectedPartner.status === "offboarded"
+                            }
+                            onChange={() =>
+                              void togglePartnerProduct(
+                                selectedPartner.id,
+                                product,
+                              )
+                            }
                           />
-                          <span>
-                            <span className="block font-medium">
-                              {product.name}
-                            </span>
-                            <span className="block text-xs text-muted-foreground">
-                              {product.category} · {product.code}
-                            </span>
-                          </span>
+                          <span className="min-w-0 flex-1 font-medium">{product.name}</span>
+                          {!product.is_enabled && (
+                            <span className="text-xs text-muted-foreground">Your agency does not sell it</span>
+                          )}
                         </label>
                       ))}
                     </div>
@@ -1187,48 +1190,6 @@ export function PartnersWorkspace({
                     <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
                       Product availability is managed by the account owner.
                     </p>
-                  )}
-                  {canManageProductConfig && (
-                    <div className="border-t pt-4">
-                      <h3 className="text-sm font-semibold">
-                        Approved for this partner
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Only enabled products can be approved.
-                      </p>
-                      <div className="mt-3 space-y-2">
-                        {selectedProducts.map((product) => (
-                          <label
-                            key={product.code}
-                            className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm ${!product.is_enabled ? "opacity-50" : ""}`}
-                          >
-                            <input
-                              type="checkbox"
-                              className="size-4"
-                              checked={product.approved}
-                              disabled={
-                                readOnly ||
-                                !product.is_enabled ||
-                                busy !== null ||
-                                selectedPartner.status === "offboarded"
-                              }
-                              onChange={() =>
-                                void togglePartnerProduct(
-                                  selectedPartner.id,
-                                  product,
-                                )
-                              }
-                            />
-                            <span>{product.name}</span>
-                            {!product.is_enabled && (
-                              <span className="ml-auto text-xs text-muted-foreground">
-                                Business disabled
-                              </span>
-                            )}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
                   )}
                 </section>
               )}
