@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
 import { ACQUISITION_CONSEQUENCE, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/accounting/expensesCore";
@@ -13,6 +12,9 @@ import { TAX_NOTICE } from "@/lib/accounting/taxCore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 import { LeaveGuard } from "@/components/ui/leave-guard";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { DraftActions } from "@/components/app/settings/primitives";
+import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
 import { fieldLabel } from "@/components/ui/field";
 
 /**
@@ -26,7 +28,30 @@ type Account = { id: string; nickname: string; lastFour: string | null; columnMa
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const plain = (c: number) => formatCentsAsCurrency(c).replace(/[$,]/g, "");
 
-export function AccountingSettingsBoard({ initial, locked, changes, accounts, canEdit }: { initial: AccountingSettings; locked: readonly Locked[]; changes: Change[]; accounts: Account[]; canEdit: boolean }) {
+/**
+ * Settings redesign R9 (2026-10-29): eight cards on one 2,200px page became three tabs, each one job;
+ * every section keeps its anchor (#tax opens Bank & tax). One save bar for the whole board (it was a
+ * button floating at the bottom right), and the eight Acquisition / Overhead dropdowns are two-way
+ * switches. The in-page change list went: the header's History has it.
+ */
+const ACCOUNTING_TABS = {
+  reporting: { label: "Reporting & costs", sections: ["reporting", "acquisition-or-overhead"] },
+  people: { label: "Payouts & splits", sections: ["partner-payouts", "producer-splits"] },
+  bank: { label: "Bank & tax", sections: ["bank-matching", "tax", "locked"] },
+} as const;
+type AccountingTab = keyof typeof ACCOUNTING_TABS;
+const tabOfSection = (id: string): AccountingTab | null =>
+  (Object.keys(ACCOUNTING_TABS) as AccountingTab[]).find((tab) => (ACCOUNTING_TABS[tab].sections as readonly string[]).includes(id)) ?? null;
+
+export function AccountingSettingsBoard({ initial, locked, accounts, canEdit }: { initial: AccountingSettings; locked: readonly Locked[]; /** Still sent by the page; the header's History shows changes now. */ changes?: Change[]; accounts: Account[]; canEdit: boolean }) {
+  const [tab, setTab] = useState<AccountingTab>("reporting");
+  // A link to one section (Settings search: #tax) opens the tab that holds it.
+  useEffect(() => {
+    const follow = () => { const next = tabOfSection(window.location.hash.replace(/^#/, "").split("/").pop() ?? ""); if (next) setTab(next); };
+    follow();
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
   const [s, setS] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -69,7 +94,7 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
   // The shared stacked label (foundation v3: 13/500 over the control).
   const field = fieldLabel;
   // Each section carries an id, so Settings search (LA-8.1) can land on it: "partner-payouts".
-  const section = (title: string, children: ReactNode, note?: ReactNode, id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) => (
+  const section = (title: string, children: ReactNode, note?: ReactNode, id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) => !(ACCOUNTING_TABS[tab].sections as readonly string[]).includes(id) ? null : (
     <TableCard>
       <div id={id} className="flex scroll-mt-24 flex-col gap-4 p-4">
         <h2 className="text-base font-semibold">{title}</h2>
@@ -79,11 +104,13 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
     </TableCard>
   );
   const dis = !canEdit;
+  const discard = () => { setS(saved); setMoney(moneyOf(saved)); };
 
   return (
     <div className="flex flex-col gap-6">
-      <LeaveGuard dirty={dirty} onSave={save} onDiscard={() => { setS(saved); setMoney(moneyOf(saved)); }} what="the accounting settings" />
+      <LeaveGuard dirty={dirty} onSave={save} onDiscard={discard} what="the accounting settings" />
       {!canEdit ? <p className="text-sm text-muted-foreground">Only the owner can change these.</p> : null}
+      <ViewTabs label="Accounting settings" value={tab} onChange={setTab} tabs={(Object.keys(ACCOUNTING_TABS) as AccountingTab[]).map((key) => ({ key, label: ACCOUNTING_TABS[key].label }))} />
       {section("Reporting", (
         <div className="grid gap-3 sm:grid-cols-4">
           <label className={field}>P&L basis<select className={toolbarControl} disabled={dis} value={s.defaultBasis} onChange={(e) => set("defaultBasis", e.target.value as "accrual" | "cash")}><option value="accrual">Accrual</option><option value="cash">Cash</option></select></label>
@@ -96,9 +123,11 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
       {section("Acquisition or overhead, by expense category", (
         <div className="grid gap-2 sm:grid-cols-2">
           {EXPENSE_CATEGORIES.map((c) => (
-            <label key={c} className="flex items-center justify-between gap-3 text-sm">{EXPENSE_CATEGORY_LABELS[c]}
-              <select className={toolbarControl} disabled={dis} value={s.acquisitionDefaults[c] ? "yes" : "no"} onChange={(e) => set("acquisitionDefaults", { ...s.acquisitionDefaults, [c]: e.target.value === "yes" })}><option value="yes">Acquisition</option><option value="no">Overhead</option></select>
-            </label>
+            <div key={c} className="flex items-center justify-between gap-3 text-sm">{EXPENSE_CATEGORY_LABELS[c]}
+              {dis
+                ? <span className="text-muted-foreground">{s.acquisitionDefaults[c] ? "Acquisition" : "Overhead"}</span>
+                : <Segmented label={`${EXPENSE_CATEGORY_LABELS[c]}: acquisition or overhead`} value={s.acquisitionDefaults[c] ? "yes" : "no"} onChange={(value) => set("acquisitionDefaults", { ...s.acquisitionDefaults, [c]: value === "yes" })} options={[{ key: "yes", label: "Acquisition" }, { key: "no", label: "Overhead" }]} />}
+            </div>
           ))}
         </div>
       ), <><strong>{ACQUISITION_CONSEQUENCE}</strong> A change applies to new expenses; ones already booked keep their choice (change those one by one on <Link className="underline" href="/app/expenses">Expenses</Link>).</>, "acquisition-or-overhead")}
@@ -147,11 +176,10 @@ export function AccountingSettingsBoard({ initial, locked, changes, accounts, ca
         <ul className="flex flex-col gap-2 text-sm">{locked.map((l) => <li key={l.key}><span aria-hidden>🔒 </span><strong>{l.label}.</strong> <span className="text-muted-foreground">{l.reason}</span></li>)}</ul>
       ), <>Set elsewhere and linked, never edited here: commission schedules and contract levels (<Link className="underline" href="/app/rate-card">Rate card</Link>), partner terms, carrier lags, vendors and campaigns (<Link className="underline" href="/app/campaigns">Campaigns</Link>).</>)}
 
-      {changes.length ? section("Recent changes", (
-        <ul className="text-sm">{changes.map((c, i) => <li key={i}>{c.at.slice(0, 16).replace("T", " ")} — {c.field.replace(/_/g, " ")}: {JSON.stringify(c.from)} → {JSON.stringify(c.to)}</li>)}</ul>
-      )) : null}
 
-      {canEdit ? <div className="sticky bottom-0 flex justify-end bg-[var(--canvas)] py-3"><Button disabled={busy || !dirty} onClick={() => void save()}>{busy ? "Saving…" : "Save changes"}</Button></div> : null}
+      <SettingsSaveBar visible={canEdit && dirty} note="Unsaved changes to the accounting settings">
+        <DraftActions dirty={dirty} saving={busy} onDiscard={discard} onSave={() => void save()} />
+      </SettingsSaveBar>
     </div>
   );
 }
