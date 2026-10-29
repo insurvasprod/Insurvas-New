@@ -60,6 +60,12 @@ export function appointmentChange(rows: AppointmentRow[], carrierId: string, sta
  * (Contracting set-up). A change with an id updates that row; one without starts a new row with a
  * local id until the next read replaces it.
  */
+/** Changes as the server takes them: a row made on screen has no id there yet, so its change goes
+ *  without one and the server matches it by carrier, state and date (save_appointments upserts). */
+export function forServer(changes: AppointmentChange[]): AppointmentChange[] {
+  return changes.map((change) => (change.id && change.id.startsWith("local-") ? { ...change, id: undefined } : change));
+}
+
 export function applyAppointmentChanges(rows: AppointmentRow[], changes: AppointmentChange[], today: string): AppointmentRow[] {
   let next = [...rows];
   for (const change of changes) {

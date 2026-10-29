@@ -52,7 +52,7 @@ import type { AppointmentRow, LicenseRow } from "@/lib/appointments/service-type
 import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
 import type { TenantCarrierRow } from "@/lib/carriers/service";
 import {
-  appointedStatesFor, appointmentChange, bpToLevel, carriersIn, coverage, currentAppointment, pendingStatesFor, statesFor, todayIso,
+  applyAppointmentChanges, appointedStatesFor, appointmentChange, bpToLevel, carriersIn, coverage, currentAppointment, forServer, pendingStatesFor, statesFor, todayIso,
   type AppointmentChange,
 } from "@/lib/appointments/tickModel";
 import type { CarriersPayload } from "@/lib/salesSettings/views";
@@ -113,6 +113,10 @@ export function CarriersSettings() {
   const decided = useRef(false);
   // The states Set up ticked since the last sync of licences.
   const touched = useRef(new Set<string>());
+  // The States tab's background saves: how many edits so far, the queue, and how many are waiting.
+  const edits = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const pendingSaves = useRef(0);
   const [carrierId, setCarrierId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState("");
@@ -133,10 +137,13 @@ export function CarriersSettings() {
     setPaneHeight(Math.max(420, Math.round(window.innerHeight - top - 32)));
   }, []);
 
-  const loadVault = useCallback(async () => {
+  // `isStale`: a read that started before newer ticks must not put the older list back on screen
+  // (owner, 2026-10-29: ticking states was slow and ticks flickered away and back).
+  const loadVault = useCallback(async (isStale?: () => boolean) => {
     const response = await fetch("/api/app/appointment-vault", { cache: "no-store" });
     const body = await response.json().catch(() => null);
     if (!response.ok) { setLoadError(body?.error ?? "Could not load your carriers"); return null; }
+    if (isStale?.()) return null;
     setLoadError(null);
     setVault(body as Vault);
     return body as Vault;
@@ -214,22 +221,13 @@ export function CarriersSettings() {
   const current = yours.find((carrier) => carrier.id === carrierId) ?? yours[0] ?? null;
   const pickedStates = selected.length ? selected : [];
 
-  async function saveAppointments(rows: AppointmentChange[]): Promise<Vault | null> {
-    if (!rows.length) return vault;
-    setBusy(true);
-    const result = await send("/api/app/appointment-vault/appointments", "POST", { appointments: rows });
-    setBusy(false);
-    if (!result.ok) { notify.block(result.error); return null; }
-    return loadVault();
-  }
-
   /**
    * One click (owner, 2026-10-28: "if it means I am clicking it and also clicking the carrier I am
    * good to go"): ticking a carrier in a state records that you are licensed there too. Unticking the
    * last carrier in a state takes the licence back off, unless it has a number or expiry on file,
    * which is kept. No details are asked: the endpoint stores placeholders for them.
    */
-  async function syncLicences(fresh: Vault, states: string[]) {
+  async function syncLicences(fresh: Vault, states: string[], isStale?: () => boolean) {
     const held = new Map(fresh.licenses.map((row) => [row.state, row]));
     const changes = states.flatMap((code) => {
       const carriersHere = carriersIn(fresh.appointments, code, today).length;
@@ -240,8 +238,8 @@ export function CarriersSettings() {
       return [];
     });
     if (!changes.length) return;
-    setBusy(true);
-    // Six at a time: one by one, thirty states took fifteen seconds.
+    // Six at a time: one by one, thirty states took fifteen seconds. In the background: the ticks are
+    // already on screen.
     for (let start = 0; start < changes.length; start += 6) {
       const results = await Promise.all(changes.slice(start, start + 6).map((change) => change.add
         ? send("/api/app/appointment-vault/licenses", "POST", { state: change.code })
@@ -249,30 +247,48 @@ export function CarriersSettings() {
       const failed = results.find((result) => !result.ok);
       if (failed && !failed.ok) { notify.block(failed.error); break; }
     }
-    setBusy(false);
-    await loadVault();
+    await loadVault(isStale);
   }
 
-  async function tick(carrier: string, on: boolean) {
+  // A tick shows at once; its save joins one queue, in order, and the screen never waits on it.
+  function saveInBackground(changes: AppointmentChange[], states: string[]) {
+    if (!changes.length) return;
+    edits.current += 1;
+    setVault((current) => (current ? { ...current, appointments: applyAppointmentChanges(current.appointments, changes, today) } : current));
+    states.forEach((code) => touched.current.add(code));
+    setBusy(true);
+    pendingSaves.current += 1;
+    saveQueue.current = saveQueue.current.then(async () => {
+      const result = await send("/api/app/appointment-vault/appointments", "POST", { appointments: forServer(changes) });
+      if (!result.ok) { notify.block(result.error); await loadVault(); }
+    }).finally(() => {
+      pendingSaves.current -= 1;
+      if (pendingSaves.current === 0) {
+        const at = edits.current;
+        void afterSetupSaves(() => edits.current !== at).finally(() => { if (pendingSaves.current === 0) setBusy(false); });
+      }
+    });
+  }
+
+  function tick(carrier: string, on: boolean) {
     if (!vault) return;
     const states = [...pickedStates];
-    const fresh = await saveAppointments(states.flatMap((state) => appointmentChange(vault.appointments, carrier, state, on, today)));
-    if (fresh) await syncLicences(fresh, states);
+    saveInBackground(states.flatMap((state) => appointmentChange(vault.appointments, carrier, state, on, today)), states);
   }
 
-  async function tickAll(on: boolean) {
+  function tickAll(on: boolean) {
     if (!vault) return;
     const states = [...pickedStates];
-    const fresh = await saveAppointments(yours.flatMap((carrier) => states.flatMap((state) => appointmentChange(vault.appointments, carrier.id, state, on, today))));
-    if (fresh) await syncLicences(fresh, states);
+    saveInBackground(yours.flatMap((carrier) => states.flatMap((state) => appointmentChange(vault.appointments, carrier.id, state, on, today))), states);
   }
 
-  // Set up's saves run in a queue; once it is empty the lists are read again, and the licences follow
-  // the states that were ticked (one sync for the batch, not one per click).
-  async function afterSetupSaves() {
-    const fresh = await loadVault();
-    if (fresh && touched.current.size) await syncLicences(fresh, [...touched.current]);
-    touched.current.clear();
+  // Saves run in a queue; once it is empty the lists are read again, and the licences follow the
+  // states that were ticked (one sync for the batch, not one per click). A read that newer ticks
+  // overtook is dropped, so it never undoes them.
+  async function afterSetupSaves(isStale?: () => boolean) {
+    const fresh = await loadVault(isStale);
+    if (fresh && touched.current.size) await syncLicences(fresh, [...touched.current], isStale);
+    if (!isStale?.()) touched.current.clear();
     await loadSales();
   }
 
@@ -466,8 +482,8 @@ export function CarriersSettings() {
                 {/* S3: only worth showing with more than one carrier. */}
                 {yours.length > 1 && (
                   <span className="flex gap-1.5">
-                    <button type="button" onClick={() => void tickAll(true)} disabled={busy} className={CHIP(false)}>All carriers</button>
-                    <button type="button" onClick={() => void tickAll(false)} disabled={busy} className={CHIP(false)}>None</button>
+                    <button type="button" onClick={() => tickAll(true)} className={CHIP(false)}>All carriers</button>
+                    <button type="button" onClick={() => tickAll(false)} className={CHIP(false)}>None</button>
                   </span>
                 )}
               </div>
@@ -483,11 +499,10 @@ export function CarriersSettings() {
                   <button
                     key={carrier.id}
                     type="button"
-                    onClick={() => void tick(carrier.id, state !== "all")}
+                    onClick={() => tick(carrier.id, state !== "all")}
                     role="checkbox"
                     aria-checked={state === "all" ? true : state === "some" ? "mixed" : false}
-                    disabled={busy}
-                    className={cn("flex w-full items-center gap-3.5 rounded-[12px] border border-[var(--border)] p-3.5 text-left disabled:cursor-wait", state !== "none" && "bg-[var(--primary-soft)]")}
+                    className={cn("flex w-full items-center gap-3.5 rounded-[12px] border border-[var(--border)] p-3.5 text-left transition-colors", state !== "none" && "bg-[var(--primary-soft)]")}
                   >
                     <span className={tickBox(state)} aria-hidden="true">{state === "some" ? "–" : "✓"}</span>
                     <span className={cn("size-2.5 rounded-full", dotOf(carrier.id))} aria-hidden="true" />

@@ -25,7 +25,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { US_STATES } from "@/lib/appointments/constants";
 import type { AppointmentRow } from "@/lib/appointments/service-types";
-import { applyAppointmentChanges, appointmentChange, bpToLevel, carriersIn, levelToBp, statesFor, todayIso } from "@/lib/appointments/tickModel";
+import { applyAppointmentChanges, appointmentChange, bpToLevel, carriersIn, forServer, levelToBp, statesFor, todayIso } from "@/lib/appointments/tickModel";
 import type { TenantCarrierRow } from "@/lib/carriers/service";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -76,7 +76,8 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   salesAvailable: boolean;
   send: Send;
   /** Reads everything again once the queue of saves is empty. */
-  reload: () => Promise<unknown>;
+  /** Reads the lists again; `isStale` says newer ticks overtook this read, so it must not apply. */
+  reload: (isStale?: () => boolean) => Promise<unknown>;
   /** After state ticks save: keep licences in step with the states (the parent's existing rule). */
   onStatesSaved: (states: string[]) => Promise<void>;
   onFinish: () => void;
@@ -92,7 +93,10 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   const queue = useRef<Promise<void>>(Promise.resolve());
   const [pending, setPending] = useState(0);
   const [failed, setFailed] = useState<string | null>(null);
+  // Every tick counts; a read that started before the latest tick is dropped so it never undoes it.
+  const edits = useRef(0);
   const enqueue = useCallback((work: () => Promise<boolean>) => {
+    edits.current += 1;
     setPending((n) => n + 1);
     queue.current = queue.current.then(async () => {
       const ok = await work().catch(() => false);
@@ -100,7 +104,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
     }).finally(() => {
       setPending((n) => {
         const left = n - 1;
-        if (left === 0) void reload();
+        if (left === 0) { const at = edits.current; void reload(() => edits.current !== at); }
         return left;
       });
     });
@@ -145,7 +149,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
     setFailed(null);
     setVault((current) => ({ ...current, appointments: applyAppointmentChanges(current.appointments, changes, today) }));
     enqueue(async () => {
-      const result = await send("/api/app/appointment-vault/appointments", "POST", { appointments: changes });
+      const result = await send("/api/app/appointment-vault/appointments", "POST", { appointments: forServer(changes) });
       if (!result.ok) return false;
       await onStatesSaved(codes);
       return true;
