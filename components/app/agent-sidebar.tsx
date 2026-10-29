@@ -79,6 +79,7 @@ import {
 } from "lucide-react";
 
 import type { MenuItem, MenuSection } from "@/lib/menu/definition";
+import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/menu/sidebar";
 
@@ -89,7 +90,12 @@ function iconFor(name: string) {
   return ICONS[name as keyof typeof ICONS] ?? Circle;
 }
 
+// Settings sections that live on their own route (Accounting, Retention, Compliance) belong to Settings
+// in the menu: /app/compliance/settings is not "Compliance › Overview" (owner's demo, 2026-10-29).
+const SETTINGS_ROUTES = SETTINGS_SECTIONS.flatMap((section) => (section.route ? [section.route] : []));
+
 function isActivePath(pathname: string, href: string) {
+  if (SETTINGS_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))) return href === "/app/settings";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
