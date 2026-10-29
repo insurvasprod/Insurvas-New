@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/field";
 import { SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
 type Row = {
   code: string;
@@ -59,11 +60,15 @@ export function ProductsSettings() {
   }, []);
 
   async function save(row: Row, sold: boolean, undoable = true) {
+    // The switch moves at once (2026-10-29: every switch waited a second for the server); a save that
+    // fails puts it back and says so.
+    const before = rows;
+    setRows((current) => current?.map((item) => (item.code === row.code ? { ...item, enabled: sold, sold } : item)) ?? current);
     setBusy(row.code);
     const response = await fetch("/api/app/settings/products", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_code: row.code, sold }) }).catch(() => null);
     const body = (await response?.json().catch(() => null)) as { products?: Row[]; error?: string } | null;
     setBusy(null);
-    if (!response?.ok || !body?.products) { notify.block(body?.error ?? "That change could not be saved. Try again."); return; }
+    if (!response?.ok || !body?.products) { setRows(before); notify.block(body?.error ?? "That change could not be saved. Try again."); return; }
     setRows(body.products);
     notify.done(sold ? `You sell ${row.name}` : `You no longer sell ${row.name}`, {
       detail: sold ? "Leads, partners, forms and quotes now offer it." : "Nothing new can use it; what already exists keeps working.",
@@ -85,16 +90,16 @@ export function ProductsSettings() {
       <SettingsSectionHeader actions={<StatusChip tone={sold ? "good" : "neutral"} dot={false}>{sold} sold · {inPlan} in your plan</StatusChip>} />
       {sold === 0 && <Callout tone="warning" title="Choose the products you sell. Partners cannot send leads, and forms and quotes have nothing to offer, until you do." />}
       <SettingsCard bodyClassName="-m-4">
-        <div id="products-list">
-          {groups.map((group, groupIndex) => (
-            <div key={group.category}>
-              <div className={groupIndex === 0 ? "bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] px-4 py-2 text-xs font-semibold text-[var(--muted)]" : "border-t border-[var(--border)] bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] px-4 py-2 text-xs font-semibold text-[var(--muted)]"}>{CATEGORY_LABEL[group.category] ?? group.category}</div>
-              {group.rows.map((row) => (
-                <div key={row.code} className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--border)] px-4 py-3">
+        {/* One grid of products, two across on a wide screen, so each switch sits beside its name and a
+            one-product category never leaves half a row empty (2026-10-29). The category is in each
+            row's caption. */}
+        <div id="products-list" className="grid lg:grid-cols-2">
+          {groups.flatMap((group) => group.rows).map((row, index) => (
+                <div key={row.code} className={cn("flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-[var(--border)] px-4 py-3 lg:odd:border-r", index > 0 && "border-t", index === 1 && "lg:border-t-0")}>
                   <div className={row.inPlan ? "min-w-0 flex-1" : "min-w-0 flex-1 opacity-60"}>
                     <div className="text-sm font-semibold text-[var(--ink)]">{row.name}</div>
                     <div className="text-xs text-[var(--muted)]">
-                      {!row.inPlan ? "In the Insurvas catalogue, not in your plan" : row.sold ? partnersText(row.partners) : "Not sold"}
+                      {CATEGORY_LABEL[row.category] ?? row.category} · {!row.inPlan ? "in the Insurvas catalogue, not in your plan" : row.sold ? partnersText(row.partners) : "not sold"}
                     </div>
                   </div>
                   {row.sold && (
@@ -108,9 +113,8 @@ export function ProductsSettings() {
                   {row.inPlan ? (
                     <Switch
                       checked={row.enabled}
-                      disabled={busy === row.code}
                       label={`Sell ${row.name}`}
-                      onChange={(next) => (next ? void save(row, true) : setConfirmOff(row))}
+                      onChange={(next) => { if (busy === row.code) return; if (next) void save(row, true); else setConfirmOff(row); }}
                     />
                   ) : (
                     <Link href="/app/settings#billing" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)]">
@@ -118,8 +122,6 @@ export function ProductsSettings() {
                     </Link>
                   )}
                 </div>
-              ))}
-            </div>
           ))}
         </div>
       </SettingsCard>

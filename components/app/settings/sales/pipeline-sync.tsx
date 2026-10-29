@@ -127,7 +127,7 @@ export function SalesPipelineSync() {
 
           <TableCard
             title="Where the card goes"
-            description="When the application reaches a state, the lead's card moves to this stage once. A card moved by hand stays where it was put."
+            info="When the application reaches a state, the lead's card moves to this stage once. A card moved by hand stays where it was put."
             action={<CardFact>{view.stored === 0 ? "Nothing is mapped yet — no card moves" : `${mappedCount} of ${PIPELINE_SYNC_KEYS.length} states move a card`}</CardFact>}
           >
             {noStages ? (

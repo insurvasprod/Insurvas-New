@@ -147,13 +147,18 @@ export async function recordMemberSetupFinished(tenantId: string, userId: string
 }
 
 async function loadBaseProgress(tenantId: string): Promise<SetupProgress> {
-  const [carriersAdded, statementImported, appointmentsConfirmed, leadSourcesAdded, phoneAdded, bookImported, finished] = await Promise.all([
+  const [contractAdded, carrierSwitchedOn, statementImported, appointmentsConfirmed, leadSourcesAdded, campaignAdded, phoneAdded, bookImported, finished] = await Promise.all([
     proves(db().from("tenant_carriers").select("id").eq("tenant_id", tenantId).eq("is_active", true).limit(1), readFoundRow),
+    // Adding a carrier writes its "contracted" switch; the contract (level + writing number) is
+    // optional since 2026-10-28, so either one proves "Add your carriers".
+    proves(db().from("tenant_carrier_requirements" as never).select("carrier_id").eq("tenant_id" as never, tenantId as never).eq("contracted" as never, true as never).limit(1), readFoundRow),
     hasImportedStatement(tenantId),
     // An agency appointment in force — the same rows the "Appointments" tile counts.
     proves(db().from("appointments").select("id").eq("tenant_id", tenantId).is("terminated_at", null).limit(1), readFoundRow),
     // Any publisher, marketing company or affiliate the agency has not offboarded.
     proves(db().from("partners").select("id").eq("tenant_id", tenantId).neq("status", "offboarded").limit(1), readFoundRow),
+    // A campaign is required before imported leads can be attributed and scrubbed.
+    proves(db().from("tenant_campaigns").select("id").eq("tenant_id", tenantId).limit(1), readFoundRow),
     // The phone on the agency profile tab (migration 20260924210000). The tenant's own row.
     proves(db().from("tenants").select("support_phone").eq("id", tenantId).maybeSingle(), readHasPhone),
     // The book import step (only when the business profile recommended it): any policy from the carrier files.
@@ -164,7 +169,7 @@ async function loadBaseProgress(tenantId: string): Promise<SetupProgress> {
       readFoundRow(read) && (read?.data as { setup_checklist_completed_at?: unknown }).setup_checklist_completed_at != null,
     ),
   ]);
-  return { carriersAdded, statementImported, appointmentsConfirmed, leadSourcesAdded, phoneAdded, bookImported, finished };
+  return { carriersAdded: contractAdded || carrierSwitchedOn, statementImported, appointmentsConfirmed, leadSourcesAdded, campaignAdded, phoneAdded, bookImported, finished };
 }
 
 /**

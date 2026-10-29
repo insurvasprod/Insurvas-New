@@ -419,6 +419,41 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - Monospace only for identifiers people copy or read aloud: policy numbers, Medicare IDs, plan
   codes.
 
+## 15. Settings pages (v3)
+**Status:** Live. The owner approved the patterns on 2026-10-29; parts in
+`components/app/settings/patterns.tsx`, worked examples on `/design/settings/patterns#patterns`.
+
+- **One frame:** breadcrumb, the section's title top-left and one line on what it is for; the
+  "Last changed · History" line under it. The settings menu starts level with the first card.
+- **Form sections:** a group's title, with its (i), above its fields on a full-width glass card
+  (`FormSection`, stacked: the owner's choice on 2026-10-29). A status or link sits at the end of the
+  title row. Short fields share a row (`FieldRow`).
+- **Help behind the (i)** (owner, 2026-10-29: text across the page is overwhelming). Why a section
+  exists goes in `FormSection`'s `info`, an `InfoTip` beside the title that opens on hover and on
+  click, in one or two plain sentences; `SettingsCard` and `TableCard` take the same `info`. What a
+  field needs while it is typed in, what an action will do, live status and legal wording stay on
+  screen. The `section-help` ratchet keeps help paragraphs from coming back.
+- **Menus as a tree:** the agent sidebar and the settings menu draw one rounded elbow per page under
+  its group, each starting a little under the one above; the current page's elbow is the accent.
+- **One save model per section.** A section edited as a draft has the save bar at the bottom
+  (`SettingsSaveBar` + `DraftActions`, solid, with the change count) and a `LeaveGuard`. Switches and
+  single choices that stand alone save at once with a quiet "Saved" (`useAutosave` / `AutosaveNote`).
+  Never a Save in the header, in a toolbar, floating in a corner, or one per card.
+- **Choices:** on/off is a `Switch`; two to five options a `Segmented`; more than five a dropdown, in
+  words ("Central (Chicago)", never an IANA code).
+- **Advanced:** settings most agencies never change fold under `Advanced`, which opens when a link
+  names something inside it.
+- **Danger zone:** anything that cannot be undone or cuts someone off is last, in `DangerZone`, with
+  `DangerAction` (red outline, a question first).
+- **Tabs:** a section longer than about a screen and a half, or with separate jobs, gets `ViewTabs`:
+  at most five, named for the job, a number only when something needs attention. Each section keeps
+  its anchor, and a link to it opens its tab.
+- **History** is the header's line, never a "Recent changes" card or a change-log tab in a section.
+- **Dates:** `dateTime` / `dayMonthYear` from `lib/format/dates.ts` ("28 Oct, 12:12", "28 Oct 2026");
+  times always with am/pm.
+- **Every page on the agent app that shows its own breadcrumb** (PageHeader `visible`) makes the top
+  bar's crumb step aside (manager review 28 Oct §3.2). Partners pages follow the same frame.
+
 ## Ownership notes
 - `components/ui/*` and `app/globals.css` are shared: change them only deliberately, once, for all.
 - Pages that write data when opened (dialer, disposition walks) — do not click their actions to "test".

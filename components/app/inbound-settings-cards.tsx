@@ -151,14 +151,14 @@ export function InboundSettingsCards({ inbound, disabled }: { inbound: ReturnTyp
       {!loaded.ready && <Callout tone="warning" title="Alerts, buffer handoff and routing need a database update before they can be changed. Until then transfers work as they always have." />}
       {inbound.error && <Callout tone="error" title={inbound.error} />}
       <SettingsGrid cols={solo ? 2 : 3}>
-        <SettingsCard title="Who hears about it" sub="When a transfer arrives or waits too long.">
+        <SettingsCard title="Who hears about it" info="When a transfer arrives or waits too long.">
           <div className="flex flex-col gap-4">
             <ToggleRow id="inbound-alert-new" title="Agents, when a transfer arrives" help="The “new lead waiting” alert to owners, producers and buffer agents. The claim card shows the wait either way." checked={draft.alertNewTransfer} onChange={(value) => set({ alertNewTransfer: value })} disabled={locked} />
             <ToggleRow id="inbound-email-owners" title="Owners by email, when it escalates" help="Each owner can still turn it off for themselves in Notifications. The in-app alert always fires." checked={draft.emailOwnersOnEscalation} onChange={(value) => set({ emailOwnersOnEscalation: value })} disabled={locked} />
             <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">The partner is told automatically in their channel: connected, the outcome, and at the partner rung above.</p>
           </div>
         </SettingsCard>
-        <SettingsCard title="Buffer agents" sub="People with the Assistant role take the call first, then hand it to a licensed agent.">
+        <SettingsCard title="Buffer agents" info="People with the Assistant role take the call first, then hand it to a licensed agent.">
           <div className="flex flex-col gap-2">
             <label htmlFor="inbound-handoff-timeout" className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">The licensed agent has this long to accept</label>
             <div className="flex items-center gap-2">
@@ -169,7 +169,7 @@ export function InboundSettingsCards({ inbound, disabled }: { inbound: ReturnTyp
           </div>
         </SettingsCard>
         {!solo && (
-          <SettingsCard title="Who gets the next transfer" sub="Take next and the claim card hand out the longest wait first.">
+          <SettingsCard title="Who gets the next transfer" info="Take next and the claim card hand out the longest wait first.">
             <div className="flex flex-col gap-4">
               <ToggleRow id="inbound-licensed-only" title="Only agents licensed in the caller’s state" help="Licensed agents are offered only callers in states they hold a live licence for. Buffer agents are not licensed and still take any caller." checked={draft.licensedOnly} onChange={(value) => set({ licensedOnly: value })} disabled={locked} />
               <ToggleRow id="inbound-skip-break" title="Skip agents on a break" help="Someone set to On break or Off on the floor is not handed a transfer until they are Ready again." checked={draft.skipOnBreak} onChange={(value) => set({ skipOnBreak: value })} disabled={locked} />

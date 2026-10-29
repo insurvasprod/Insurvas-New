@@ -55,6 +55,29 @@ export function appointmentChange(rows: AppointmentRow[], carrierId: string, sta
   return [{ id: open.id, carrier_id: carrierId, state, status: "terminated", effective_from: open.effective_from, terminated_at: end }];
 }
 
+/**
+ * The rows as they will be once these changes save, for a screen that answers before the server does
+ * (Contracting set-up). A change with an id updates that row; one without starts a new row with a
+ * local id until the next read replaces it.
+ */
+/** Changes as the server takes them: a row made on screen has no id there yet, so its change goes
+ *  without one and the server matches it by carrier, state and date (save_appointments upserts). */
+export function forServer(changes: AppointmentChange[]): AppointmentChange[] {
+  return changes.map((change) => (change.id && change.id.startsWith("local-") ? { ...change, id: undefined } : change));
+}
+
+export function applyAppointmentChanges(rows: AppointmentRow[], changes: AppointmentChange[], today: string): AppointmentRow[] {
+  let next = [...rows];
+  for (const change of changes) {
+    if (change.id) {
+      next = next.map((row) => (row.id === change.id ? { ...row, status: change.status, effective_from: change.effective_from, terminated_at: change.terminated_at ?? null } : row));
+    } else {
+      next.push({ id: `local-${change.carrier_id}-${change.state}-${next.length}`, tenant_id: "", carrier_id: change.carrier_id, state: change.state, status: change.status, effective_from: change.effective_from, terminated_at: null, created_at: today, updated_at: today, expires_at: null });
+    }
+  }
+  return next;
+}
+
 /** For several selected states at once: is the carrier on in all, some or none of them? */
 export function coverage(rows: AppointmentRow[], carrierId: string, states: string[], today: string): "all" | "some" | "none" {
   const on = states.filter((state) => currentAppointment(rows, carrierId, state, today)).length;
@@ -66,9 +89,48 @@ export function carriersIn(rows: AppointmentRow[], state: string, today: string)
   return [...new Set(rows.filter((row) => row.state === state && isOpenAppointment(row, today)).map((row) => row.carrier_id))];
 }
 
-/** The states a carrier is appointed in today, A to Z. */
+/**
+ * Granted and in force: open and no longer pending. What "can sell here" means everywhere a carrier
+ * is called ready (eligibility.ts agrees: a pending appointment never counts). A pending one is
+ * still ticked on the States step, since it was applied for, but it does not make a carrier ready.
+ */
+export function isActiveAppointment(row: Pick<AppointmentRow, "status" | "terminated_at" | "expires_at">, today: string) {
+  return row.status === "active" && isOpenAppointment(row, today);
+}
+
+/** The states a carrier can sell in today (active appointments only), A to Z. */
+export function appointedStatesFor(rows: AppointmentRow[], carrierId: string, today: string) {
+  return [...new Set(rows.filter((row) => row.carrier_id === carrierId && isActiveAppointment(row, today)).map((row) => row.state))].sort();
+}
+
+/** The states where the carrier's appointment is applied for but not granted yet, A to Z. */
+export function pendingStatesFor(rows: AppointmentRow[], carrierId: string, today: string) {
+  const appointed = new Set(appointedStatesFor(rows, carrierId, today));
+  return [...new Set(rows.filter((row) => row.carrier_id === carrierId && row.status === "pending" && isOpenAppointment(row, today) && !appointed.has(row.state)).map((row) => row.state))].sort();
+}
+
+/** The states a carrier is ticked in today, pending included, A to Z (the States step's count). */
 export function statesFor(rows: AppointmentRow[], carrierId: string, today: string) {
   return [...new Set(rows.filter((row) => row.carrier_id === carrierId && isOpenAppointment(row, today)).map((row) => row.state))].sort();
+}
+
+/**
+ * A licence the agent ticked without its details (owner, 2026-10-28: "it will work even without
+ * those"). The table needs a number and an expiry, and every check (dialer, routing, eligibility,
+ * expiry warnings) reads a licence by its expiry, so a tick is stored with these two placeholders:
+ * a licence that is valid and never due. Screens show them as "No number yet" and "No expiry".
+ */
+export const LICENCE_NUMBER_NOT_ENTERED = "Not entered";
+export const LICENCE_NO_EXPIRY = "9999-12-31";
+
+/** The licence number to show: blank for a placeholder. */
+export function licenceNumberValue(number: string | null | undefined): string {
+  return !number || number === LICENCE_NUMBER_NOT_ENTERED ? "" : number;
+}
+
+/** The expiry to show in a date field: blank for a placeholder. */
+export function licenceExpiryValue(expiresAt: string | null | undefined): string {
+  return !expiresAt || expiresAt === LICENCE_NO_EXPIRY ? "" : expiresAt;
 }
 
 /** A licence's state: on file and valid, due for renewal inside 60 days, or expired. */

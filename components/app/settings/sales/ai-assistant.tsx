@@ -77,7 +77,7 @@ export function SalesAiAssistant() {
         <>
           {!status.available && <Callout tone="warning" title={`${why} It stays off until then.`} />}
 
-          <SettingsCard title="Availability" sub="One switch for the whole agency.">
+          <SettingsCard title="Availability" info="One switch for the whole agency.">
             <div className="flex flex-col gap-[18px]">
               {/* A disabled switch gets no pointer events, so the reason sits on its row. */}
               <div title={why}>
@@ -105,7 +105,7 @@ export function SalesAiAssistant() {
           </SettingsCard>
 
           <SettingsGrid>
-            <TableCard title="Sent with every request" description="Fixed in code — an owner cannot add a field.">
+            <TableCard title="Sent with every request" info="Fixed in code — an owner cannot add a field.">
               <ul className="m-0 list-none p-0">
                 {SENT.map((item) => (
                   <li key={item.label} className="flex gap-2.5 border-t border-[var(--border)] px-4 py-2.5">
@@ -118,10 +118,11 @@ export function SalesAiAssistant() {
                 ))}
               </ul>
             </TableCard>
-            <TableCard title="Never sent" description="Fixed in code — an owner cannot remove one.">
-              <ul className="m-0 list-none p-0">
+            <TableCard title="Never sent" info="Fixed in code — an owner cannot remove one.">
+              {/* Two across, so this list ends level with the shorter one beside it (2026-10-29). */}
+              <ul className="m-0 grid list-none grid-cols-2 p-0">
                 {NEVER.map((label) => (
-                  <li key={label} className="flex gap-2.5 border-t border-[var(--border)] px-4 py-2.5">
+                  <li key={label} className="flex gap-2.5 border-t border-[var(--border)] px-4 py-2.5 odd:border-r">
                     <X aria-hidden className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" />
                     <span className="text-sm leading-[1.5] text-[var(--body)]">{label}</span>
                   </li>

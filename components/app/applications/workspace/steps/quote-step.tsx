@@ -229,7 +229,7 @@ function QuoteStepFor() {
   let formCard;
   if (cat.status === "loading") formCard = <StepCard title="Type the premium from the carrier’s own tool"><SectionLoading rows={2} columns={3} label="Loading the carriers" /></StepCard>;
   else if (cat.status === "error") formCard = <StepCard title="Type the premium from the carrier’s own tool"><ErrorState title="The carriers did not load" detail={cat.message} action={<Button type="button" variant="outline" onClick={retry}>Try again</Button>} /></StepCard>;
-  else if (catalogue && catalogue.carriers.length === 0) formCard = <StepCard title="Type the premium from the carrier’s own tool"><EmptyState title="No carriers to quote" hint="Add the carriers you're contracted with, and their products, in Settings › Carriers." /></StepCard>;
+  else if (catalogue && catalogue.carriers.length === 0) formCard = <StepCard title="Type the premium from the carrier’s own tool"><EmptyState title="No carriers to quote" hint="Add the carriers you're contracted with, and their products, in Settings › Contracting." /></StepCard>;
   else if (catalogue) formCard = <AddQuoteForm catalogue={catalogue} template={formTemplate} onTemplate={changeTemplate} onExtra={changeExtra} prefill={prefill} prefillExtra={prefillExtra} defaultCarrierId={attempt.carrierId} caseProductCode={attempt.productCode} onAdd={addQuote} readOnly={readOnly} />;
 
   const others = Math.max(attempt.quotes.length - 1, 0);

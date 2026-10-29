@@ -8,6 +8,7 @@ import { dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, priceForCycle, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { readPlanChoice } from "@/lib/signup/planChoiceQueries";
+import { nameFromEmail } from "@/lib/signup/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /** The Whop environment our API key belongs to, so the embedded form talks to the same one. */
@@ -58,7 +59,7 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
         supabase.from("plan_prices").select("*").eq("plan_id", selection.plan_id).maybeSingle<PlanPrices>(),
         supabase.from("plan_features").select("feature_key").eq("plan_id", selection.plan_id),
         supabase.from("plan_limits").select("max_seats").eq("plan_id", selection.plan_id).maybeSingle<{ max_seats: number | null }>(),
-        // The seats and add-ons from Step 4 of 5 (kept once 20261026300000 is applied).
+        // The seats and add-ons from the plan screen (step 2 of 3) (kept once 20261026300000 is applied).
         readPlanChoice(context.tenantId),
       ])
     : [{ data: null }, { data: null }, { data: null }, { data: null }, null];
@@ -95,6 +96,8 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
       pending={pending === "1"}
       failed={failed === "1"}
       email={context.email}
+      // The stand-in made from the address at sign-up is not a cardholder name.
+      name={context.name && context.name !== nameFromEmail(context.email) ? context.name : null}
       environment={whopEnvironment()}
       noPayment={checkoutPaymentMode() === "none"}
     />

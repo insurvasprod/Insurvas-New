@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { ViewTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, X } from "lucide-react";
 
@@ -35,6 +35,7 @@ export function AuthLayout({
   back,
   story,
   align,
+  legal = true,
   children,
 }: {
   plane: AuthPlane;
@@ -53,6 +54,12 @@ export function AuthLayout({
    * them in the center", the sign-up steps too). "top" is kept for a screen that needs it.
    */
   align?: "top" | "center";
+  /**
+   * The Privacy · Terms · Support line under the form. Payment turns it off and shows the same links
+   * in its summary instead (owner, 2026-10-28): Whop's form is as tall as it is, and this line was
+   * what still pushed the page past an 826px window.
+   */
+  legal?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -70,19 +77,38 @@ export function AuthLayout({
           {/* Auto margins, not justify-content: a door taller than the window starts at the top
               instead of being cut off above it. */}
           <div className="m-stagger" data-auth-body="">
-            {steps && <AuthSteps {...steps} />}
-            {back && <AuthBack href={back.href} label={back.label} />}
-            {children}
-            <nav className="portal-login-footer" aria-label="Legal links">
-              <Link href="/legal/privacy">Privacy</Link>
-              <Link href="/legal/tos">Terms</Link>
-              <a href="mailto:support@insurvas.com">Support</a>
-            </nav>
+            {/* Step to step (manager review, 2026-10-28: "from this page to next page should be smooth"):
+                the progress bar stays where it is and only the step's own content moves, a quick fade
+                out and a short rise in. Classes in globals.css (auth-still, auth-step). */}
+            {steps && (
+              <ViewTransition name="auth-steps" share="auth-still" default="none">
+                <div><AuthSteps {...steps} /></div>
+              </ViewTransition>
+            )}
+            <ViewTransition name="auth-step-body" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
+              <div>
+                {back && <AuthBack href={back.href} label={back.label} />}
+                {children}
+                {legal && <AuthLegalLinks />}
+              </div>
+            </ViewTransition>
           </div>
         </div>
       }
       story={story}
     />
+  );
+}
+
+/** Privacy · Terms · Support, the line under every auth form (and in the payment summary). */
+export function AuthLegalLinks({ className, onDark = false }: { className?: string; onDark?: boolean }) {
+  return (
+    // Inline colour on the green panel: .portal-login-footer's own colour outranks a utility class.
+    <nav className={cn("portal-login-footer", className)} style={onDark ? { color: "var(--nav-muted)" } : undefined} aria-label="Legal links">
+      <Link href="/legal/privacy">Privacy</Link>
+      <Link href="/legal/tos">Terms</Link>
+      <a href="mailto:support@insurvas.com">Support</a>
+    </nav>
   );
 }
 
@@ -102,7 +128,7 @@ export type AuthStepsProps = {
   aside?: ReactNode;
 };
 
-/** "Step 2 of 5 · Your email" over one bar per step. One stepper, so no screen counts differently. */
+/** "Step 1 of 3 · Your account" over one bar per step. One stepper, so no screen counts differently. */
 export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside }: AuthStepsProps) {
   const done = current > total;
   return (

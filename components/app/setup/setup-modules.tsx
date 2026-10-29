@@ -7,42 +7,38 @@ import { TableCard } from "@/components/ui/table-card";
 
 import { SetupStepList, type SetupStepRow } from "./setup-step-list";
 
-/** Steps shown before the rest fold away behind "Show N more steps". */
-const LEADING_STEPS = 3;
-
-export type SetupModuleGroup = { key: string; label: string; steps: SetupStepRow[] };
+export type SetupModuleGroup = { key: string; label: string; hint?: string; steps: SetupStepRow[]; optional?: boolean };
 
 /**
- * The setup page's module cards, the later ones folded (redesign, 2026-10-24): eighteen steps on one
- * screen read as a wall, so the page leads with the modules that hold the first three steps and
- * offers the rest behind one control. Whole modules fold, never half of one, and the module holding
- * the next step always stays open, so "Start: …" in the header never points at something hidden.
+ * The setup page's groups (owner, 2026-10-28: "simplify it and make it easier for people to set up
+ * and start working"): Start working and Get paid right are open; Fine-tune later — optional settings
+ * that work on their defaults — folds behind one control, so the page reads as the few steps that
+ * matter instead of a wall of eighteen.
  */
 export function SetupModules({ modules, nextKey }: { modules: SetupModuleGroup[]; nextKey: string | null }) {
   const [expanded, setExpanded] = useState(false);
-
-  const nextModule = modules.findIndex((module) => module.steps.some((step) => step.key === nextKey));
-  let shownSteps = 0;
-  let lead = 0;
-  while (lead < modules.length && (shownSteps < LEADING_STEPS || lead <= nextModule)) {
-    shownSteps += modules[lead].steps.length;
-    lead += 1;
-  }
-  const folded = modules.slice(lead);
+  const counted = modules.filter((module) => !module.optional);
+  const folded = modules.filter((module) => module.optional);
   const foldedSteps = folded.reduce((sum, module) => sum + module.steps.length, 0);
-  const visible = expanded ? modules : modules.slice(0, lead);
 
   return (
     <>
-      {visible.map((module) => (
-        <TableCard key={module.key} title={module.label}>
+      {counted.map((module) => (
+        <TableCard key={module.key} title={module.label} description={module.hint}>
           <SetupStepList steps={module.steps} nextKey={nextKey} />
         </TableCard>
       ))}
+      {expanded
+        ? folded.map((module) => (
+            <TableCard key={module.key} title={module.label} description={module.hint}>
+              <SetupStepList steps={module.steps} nextKey={nextKey} />
+            </TableCard>
+          ))
+        : null}
       {foldedSteps > 0 ? (
         <div>
           <Button type="button" variant="outline" aria-expanded={expanded} onClick={() => setExpanded((open) => !open)}>
-            {expanded ? "Show fewer steps" : `Show ${foldedSteps} more step${foldedSteps === 1 ? "" : "s"}`}
+            {expanded ? "Hide optional settings" : `Show ${foldedSteps} optional setting${foldedSteps === 1 ? "" : "s"}`}
           </Button>
         </div>
       ) : null}

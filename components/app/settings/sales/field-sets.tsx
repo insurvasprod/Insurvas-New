@@ -17,7 +17,7 @@ import { Lock, Plus, Trash2 } from "lucide-react";
 
 import { Callout, SettingsStack, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
@@ -29,8 +29,8 @@ import { isSensitiveKey } from "@/lib/applications/constants";
 import { cn } from "@/lib/utils";
 
 import {
-  DiscardSave, LifecyclePill, ReadOnlyNotice, RowAction, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, WithReason, checkbox,
-  notRefreshed, warnUnsaved,
+  DiscardSave, LifecyclePill, ReadOnlyNotice, RowAction, RowMenu, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, WithReason, checkbox,
+  warnUnsaved,
 } from "./shared";
 import { liveOf, useSalesTemplates } from "./templates-data";
 import { PairDialog, PublishDialog, RetireDialog } from "./templates-dialogs";
@@ -163,18 +163,11 @@ export function SalesFieldSets() {
             total={rowsShown.length}
             noun="field sets"
             title="Field sets"
-            description="One per carrier and product, with the platform set behind them."
-            toolbar={
-              <DataToolbar
-                actions={
-                  <>
+            info="One per carrier and product, with the platform set behind them."
+            action={
                     <WithReason reason={ownerOnly}>
                       <Button type="button" disabled={!canEdit} onClick={() => setDialog({ kind: "add" })}><Plus aria-hidden="true" />Add a field set</Button>
                     </WithReason>
-                    <RefreshButton onClick={sample ? notRefreshed : () => { void api.reload(); }} refreshing={api.loading && !sample} />
-                  </>
-                }
-              />
             }
           >
             {rowsShown.length === 0 ? (
@@ -199,7 +192,11 @@ export function SalesFieldSets() {
                     const isOpen = r.key === selectedKey;
                     const verb = isOpen ? "Close" : canEdit && r.own ? "Edit" : "View";
                     return (
-                      <tr key={r.key} className={cn("m-row", isOpen && "bg-[var(--brand-50)]")}>
+                      <tr
+                        key={r.key}
+                        className={cn("m-row", (isOpen || r.own || r.inUse) && "cursor-pointer", isOpen && "bg-[var(--brand-50)]")}
+                        onClick={(event) => { if ((isOpen || r.own || r.inUse) && !(event.target as HTMLElement).closest("button, a, [role=menu]")) toggle(r); }}
+                      >
                         <td className={st.td}><span className={st.strong}>{r.carrierName}</span></td>
                         <td className={st.td}>{r.productLabel}</td>
                         <td className={cn(st.td, st.num)}>{list.length}</td>
@@ -210,16 +207,15 @@ export function SalesFieldSets() {
                         </td>
                         <td className={cn(st.td, "whitespace-nowrap text-right")}>
                           <span className="inline-flex gap-2">
-                            {!r.own && (
-                              <RowAction onClick={() => { void copyFor(r); }} disabled={!canEdit || !r.inUse} reason={!r.inUse ? "There is no platform set to copy for this product." : ownerOnly}>Copy to my agency</RowAction>
-                            )}
-                            {r.liveOwn && (
-                              <RowAction onClick={() => setDialog({ kind: "retire", template: r.liveOwn! })} disabled={!canEdit} reason={ownerOnly}>Retire</RowAction>
-                            )}
-                            {r.own?.status === "draft" && (
-                              <RowAction onClick={() => setDialog({ kind: "publish", template: r.own! })} disabled={!canEdit || (isOpen && dirty)} reason={isOpen && dirty ? "Save your changes before publishing." : ownerOnly}>Publish</RowAction>
-                            )}
                             <RowAction onClick={() => toggle(r)} disabled={!isOpen && !(r.own ?? r.inUse)} reason="There is no field set to show for this product." label={`${verb} the ${r.carrierName} · ${r.productLabel} field set`}>{verb}</RowAction>
+                            <RowMenu
+                              label={`the ${r.carrierName} · ${r.productLabel} field set`}
+                              items={[
+                                !r.own && { label: "Copy to my agency", onSelect: () => { void copyFor(r); }, disabled: !canEdit || !r.inUse, reason: !r.inUse ? "There is no platform set to copy for this product." : ownerOnly },
+                                r.own?.status === "draft" && { label: "Publish", onSelect: () => setDialog({ kind: "publish", template: r.own! }), disabled: !canEdit || (isOpen && dirty), reason: isOpen && dirty ? "Save your changes before publishing." : ownerOnly },
+                                Boolean(r.liveOwn) && { label: "Retire", onSelect: () => setDialog({ kind: "retire", template: r.liveOwn! }), disabled: !canEdit, reason: ownerOnly },
+                              ]}
+                            />
                           </span>
                         </td>
                       </tr>

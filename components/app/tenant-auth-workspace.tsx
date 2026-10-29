@@ -7,7 +7,8 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { LinkArrow } from "@/components/ui/link-arrow";
 import type { PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
-import { AuthHeading, AuthLayout, AuthStory } from "@/components/portal/auth-layout";
+import { AuthHeading, AuthLayout } from "@/components/portal/auth-layout";
+import { AuthShowcase } from "@/components/app/auth-showcase";
 import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
 import { GoogleButton } from "@/components/portal/google-button";
 import { OtpInput } from "@/components/app/otp-input";
@@ -18,42 +19,17 @@ import type { MaintenanceStatus } from "@/lib/system/constants";
 const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
 
 /**
- * The panel is reassurance, not content.
- *
- * It says what this door is for — the floor, and the boundary around it — so a partner or a member
- * of staff who landed here can tell in one look that they are at the wrong door. Below 1024px the
- * shell drops it entirely rather than pushing the form under the fold.
- */
-const floorLines = [
-  { label: "Inbound transfers", value: "Claimed by one agent" },
-  { label: "Every dial", value: "Checked against do-not-call" },
-  { label: "Lead cost", value: "Traced to the policy" },
-  { label: "Callbacks and appointments", value: "On the lead's record" },
-];
-
-/** The sign-up steps, as the panel beside steps 1–3 lists them (FUNNEL_STEPS in funnel-frame.tsx). */
-const SIGN_UP_STEPS = ["Your account", "Your email", "Your agency", "Your plan", "Payment"] as const;
-
-/**
- * The brand panel beside the agent forms, in the one AuthStory style. Sign-up shows where you are in
- * the five steps, and says what the payment step will ask for in the payment mode that is on; it
- * never names a trial length, because that depends on the plan chosen at step 4 (owner, 2026-10-27).
- * AppAuthFrame (set password, confirm email) shows the sign-in one.
+ * The brand panel beside the agent forms: the product, moving (components/app/auth-showcase.tsx).
+ * Manager review, 2026-10-28: show what the software looks like, one feature at a time, animated.
+ * Sign-up screen N opens on feature N, so each step moves the story on; sign-in starts at the first.
+ * The payment line stays as a footnote; it never names a trial length, because that depends on the
+ * plan (owner, 2026-10-27). AppAuthFrame (set password, confirm email) shows the sign-in one.
  */
 export function StoryPanel({ mode, step = 1, noPayment = false }: { mode: PortalAuthMode; step?: number; noPayment?: boolean }) {
   if (mode === "sign-up") {
-    return (
-      <AuthStory
-        title="Five steps to your workspace."
-        rows={SIGN_UP_STEPS.map((name, index) => ({
-          label: name,
-          value: index + 1 < step ? "Done" : index + 1 === step ? "Now" : undefined,
-          detail: name === "Payment" ? (noPayment ? "No card needed" : "Card on Whop's secure checkout · not charged during your trial") : undefined,
-        }))}
-      />
-    );
+    return <AuthShowcase step={step} footnote={noPayment ? "No card needed" : "Card on Whop's secure checkout · not charged during your trial"} />;
   }
-  return <AuthStory label="For licensed agents" title="Your agency's floor, in one workspace." rows={floorLines} />;
+  return <AuthShowcase step={0} />;
 }
 
 /**
@@ -164,12 +140,6 @@ export function TenantAuthWorkspace({
     }
   }
 
-  function openLinkRequest() {
-    setLinkEmail(loginEmail);
-    setLinkError(null);
-    setLinkRequest("open");
-  }
-
   async function requestLink(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (linkCooldown > 0) return;
@@ -255,7 +225,8 @@ export function TenantAuthWorkspace({
 
   const signIn = (
     <>
-      <AuthHeading title="Welcome back">Sign in to your agency&rsquo;s workspace.</AuthHeading>
+      {/* The sign-in page cannot know an agency from one agent, so it names neither (manager review, 2026-10-28). */}
+      <AuthHeading title="Welcome back">Sign in to your workspace.</AuthHeading>
 
       <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
         <AuthField label="Email" htmlFor="tenant-login-email">
@@ -319,32 +290,33 @@ export function TenantAuthWorkspace({
         </AuthSubmit>
       </form>
 
-      <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
-        <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
-      </div>
-      {/* The other ways in sit together under one "or": Google beside the emailed link, so it adds no
-          height (owner, 2026-10-27). Side by side from 480px; stacked on a phone. */}
-      <div className={googleEnabled ? "grid grid-cols-1 gap-2.5 min-[480px]:grid-cols-2" : undefined}>
-        {googleEnabled && <GoogleButton intent="sign-in" />}
-        <AuthSecondary onClick={openLinkRequest} disabled={maintenance?.level === "locked"}>
-          {googleEnabled ? "Email me a link" : "Email me a sign-in link"}
-        </AuthSecondary>
-      </div>
+      {/* One other way in: Google, full width under the "or". "Email me a link" is gone from here
+          (manager review, 2026-10-28); a link already sent still opens the finish panel below. */}
+      {googleEnabled && (
+        <>
+          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
+            <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
+          </div>
+          <GoogleButton intent="sign-in" />
+        </>
+      )}
 
-      <p className="mt-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
-        New to Insurvas?{" "}
-        <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
-          Create an account
-        </Link>
-      </p>
-
-      <p className="mt-3 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-        Partner or affiliate?{" "}
-        <Link href="/partner/login" className="font-semibold text-foreground">
-          Use the partner portal instead
-        </Link>
-        .
-      </p>
+      {/* Both "elsewhere" lines in one style, side by side where they fit (manager review, 2026-10-28:
+          the partner line had a different font and colour). */}
+      <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+        <p className="m-0">
+          New to Insurvas?{" "}
+          <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            Create an account
+          </Link>
+        </p>
+        <p className="m-0">
+          Partner or affiliate?{" "}
+          <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            Partner portal
+          </Link>
+        </p>
+      </div>
     </>
   );
 

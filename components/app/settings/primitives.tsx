@@ -13,12 +13,15 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
 
 import { cn } from "@/lib/utils";
 import { SectionLastChanged } from "@/components/app/settings/last-changed";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /* ── section header ─────────────────────────────────────────────────────── */
 
@@ -26,7 +29,19 @@ import { SectionLastChanged } from "@/components/app/settings/last-changed";
  * `id` and `history` (LA-8.8): the section's registry id, and whether this viewer may read the
  * settings history — then the header says who last changed something here, linking into the log.
  */
-type SectionMeta = { title: string; description: string; id?: string; history?: boolean };
+type SectionMeta = {
+  title: string;
+  description: string;
+  id?: string;
+  history?: boolean;
+  /**
+   * Inside the Settings frame (settings-shell plan, 2026-10-28): the page header already shows the
+   * section's title and purpose, top-left, so the section header draws neither, and its actions go
+   * to the header's action slot on the title's line.
+   */
+  framed?: boolean;
+  actionsSlot?: HTMLElement | null;
+};
 const SectionContext = createContext<SectionMeta | null>(null);
 
 export function SettingsSectionProvider({ value, children }: { value: SectionMeta; children: ReactNode }) {
@@ -49,6 +64,24 @@ export function SettingsSectionHeader({ actions, trail }: {
 }) {
   const meta = useContext(SectionContext);
   if (!meta) return null;
+  if (meta.framed) {
+    // One title per page: the frame's. A record open in the section keeps its own line here, with
+    // its actions; otherwise the actions move up to the title's line. The history note is in the
+    // frame's header too, under the purpose line (it floated above the tabs here).
+    if (trail) {
+      return (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-[240px] flex-1 items-center gap-3">{trail}</div>
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2.5">{actions}</div>}
+        </div>
+      );
+    }
+    return (
+      <>
+        {actions && (meta.actionsSlot ? createPortal(actions, meta.actionsSlot) : <div className="flex justify-end gap-2.5">{actions}</div>)}
+      </>
+    );
+  }
   if (trail) {
     return (
       <div className="flex flex-wrap items-center gap-3">
@@ -108,7 +141,8 @@ export function SettingsStack({ children, className }: { children: ReactNode; cl
 /** Two columns, 24px apart, top-aligned — the boards' grid for paired cards. */
 export function SettingsGrid({ children, className, cols = 2 }: { children: ReactNode; className?: string; cols?: 2 | 3 | 4 }) {
   const c = { 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "sm:grid-cols-2 lg:grid-cols-4" }[cols];
-  return <div className={cn("grid items-start gap-6", c, className)}>{children}</div>;
+  // Cards side by side end level (2026-10-29: no ragged gap under the shorter one).
+  return <div className={cn("grid items-stretch gap-6", c, className)}>{children}</div>;
 }
 
 /* ── buttons ────────────────────────────────────────────────────────────── */
@@ -156,6 +190,7 @@ export function Callout({ tone, title, children, className }: { tone: Tone; titl
 export function SettingsCard({
   title,
   sub,
+  info,
   children,
   className,
   bodyClassName,
@@ -164,6 +199,9 @@ export function SettingsCard({
 }: {
   title?: ReactNode;
   sub?: ReactNode;
+  /** Why the card exists, behind an (i) beside the title (owner, 2026-10-29). `sub` is for one line
+   *  that must be read to use the card. */
+  info?: ReactNode;
   children?: ReactNode;
   className?: string;
   bodyClassName?: string;
@@ -177,7 +215,12 @@ export function SettingsCard({
       {(title || sub || action) && (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            {title && <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>}
+            {title && (
+              <div className="flex min-w-0 items-center gap-1">
+                <h3 className="m-0 text-card-title text-[var(--ink)]">{titleCaseNode(title)}</h3>
+                {info && <InfoTip label={typeof title === "string" ? `About ${title.toLowerCase()}` : "About this card"}>{info}</InfoTip>}
+              </div>
+            )}
             {sub && <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
           </div>
           {action}

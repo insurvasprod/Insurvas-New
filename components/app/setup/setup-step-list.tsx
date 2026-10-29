@@ -93,8 +93,8 @@ export function SetupStepList({ steps, nextKey }: { steps: SetupStepRow[]; nextK
               <span className={`min-w-0 break-words text-sm ${step.complete || step.skipped ? "text-muted-foreground" : isNext ? "font-semibold text-foreground" : "text-foreground"}`}>
                 {step.label}
               </span>
-              <InfoTip label={`Why: ${step.label}`}>{step.why}</InfoTip>
-              {step.complete ? <StatusChip tone="good">Done</StatusChip> : step.skipped ? <StatusChip tone="neutral">Skipped</StatusChip> : null}
+              <InfoTip label={step.key === "statement" ? "What is a carrier statement?" : `Why: ${step.label}`}>{step.why}</InfoTip>
+              {step.complete ? <StatusChip tone="good">Done</StatusChip> : step.skipped ? <StatusChip tone="neutral">Skipped</StatusChip> : step.optional ? <StatusChip tone="neutral">Optional</StatusChip> : null}
               {!step.complete && step.minutes ? (
                 <span className="w-full text-xs tabular-nums text-muted-foreground sm:w-auto">About {step.minutes} min</span>
               ) : null}
@@ -105,7 +105,8 @@ export function SetupStepList({ steps, nextKey }: { steps: SetupStepRow[]; nextK
                   Mark done
                 </Button>
               ) : null}
-              {!step.complete ? (
+              {/* An optional step is never counted, so there is nothing to skip. */}
+              {!step.complete && !step.optional ? (
                 <Button type="button" variant="ghost" disabled={disabled} onClick={() => run(step.key, () => act(step.skipped ? "unskip" : "skip", step.key))}>
                   {step.skipped ? "Bring back" : "Skip"}
                 </Button>

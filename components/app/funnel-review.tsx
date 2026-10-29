@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
+import { FunnelActions } from "@/components/portal/funnel-actions";
 import { FunnelHeading } from "@/components/app/funnel-frame";
 import { Button } from "@/components/ui/button";
 
@@ -10,17 +10,15 @@ import { Button } from "@/components/ui/button";
  * once the account exists and the email is confirmed, so Back shows what was done, rather than an
  * empty form that would only fail.
  *
- * Two ways on (owner, 2026-10-27): Continue returns to where the signup stands; "Next" walks one step
- * forward, so someone who went back can step through again. Next is left out when it is the same place.
+ * One way on (manager review, 2026-10-28): Continue returns to where the sign-up stands. The second
+ * "Next: …" button and "Not you? Sign out" are gone; `back` adds the Back button on steps after the first.
  */
-export function FunnelReview({ title, subtitle, rows, continueHref, next, children }: {
+export function FunnelReview({ title, subtitle, rows, continueHref, back }: {
   title: string;
   subtitle: string;
   rows: { label: string; value: string; done?: boolean }[];
   continueHref: string;
-  /** The step after this one, by name: "Next: Your email". */
-  next?: { href: string; label: string };
-  children?: ReactNode;
+  back?: string;
 }) {
   return (
     <div>
@@ -40,17 +38,11 @@ export function FunnelReview({ title, subtitle, rows, continueHref, next, childr
           </div>
         ))}
       </dl>
-      <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
-        <Button asChild className="h-11 flex-1">
+      <FunnelActions back={back} className="mt-6">
+        <Button asChild className="h-11">
           <Link href={continueHref}>Continue</Link>
         </Button>
-        {next && next.href !== continueHref && (
-          <Button asChild variant="outline" className="h-11 flex-1 border-[var(--border-strong)]">
-            <Link href={next.href}>Next: {next.label}<ArrowRight aria-hidden="true" /></Link>
-          </Button>
-        )}
-      </div>
-      {children}
+      </FunnelActions>
     </div>
   );
 }

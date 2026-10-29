@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Plus } from "lucide-react";
 
 import { notify } from "@/lib/notify";
+import { dayMonthYear } from "@/lib/format/dates";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,7 +21,8 @@ import { REJECTION_LABELS, REJECTION_TONE, type PostKey, type PostKeysLoaded } f
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 
-const when = (value: string | null) => (value ? new Date(value).toLocaleDateString() : null);
+// One date form across Settings ("28 Oct 2026"; settings audit P9), in the viewer's own zone.
+const when = (value: string | null) => (value ? dayMonthYear(value, viewerTimeZone()) : null);
 const fmt = (n: number) => n.toLocaleString();
 
 /** A row of the field-map draft. `id` is local, so React keys survive edits to either name. */

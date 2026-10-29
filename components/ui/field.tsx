@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /**
  * Form fields, once (foundation v3, 2026-10-27): the labelled field, the 36px control class, the
@@ -52,7 +53,7 @@ export function Field({
   return (
     <div className={cn("block min-w-0", className)}>
       <label htmlFor={htmlFor} className="text-label text-[var(--body)]">
-        {label}
+        {titleCaseNode(label)}
         {required && <span className="text-[var(--error-ink)]"> *</span>}
       </label>
       {children}
@@ -84,7 +85,7 @@ export function ToggleRow({
   return (
     <div className="flex items-start justify-between gap-4">
       <span className="min-w-0">
-        <label htmlFor={id} className="block text-label text-[var(--body)]">{title}</label>
+        <label htmlFor={id} className="block text-label text-[var(--body)]">{titleCaseNode(title)}</label>
         {help && <span className="mt-1 block max-w-[420px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{help}</span>}
       </span>
       <Switch id={id} checked={checked} onChange={onChange} disabled={disabled} />

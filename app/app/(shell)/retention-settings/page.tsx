@@ -3,9 +3,7 @@ import { HubError, loadHub, type Hub } from "@/lib/retention/settingsHubStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionSettingsBoard } from "@/components/app/retention/retention-settings-board";
-import { SectionLastChanged } from "@/components/app/settings/last-changed";
-import { SettingsTrail } from "@/components/app/settings/settings-trail";
-import { PageHeader } from "@/components/ui/page-header";
+import { SettingsRouteFrame } from "@/components/app/settings/settings-route-frame";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -31,17 +29,16 @@ export default async function RetentionSettingsPage() {
     problem = error.message;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <SettingsTrail label="Retention" />
-      <div>
-        <PageHeader title="Retention settings" description="Weights, thresholds, cooling-off periods and the holdout." />
-        <SectionLastChanged sectionKey="retention" />
-      </div>
+    // The one Settings layout: header, breadcrumb and menu come from the frame (settings-shell plan,
+    // Task 6); this page keeps its gates above and draws only its board.
+    <SettingsRouteFrame sectionId="retention">
+      <div className="flex min-h-0 flex-grow flex-col gap-4">
       {hub ? (
         <RetentionSettingsBoard hub={hub} canEdit={guard.entitlement.access !== "read_only"} />
       ) : (
         <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>
       )}
-    </div>
+      </div>
+    </SettingsRouteFrame>
   );
 }

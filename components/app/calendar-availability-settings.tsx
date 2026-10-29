@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
@@ -89,6 +91,13 @@ const ZONES = [
   "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
   "America/Phoenix", "America/Anchorage", "Pacific/Honolulu", "Asia/Manila", "Asia/Kolkata", "UTC",
 ];
+/** Time zones in words, US first (settings audit: the list showed raw codes in an odd order). */
+const ZONE_NAMES: Record<string, string> = {
+  "America/New_York": "Eastern (New York)", "America/Chicago": "Central (Chicago)", "America/Denver": "Mountain (Denver)",
+  "America/Los_Angeles": "Pacific (Los Angeles)", "America/Phoenix": "Arizona (Phoenix)", "America/Anchorage": "Alaska (Anchorage)",
+  "Pacific/Honolulu": "Hawaii (Honolulu)", "Asia/Manila": "Philippines (Manila)", "Asia/Kolkata": "India (Kolkata)", UTC: "UTC",
+};
+const zoneName = (zone: string) => ZONE_NAMES[zone] ?? zone.replace(/_/g, " ");
 
 const LENGTHS = [20, 30, 45, 60];
 const BUFFERS = [0, 5, 10, 15];
@@ -292,21 +301,15 @@ export function CalendarAvailabilitySettings() {
   // page's own one became. Clicks inside rootRef are the page's own.
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const header = (
-    <SettingsSectionHeader
-      actions={
-        editable && draft ? (
-          <DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void save()} />
-        ) : undefined
-      }
-    />
-  );
+  // Save and Discard appear in the bottom save bar only when something changed, as on every other
+  // Settings page (2026-10-29), not as two greyed buttons in the header all the time.
+  const header = <SettingsSectionHeader />;
 
   if (loading)
     return (
       <SettingsStack>
         {header}
-        <p role="status" className="text-sm text-[var(--muted)]">Loading calendar settings…</p>
+        <SettingsCard><SectionLoading rows={6} columns={2} label="Loading calendar settings" /></SettingsCard>
       </SettingsStack>
     );
   if (error)
@@ -336,7 +339,8 @@ export function CalendarAvailabilitySettings() {
   const { appointmentMinutes: length, bufferMinutes: buffer } = draft.policy;
   const openDays = new Set(draft.hours.map((hour) => hour.weekday)).size;
   const busy = !editable || saving;
-  const zoneOptions = [...new Set([...(zone ? [zone] : []), Intl.DateTimeFormat().resolvedOptions().timeZone, ...ZONES])].filter(Boolean);
+  // The usual list in its own order; the saved zone and this browser's zone follow it when they are not on it.
+  const zoneOptions = [...new Set([...ZONES, ...(zone ? [zone] : []), Intl.DateTimeFormat().resolvedOptions().timeZone])].filter(Boolean);
 
   // Monday–Friday and friends in one tap: the hours most agents keep (owner pick C, 2026-10-26).
   const presets: Array<{ label: string; days: number[]; from: string; to: string }> = [
@@ -409,7 +413,7 @@ export function CalendarAvailabilitySettings() {
                   className={cn(control, "w-[240px]")}
                 >
                   <option value="">Choose a timezone…</option>
-                  {zoneOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                  {zoneOptions.map((option) => <option key={option} value={option}>{zoneName(option)}</option>)}
                 </select>
               </span>
             }
@@ -473,7 +477,7 @@ export function CalendarAvailabilitySettings() {
         {view === "appointments" && (
           <SettingsCard title="Appointments" className={glass}>
             <div className="flex flex-col gap-5">
-              <ChipField label="Length" hint="How long one appointment takes.">
+              <ChipField label="Length">
                 {withCurrent(LENGTHS, length).map((minutes) => (
                   <ToggleChip key={minutes} selected={minutes === length} disabled={busy} onClick={() => setPolicy({ appointmentMinutes: minutes })}>{minutes} min</ToggleChip>
                 ))}
@@ -617,7 +621,7 @@ export function CalendarAvailabilitySettings() {
                 hint={
                   !bookingReady
                     ? "All agents together. Can be set once a pending database update is applied."
-                    : "All agents together. Leave empty for no agency limit."
+                    : "All agents together."
                 }
               >
                 <input
@@ -638,12 +642,12 @@ export function CalendarAvailabilitySettings() {
                 />
               </Field>
               <Field
-                label="Callback reminder"
+                label="Callback reminder, minutes before"
                 htmlFor="callback-reminder-lead"
                 hint={
                   !reminderReady
-                    ? "Minutes before a callback that its reminder goes out. Can be set once a pending database update is applied."
-                    : "Minutes before a callback that its reminder goes out. Leave empty for the platform default."
+                    ? "Can be set once a pending database update is applied."
+                    : "Empty uses the platform default."
                 }
               >
                 <input
@@ -684,6 +688,11 @@ export function CalendarAvailabilitySettings() {
       />
 
       <LeaveGuard dirty={dirty} scope={rootRef} onSave={save} onDiscard={discard} what={`${draft.name}’s calendar`} />
+      {editable && (
+        <SettingsSaveBar visible={dirty} note={`Unsaved changes to ${draft.name}’s calendar`}>
+          <DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void save()} />
+        </SettingsSaveBar>
+      )}
     </SettingsStack>
     </div>
   );

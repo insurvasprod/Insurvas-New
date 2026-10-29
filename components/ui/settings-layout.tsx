@@ -89,8 +89,10 @@ export function SettingsSaveBar({
   if (!visible) return null;
 
   return (
-    <div className="sticky bottom-0 z-10 -mx-4 mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:-mx-6 sm:px-6">
-      {note && <p className="text-xs text-muted-foreground">{note}</p>}
+    // Settings R3 (2026-10-29): a solid bar floating 16px above the window's bottom edge. The see-through
+    // band it replaced let the page's text run under its buttons, so it read as part of the page.
+    <div role="region" aria-label="Unsaved changes" className="sticky bottom-4 z-20 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 shadow-[var(--shadow-overlay)]">
+      {note && <p className="m-0 flex items-center gap-2 text-sm text-[var(--body)]"><span aria-hidden="true" className="size-2 rounded-full bg-[var(--warning)]" />{note}</p>}
       <div className="ml-auto flex items-center gap-2">{children}</div>
     </div>
   );

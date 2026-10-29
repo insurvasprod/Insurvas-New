@@ -78,9 +78,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       { label: "Languages I speak", anchor: "profile-languages", keywords: ["language", "languages", "spanish", "bilingual", "speak"] },
       { label: "Sign-in email", anchor: "security-email", keywords: ["change email", "email address", "login email"] },
       { label: "Password", anchor: "security-password", keywords: ["change password", "reset password"] },
-      { label: "Two-factor authentication", anchor: "security-two-factor", keywords: ["2fa", "two factor", "authenticator", "mfa", "recovery codes"] },
+      { label: "Two-step verification", anchor: "security-two-factor", keywords: ["2fa", "two factor", "two-factor", "two step", "authenticator", "mfa", "recovery codes"] },
       { label: "Sessions", anchor: "security-sessions", keywords: ["sign out", "log out", "devices", "lost laptop", "stolen phone", "end session"] },
-      { label: "Security log", anchor: "security-log", keywords: ["login history", "failed logins", "security events"] },
+      { label: "Sign-in history", anchor: "security-log", keywords: ["login history", "failed logins", "security events"] },
       { label: "Quiet hours", anchor: "notify-quiet-hours", keywords: ["quiet hours", "do not disturb at night", "mute at night"] },
       { label: "Alerts that cannot be switched off", anchor: "notify-protected", keywords: ["doi deadline", "reinstatement", "licence expiring", "payment failed", "cannot switch off"] },
     ],
@@ -130,7 +130,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   // ── Carriers ────────────────────────────────────────────────────────────────────────────────────
   // Owner pick D, 2026-10-26: Carrier library and States & licences in one place, in three steps.
   // 2026-10-27: Carrier details (sales-carriers) folded into each carrier's card; old links land on Carriers.
-  { group: "Carriers", id: "carriers", label: "Carriers", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Your carriers and the states each one appointed you in.", short: "Carriers, contract levels and appointed states.", search_keywords: ["carriers", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
+  // Manager review 28 Oct §5.1: "Contracting", a guided set-up (carriers, then states) and the two lists. The id stays.
+  { group: "Carriers", id: "carriers", label: "Contracting", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "The carriers you are contracted with and the states you sell in, set up step by step.", short: "Your carriers and the states you sell in, set up in two steps.", search_keywords: ["contracting", "contract management", "carriers", "add carrier", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
   // 2026-10-28 (owner): Carrier rules is neither a rail entry nor a tab on Carriers.
   { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
 

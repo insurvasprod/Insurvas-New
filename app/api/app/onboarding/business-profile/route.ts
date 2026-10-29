@@ -1,16 +1,18 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { deriveRecommendedSetupSteps } from "@/lib/signup/constants";
 import { resolveSignupContext } from "@/lib/signup/context";
+import { PROFILE_EDITABLE_STATES, signupDestination } from "@/lib/signup/destination";
 import { businessProfileSchema } from "@/lib/signup/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  // awaiting_payment too: the owner may correct the profile while checkout is pending. The RPC keeps
-  // that state (migration 20261015580000), so the open checkout is not lost.
-  if (context.userStatus !== "active" || !["business_profile", "ready_for_checkout", "awaiting_payment"].includes(context.onboardingState)) {
+  // Before, during and after payment (migration 20261028200000): the profile is asked after checkout
+  // and at first login, and the RPC never moves a tenant backwards.
+  if (context.userStatus !== "active" || !(PROFILE_EDITABLE_STATES as readonly string[]).includes(context.onboardingState)) {
     return NextResponse.json({ error: "Verify your email before completing the business profile" }, { status: 409 });
   }
 
@@ -23,6 +25,23 @@ export async function POST(request: NextRequest) {
   const profile = parsed.data;
   const setupSteps = deriveRecommendedSetupSteps(profile);
   const supabase = getSupabaseServiceClient();
+
+  // About you (manager review, 2026-10-28): step 1 is only email and password, so the person's name
+  // and phone are saved here. Left out (a profile corrected from checkout by an older page), they stay.
+  if (profile.firstName && profile.lastName) {
+    const fullName = `${profile.firstName} ${profile.lastName}`;
+    // Untyped, like lib/users/ownProfileService.ts: the generated types leave these columns read-only.
+    const { error: personError } = await (supabase as unknown as SupabaseClient)
+      .from("users")
+      .update({ name: fullName, full_name: fullName, display_name: fullName, ...(profile.phone ? { phone: profile.phone } : {}), updated_at: new Date().toISOString() })
+      .eq("id", context.userId);
+    if (personError) {
+      console.error("Could not save the signup name and phone", personError.code, personError.message);
+      return NextResponse.json({ error: "Could not save your details. Try again." }, { status: 500 });
+    }
+    // The Auth identity carries the name too (it is set at sign-up from the address until now).
+    await supabase.auth.admin.updateUserById(context.userId, { user_metadata: { name: fullName, full_name: fullName } }).catch(() => {});
+  }
   const { data, error } = await supabase.rpc("save_signup_business_profile", {
     p_user_id: context.userId,
     p_business_name: profile.businessName,
@@ -50,6 +69,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not save your business profile" }, { status: 500 });
   }
 
-  // Step 4 of 5 is the plan (owner, 2026-10-26), then Payment.
-  return NextResponse.json({ ok: true, redirectTo: "/app/onboarding/plan", setupSteps });
+  // Wherever the sign-up stands after saving: the plan or checkout if payment is still to come, the
+  // app once the plan has started (payment comes first since migration 20261028200000).
+  const savedState = String(data[0].onboarding_state ?? context.onboardingState);
+  return NextResponse.json({ ok: true, redirectTo: signupDestination({ userStatus: "active", onboardingState: savedState }) ?? "/app/dashboard", setupSteps });
 }

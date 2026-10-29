@@ -1052,7 +1052,6 @@ export function AppTopBar({ user, userId, plan, menu }: {
       signOutRedirect="/app/login"
       workspacesEndpoint="/api/app/auth/workspaces"
       switchWorkspaceEndpoint="/api/app/auth/switch-workspace"
-      accountHostId="agent-rail-account"
       accountExtra={plan ? <PlanLine plan={plan} /> : undefined}
       leading={menu ? <TopBarCrumb menu={menu} /> : undefined}
       actions={menu ? <TopBarNew menu={menu} /> : undefined}

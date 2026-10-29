@@ -362,7 +362,13 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
        md the shell's own menu header stacks over the bar, so the page scrolls and the panes get
        fixed heights instead. */
     <div className="m-stagger flex min-w-0 flex-col gap-4 md:h-[calc(100dvh-var(--top-bar-h)-48px)] lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
-      <PageHeader title="Partner chat" />
+      {/* New conversation sits in the Conversations bar (owner, 2026-10-28), not here. */}
+      <PageHeader
+        visible
+        title="Partner Chat"
+        description="Messages with your lead sources and your team."
+        breadcrumbs={[{ label: "Partners" }, { label: "Partner Chat" }]}
+      />
       {error && <p role="alert" className="m-0 rounded-md border border-[var(--error)]/40 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
       {/* Columns: conversations, the thread, then details from xl. Widths come from the layout. */}

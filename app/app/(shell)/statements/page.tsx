@@ -9,6 +9,8 @@ import { StatementsTable } from "@/components/app/statements-table";
 import { UnmatchedLinesTable } from "@/components/app/unmatched-lines-table";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTip } from "@/components/ui/info-tip";
+import { STATEMENT_EXPLAINER } from "@/lib/dashboard/checklist";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import {
   STATEMENT_SCHEMA_PENDING_MESSAGE,
@@ -78,7 +80,8 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Statements"
-        description="A line posts to the commission ledger only when a person accepts its match."
+        titleInfo={<InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip>}
+        description="What each carrier paid you, line by line. A line reaches your commission ledger once you accept its match."
         actions={statements.length > 0 ? undefined : actions}
       />
 

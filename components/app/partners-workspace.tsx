@@ -10,14 +10,14 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { notify } from "@/lib/notify";
 import {
   Archive,
   ArrowRight,
   Check,
   ChevronDown,
-  ChevronLeft,
+  ChevronRight,
   Download,
   Edit3,
   MapPin,
@@ -33,7 +33,7 @@ import { AffiliateLinksPanel } from "@/components/app/affiliate-links-panel";
 import { PartnerUsersPanel } from "@/components/app/partner-users-panel";
 import { PartnerFormStudio } from "@/components/app/partner-form-studio";
 import { PartnerMarketAccessPanel } from "@/components/app/partner-market-access-panel";
-import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,26 +56,23 @@ import {
   PARTNER_PAYOUT_MODEL_LABELS,
   PARTNER_PAYOUT_MODELS,
   PARTNER_STATUS_LABELS,
-  PARTNER_TYPE_LABELS,
   PARTNER_TYPES,
   type PartnerPayoutModel,
   type PartnerStatus,
   type PartnerType,
 } from "@/lib/partners/constants";
 import { PageHeader } from "@/components/ui/page-header";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { PartnerOnboarding } from "@/components/app/partner-onboarding";
-import { Ring } from "@/components/app/inbound/stream-parts";
 import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
-import { productLineLabel } from "@/lib/format/productLine";
-import { PARTNER_LIMIT_KEYS, capacityLabel } from "@/lib/partners/limits";
+import { PARTNER_LIMIT_KEYS } from "@/lib/partners/limits";
 import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
 import { cn } from "@/lib/utils";
-import { UnderlineTabs } from "@/components/ui/view-tabs";
 
 type Term = {
   id: string;
@@ -170,13 +167,6 @@ const detailTabLabel = (tab: DetailTab) =>
       ? "Commercial terms"
       : tab.charAt(0).toUpperCase() + tab.slice(1);
 
-const STATUS_TONE: Record<PartnerStatus, StatusTone> = {
-  active: "good",
-  draft: "info",
-  paused: "warning",
-  offboarded: "neutral",
-};
-
 function PartnerFact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
@@ -186,18 +176,79 @@ function PartnerFact({ label, children }: { label: string; children: React.React
   );
 }
 
-/** Whether a product is open to the partner, as the shared chip (foundation v3). */
+/** On / off for a product, as the kit's status chip (Foundation v3: dot plus text). */
 function ProductChip({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabel: string }) {
-  return <StatusChip tone={on ? "good" : "neutral"} dot>{on ? onLabel : offLabel}</StatusChip>;
+  return <StatusChip tone={on ? "good" : "neutral"}>{on ? onLabel : offLabel}</StatusChip>;
+}
+
+/** L4 (owner, 2026-10-28): what each kind of lead source does, in the agent's words. */
+const SOURCE_TYPE_CHOICE: Record<PartnerType, string> = {
+  publisher: "Transfers live calls to me",
+  marketing: "Sells me leads",
+  affiliate: "Refers clients to me",
+};
+/** The same, short, for the list and its filter. */
+const SOURCE_TYPE_SHORT: Record<PartnerType, string> = {
+  publisher: "Live transfers",
+  marketing: "Lead seller",
+  affiliate: "Referrals",
+};
+/** Why a new source could not go Active, in the agent's words: almost always the plan's limit. */
+function friendlyActivation(reason: string): string {
+  return /limit|max_|cap/i.test(reason) ? "Your plan's limit for this kind of source is used. Pause another one or upgrade, then activate it from its Actions menu." : "Activate it from its Actions menu.";
+}
+
+/** How a source is usually paid, by kind: the form starts there (L2). */
+const DEFAULT_PAY: Record<PartnerType, PartnerPayoutModel> = { publisher: "per_transfer", marketing: "per_lead", affiliate: "per_sale" };
+
+/**
+ * Where the source works from (manager review 28 Oct §6: "Country" was free text). The US first; the
+ * countries call centres most often work from after it. The time zone list follows the country.
+ */
+const COUNTRIES: ReadonlyArray<{ code: string; name: string; zones: ReadonlyArray<readonly [string, string]> }> = [
+  { code: "US", name: "United States", zones: [] },
+  { code: "CA", name: "Canada", zones: [["America/Toronto", "Eastern (Toronto)"], ["America/Winnipeg", "Central (Winnipeg)"], ["America/Edmonton", "Mountain (Edmonton)"], ["America/Vancouver", "Pacific (Vancouver)"]] },
+  { code: "MX", name: "Mexico", zones: [["America/Mexico_City", "Mexico City"], ["America/Tijuana", "Tijuana"]] },
+  { code: "DO", name: "Dominican Republic", zones: [["America/Santo_Domingo", "Santo Domingo"]] },
+  { code: "JM", name: "Jamaica", zones: [["America/Jamaica", "Kingston"]] },
+  { code: "CO", name: "Colombia", zones: [["America/Bogota", "Bogotá"]] },
+  { code: "PH", name: "Philippines", zones: [["Asia/Manila", "Manila"]] },
+  { code: "IN", name: "India", zones: [["Asia/Kolkata", "India"]] },
+  { code: "PK", name: "Pakistan", zones: [["Asia/Karachi", "Karachi"]] },
+];
+const zonesFor = (country: string): ReadonlyArray<readonly [string, string]> => {
+  const found = COUNTRIES.find((row) => row.code === country);
+  return found && found.zones.length ? found.zones : US_TIME_ZONES;
+};
+
+/** L3: US time zones, so nobody types an IANA name. Anything else on file is kept as an extra option. */
+const US_TIME_ZONES = [
+  ["America/New_York", "Eastern"],
+  ["America/Chicago", "Central"],
+  ["America/Denver", "Mountain"],
+  ["America/Phoenix", "Arizona"],
+  ["America/Los_Angeles", "Pacific"],
+  ["America/Anchorage", "Alaska"],
+  ["Pacific/Honolulu", "Hawaii"],
+  ["America/Puerto_Rico", "Puerto Rico"],
+] as const;
+function homeTimeZone(): string {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return US_TIME_ZONES.some(([value]) => value === zone) ? zone : "America/New_York";
+  } catch {
+    return "America/New_York";
+  }
 }
 
 const emptyDraft: PartnerDraft = {
   name: "",
   partner_type: "publisher",
+  // Manager review §6: a country choice again, the US by default.
   country: "US",
   contact_name: "",
   contact_email: "",
-  timezone: "UTC",
+  timezone: "America/New_York",
   notes: "",
 };
 // Keep server and browser markup identical. The publisher page is rendered on the
@@ -230,34 +281,23 @@ const earliestTerm = (partner: Partner) =>
 const statusTone = (status: PartnerStatus) =>
   status === "active" ? "good" : status === "paused" ? "warning" : "neutral";
 
-function CapacityMetric({
-  label,
-  noun,
-  usage,
-  limit,
-  activeOnly = true,
-}: {
-  label: string;
-  noun: string;
-  usage: number;
-  limit: number | null;
-  activeOnly?: boolean;
-}) {
-  const percent =
-    limit == null
-      ? 0
-      : Math.min(100, limit === 0 ? 100 : (usage / limit) * 100);
-  // Said before the ceiling is hit, in the same count the server enforces: only an ACTIVE partner
-  // holds a slot (LA-1.19). Drafts, paused and offboarded partners do not.
-  // Partners A1 (2026-10-25): the plan's room as a ring, amber from four fifths full.
+/**
+ * One limit of the plan, said once ("1 of 5"), with a thin bar. Four of these share one strip: the
+ * ring cards before said each number three times ("1/5 · 1 of 5 · 1 of 5 live transfer sources").
+ */
+function PlanRoom({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+  const full = limit != null && used >= limit;
   return (
-    <div className="m-glass rounded-xl border border-border flex min-w-0 items-center gap-3.5 px-4 py-3.5">
-      <Ring value={percent / 100} tone={percent >= 80 ? "warning" : "success"} size={52} label={`${label} capacity used`}>{limit == null ? usage : `${usage}/${limit}`}</Ring>
-      <div className="min-w-0">
-        <p className="m-0 text-xs leading-[1.5] font-semibold tracking-[0.06em] uppercase text-muted-foreground">{label}</p>
-        <p className="m-0 mt-0.5 text-xl leading-tight font-semibold tracking-[-0.02em] tabular-nums text-foreground">{limit == null ? usage : `${usage} of ${limit}`}</p>
-        <p className="m-0 text-xs leading-[1.5] text-muted-foreground">{`${capacityLabel(usage, limit, usage === 1 && limit == null ? noun.replace(/s$/, "") : noun)}${activeOnly && limit != null ? " · active only" : ""}`}</p>
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-xs text-muted-foreground">{label}</span>
+        <span className={cn("text-sm font-semibold tabular-nums", full ? "text-[var(--warning-ink)]" : "text-foreground")}>{limit == null ? `${used} active` : `${used} of ${limit}`}</span>
       </div>
+      {limit != null && (
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
+          <div className={cn("h-full rounded-full", full ? "bg-[var(--warning)]" : "bg-[var(--primary)]")} style={{ width: `${limit ? Math.min(100, (used / limit) * 100) : 0}%` }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -291,7 +331,13 @@ export function PartnersWorkspace({
     useState<PartnerPayoutModel>("per_transfer");
   const [termRate, setTermRate] = useState("");
   const [termDate, setTermDate] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
+  // L2: how this source is paid, asked when it is added (optional; "Not sure yet" skips it).
+  const [newPay, setNewPay] = useState<PartnerPayoutModel | "none">("per_transfer");
+  const [newRate, setNewRate] = useState("");
+  // L8: during Get set up, the form stays open after an add so the next one is one click away.
+  const guiding = useSearchParams().has("guide");
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [, setProducts] = useState<Product[]>([]);
   const [partnerProducts, setPartnerProducts] = useState<
     Record<string, PartnerProduct[]>
   >({});
@@ -491,17 +537,55 @@ export function PartnersWorkspace({
   }
   async function savePartner(event: FormEvent) {
     event.preventDefault();
-    const path = editing ? `/api/app/partners/${editing}` : "/api/app/partners";
-    const ok = await send(
-      path,
-      editing ? "PATCH" : "POST",
-      editing ? { action: "update", ...draft } : draft,
-      editing ? "Partner updated" : "Partner created",
-    );
-    if (ok) {
-      setDraft(emptyDraft);
-      setEditing(null);
-      setDialogOpen(false);
+    if (editing) {
+      const ok = await send(`/api/app/partners/${editing}`, "PATCH", { action: "update", ...draft }, "Lead source updated");
+      if (ok) {
+        setDraft(emptyDraft);
+        setEditing(null);
+        setDialogOpen(false);
+      }
+      return;
+    }
+    // Added, then (when given) its pay, from the new record's id (L2).
+    const rate = Number(newRate);
+    const pay = newPay !== "none" && newRate.trim() !== "" && Number.isFinite(rate) && rate >= 0 ? newPay : null;
+    setBusy("/api/app/partners");
+    try {
+      const response = await fetch("/api/app/partners", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.partner?.id) { notify.block(result?.error ?? "Could not add the lead source"); return; }
+      if (pay) {
+        const today = new Date();
+        const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        const term = await fetch(`/api/app/partners/${result.partner.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(pay === "revenue_share"
+            ? { action: "add_term", payout_model: pay, rate_cents: null, rate_pct_bp: Math.round(rate * 100), effective_from: from }
+            : { action: "add_term", payout_model: pay, rate_cents: Math.round(rate * 100), rate_pct_bp: null, effective_from: from }),
+        });
+        if (!term.ok) {
+          const body = await term.json().catch(() => null);
+          notify.warn(`${draft.name} was added, but its pay was not saved`, { detail: body?.error ?? "Add it on the source's Commercial terms tab." });
+        }
+      }
+      if (result.activationRefused) notify.warn(`${draft.name} was added as a draft`, { detail: friendlyActivation(result.activationRefused) });
+      else notify.done(`${draft.name} added`);
+      await load();
+      setNewRate("");
+      setNewPay(DEFAULT_PAY[emptyDraft.partner_type]);
+      if (guiding) {
+        // L8: stay here, ready for the next one.
+        setJustAdded(draft.name);
+        setDraft({ ...emptyDraft, timezone: draft.timezone });
+      } else {
+        setDraft(emptyDraft);
+        setDialogOpen(false);
+      }
+    } catch (reason) {
+      notify.fail("Could not add the lead source", { detail: reason instanceof Error ? reason.message : undefined });
+    } finally {
+      setBusy(null);
     }
   }
   // Offboarding is typed, not clicked: the first call opens the dialog, and only the dialog's
@@ -566,7 +650,10 @@ export function PartnersWorkspace({
   }
   function openCreate() {
     setEditing(null);
-    setDraft(emptyDraft);
+    setDraft({ ...emptyDraft, timezone: homeTimeZone() });
+    setNewPay(DEFAULT_PAY[emptyDraft.partner_type]);
+    setNewRate("");
+    setJustAdded(null);
     setDialogOpen(true);
   }
   function openEdit(partner: Partner) {
@@ -627,6 +714,9 @@ export function PartnersWorkspace({
     return cap != null && usage[type === "publisher" ? "publishers" : type === "marketing" ? "marketing" : "affiliates"] >= cap;
   });
 
+  // Said as it is typed (manager review §6), only once there is something that is clearly not an email.
+  const emailLooksWrong = draft.contact_email.trim().length > 3 && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(draft.contact_email.trim());
+
   if (loading) return <PageLoading />;
 
   return (
@@ -637,19 +727,21 @@ export function PartnersWorkspace({
           are unavailable until billing is restored.
         </div>
       )}
-      {detailOnly ? (
-        /* One partner, opened directly. The way back is a link above the title, as the artboard
-           draws it, rather than a second button competing with the record's own actions. */
-        <Link
-          href="/app/publishers"
-          className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ChevronLeft className="size-4" aria-hidden="true" />
-          Back to partners
-        </Link>
-      ) : null}
       <PageHeader
-        title={detailOnly ? (selectedPartner?.name ?? "Publisher details") : "Partners"}
+        visible
+        title={detailOnly ? (selectedPartner?.name ?? "Lead Source") : "Lead Sources"}
+        description={detailOnly
+          ? (selectedPartner ? `${SOURCE_TYPE_SHORT[selectedPartner.partner_type]}${selectedPartner.contact_name ? ` · ${selectedPartner.contact_name}` : ""}` : undefined)
+          : "Everyone who sends you leads or live calls: what you pay them, and how they are doing this month."}
+        breadcrumbs={detailOnly
+          ? [{ label: "Partners" }, { label: "Lead Sources", href: "/app/publishers" }, { label: selectedPartner?.name ?? "Lead Source" }]
+          : [{ label: "Partners" }, { label: "Lead Sources" }]}
+        meta={detailOnly && selectedPartner ? (
+          <span className="mt-2 flex flex-wrap items-center gap-2">
+            <StatusChip tone={statusTone(selectedPartner.status)}>{PARTNER_STATUS_LABELS[selectedPartner.status]}</StatusChip>
+            <span className="text-xs text-muted-foreground">{selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}</span>
+          </span>
+        ) : undefined}
         actions={
           detailOnly ? (
             selectedPartner ? (
@@ -660,7 +752,7 @@ export function PartnersWorkspace({
                   </Button>
                 )}
                 <Button type="button" variant="outline" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
-                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit partner
+                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit lead source
                 </Button>
                 {!readOnly && selectedPartner.status !== "offboarded" && (
                   <DropdownMenu>
@@ -689,39 +781,20 @@ export function PartnersWorkspace({
               <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
               <Button data-guide="publisher-add" type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus aria-hidden="true" />
-                Add partner
+                Add lead source
               </Button>
             </>
           )
         }
       />
-      {!detailOnly && (
-        <section aria-label="Partner capacity" className="portal-partners-capacity grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <CapacityMetric
-            label="Publishers"
-            noun="publishers"
-            usage={usage.publishers}
-            limit={limits.max_publishers}
-          />
-          <CapacityMetric
-            label="Marketing"
-            noun="marketing partners"
-            usage={usage.marketing}
-            limit={limits.max_marketing_partners}
-          />
-          <CapacityMetric
-            label="Affiliates"
-            noun="affiliates"
-            usage={usage.affiliates}
-            limit={limits.max_affiliates}
-          />
-          <CapacityMetric
-            label="Partner users"
-            noun="partner users"
-            usage={usage.partnerUsers}
-            limit={limits.max_partner_users}
-            activeOnly={false}
-          />
+      {/* Only when the plan sets a limit: four bare counts of active sources read as wrong beside the
+          table (owner's demo account, 2026-10-29). */}
+      {!detailOnly && partners.length > 0 && [limits.max_publishers, limits.max_marketing_partners, limits.max_affiliates, limits.max_partner_users].some((limit) => limit != null) && (
+        <section aria-label="Room on your plan" className="m-glass grid grid-cols-2 gap-x-6 gap-y-3 rounded-[12px] border border-border px-4 py-3 lg:grid-cols-4">
+          <PlanRoom label="Live transfer sources" used={usage.publishers} limit={limits.max_publishers} />
+          <PlanRoom label="Lead sellers" used={usage.marketing} limit={limits.max_marketing_partners} />
+          <PlanRoom label="Referral partners" used={usage.affiliates} limit={limits.max_affiliates} />
+          <PlanRoom label="Partner logins" used={usage.partnerUsers} limit={limits.max_partner_users} />
         </section>
       )}
       {!detailOnly && selectedPartner && (
@@ -744,7 +817,7 @@ export function PartnersWorkspace({
               {listFiltered && <ClearFiltersButton onClick={clearListFilters} />}
               <RefreshButton onClick={() => void load()} refreshing={refreshing} />
             </>}>
-              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search partners" />
+              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search lead sources" />
               <select
                 aria-label="Filter by partner type"
                 className={cn(toolbarControl, selectedPartner && "hidden")}
@@ -754,7 +827,7 @@ export function PartnersWorkspace({
                 <option value="all">All types</option>
                 {PARTNER_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {PARTNER_TYPE_LABELS[type]}
+                    {SOURCE_TYPE_SHORT[type]}
                   </option>
                 ))}
               </select>
@@ -773,60 +846,62 @@ export function PartnersWorkspace({
               </select>
             </DataToolbar>
           }
-          footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="partners" onPage={setListPage} suffix={`${partners.length} partner records in all`} />}
+          footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="lead sources" onPage={setListPage} suffix={`${partners.length} lead source${partners.length === 1 ? "" : "s"} in all`} />}
         >
             {partners.length === 0 && !listFiltered ? (
-              <EmptyState title="No partners yet" hint="Add the publishers, marketing companies and affiliates who send you leads." action={readOnly ? undefined : <Button type="button" onClick={openCreate}><Plus aria-hidden="true" />Add partner</Button>} />
+              <EmptyState title="No lead sources yet" hint="Add each company that sends you leads, transfers calls to you or refers clients." />
             ) : filteredPartners.length === 0 ? (
-              <NoMatches noun="partners" onClear={clearListFilters} />
+              <NoMatches noun="lead sources" onClear={clearListFilters} />
             ) : (
-              <table className={cn("portal-lead-table w-full text-left text-sm", selectedPartner ? "min-w-0" : "min-w-[1080px]")}>
+              <table className="portal-lead-table w-full text-left text-sm">
                 <thead>
                   <tr>
-                    <th>Partner</th>
-                    {!selectedPartner && <th>Contact email</th>}
-                    {!selectedPartner && <th>Type</th>}
-                    {!selectedPartner && <th>Approved for</th>}
+                    <th>Lead Source</th>
                     {!selectedPartner && <th>Status</th>}
-                    {/* A live transfer is the publisher's word; marketing and affiliate partners send leads. */}
-                    {!selectedPartner && (typeFilter === "publisher"
-                      ? <th className="text-right" title="Transfers this month">Transfers (month)</th>
-                      : <th className="text-right" title="Leads received this month">Leads (month)</th>)}
-                    {!selectedPartner && <th className="text-right" title="Completed this month">Completed</th>}
-                    {!selectedPartner && <th className="text-right" title="Dropped this month">Dropped</th>}
-                    {!selectedPartner && <th>Last submission</th>}
+                    {!selectedPartner && <th className="text-right" title="Live transfers or leads received this month">This Month</th>}
+                    {!selectedPartner && <th className="text-right" title="Sales this month">Sales</th>}
+                    {!selectedPartner && <th>Last Lead</th>}
+                    {!selectedPartner && <th>You Pay</th>}
                     <th className="text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="m-seq">
                   {listRows.map((partner) => {
-                    const products = partner.approved_products.length ? partner.approved_products.map(productLineLabel).join(" · ") : "Nothing yet";
                     const dropHeavy = partner.transfers_this_month >= 10 && partner.dropped_this_month / partner.transfers_this_month >= 0.15;
+                    // A live-transfer source is counted in calls; the others in leads.
+                    const volume = partner.partner_type === "publisher"
+                      ? `${partner.transfers_this_month.toLocaleString()} ${partner.transfers_this_month === 1 ? "call" : "calls"}`
+                      : `${partner.lead_volume_this_month.toLocaleString()} ${partner.lead_volume_this_month === 1 ? "lead" : "leads"}`;
                     return (
-                      <tr key={partner.id} className={cn("m-row", selectedPartner?.id === partner.id && "bg-[var(--primary-soft)]")}>
-                        <td className="max-w-[260px]">
+                      // The whole row opens the partner, as in any list people use daily (2026-10-29); the
+                      // name stays a button so the keyboard reaches it.
+                      <tr
+                        key={partner.id}
+                        className={cn("m-row group", !selectedPartner && "cursor-pointer", selectedPartner?.id === partner.id && "bg-[var(--primary-soft)]")}
+                        onClick={(event) => {
+                          if (selectedPartner || (event.target as HTMLElement).closest("button, a")) return;
+                          router.push(`/app/publishers/${partner.id}`);
+                        }}
+                      >
+                        <td className="max-w-[280px]">
                           <button
                             type="button"
-                            className="flex w-full min-w-0 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="flex w-full min-w-0 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             // One partner has one page (/app/publishers/[id]) — the same layout whether it
                             // was opened from here or from a link, so the two can never drift apart.
                             onClick={() => router.push(`/app/publishers/${partner.id}`)}
                           >
-                            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--primary-soft)] text-xs font-semibold text-[var(--accent-ink)]" aria-hidden="true">
-                              {partner.name.slice(0, 1).toUpperCase()}
-                            </span>
                             <span className="truncate font-semibold text-foreground" title={partner.name}>{partner.name}</span>
+                            <span className="truncate text-xs text-muted-foreground">{SOURCE_TYPE_SHORT[partner.partner_type]}</span>
                           </button>
                         </td>
-                        {!selectedPartner && <td className="max-w-[220px] truncate text-muted-foreground" title={partner.contact_email ?? undefined}>{partner.contact_email || "No contact email"}</td>}
-                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{PARTNER_TYPE_LABELS[partner.partner_type]}</td>}
-                        {!selectedPartner && <td className="max-w-[220px] truncate text-muted-foreground" title={products}>{products}</td>}
                         {!selectedPartner && (
                           <td className="whitespace-nowrap">
-                            <span className="inline-flex items-center gap-2">
+                            <span className="inline-flex flex-wrap items-center gap-2">
                               <StatusChip tone={statusTone(partner.status)}>
                                 {PARTNER_STATUS_LABELS[partner.status]}
                               </StatusChip>
+                              {dropHeavy && <StatusChip tone="warning">Many dropped calls</StatusChip>}
                               {partner.status === "offboarded" && (
                                 <span className="text-xs text-muted-foreground">
                                   {partner.offboarded_at ? `${dateLabel(partner.offboarded_at)} · ` : ""}history kept
@@ -835,17 +910,10 @@ export function PartnersWorkspace({
                             </span>
                           </td>
                         )}
-                        {!selectedPartner && <td className="text-right tabular-nums">{partner.transfers_this_month}</td>}
+                        {!selectedPartner && <td className="whitespace-nowrap text-right tabular-nums">{volume}</td>}
                         {!selectedPartner && <td className="text-right tabular-nums">{partner.completed_this_month}</td>}
-                        {!selectedPartner && (
-                          <td className="tabular-nums">
-                            <span className="flex items-center justify-end gap-2">
-                              <span className={cn("w-8 text-right", dropHeavy && "font-semibold text-[var(--warning-ink)]")}>{partner.dropped_this_month}</span>
-                              <span aria-hidden className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={cn("block h-full rounded-full", dropHeavy ? "bg-[var(--warning)]" : "bg-[var(--muted-foreground)]")} style={{ width: `${partner.transfers_this_month ? Math.min(100, (partner.dropped_this_month / partner.transfers_this_month) * 300) : 0}%` }} /></span>
-                            </span>
-                          </td>
-                        )}
-                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{dateLabel(partner.last_submission)}</td>}
+                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{partner.last_submission ? dateLabel(partner.last_submission) : "None yet"}</td>}
+                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{termText(partner.active_term)}</td>}
                         <td className="text-right">
                           {selectedPartner?.id === partner.id ? (
                             <Button
@@ -858,11 +926,13 @@ export function PartnersWorkspace({
                               Close
                             </Button>
                           ) : (
-                            <Button asChild type="button" variant="outline" size="sm">
-                              <Link href={`/app/publishers/${partner.id}`} aria-label={`View ${partner.name}`}>
-                                View
-                              </Link>
-                            </Button>
+                            <Link
+                              href={`/app/publishers/${partner.id}`}
+                              aria-label={`Open ${partner.name}`}
+                              className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--muted)] transition-colors group-hover:bg-[var(--surface-alt)] group-hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
+                            >
+                              <ChevronRight className="size-4" aria-hidden="true" />
+                            </Link>
                           )}
                         </td>
                       </tr>
@@ -885,30 +955,40 @@ export function PartnersWorkspace({
           <div className="flex min-w-0 flex-col gap-6" aria-label={`${selectedPartner.name} details`}>
             {/* The key facts in one compact block (2026-10-06 redesign): state chips, then the figures. */}
             <section aria-label="Partner facts" className="flex flex-col gap-3">
-              <div className="flex flex-wrap gap-2">
-                <StatusChip tone={STATUS_TONE[selectedPartner.status]} dot>{PARTNER_STATUS_LABELS[selectedPartner.status]}</StatusChip>
-                <StatusChip>{PARTNER_TYPE_LABELS[selectedPartner.partner_type]}</StatusChip>
-                <StatusChip tone="action" dot={false}>
-                  {selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}
-                </StatusChip>
-              </div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Submitted">{selectedPartner.lead_volume_this_month.toLocaleString()} this month</PartnerFact></div>
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Last submission">{dateLabel(selectedPartner.last_submission)}</PartnerFact></div>
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Leads this month">{selectedPartner.lead_volume_this_month.toLocaleString()}</PartnerFact></div>
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Last lead">{selectedPartner.last_submission ? dateLabel(selectedPartner.last_submission) : "None yet"}</PartnerFact></div>
                 <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Approved products">{selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}</PartnerFact></div>
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Pays">{termText(selectedPartner.active_term)}</PartnerFact></div>
+                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="You pay">{termText(selectedPartner.active_term)}</PartnerFact></div>
                 <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Since">{earliestTerm(selectedPartner) ? dateLabel(earliestTerm(selectedPartner)) : "—"}</PartnerFact></div>
               </div>
             </section>
 
             <div className="flex min-w-0 flex-col gap-6">
+              <ViewTabs
+                label="Partner record"
+                value={detailTab}
+                onChange={setDetailTab}
+                idPrefix="partner-detail-tab"
+                controls="partner-detail-view"
+                tabs={shownTabs.map((tab) => ({ key: tab, label: detailTabLabel(tab) }))}
+              />
               <section className="m-glass rounded-xl border border-border min-w-0 overflow-visible">
-                <UnderlineTabs label="Partner detail sections" className="px-5" tabs={shownTabs.map((tab) => ({ key: tab, label: detailTabLabel(tab) }))} value={detailTab} onChange={setDetailTab} idPrefix="partner-detail-tab" controls="partner-detail-view" />
             {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
             <div key={detailTab} role="tabpanel" id="partner-detail-view" aria-labelledby={`partner-detail-tab-${detailTab}`} className="space-y-5 p-5">
               {detailTab === "overview" && (
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
-                <div className="min-w-0 space-y-5">
+                <div className="flex min-w-0 flex-col gap-6">
+                  <PartnerOnboarding
+                    partnerId={selectedPartner.id}
+                    hasTerm={Boolean(selectedPartner.active_term)}
+                    termText={termText(selectedPartner.active_term)}
+                    approved={partnerProducts[selectedPartner.id] ? { count: selectedProducts.filter((product) => product.approved).length, total: selectedProducts.length } : null}
+                    lastSubmission={selectedPartner.last_submission}
+                    onGo={readOnly || selectedPartner.status === "offboarded" ? undefined : (to) => {
+                      if (to === "people") document.getElementById("partner-section-team")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      else setDetailTab(to);
+                    }}
+                  />
                   {extraTabs.quality && (
                     <section id="partner-section-quality" className="scroll-mt-24 space-y-3">
                       <h3 className="text-base font-semibold">Quality</h3>
@@ -935,19 +1015,6 @@ export function PartnersWorkspace({
                       onSeatsChanged={() => void refreshCapacity()}
                     />
                   </section>
-                  {/* Compliance: the screening dependency, said once and kept visible. */}
-                  <p role="note" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--body)]">
-                    <strong className="font-semibold text-[var(--error-ink)]">The lead form must keep its phone field.</strong> Phone is required for screening and cannot be deleted from a partner form.
-                  </p>
-                </div>
-                <div className="min-w-0 space-y-5">
-                  <PartnerOnboarding
-                    partnerId={selectedPartner.id}
-                    hasTerm={Boolean(selectedPartner.active_term)}
-                    termText={termText(selectedPartner.active_term)}
-                    approved={partnerProducts[selectedPartner.id] ? { count: selectedProducts.filter((product) => product.approved).length, total: selectedProducts.length } : null}
-                    lastSubmission={selectedPartner.last_submission}
-                  />
                   <section>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <h3 className="text-base font-semibold">Products this partner may submit</h3>
@@ -988,7 +1055,7 @@ export function PartnersWorkspace({
                       )
                     )}
                   </section>
-                  <div className="grid gap-3">
+                  <div className="grid gap-3 md:grid-cols-2">
                     <section className="rounded-lg border border-border p-4">
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="text-sm font-semibold">Contact</h3>
@@ -1001,7 +1068,7 @@ export function PartnersWorkspace({
                         {selectedPartner.contact_email && <p className="break-all text-muted-foreground">{selectedPartner.contact_email}</p>}
                         <p className="flex items-center gap-2 text-muted-foreground">
                           <MapPin className="size-3.5" aria-hidden="true" />
-                          {selectedPartner.country} · {selectedPartner.timezone}
+                          {COUNTRIES.find((row) => row.code === selectedPartner.country)?.name ?? selectedPartner.country} · {zonesFor(selectedPartner.country).find(([value]) => value === selectedPartner.timezone)?.[1] ?? selectedPartner.timezone} time
                         </p>
                       </div>
                     </section>
@@ -1023,7 +1090,6 @@ export function PartnersWorkspace({
                       readOnly={readOnly}
                     />
                   )}
-                </div>
                 </div>
               )}
               {detailTab === "terms" && (
@@ -1075,51 +1141,77 @@ export function PartnersWorkspace({
                 </section>
               )}
               {detailTab === "products" && (
-                <section className="space-y-4">
-                  {/* Settings › Products (2026-10-27) decides what the agency sells; this tab only says
-                      which of those this partner may send. */}
-                  <p className="m-0 text-sm text-muted-foreground">
-                    {products.some((product) => product.is_enabled)
-                      ? <>Your agency sells {products.filter((product) => product.is_enabled).map((product) => product.name).join(", ")}.</>
-                      : <>Your agency does not sell any product yet.</>}{" "}
-                    {canManageProductConfig && <Link href="/app/settings#products" className="font-semibold text-foreground underline underline-offset-2">Change in Settings › Products</Link>}
-                  </p>
-                  {canManageProductConfig ? (
-                    <div>
-                      <h3 className="text-sm font-semibold">Approved for this partner</h3>
-                      <div className="mt-3 space-y-2">
-                        {selectedProducts.filter((product) => product.is_enabled).map((product) => (
-                          <label key={product.code} className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
-                            <input
-                              type="checkbox"
-                              className="size-4"
-                              checked={product.approved}
-                              disabled={readOnly || busy !== null || selectedPartner.status === "offboarded"}
-                              onChange={() => void togglePartnerProduct(selectedPartner.id, product)}
-                            />
-                            <span>{product.name}</span>
-                          </label>
-                        ))}
-                      </div>
+                // One list: what this partner may send (2026-10-29). Which products the agency sells
+                // is set once, in Settings › Products, not repeated on every partner.
+                <section className="space-y-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold">What {selectedPartner.name} may send</h3>
+                    <Link href="/app/settings#products" className="text-xs font-medium text-[var(--accent-ink)] hover:underline">
+                      Products your agency sells: Settings › Products
+                    </Link>
+                  </div>
+                  {canManageProductConfig && selectedProducts.length > 0 && !selectedProducts.some((product) => product.is_enabled) ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-3 text-sm">
+                      <span className="text-[var(--body)]">Your agency sells no products yet, so there is nothing to approve for {selectedPartner.name}.</span>
+                      <Button asChild size="sm"><Link href="/app/settings#products">Choose products</Link></Button>
+                    </div>
+                  ) : canManageProductConfig ? (
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {selectedProducts.map((product) => (
+                        <label
+                          key={product.code}
+                          className={cn("flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm transition-colors", product.approved && "border-[var(--primary)] bg-[var(--primary-soft)]", !product.is_enabled && "opacity-50")}
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-4"
+                            checked={product.approved}
+                            disabled={
+                              readOnly ||
+                              !product.is_enabled ||
+                              busy !== null ||
+                              selectedPartner.status === "offboarded"
+                            }
+                            onChange={() =>
+                              void togglePartnerProduct(
+                                selectedPartner.id,
+                                product,
+                              )
+                            }
+                          />
+                          <span className="min-w-0 flex-1 font-medium">{product.name}</span>
+                          {!product.is_enabled && (
+                            <span className="text-xs text-muted-foreground">Your agency does not sell it</span>
+                          )}
+                        </label>
+                      ))}
                     </div>
                   ) : (
                     <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                      Product approvals are managed by the account owner.
+                      Product availability is managed by the account owner.
                     </p>
                   )}
                 </section>
               )}
               {detailTab === "markets" && (
                 <PartnerMarketAccessPanel
+                  compact
                   partnerId={selectedPartner.id}
                   readOnly={readOnly || selectedPartner.status === "offboarded"}
                 />
               )}
               {detailTab === "forms" && (
+                <>
+                {/* Compliance: the screening dependency, said where the form is edited (it was a red
+                    banner on Overview, where it alarmed people who were not editing anything). */}
+                <p role="note" className="rounded-lg border border-[var(--info)]/30 bg-[var(--info-surface)] px-4 py-2.5 text-sm text-[var(--body)]">
+                  <strong className="font-semibold text-[var(--info-ink)]">The lead form always keeps its phone field.</strong> Phone is needed for screening, so it cannot be removed from a partner form.
+                </p>
                 <PartnerFormStudio
                   partnerId={selectedPartner.id}
                   readOnly={readOnly || selectedPartner.status === "offboarded"}
                 />
+                </>
               )}
               {detailTab === "activity" && (
                 <section className="space-y-3 text-sm">
@@ -1257,20 +1349,27 @@ export function PartnersWorkspace({
         </DialogContent>
       </Dialog>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        {/* A 560px dialog (two columns of short fields); `size` here is the dialog's width, not a tall control. */}
+        <DialogContent size={"lg"} className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit partner" : "Add a partner"}
+              {editing ? "Edit lead source" : "Add a lead source"}
             </DialogTitle>
             <DialogDescription>
               {editing
                 ? "Its history stays as it was."
-                : "A publisher, marketing company or affiliate."}
+                : "A company that sends you leads, transfers calls to you or refers clients."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={savePartner} className="grid gap-4 md:grid-cols-2">
+            {justAdded && (
+              <p role="status" className="m-0 rounded-md bg-[var(--success-surface)] px-3 py-2 text-sm text-[var(--success-ink)] md:col-span-2">
+                {justAdded} added. Add another, or close this to continue.
+              </p>
+            )}
+            {/* Manager review 28 Oct §6: who they are, who to talk to, where they are, then money. */}
             <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="partner-name">Partner name</Label>
+              <Label htmlFor="partner-name">Company name</Label>
               <Input
                 id="partner-name"
                 value={draft.name}
@@ -1282,38 +1381,24 @@ export function PartnersWorkspace({
                 maxLength={200}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="partner-type">Type</Label>
+            <div className="space-y-1.5 md:col-span-2">
+              <Label htmlFor="partner-type">What they do for you</Label>
               <select
                 id="partner-type"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                 value={draft.partner_type}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    partner_type: event.target.value as PartnerType,
-                  })
-                }
+                onChange={(event) => {
+                  const type = event.target.value as PartnerType;
+                  setDraft({ ...draft, partner_type: type });
+                  if (!editing) setNewPay(DEFAULT_PAY[type]);
+                }}
               >
                 {PARTNER_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {PARTNER_TYPE_LABELS[type]}
+                    {SOURCE_TYPE_CHOICE[type]}
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="partner-country">Country</Label>
-              <Input
-                id="partner-country"
-                value={draft.country}
-                onChange={(event) =>
-                  setDraft({ ...draft, country: event.target.value })
-                }
-                placeholder="US"
-                required
-                maxLength={2}
-              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="partner-contact">Contact name</Label>
@@ -1323,6 +1408,7 @@ export function PartnersWorkspace({
                 onChange={(event) =>
                   setDraft({ ...draft, contact_name: event.target.value })
                 }
+                placeholder="The person you deal with"
                 maxLength={200}
               />
             </div>
@@ -1332,27 +1418,73 @@ export function PartnersWorkspace({
                 id="partner-email"
                 type="email"
                 value={draft.contact_email}
+                aria-invalid={emailLooksWrong || undefined}
+                aria-describedby={emailLooksWrong ? "partner-email-problem" : undefined}
                 onChange={(event) =>
                   setDraft({ ...draft, contact_email: event.target.value })
                 }
                 placeholder="ops@example.com"
               />
+              {emailLooksWrong && <p id="partner-email-problem" className="m-0 text-xs text-[var(--error-ink)]">That doesn&rsquo;t look like an email address.</p>}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="partner-timezone">Timezone</Label>
-              <Input
-                id="partner-timezone"
-                value={draft.timezone}
-                onChange={(event) =>
-                  setDraft({ ...draft, timezone: event.target.value })
-                }
-                placeholder="America/Phoenix"
-                required
-                maxLength={100}
-              />
+              <Label htmlFor="partner-country">Country</Label>
+              <select
+                id="partner-country"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={draft.country}
+                onChange={(event) => {
+                  const country = event.target.value;
+                  const zones = zonesFor(country);
+                  // The time zone follows the country unless it is already one of that country's.
+                  setDraft({ ...draft, country, timezone: zones.some(([value]) => value === draft.timezone) ? draft.timezone : zones[0][0] });
+                }}
+              >
+                {COUNTRIES.map((row) => <option key={row.code} value={row.code}>{row.name}</option>)}
+                {!COUNTRIES.some((row) => row.code === draft.country) && <option value={draft.country}>{draft.country}</option>}
+              </select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="partner-timezone">Their time zone</Label>
+              <select
+                id="partner-timezone"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={draft.timezone}
+                onChange={(event) => setDraft({ ...draft, timezone: event.target.value })}
+              >
+                {zonesFor(draft.country).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {!zonesFor(draft.country).some(([value]) => value === draft.timezone) && <option value={draft.timezone}>{draft.timezone}</option>}
+              </select>
+            </div>
+            {!editing && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="partner-pay">How you pay them</Label>
+                  <select
+                    id="partner-pay"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                    value={newPay}
+                    onChange={(event) => setNewPay(event.target.value as PartnerPayoutModel | "none")}
+                  >
+                    {PARTNER_PAYOUT_MODELS.map((model) => <option key={model} value={model}>{PARTNER_PAYOUT_MODEL_LABELS[model]}</option>)}
+                    <option value="none">Not sure yet</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="partner-rate">{newPay === "revenue_share" ? "Share (%)" : "Amount ($)"}</Label>
+                  <Input
+                    id="partner-rate"
+                    inputMode="decimal"
+                    value={newRate}
+                    disabled={newPay === "none"}
+                    onChange={(event) => setNewRate(event.target.value)}
+                    placeholder={newPay === "revenue_share" ? "e.g. 20" : "e.g. 35"}
+                  />
+                </div>
+              </>
+            )}
             <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="partner-notes">Notes</Label>
+              <Label htmlFor="partner-notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label>
               <textarea
                 id="partner-notes"
                 className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1377,10 +1509,10 @@ export function PartnersWorkspace({
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
               >
-                Cancel
+                {justAdded ? "Done" : "Cancel"}
               </Button>
-              <Button type="submit" disabled={busy !== null || createAtLimit}>
-                {busy ? "Saving…" : editing ? "Save partner" : "Create partner"}
+              <Button type="submit" disabled={busy !== null || createAtLimit || emailLooksWrong}>
+                {busy ? "Saving…" : editing ? "Save" : justAdded ? "Add another" : "Add lead source"}
               </Button>
             </DialogFooter>
           </form>

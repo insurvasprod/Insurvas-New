@@ -21,9 +21,7 @@
   "pill-button": {},
   "hand-filter-panel": {},
   "mixed-stat": {},
-  "local-surface": {
-    "components/app/settings/carriers-settings.tsx": 1
-  },
+  "local-surface": {},
   "window-confirm": {},
   "hand-tablist": {
     "components/app/form-templates/form-settings.tsx": 1,
@@ -33,7 +31,6 @@
   "local-chip": {
     "components/app/confirm-email-panel.tsx": 1,
     "components/app/pipeline-views.tsx": 1,
-    "components/app/settings/business-identity.tsx": 1,
     "components/app/settings/sales/underwriting.tsx": 1,
     "components/marketing/landing-mocks.tsx": 1
   },
@@ -44,5 +41,6 @@
   "unguarded-dirty": {
     "components/app/form-templates/status-line.tsx": 1
   },
-  "radix-select": {}
+  "radix-select": {},
+  "section-help": {}
 }

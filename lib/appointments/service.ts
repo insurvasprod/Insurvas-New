@@ -203,6 +203,17 @@ async function saveAtomically<T>(fn: string, args: Record<string, unknown>, extr
   return data as T;
 }
 
+/**
+ * Takes a state's licence off (Settings › Carriers › States, owner 2026-10-28: untick "Licensed").
+ * Tenant-scoped; returns whether a row was there. Appointments are left alone.
+ */
+export async function removeLicense(tenantId: string, state: string): Promise<boolean> {
+  const { data, error } = await getSupabaseServiceClient().from("licenses").delete().eq("tenant_id", tenantId).eq("state", state).select("id");
+  if (error && isPendingSchema(error)) throw new SchemaPendingError();
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
 export async function saveLicense(tenantId: string, input: { state: string; license_number: string; expires_at: string; licence_type?: string | null; lines_of_authority?: string[] }) {
   const extras = definedExtras({ licence_type: input.licence_type, lines_of_authority: input.lines_of_authority });
   const atomic = await saveAtomically<LicenseRow>("save_license_with_details", { p_tenant_id: tenantId, p_state: input.state, p_license_number: input.license_number, p_expires_at: input.expires_at }, extras);

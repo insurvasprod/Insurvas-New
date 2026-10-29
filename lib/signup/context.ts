@@ -55,14 +55,5 @@ const readSignupContext = cache(async (): Promise<SignupContext | null> => {
   };
 });
 
-export function signupDestination(context: Pick<SignupContext, "userStatus" | "onboardingState">): string | null {
-  if (context.userStatus === "pending_verification") return "/app/verify-email";
-  if (context.userStatus !== "active") return null;
-  if (context.onboardingState === "business_profile") return "/app/onboarding/business-profile";
-  // Step 4 of 5 (2026-10-26): the plan, preselected with what is saved, then Payment.
-  if (context.onboardingState === "ready_for_checkout") return "/app/onboarding/plan";
-  // SA-5.2: a customer who opened checkout and abandoned it comes back to the same place rather
-  // than being stranded — "recoverable by returning, not a broken half-account".
-  if (context.onboardingState === "awaiting_payment") return "/app/checkout";
-  return null;
-}
+// The router itself is pure, in ./destination.ts, so it can be unit-tested.
+export { signupDestination } from "./destination";

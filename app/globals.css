@@ -1819,8 +1819,14 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 }
 
 .portal-settings-page { color: var(--portal-ink); }
-.portal-settings-nav { max-height: min(55dvh, 480px); }
+.portal-settings-nav { max-height: min(55dvh, 480px); scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent; }
 .portal-settings-nav-group { min-width: 0; }
+.portal-settings-nav-group + .portal-settings-nav-group { margin-top: .75rem; }
+/* Group names are headings, not toggles (2026-10-29): every group stays open. */
+.portal-settings-group-label {
+  margin: 0; padding: .375rem .625rem .25rem; color: var(--muted);
+  font-size: .6875rem; font-weight: 700; line-height: 1.35; letter-spacing: .06em; text-transform: uppercase;
+}
 .portal-settings-group-toggle {
   display: flex; width: 100%; min-height: 38px; align-items: center; justify-content: space-between; gap: .5rem;
   padding: .5rem .625rem; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
@@ -1832,18 +1838,27 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 .portal-settings-group-chevron { width: 14px; height: 14px; flex: 0 0 auto; transition: transform 140ms ease; }
 .portal-settings-group-chevron.is-open { transform: rotate(180deg); }
 .portal-settings-nav-subsections {
-  display: flex; min-width: 0; flex-direction: column; gap: 0; margin: .125rem 0 .375rem .5rem; padding-left: .5rem;
-  border-left: 1px solid var(--settings-nav-guide, var(--border));
+  display: flex; min-width: 0; flex-direction: column; gap: 0; margin: .125rem 0 .375rem .5rem; padding-left: .75rem;
 }
 .portal-settings-nav-subsections[hidden] { display: none; }
 .portal-settings-subsection { position: relative; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+/* One rounded elbow per page, each starting a little under the one above (owner's reference,
+   2026-10-29): a tree you read parent → child, not a ruler down the side. */
 .portal-settings-subsection::before {
-  position: absolute; top: 50%; left: -9px; width: 9px; height: 1px; background: var(--settings-nav-guide, var(--border));
-  content: ""; pointer-events: none; transform: translateY(-.5px);
+  position: absolute; top: -.375rem; bottom: 50%; left: -.75rem; width: .625rem;
+  border-left: 1.5px solid var(--settings-nav-guide, var(--border-strong));
+  border-bottom: 1.5px solid var(--settings-nav-guide, var(--border-strong));
+  border-bottom-left-radius: .5rem;
+  content: ""; pointer-events: none;
 }
+.portal-settings-subsection[aria-current="page"]::before { border-color: var(--accent-ink); }
+.portal-settings-item-icon { color: var(--muted); }
+.portal-settings-subsection[aria-current="page"] .portal-settings-item-icon { color: var(--accent-ink); }
 .dark .portal-settings-nav-subsections { --settings-nav-guide: var(--border-strong); }
 @media (min-width: 1024px) {
   .portal-settings-nav { max-height: none; }
+  /* A column of navigation, not a floating card (manager review §4): a hairline on its right. */
+  [data-settings-rail] { border-right: 1px solid var(--border); padding-right: 1rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .portal-settings-group-toggle, .portal-settings-group-chevron { transition: none; }
@@ -3185,6 +3200,26 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 @keyframes auth-rise-in { from { opacity: 0; transform: translateY(16px); } }
 @keyframes auth-fade-out { to { opacity: 0; transform: translateY(-6px); } }
 
+/* Sign-up step to step (manager review, 2026-10-28: "it needs to be smooth"). The logo and the
+   progress bar stay put (auth-still: no animation, the old snapshot hidden so nothing doubles); the
+   step's content fades out fast and rises in (auth-step), drawn at its own size so text never
+   stretches while the column changes height; the brand panel crossfades in place (auth-hold). */
+::view-transition-group(.auth-still) { animation: none; }
+::view-transition-old(.auth-still) { display: none; }
+::view-transition-new(.auth-still) { animation: none; }
+::view-transition-group(.auth-step) { animation: none; }
+::view-transition-old(.auth-step),
+::view-transition-new(.auth-step) { width: 100%; height: auto; object-fit: none; object-position: top; }
+::view-transition-old(.auth-step) { animation: auth-fade-out 150ms ease-in both; }
+::view-transition-new(.auth-step) { animation: auth-rise-in 340ms cubic-bezier(.22, 1, .36, 1) 90ms both; }
+::view-transition-group(.auth-hold) { animation-duration: 320ms; }
+::view-transition-old(.auth-hold) { animation: auth-hold-out 280ms ease both; }
+::view-transition-new(.auth-hold) { animation: auth-hold-in 320ms ease both; }
+@keyframes auth-hold-out { to { opacity: 0; } }
+@keyframes auth-hold-in { from { opacity: 0; } }
+/* Clicks during a transition reach the page instead of the overlay (Next's view-transitions guide). */
+::view-transition { pointer-events: none; }
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-image-pair(*),
@@ -3275,11 +3310,6 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-rail-account:focus-visible { background: color-mix(in srgb, var(--nav-ink), transparent 90%); }
 .portal-rail-account:focus-visible { outline: 2px solid var(--nav-success); outline-offset: 2px; }
 .portal-rail-account[aria-expanded="true"] .portal-top-avatar { box-shadow: 0 0 0 2px var(--nav-success); }
-/* With the account in the rail, the bar drops its own button (the phone keeps it: no rail there). */
-@media (min-width: 768px) {
-  :has(> .portal-agent-desktop-nav) .portal-top-account,
-  :has(> .portal-agent-desktop-nav) .portal-top-divider { display: none; }
-}
 /* Its menu opens beside the rail, from the bottom. */
 .portal-top-panel.portal-top-panel-rail { position: fixed; top: auto; right: auto; left: 80px; bottom: 12px; z-index: 45; }
 /* The account menu opens next to the wider desktop sidebar. */
@@ -3691,3 +3721,36 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   :has(> .portal-agent-rail) .portal-top-bar .portal-top-search { flex: 0 1 520px; margin-inline: 0; }
   :has(> .portal-agent-rail) .portal-top-bar .portal-top-actions { flex: 1 1 0; justify-content: flex-end; }
 }
+
+/* ── Sidebar sub-navigation as a tree (manager review 28 Oct §3.1, settings redesign 2026-10-29) ──
+   The group is the heading (icon, bold); each of its pages hangs off a rounded elbow drawn under the
+   group's icon, each starting a little under the one above (owner's reference, 2026-10-29), so the
+   eye reads parent → children at a glance. Children are text only; the active page's elbow takes
+   the accent.
+   Only for groups in the open rail: the collapsed icon rail hides sublists already. */
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) {
+  position: relative;
+  margin-left: 2.5rem !important; /* under the group's icon */
+  padding-left: .7rem !important;
+  border-left: 0 !important; /* the older straight guide; the elbows replace it */
+}
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li { position: relative; }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li::before {
+  content: "";
+  position: absolute;
+  top: -.3rem;
+  bottom: 50%;
+  left: -.7rem;
+  width: .55rem;
+  border-left: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-bottom-left-radius: .45rem;
+  pointer-events: none;
+}
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li:has(.is-active)::before { border-color: var(--accent-ink); }
+/* Children keep their own icon on the elbow, as in the reference (manager review §3.1: "connected
+   with icons"), one step smaller and quieter than the group's. */
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested .portal-agent-nav-icon { width: 1rem; height: 1rem; opacity: .8; }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested.is-active .portal-agent-nav-icon { opacity: 1; }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested { padding-left: .375rem; gap: .5rem; font-weight: 400; }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested.is-active { font-weight: 600; }

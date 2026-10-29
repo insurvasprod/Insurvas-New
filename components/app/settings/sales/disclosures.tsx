@@ -20,7 +20,6 @@ import { notify } from "@/lib/notify";
 
 import { Callout, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
@@ -31,8 +30,8 @@ import { cn } from "@/lib/utils";
 
 import { DisclosureEditor, fieldKind, fieldLabel, toDraft, toInput, type DisclosureDraft } from "./disclosures-editor";
 import {
-  BackButton, DialogActions, DiscardSave, LifecyclePill, NOT_SAVED, ReadOnlyNotice, RowAction, SalesDialog, SalesLoadError, SalesLoading, SalesPanelTop,
-  SalesSetupPending, WithReason, notRefreshed, useSalesSample, warnUnsaved, type Lifecycle,
+  BackButton, DialogActions, DiscardSave, LifecyclePill, NOT_SAVED, ReadOnlyNotice, RowAction, RowMenu, SalesDialog, SalesLoadError, SalesLoading, SalesPanelTop,
+  SalesSetupPending, WithReason, useSalesSample, warnUnsaved, type Lifecycle,
 } from "./shared";
 
 const API = "/api/app/settings/sales/disclosures";
@@ -360,18 +359,11 @@ export function SalesDisclosures() {
             total={docs.length}
             noun="documents"
             title="The library"
-            description="One row per document. A version is superseded, never overwritten."
-            toolbar={
-              <DataToolbar
-                actions={
-                  <>
+            info="One row per document. A version is superseded, never overwritten."
+            action={
                     <WithReason reason={addReason}>
                       <Button type="button" disabled={!canEdit} onClick={() => openItem(null)}><Plus aria-hidden="true" />Add a document</Button>
                     </WithReason>
-                    <RefreshButton onClick={sample ? notRefreshed : load} refreshing={loading && !sample} />
-                  </>
-                }
-              />
             }
           >
             {docs.length === 0 ? (
@@ -401,10 +393,11 @@ export function SalesDisclosures() {
                       <td className={st.td}><StatusCell doc={d} /></td>
                       <td className={cn(st.td, "whitespace-nowrap text-right")}>
                         <span className="inline-flex gap-2">
-                          {d.shown.platform && canEdit && (
-                            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => copyToAgency(d.shown)} aria-label={`Copy ${d.shown.title} to my agency`}>Copy to my agency</Button>
-                          )}
                           <RowAction onClick={() => openItem(d.shown)} label={`Open ${d.shown.title}`}>{canEdit && !d.shown.platform && d.shown.status !== "retired" ? "Edit" : "View"}</RowAction>
+                          <RowMenu
+                            label={d.shown.title}
+                            items={[d.shown.platform && canEdit && { label: "Copy to my agency", onSelect: () => copyToAgency(d.shown), disabled: busy }]}
+                          />
                         </span>
                       </td>
                     </tr>
@@ -414,7 +407,7 @@ export function SalesDisclosures() {
             )}
           </PagedTableCard>
 
-          <PagedTableCard total={liveRules.length} noun="rules" title="What triggers them" description="Read top to bottom against the case. A document named twice is attached once.">
+          <PagedTableCard total={liveRules.length} noun="rules" title="What triggers them" info="Read top to bottom against the case. A document named twice is attached once.">
             {liveRules.length === 0 ? (
               <EmptyState title="No rules yet" hint="No published document has a rule, so none is required on its own. Open a document to add one." />
             ) : (

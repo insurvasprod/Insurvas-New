@@ -64,6 +64,29 @@ function useSubPage(pathname: string, itemPath: string | null) {
 }
 
 /**
+ * True while the page draws its own breadcrumb and title (PageHeader `visible`: Settings, Partners).
+ * Manager review 28 Oct §3.2: "navigation always comes on the page", so the bar's crumb steps aside
+ * there instead of saying the same thing twice. Re-read as the page streams in.
+ */
+function usePageHasHeader(pathname: string) {
+  const [has, setHas] = useState(false);
+  useEffect(() => {
+    let frame = 0;
+    const read = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setHas(Boolean(document.querySelector('main [data-page-header="visible"]'))));
+    };
+    read();
+    const main = document.querySelector("main");
+    if (!main) return () => cancelAnimationFrame(frame);
+    const observer = new MutationObserver(read);
+    observer.observe(main, { childList: true, subtree: true });
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [pathname]);
+  return has;
+}
+
+/**
  * Area › page, and › the step when you are below the page (Inbound › Verification), the page then a
  * link back to it. Home and Settings stand alone, so they show the page alone. Always draws the nav,
  * empty when no menu page holds the address, so the search stays in the middle of the bar.
@@ -75,8 +98,10 @@ export function TopBarCrumb({ menu }: { menu: MenuSection[] }) {
   // The one Leads page (2026-10-28): each step keeps its own address, so the bar names the page and
   // the step — "Lead sources › Recycle" — rather than the page that address used to be. No area name:
   // three parts do not fit beside the search, and the step is the part that matters.
+  // A page that draws its own header names itself; the bar then stays empty (main, 2026-10-29).
+  const pageHasHeader = usePageHasHeader(pathname);
   const leadsStep = leadsInStepOf(pathname);
-  if (leadsStep) {
+  if (leadsStep && !pageHasHeader) {
     return (
       <nav aria-label="Breadcrumb" className="portal-top-crumb">
         <span className="portal-top-crumb-group">Lead sources</span>
@@ -85,7 +110,7 @@ export function TopBarCrumb({ menu }: { menu: MenuSection[] }) {
       </nav>
     );
   }
-  if (!item) return <nav aria-label="Breadcrumb" className="portal-top-crumb" />;
+  if (!item || pageHasHeader) return <nav aria-label="Breadcrumb" className="portal-top-crumb" />;
   const page = item.navLabel ?? item.label;
   // The rail's area name (Work, Leads, Book, Money, Team, Compliance), so the bar and the rail agree.
   const area = areaOfSection(item.section);

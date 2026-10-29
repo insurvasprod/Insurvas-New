@@ -4,7 +4,7 @@ import { after as afterResponse } from "next/server";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
-import { guideHref, isManualStep, isSetupStepKey, nextSetupStep } from "@/lib/dashboard/checklist";
+import { currentSetupStepKey, guideHref, isManualStep, isSetupStepKey, nextSetupStep } from "@/lib/dashboard/checklist";
 import { loadSetupGuideState, saveSetupGuideState } from "@/lib/dashboard/setupProgress";
 import { loadViewerSetup } from "@/lib/dashboard/setupViewer";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
@@ -45,7 +45,8 @@ export async function PATCH(request: NextRequest) {
   if (typeof action !== "string" || !ACTIONS.includes(action as SetupAction)) {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }
-  const step = typeof body?.step === "string" ? body.step : null;
+  // An old link may still carry a merged step key; the mark lands on the step that replaced it.
+  const step = typeof body?.step === "string" ? (isSetupStepKey(body.step) ? currentSetupStepKey(body.step) : body.step) : null;
   const needsStep = action !== "hide" && action !== "show";
   if (needsStep && (!step || !isSetupStepKey(step))) return NextResponse.json({ error: "Unknown step" }, { status: 400 });
   if ((action === "done" || action === "undone") && step && !isManualStep(step)) {

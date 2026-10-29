@@ -417,6 +417,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/partners/[id]/users/[userId]/form-profile/route.ts", featureKey: "publisher_records", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/partners/[id]/users/[userId]/market-access/route.ts", featureKey: "publisher_records", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/onboarding/business-profile/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/onboarding/business-profile/skip/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/plan/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/status/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/verification/route.ts", featureKey: null },

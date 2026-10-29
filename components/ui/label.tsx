@@ -4,9 +4,11 @@ import * as React from "react"
 import { Label as LabelPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { titleCaseNode } from "@/components/ui/title-case";
 
 function Label({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof LabelPrimitive.Root>) {
   return (
@@ -17,7 +19,9 @@ function Label({
         className
       )}
       {...props}
-    />
+    >
+      {titleCaseNode(children)}
+    </LabelPrimitive.Root>
   )
 }
 

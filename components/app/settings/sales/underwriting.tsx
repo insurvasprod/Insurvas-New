@@ -17,7 +17,6 @@ import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { Callout, SettingsStack, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
-import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { ViewTabs } from "@/components/ui/view-tabs";
@@ -28,8 +27,8 @@ import type { TemplateRowView } from "@/lib/salesSettings/views";
 import { cn } from "@/lib/utils";
 
 import {
-  LifecyclePill, ReadOnlyNotice, RowAction, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, VersionPill, WithReason,
-  notRefreshed, warnUnsaved,
+  LifecyclePill, ReadOnlyNotice, RowAction, RowMenu, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, VersionPill, WithReason,
+  warnUnsaved,
 } from "./shared";
 import { QuestionBuilder } from "./templates-builder";
 import { liveOf, tableRows, useSalesTemplates } from "./templates-data";
@@ -210,17 +209,10 @@ export function SalesUnderwritingTemplates() {
             total={rowsShown.length}
             noun="templates"
             title="Templates"
-            toolbar={
-              <DataToolbar
-                actions={
-                  <>
+            action={
                     <WithReason reason={ownerOnly}>
                       <Button type="button" disabled={!canEdit} onClick={() => setDialog({ kind: "new" })}><Plus aria-hidden="true" />New template</Button>
                     </WithReason>
-                    <RefreshButton onClick={sample ? notRefreshed : () => { void api.reload(); }} refreshing={api.loading && !sample} />
-                  </>
-                }
-              />
             }
           >
             {rowsShown.length === 0 ? (
@@ -242,7 +234,11 @@ export function SalesUnderwritingTemplates() {
                     const isLive = t.tenantOwned && t.status === "published" && liveOf(all, t)?.id === t.id;
                     const isOpen = t.id === selectedId;
                     return (
-                      <tr key={t.id} className={cn("m-row", isOpen && "bg-[var(--brand-50)]")}>
+                      <tr
+                        key={t.id}
+                        className={cn("m-row cursor-pointer", isOpen && "bg-[var(--brand-50)]")}
+                        onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a, [role=menu]")) open(t); }}
+                      >
                         <td className={st.td}>
                           <span className={cn(st.strong, "block")}>{t.name}</span>
                         </td>
@@ -255,16 +251,17 @@ export function SalesUnderwritingTemplates() {
                             <RowAction onClick={() => open(t)} label={`${canEdit && t.tenantOwned ? "Edit" : "View"} ${t.name} v${t.version}`}>
                               {canEdit && t.tenantOwned ? "Edit" : "View"}
                             </RowAction>
-                            {!t.tenantOwned ? (
-                              <RowAction onClick={() => { void copyPlatform(t); }} disabled={!canEdit} reason={ownerOnly}>Copy to my agency</RowAction>
-                            ) : (
-                              <>
-                                {t.status === "published" && <RowAction onClick={() => setDialog({ kind: "retire", template: t })} disabled={!canEdit} reason={ownerOnly}>Retire</RowAction>}
-                                {t.status === "draft" && <RowAction onClick={() => setDialog({ kind: "publish", template: t })} disabled={!canEdit || (isOpen && dirty)} reason={isOpen && dirty ? "Save your changes before publishing." : ownerOnly}>Publish</RowAction>}
-                                <RowAction onClick={() => setDialog({ kind: "duplicate", source: t })} disabled={!canEdit} reason={ownerOnly}>Duplicate</RowAction>
-                                <RowAction onClick={() => { void remove(t); }} disabled={!canEdit} reason={ownerOnly} label={`Delete ${t.name} v${t.version}`}><Trash2 aria-hidden="true" /></RowAction>
-                              </>
-                            )}
+                            <RowMenu
+                              label={`${t.name} v${t.version}`}
+                              items={!t.tenantOwned ? [
+                                { label: "Copy to my agency", onSelect: () => { void copyPlatform(t); }, disabled: !canEdit, reason: ownerOnly },
+                              ] : [
+                                t.status === "draft" && { label: "Publish", onSelect: () => setDialog({ kind: "publish", template: t }), disabled: !canEdit || (isOpen && dirty), reason: isOpen && dirty ? "Save your changes before publishing." : ownerOnly },
+                                t.status === "published" && { label: "Retire", onSelect: () => setDialog({ kind: "retire", template: t }), disabled: !canEdit, reason: ownerOnly },
+                                { label: "Duplicate", onSelect: () => setDialog({ kind: "duplicate", source: t }), disabled: !canEdit, reason: ownerOnly },
+                                { label: "Delete", onSelect: () => { void remove(t); }, disabled: !canEdit, reason: ownerOnly, danger: true },
+                              ]}
+                            />
                           </span>
                         </td>
                       </tr>

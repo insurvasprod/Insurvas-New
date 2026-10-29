@@ -127,6 +127,10 @@ export function IntegrationsSettings() {
   const replaced = new Set(keys.map((k) => k.rotatedFrom).filter((id): id is string => Boolean(id)));
   const idle = keys.filter((k) => isIdleKey(k, now));
   const failingHooks = hooks.filter((h) => h.status === "failing" || h.status === "disabled").length;
+  // A key that stops within two weeks: said on its row and counted on the tab, so nothing breaks unseen.
+  const SOON_MS = 14 * 86_400_000;
+  const endsSoon = (key: ApiKeyView) => !key.revokedAt && key.expiresAt !== null && Date.parse(key.expiresAt) - now < SOON_MS && Date.parse(key.expiresAt) > now;
+  const endingSoon = keys.filter(endsSoon).length;
 
   return (
     <SettingsStack>
@@ -137,8 +141,9 @@ export function IntegrationsSettings() {
         value={view}
         onChange={setView}
         tabs={[
-          { key: "keys", label: "API keys", count: keys.filter((k) => !k.revokedAt).length },
-          { key: "webhooks", label: "Webhooks", count: failingHooks || hooks.length, tone: failingHooks ? "danger" : undefined },
+          // A number only when something needs you (settings audit P4): keys about to end, failing webhooks.
+          { key: "keys", label: "API keys", count: endingSoon || null, tone: "danger" },
+          { key: "webhooks", label: "Webhooks", count: failingHooks || null, tone: "danger" },
         ]}
       />
 
@@ -185,7 +190,7 @@ export function IntegrationsSettings() {
                         {key.lastUsedAt ? <>{when(key.lastUsedAt)}<span className={st.sub}>from {key.lastUsedIp ?? "an unknown address"}</span></> : "Never used"}
                         {keyIdle && <span className={st.sub}><StatusChip tone="warning">Unused {IDLE_DAYS}+ days — revoke?</StatusChip></span>}
                       </td>
-                      <td className={st.td}>{key.revokedAt ? `Revoked ${when(key.revokedAt)}` : key.expiresAt ? when(key.expiresAt) : "No end date"}</td>
+                      <td className={st.td}>{key.revokedAt ? `Revoked ${when(key.revokedAt)}` : key.expiresAt ? <span className="inline-flex flex-wrap items-center gap-2">{when(key.expiresAt)}{endsSoon(key) && <StatusChip tone="warning">Ends soon</StatusChip>}</span> : "No end date"}</td>
                       <td className={cn(st.td, "whitespace-nowrap text-right")}>
                         {live && (
                           <span className="inline-flex gap-2">

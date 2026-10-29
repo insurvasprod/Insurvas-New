@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { partnerSchema } from "@/lib/partners/schemas";
-import { createPartnerWithLimits, listPartners } from "@/lib/partners/service";
+import { createPartnerWithLimits, listPartners, transitionPartner } from "@/lib/partners/service";
 import { friendlyPartnerDbError } from "@/lib/partners/dbErrors";
 import { listPartnerUsers } from "@/lib/partnerUsers/service";
 import { parsePartnerLimitError, partnerLimitBody } from "@/lib/partnerLimits/copy";
@@ -60,7 +60,20 @@ export async function POST(request: Request) {
       partner = await createPartnerWithLimits(tenantId, auth.context.userId, parsed.data, { ...limits, [capKey]: raised });
     }
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_created", targetType: "partner", targetId: partner.id, metadata: { name: partner.name, partnerType: partner.partner_type }, request });
-    return NextResponse.json({ partner }, { status: 201 });
+    // A new lead source is Active straight away (owner, 2026-10-28): a draft could not send leads and
+    // read as 0 in the counters. The same guarded transition as the Actions menu, so plan limits still
+    // hold; if it is refused, the source stays a draft and the reason goes back with it.
+    let activationRefused: string | null = null;
+    if (partner.status === "draft") {
+      try {
+        const activated = await transitionPartner(tenantId, partner.id, "active", undefined, limits);
+        await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_lifecycle_changed", targetType: "partner", targetId: partner.id, reason: "Active on creation", metadata: { from: "draft", to: activated.status, revokedPartnerUsers: false }, request });
+        partner = activated;
+      } catch (error) {
+        activationRefused = error instanceof Error ? error.message : "Could not activate the lead source";
+      }
+    }
+    return NextResponse.json({ partner, activationRefused }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create partner";
     const limit = parsePartnerLimitError(message);

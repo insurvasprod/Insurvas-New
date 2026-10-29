@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { SectionLoading } from "@/components/ui/page-states";
 
 type Market = { carrier_id: string; carrier_name: string; state: string };
 type Profile = {
@@ -135,8 +137,8 @@ export function PartnerMarketAccessPanel({
   if (loading)
     return (
       <Card className={cn(compact && "border-0 shadow-none")}>
-        <CardContent className="py-8 text-sm text-muted-foreground">
-          Loading carrier and state access…
+        <CardContent className="p-4">
+          <SectionLoading rows={3} columns={4} label="Loading carrier and state access" />
         </CardContent>
       </Card>
     );
@@ -165,14 +167,16 @@ export function PartnerMarketAccessPanel({
         </div>
       </CardHeader>
       <CardContent className={cn("space-y-4 p-4", compact && "p-0 pt-3")}>
-        <div className="flex items-start gap-2 rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
-          <MapPin className="mt-0.5 size-4 shrink-0" />
-          <p>
-            Partners must select <strong>Product, Carrier, and State</strong>{" "}
-            before submitting. The Partner Portal receives only the pairs saved
-            here.
-          </p>
-        </div>
+        {eligible.length > 0 && (
+          <div className="flex items-start gap-2 rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
+            <MapPin className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Partners must select <strong>Product, Carrier, and State</strong>{" "}
+              before submitting. The Partner Portal receives only the pairs saved
+              here.
+            </p>
+          </div>
+        )}
         {eligible.length ? (
           <PagedProvider>
           <div className="overflow-x-auto rounded-lg border">
@@ -243,11 +247,14 @@ export function PartnerMarketAccessPanel({
           </div>
           </PagedProvider>
         ) : (
-          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            No active carrier appointments are available. Add agency contracts
-            and appointments before granting access.
+          // Nothing to choose yet: one line and the way to fix it (2026-10-29), not a counter at 0
+          // and a greyed Save.
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-3 text-sm">
+            <span className="text-[var(--body)]">A carrier can be granted once it has its contract details and at least one state in Contracting. None has both yet.</span>
+            <Button asChild size="sm" variant="outline"><Link href="/app/settings#carriers">Open Contracting</Link></Button>
           </div>
         )}
+        {eligible.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             {selected.size} carrier/state pair{selected.size === 1 ? "" : "s"} selected
@@ -260,6 +267,7 @@ export function PartnerMarketAccessPanel({
             {saving ? "Saving…" : "Save carrier & state access"}
           </Button>
         </div>
+        )}
       </CardContent>
     </Card>
   );

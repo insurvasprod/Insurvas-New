@@ -63,3 +63,10 @@ export function checkInternationalPhone(text: string): { ok: true; e164: string 
   if (!parsed || !parsed.isValid()) return { ok: false, error: "That isn't a valid phone number" };
   return { ok: true, e164: parsed.number };
 }
+
+/** A saved number back into the form's two halves: its country and the national digits. */
+export function splitPhone(e164: string | null | undefined): { country: string; national: string } {
+  const parsed = e164 ? parsePhoneNumberFromString(e164) : undefined;
+  if (!parsed?.country || !BY_CODE.has(parsed.country)) return { country: DEFAULT_PHONE_COUNTRY, national: "" };
+  return { country: parsed.country, national: parsed.formatNational() };
+}
