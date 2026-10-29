@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,8 @@ import { Pager } from "@/components/ui/pager";
 
 /** Carriers on one page of step 1 (manager review 29 Oct, 06:09: pages, not one long scroll). */
 const CARRIERS_PER_PAGE = 10;
+/** One carrier row's height in step 1 (the row's inputs plus its padding). */
+const CARRIER_ROW_HEIGHT = 53;
 /** A step's footer stays at the bottom of the view while the list scrolls, so Next is always there. */
 const STEP_FOOTER = "sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center justify-between gap-3 rounded-b-[12px] border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3";
 
@@ -125,9 +127,25 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
 
   const [query, setQuery] = useState("");
   const [libraryPage, setLibraryPage] = useState(1);
+  // As many carriers as fit above the step's footer on a desktop, so the step needs no scroll
+  // (owner, 29 Oct); never more than ten. A phone scrolls anyway and keeps ten.
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const [perPage, setPerPage] = useState(CARRIERS_PER_PAGE);
+  useEffect(() => {
+    const measure = () => {
+      const list = listRef.current;
+      if (!list || window.innerWidth < 1024) { setPerPage(CARRIERS_PER_PAGE); return; }
+      // 32px: the shell's bottom padding; 72px: the footer and the gap above it.
+      const room = window.innerHeight - list.getBoundingClientRect().top - 32 - 72;
+      setPerPage(Math.min(CARRIERS_PER_PAGE, Math.max(4, Math.floor(room / CARRIER_ROW_HEIGHT))));
+    };
+    const timer = window.setTimeout(measure, 0);
+    window.addEventListener("resize", measure);
+    return () => { window.clearTimeout(timer); window.removeEventListener("resize", measure); };
+  }, [step]);
   const needle = query.trim().toLowerCase();
   const library = vault.carriers.filter((carrier) => !needle || carrier.name.toLowerCase().includes(needle));
-  const shownPage = Math.min(libraryPage, Math.max(1, Math.ceil(library.length / CARRIERS_PER_PAGE)));
+  const shownPage = Math.min(libraryPage, Math.max(1, Math.ceil(library.length / perPage)));
 
   function toggleCarrier(carrier: { id: string; name: string }) {
     const on = !mineIds.has(carrier.id);
@@ -166,7 +184,6 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   }
 
   const allIds = mine.map((carrier) => carrier.id);
-  const toggleState = (code: string) => setAppointments([code], allIds, carriersHere(code).length === 0);
   const pickMany = (codes: string[]) => setAppointments(codes.filter((code) => carriersHere(code).length === 0), allIds, true);
   const chosenStates = US_STATES.filter(([code]) => carriersHere(code).length > 0).length;
   const missing = mine.filter((carrier) => statesFor(vault.appointments, carrier.id, today).length === 0);
@@ -180,53 +197,47 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
 
   return (
     <div id="contracting-setup" className="flex min-w-0 scroll-mt-24 flex-col gap-4">
-      {/* Where you are: two steps, a bar, and the percentage (manager review §5.3). */}
-      <div className={cn(cardSurface, "flex flex-col gap-3 p-4")}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <ol className="m-0 flex list-none flex-wrap items-center gap-2 p-0">
-            {([[1, "Your carriers", mine.length > 0], [2, "Your states", progress.complete]] as const).map(([n, label, done], index) => (
-              <li key={n} className="flex items-center gap-2">
-                {index > 0 && <span aria-hidden="true" className="h-px w-6 bg-[var(--border-strong)]" />}
-                <button
-                  type="button"
-                  onClick={() => setStep(n)}
-                  aria-current={step === n ? "step" : undefined}
-                  className={cn("inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm font-medium", step === n ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "text-[var(--body)] hover:bg-[var(--surface-alt)]")}
-                >
-                  <span className={cn("inline-grid size-5 place-items-center rounded-full text-xs font-semibold", done ? "bg-[var(--success)] text-[var(--on-primary)]" : step === n ? "bg-[var(--primary)] text-[var(--on-primary)]" : "border border-[var(--border-strong)] text-[var(--muted)]")}>
-                    {done ? <Check className="size-3" aria-hidden="true" /> : n}
-                  </span>
-                  {label}
-                </button>
-              </li>
-            ))}
-          </ol>
-          <span className="text-sm text-[var(--muted)] tabular-nums">Step {step} of 2 · {progress.percent}% done</span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]" role="progressbar" aria-label="Contracting set-up" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100}>
-          <div className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-300" style={{ width: `${progress.percent}%` }} />
-        </div>
-      </div>
-
+      {/* Where you are: two steps, each with its own bar, no card and no connector line (manager review
+          29 Oct, 08:32: "these lines don't look good"). Green when done, the brand colour for the step
+          you are on. Either step can be opened from here. */}
+      <ol aria-label="Set-up steps" className="m-0 grid list-none grid-cols-2 gap-3 p-0">
+        {([[1, "Your carriers", mine.length > 0], [2, "Your states", progress.complete]] as const).map(([n, label, done]) => (
+          <li key={n}>
+            <button
+              type="button"
+              onClick={() => setStep(n)}
+              aria-current={step === n ? "step" : undefined}
+              className="group flex w-full flex-col gap-2 rounded-md pt-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+            >
+              <span aria-hidden="true" className={cn("h-1 w-full rounded-full transition-colors", step === n ? "bg-[var(--primary)]" : done ? "bg-[var(--success)]" : "bg-[var(--border)] group-hover:bg-[var(--border-strong)]")} />
+              <span className={cn("flex items-center gap-2 text-sm font-medium", step === n ? "text-[var(--ink)]" : "text-[var(--muted)] group-hover:text-[var(--ink)]")}>
+                <span className="text-xs tabular-nums text-[var(--muted)]">Step {n}</span>
+                {label}
+                {done && <Check aria-label="done" className="size-3.5 text-[var(--success)]" />}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
       {step === 1 ? (
         <section aria-labelledby="contracting-step-1" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
-          <div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 id="contracting-step-1" className="m-0 flex items-center gap-1 text-card-title text-[var(--ink)]">
               Which carriers are you contracted with?
               <InfoTip label="About this step">Tick each one. Contract details are optional: add them now or later, they only feed commission figures.</InfoTip>
             </h3>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <input className={cn(control, "mt-0 max-w-sm")} aria-label="Search carriers" placeholder="Search carriers" value={query} onChange={(event) => { setQuery(event.target.value); setLibraryPage(1); }} />
-            <span className="text-sm text-[var(--muted)] tabular-nums">{mine.length} selected</span>
+            <span className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-[var(--muted)] tabular-nums">{mine.length} selected</span>
+              <input className={cn(control, "mt-0 w-64 max-w-full")} aria-label="Search carriers" placeholder="Search carriers" value={query} onChange={(event) => { setQuery(event.target.value); setLibraryPage(1); }} />
+            </span>
           </div>
           {/* One header for the three optional fields, not a label on every row. */}
           <div aria-hidden="true" className={cn(ROW, "hidden border-b border-[var(--border)] pb-2 text-label text-[var(--muted)] sm:grid")}>
             <span>Carrier</span><span>Level</span><span>Contracted from</span><span>Writing number</span>
           </div>
-          <ul className="-mt-4 m-0 flex list-none flex-col p-0">
+          <ul ref={listRef} className="-mt-4 m-0 flex list-none flex-col p-0">
             {library.length === 0 && <li className="py-3 text-sm text-[var(--muted)]">No carrier matches. <a className="font-medium text-[var(--accent-ink)] hover:underline" href="mailto:support@insurvas.com?subject=Please%20add%20a%20carrier%20to%20the%20library">Ask Insurvas to add it</a></li>}
-            {library.slice((shownPage - 1) * CARRIERS_PER_PAGE, shownPage * CARRIERS_PER_PAGE).map((carrier) => (
+            {library.slice((shownPage - 1) * perPage, shownPage * perPage).map((carrier) => (
               <CarrierRow
                 key={carrier.id}
                 carrier={carrier}
@@ -238,75 +249,119 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
               />
             ))}
           </ul>
-          {library.length > CARRIERS_PER_PAGE && <Pager page={shownPage} total={library.length} noun="carriers" pageSize={CARRIERS_PER_PAGE} onPage={setLibraryPage} />}
-          {/* Always in view while the step is done (manager review 29 Oct, 05:39). */}
+          {/* Always in view while the step is done (manager review 29 Oct, 05:39). The pages sit here
+              with Next, one bar of controls, rather than loose under the list. */}
           <footer className={STEP_FOOTER}>
             {status}
-            <Button type="button" disabled={mine.length === 0} onClick={() => setStep(2)}>Next: set up states →</Button>
+            <span className="flex flex-wrap items-center gap-4">
+              {library.length > perPage && (
+                <span className="flex items-center gap-3 text-xs text-[var(--muted)]">
+                  <Pager page={shownPage} total={library.length} noun="carriers" pageSize={perPage} onPage={setLibraryPage} />
+                </span>
+              )}
+              <Button type="button" disabled={mine.length === 0} onClick={() => setStep(2)}>Next: set up states →</Button>
+            </span>
           </footer>
         </section>
       ) : (
         <section aria-labelledby="contracting-step-2" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
-          <div>
+          {/* Owner, 29 Oct: no scrolling. All 51 states fit as tiles; the state in focus shows its
+              carriers on the right, one tick each (manager review 29 Oct, 08:05: "a card … showing
+              me all the carriers, tick by tick"). A tile only opens its state: nothing is ticked until the
+              person ticks a carrier in the card (owner, 29 Oct). A region chip is the one bulk add. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 id="contracting-step-2" className="m-0 flex items-center gap-1 text-card-title text-[var(--ink)]">
               Which states do you sell in?
-              <InfoTip label="About this step">Tick a state and its carriers appear: untick any you are not appointed with there.</InfoTip>
+              <InfoTip label="About this step">Pick a state to see your carriers in it, then tick the ones you are appointed with there. A region adds its states with every carrier.</InfoTip>
             </h3>
+            {mine.length > 0 && (
+              <span className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-[var(--muted)] tabular-nums">{chosenStates} state{chosenStates === 1 ? "" : "s"} chosen</span>
+                <input className={cn(control, "mt-0 w-56 max-w-full")} aria-label="Search states" placeholder="Search states" value={stateQuery} onChange={(event) => setStateQuery(event.target.value)} />
+              </span>
+            )}
           </div>
           {mine.length === 0 ? (
             <p className="m-0 text-sm text-[var(--body)]">Choose your carriers first. <button type="button" className="font-medium text-[var(--accent-ink)] hover:underline" onClick={() => setStep(1)}>Go to step 1</button></p>
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <input className={cn(control, "mt-0 w-56")} aria-label="Search states" placeholder="Search states" value={stateQuery} onChange={(event) => setStateQuery(event.target.value)} />
-                <span className="mx-1 h-5 w-px bg-[var(--border)]" aria-hidden="true" />
                 <span className="text-xs text-[var(--muted)]">Add a region:</span>
                 {REGIONS.map((region) => <ToggleChip key={region.label} onClick={() => pickMany(region.states)}>{region.label}</ToggleChip>)}
                 <ToggleChip onClick={() => pickMany(US_STATES.map(([code]) => code as string))}>All states</ToggleChip>
+                {missing.length > 0 && <StatusChip tone="warning" className="ml-auto">{missing.map((carrier) => carrier.name).join(", ")} {missing.length === 1 ? "has" : "have"} no state yet</StatusChip>}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="text-[var(--muted)] tabular-nums">{chosenStates} state{chosenStates === 1 ? "" : "s"} chosen</span>
-                {missing.length > 0 && <StatusChip tone="warning">{missing.map((carrier) => carrier.name).join(", ")} {missing.length === 1 ? "has" : "have"} no state yet</StatusChip>}
-              </div>
-              <ul className="m-0 grid list-none grid-cols-1 items-start gap-x-4 gap-y-0.5 p-0 md:grid-cols-2">
-                {states.map(([code, name]) => {
-                  const here = carriersHere(code);
-                  const on = here.length > 0;
-                  const expanded = open === code;
-                  return (
-                    <li key={code} className={cn("rounded-[10px] px-1.5 py-0.5", expanded && "bg-[var(--surface-alt)]")}>
-                      <div className="flex items-center gap-3">
-                        <button type="button" role="checkbox" aria-checked={on} aria-label={name} onClick={() => { toggleState(code); if (!on && mine.length > 1) setOpen(code); else if (on && expanded) setOpen(null); }} className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-1.5 text-left">
-                          <span aria-hidden="true" className={cn("inline-grid size-[18px] shrink-0 place-items-center rounded-[5px] border", on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)]")}>{on && <Check className="size-3" />}</span>
-                          <span className="w-7 font-mono text-xs text-[var(--muted)]">{code}</span>
-                          <span className="min-w-0 flex-1 truncate text-sm text-[var(--ink)]">{name}</span>
+              <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_240px] @6xl:grid-cols-[minmax(0,1fr)_300px]">
+                <ul aria-label="States" className="m-0 grid list-none content-start gap-1.5 p-0 grid-cols-[repeat(auto-fill,minmax(62px,1fr))] @6xl:grid-cols-[repeat(auto-fill,minmax(96px,1fr))]">
+                  {states.length === 0 && <li className="col-span-full py-3 text-sm text-[var(--muted)]">No state matches.</li>}
+                  {states.map(([code, name]) => {
+                    const here = carriersHere(code);
+                    const on = here.length > 0;
+                    const focused = open === code;
+                    return (
+                      <li key={code}>
+                        <button
+                          type="button"
+                          aria-pressed={focused}
+                          aria-label={`${name}${on ? `, ${here.length} of ${mine.length} carriers` : ", no carriers"}`}
+                          title={name}
+                          onClick={() => setOpen(code)}
+                          className={cn(
+                            "flex h-9 w-full flex-col items-start justify-center rounded-[8px] border px-2 text-left transition-colors",
+                            on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-alt)]",
+                            focused && "ring-2 ring-[var(--primary)] ring-offset-1 ring-offset-[var(--surface)]",
+                          )}
+                        >
+                          <span className="flex w-full items-center justify-between gap-1">
+                            <span className={cn("font-mono text-xs font-semibold", on ? "text-[var(--accent-ink)]" : "text-[var(--ink)]")}>{code}</span>
+                            {on && (here.length === mine.length ? <Check aria-hidden="true" className="size-3 text-[var(--accent-ink)]" /> : <span className="text-xs leading-none font-semibold tabular-nums text-[var(--accent-ink)]">{here.length}/{mine.length}</span>)}
+                          </span>
+                          <span className="w-full truncate text-xs leading-tight text-[var(--muted)]">{name}</span>
                         </button>
-                        {on && mine.length > 1 && (
-                          <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : code)} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--body)] hover:bg-[var(--surface-alt)]">
-                            {here.length === mine.length ? "All carriers" : `${here.length} of ${mine.length} carriers`}
-                            <ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", expanded && "rotate-180")} />
-                          </button>
-                        )}
-                      </div>
-                      {/* Picking a state opens its carriers, one tick each (manager review 29 Oct, 08:05:
-                          "just make a card … showing me all the carriers, tick by tick"). */}
-                      {expanded && on && (
-                        <div role="group" aria-label={`Carriers in ${name}`} className="mt-1 mb-1.5 ml-8 flex flex-col rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
+                      </li>
+                    );
+                  })}
+                </ul>
+                {/* The card is as tall as its carriers (it was held to the tiles' height and squeezed its list, owner
+                    29 Oct); only a very long list scrolls, inside the card. */}
+                <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 @3xl:self-start">
+                  {(() => {
+                    const focus = open ? US_STATES.find(([code]) => code === open) : null;
+                    if (!focus) return <p className="m-0 py-8 text-center text-sm text-[var(--muted)]">Pick a state to see its carriers here.</p>;
+                    const [code, name] = focus;
+                    const here = carriersHere(code);
+                    return (
+                      <div role="group" aria-label={`Carriers in ${name}`} className="flex min-h-0 flex-1 flex-col gap-2">
+                        <div className="flex items-baseline justify-between gap-2 px-1">
+                          <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]">{name}</span>
+                          <span className="shrink-0 text-xs text-[var(--muted)] tabular-nums">{here.length} of {mine.length} carriers</span>
+                        </div>
+                        <div className="flex max-h-[min(45vh,400px)] flex-col overflow-y-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
                           {mine.map((carrier) => {
                             const has = here.includes(carrier.id);
                             return (
-                              <button key={carrier.id} type="button" role="checkbox" aria-checked={has} onClick={() => setAppointments([code], [carrier.id], !has)} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-alt)]">
+                              <button key={carrier.id} type="button" role="checkbox" aria-checked={has} onClick={() => setAppointments([code], [carrier.id], !has)} className="flex shrink-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-alt)]">
                                 <span aria-hidden="true" className={cn("inline-grid size-4 shrink-0 place-items-center rounded-[4px] border", has ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)]")}>{has && <Check className="size-3" />}</span>
                                 <span className={cn("min-w-0 flex-1 truncate", has ? "text-[var(--ink)]" : "text-[var(--muted)]")}>{carrier.name}</span>
                               </button>
                             );
                           })}
                         </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          {here.length < mine.length ? (
+                            <button type="button" onClick={() => setAppointments([code], allIds, true)} className="rounded-md py-0.5 text-xs font-medium text-[var(--accent-ink)] hover:underline">Tick all</button>
+                          ) : <span />}
+                          {here.length > 0 && (
+                            <button type="button" onClick={() => setAppointments([code], allIds, false)} className="rounded-md py-0.5 text-xs font-medium text-[var(--error-ink)] hover:underline">
+                              Remove {name}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
             </>
           )}
           <footer className={STEP_FOOTER}>

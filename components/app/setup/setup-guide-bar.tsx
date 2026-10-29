@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, ChevronRight, ListChecks } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -37,6 +37,20 @@ export function SetupGuideBar() {
   const [data, setData] = useState<SetupResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const timers = useRef<number[]>([]);
+  // Closed by default: a slim tab in the page's right margin, so the box never sits on a page's own
+  // buttons (owner, 29 Oct: it covered Contracting's "Next: Set Up States"). Opening it is remembered
+  // for the visit, so someone who keeps it open is not made to open it on every step.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let saved = false;
+    try { saved = window.sessionStorage.getItem("setup-guide-open") === "1"; } catch { /* storage blocked */ }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the visit's storage
+    if (saved) setOpen(true);
+  }, []);
+  const toggle = (next: boolean) => {
+    setOpen(next);
+    try { window.sessionStorage.setItem("setup-guide-open", next ? "1" : "0"); } catch { /* storage blocked */ }
+  };
 
   // Every check is numbered and only the newest answer is kept: two checks in flight (a click and a
   // focus) could otherwise land out of order, and an older "not done" overwrote a newer "done" (live
@@ -156,15 +170,32 @@ export function SetupGuideBar() {
   };
   const markDone = () => void markSetupStep("done", step.key).then((ok) => { if (ok) void load(); });
 
-  // A floating box at the bottom right, over the page rather than in it (manager review 29 Oct,
-  // 01:13: "an overlay … so the pages stay on their own design … it stays until he finishes"). Raised
-  // clear of a page's save bar, so it never covers Save.
+  // Closed, a tab flush with the window's right edge, inside the page's 32px margin, so it covers
+  // nothing; open, a box docked to that edge above the page's save bars. Done turns the tab green.
+  const tab = (
+    <button
+      type="button"
+      onClick={() => toggle(true)}
+      aria-expanded={false}
+      aria-label={`Get set up: ${position}, ${step.label}${step.complete ? ", done" : ""}. Show`}
+      title={`${position} · ${step.label}`}
+      className="fixed right-0 bottom-28 z-40 flex w-8 flex-col items-center gap-2 rounded-l-[10px] border border-r-0 border-primary bg-[var(--color-card)] py-3 text-[var(--accent-ink)] shadow-[var(--shadow-overlay,0_8px_20px_rgba(0,0,0,.25))] transition-[width] hover:w-9 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+    >
+      {step.complete ? (
+        <span aria-hidden="true" className="inline-flex size-5 items-center justify-center rounded-full bg-[var(--success)] text-[var(--on-success)]"><Check className="size-3" strokeWidth={3} /></span>
+      ) : (
+        <ListChecks aria-hidden="true" className="size-4" />
+      )}
+      <span aria-hidden="true" className="text-xs font-semibold tabular-nums [writing-mode:vertical-rl] rotate-180">{step.optional ? "Setting" : position.replace("Step ", "")}</span>
+    </button>
+  );
+  if (!open) return (<><span role="status" aria-live="polite" className="sr-only">{announcement}</span>{tab}</>);
   return (
     <div
       data-setup-guide=""
       role="region"
       aria-label="Get set up"
-      className="fixed right-6 bottom-24 z-40 flex w-[min(380px,calc(100vw-3rem))] flex-col gap-3 rounded-[12px] border border-primary bg-[var(--color-card)] p-4 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))]"
+      className="fixed right-0 bottom-28 z-40 flex w-[min(360px,calc(100vw-1rem))] flex-col gap-3 rounded-l-[12px] border border-r-0 border-primary bg-[var(--color-card)] p-4 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))]"
     >
       <span role="status" aria-live="polite" className="sr-only">{announcement}</span>
       <div className="flex items-start gap-2.5">
@@ -178,6 +209,9 @@ export function SetupGuideBar() {
           <span className="block font-semibold">{step.label}{step.key === "statement" ? <> <InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip></> : null}</span>
           <span className="mt-0.5 block text-muted-foreground">{step.complete ? "Done." : step.instruction}</span>
         </p>
+        <button type="button" onClick={() => toggle(false)} aria-label="Hide Get set up" title="Hide" className="-mt-1 -mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]">
+          <ChevronRight aria-hidden="true" className="size-4" />
+        </button>
       </div>
       <span className="flex flex-wrap items-center justify-end gap-2">
         <Link href="/app/setup" className={buttonVariants({ variant: "ghost", size: "sm" })}>Back to setup</Link>

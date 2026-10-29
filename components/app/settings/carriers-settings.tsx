@@ -40,6 +40,7 @@ import { SectionLoading } from "@/components/ui/page-states";
 import { CarrierCard, ProgressLine, carrierProgress } from "@/components/app/settings/carrier-card";
 import { CarrierFieldMaps } from "@/components/app/settings/carrier-field-maps";
 import { ContractingSetup, setupProgress } from "@/components/app/settings/contracting-setup";
+import { Pager } from "@/components/ui/pager";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { notify } from "@/lib/notify";
 import { parseSettingsHash } from "@/lib/settings/registry";
@@ -297,33 +298,39 @@ export function CarriersSettings() {
             <Button type="button" onClick={() => pickStep("setup")}>Start set-up</Button>
           </div>
         ) : (
-          <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 @2xl:grid-cols-2 @5xl:grid-cols-3">
-            {yours.map((carrier) => {
+          <FittedGrid
+            items={yours}
+            noun="carriers"
+            rowHeight={144}
+            className="grid-cols-1 @2xl:grid-cols-2 @5xl:grid-cols-3"
+            keyOf={(carrier) => carrier.id}
+            render={(carrier) => {
               const contract = vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active) ?? null;
               const off = Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === carrier.id && row.contracted === false));
               const appointed = appointedStatesFor(vault.appointments, carrier.id, today);
               return (
-                <li key={carrier.id} className={cn(PANE, "flex flex-col gap-3 p-4", off && "opacity-70")}>
+                <div className={cn(PANE, "flex h-full flex-col gap-3 overflow-hidden p-4", off && "opacity-70")}>
                   <div className="flex items-start justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className={cn("size-2.5 shrink-0 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
-                      <span className="truncate text-sm font-semibold text-[var(--ink)]">{carrier.name}</span>
+                      <span className="truncate text-sm font-semibold text-[var(--ink)]" title={carrier.name}>{carrier.name}</span>
                     </span>
                     <ProgressLine progress={progressOf(carrier.id)} switchedOff={off} />
                   </div>
                   <dl className="m-0 grid grid-cols-3 gap-2 text-xs">
                     <div><dt className="text-[var(--muted)]">Level</dt><dd className="m-0 font-semibold tabular-nums text-[var(--ink)]">{contract ? `${bpToLevel(contract.contract_level_bp)}%` : "—"}</dd></div>
-                    <div><dt className="text-[var(--muted)]">Writing number</dt><dd className="m-0 truncate font-mono text-[var(--ink)]">{contract?.writing_number || "—"}</dd></div>
+                    <div className="min-w-0"><dt className="text-[var(--muted)]">Writing number</dt><dd className="m-0 truncate font-mono text-[var(--ink)]">{contract?.writing_number || "—"}</dd></div>
                     <div><dt className="text-[var(--muted)]">States</dt><dd className="m-0 font-semibold tabular-nums text-[var(--ink)]">{appointed.length}</dd></div>
                   </dl>
-                  {appointed.length > 0 && <p className="m-0 truncate font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>{appointed.join(" · ")}</p>}
-                  <div className="mt-auto flex justify-end">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setEditingId(carrier.id)}>Edit</Button>
+                  {/* Any number of states fits one line: the first few, then "+N" (all of them on hover). */}
+                  <div className="mt-auto flex items-center justify-between gap-3">
+                    <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>{appointed.length ? firstFew(appointed, 6, " · ") : "No states yet"}</p>
+                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setEditingId(carrier.id)}>Edit</Button>
                   </div>
-                </li>
+                </div>
               );
-            })}
-          </ul>
+            }}
+          />
         )
       )}
       {editing && (
@@ -332,7 +339,8 @@ export function CarriersSettings() {
             <DialogTitle className="sr-only">{editing.name}</DialogTitle>
             <CarrierCard
               key={editing.id}
-              className="p-5"
+              // The header row leaves room for the dialog's X, which sat on the status chip.
+              className="p-5 [&>*:first-child]:pr-9"
               carrier={editing}
               dot={dotOf(editing.id)}
               contract={vault.tenantCarriers.find((row) => row.carrier_id === editing.id && row.is_active) ?? null}
@@ -379,23 +387,87 @@ export function CarriersSettings() {
             <Button type="button" onClick={() => pickStep("setup")}>Open set-up</Button>
           </div>
         ) : (
-          <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 @xl:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4">
-            {held.map((row) => (
-              <li key={row.code} className={cn(PANE, "flex flex-col gap-2 p-4")}>
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]"><span className="mr-2 font-mono text-xs text-[var(--muted)]">{row.code}</span>{row.name}</span>
-                  <span className="shrink-0 text-xs font-semibold tabular-nums text-[var(--accent-ink)]">{row.ids.length === yours.length ? "All carriers" : `${row.ids.length} of ${yours.length}`}</span>
-                </span>
-                <span className="flex flex-wrap gap-x-3 gap-y-1">
-                  {row.ids.map((id) => (
-                    <span key={id} className="inline-flex items-center gap-1.5 text-xs text-[var(--body)]"><span className={cn("size-2 rounded-full", dotOf(id))} aria-hidden="true" />{yours.find((carrier) => carrier.id === id)?.name}</span>
-                  ))}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <FittedGrid
+            items={held}
+            noun="states"
+            rowHeight={80}
+            className="grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4"
+            keyOf={(row) => row.code}
+            render={(row) => {
+              const names = row.ids.map((id) => yours.find((carrier) => carrier.id === id)?.name ?? "");
+              return (
+                <div className={cn(PANE, "flex h-full flex-col justify-center gap-2 overflow-hidden px-4")}>
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]"><span className="mr-2 font-mono text-xs text-[var(--muted)]">{row.code}</span>{row.name}</span>
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-[var(--accent-ink)]">{row.ids.length === yours.length ? "All carriers" : `${row.ids.length} of ${yours.length}`}</span>
+                  </span>
+                  {/* Any number of carriers fits one line: the first two, then "+N more" (all on hover). */}
+                  <span className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap" title={names.join(", ")}>
+                    {row.ids.slice(0, 2).map((id, index) => (
+                      <span key={id} className="inline-flex min-w-0 items-center gap-1.5 text-xs text-[var(--body)]"><span className={cn("size-2 shrink-0 rounded-full", dotOf(id))} aria-hidden="true" /><span className="truncate">{names[index]}</span></span>
+                    ))}
+                    {row.ids.length > 2 && <span className="shrink-0 text-xs font-semibold text-[var(--muted)]">+{row.ids.length - 2} more</span>}
+                  </span>
+                </div>
+              );
+            }}
+          />
         );
       })()}
     </SettingsStack>
+  );
+}
+
+/** "AK · AL · AZ · GA +12": the first `count`, then how many more. */
+function firstFew(list: string[], count: number, joiner: string) {
+  return list.length > count ? `${list.slice(0, count).join(joiner)} +${list.length - count}` : list.join(joiner);
+}
+
+/**
+ * Same-height cards paged to fit the screen (owner, 29 Oct: "we don't want scrolling … what if there
+ * are a lot"). On a desktop, the rows that fit between the grid's top and the window's bottom, less
+ * the pager, make a page; the columns are the grid's own. A phone scrolls anyway, so it shows six rows.
+ */
+function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
+  items: T[];
+  noun: string;
+  rowHeight: number;
+  className: string;
+  keyOf: (item: T) => string;
+  render: (item: T) => ReactNode;
+}) {
+  const grid = useRef<HTMLUListElement | null>(null);
+  const [perPage, setPerPage] = useState(12);
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    const element = grid.current;
+    if (!element) return;
+    const measure = () => {
+      const style = getComputedStyle(element);
+      const columns = Math.max(1, style.gridTemplateColumns.split(" ").filter(Boolean).length);
+      const gap = parseFloat(style.rowGap) || 0;
+      // 32px: the shell's bottom padding; 52px: the pager and the gap above it.
+      const room = window.innerWidth >= 1024 ? window.innerHeight - element.getBoundingClientRect().top - 32 - 52 : (rowHeight + gap) * 6;
+      setPerPage(columns * Math.max(1, Math.floor((room + gap) / (rowHeight + gap))));
+    };
+    const timer = window.setTimeout(measure, 0);
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    window.addEventListener("resize", measure);
+    return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
+  }, [rowHeight]);
+  const pages = Math.max(1, Math.ceil(items.length / perPage));
+  const shown = Math.min(page, pages);
+  return (
+    <div className="flex flex-col gap-3">
+      <ul ref={grid} className={cn("m-0 grid list-none gap-3 p-0", className)} style={{ gridAutoRows: `${rowHeight}px` }}>
+        {items.slice((shown - 1) * perPage, shown * perPage).map((item) => <li key={keyOf(item)} className="min-w-0">{render(item)}</li>)}
+      </ul>
+      {items.length > perPage && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--muted)]">
+          <Pager page={shown} total={items.length} noun={noun} pageSize={perPage} onPage={setPage} />
+        </div>
+      )}
+    </div>
   );
 }

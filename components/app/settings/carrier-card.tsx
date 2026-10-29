@@ -219,7 +219,9 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, pendi
       <div id={ids.states} className="flex flex-wrap items-center gap-1.5">
         <span className={cn(KICKER, "mr-1")}>Appointed states</span>
         {states.length === 0 && pendingStates.length === 0 && <span className="mr-1 text-sm text-[var(--muted)]">None yet</span>}
-        {states.map((code) => <span key={code} className="inline-flex h-7 items-center rounded-full bg-[var(--primary-soft)] px-2.5 text-xs font-semibold text-[var(--accent-ink)]">{code}</span>)}
+        {/* Twelve at most: a carrier in every state would otherwise fill the dialog with chips. */}
+        {states.slice(0, 12).map((code) => <span key={code} className="inline-flex h-7 items-center rounded-full bg-[var(--primary-soft)] px-2.5 text-xs font-semibold text-[var(--accent-ink)]">{code}</span>)}
+        {states.length > 12 && <span className="inline-flex h-7 items-center px-1 text-xs font-semibold text-[var(--muted)]" title={states.slice(12).join(", ")}>+{states.length - 12} more</span>}
         {/* Pending: outlined, with the word, so it never reads as appointed. */}
         {pendingStates.map((code) => <span key={code} className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-[var(--border-strong)] px-2.5 text-xs font-semibold text-[var(--muted)]">{code}<span className="font-normal">pending</span></span>)}
         {states.length === 0 && pendingStates.length === 0 && !switchedOff
@@ -305,7 +307,7 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
       {error && <Callout tone="error" title={error} />}
       {missing && (
         <p className="m-0 text-xs text-[var(--muted)]">
-          {`You can sell ${carrierName} without these. Add them for commission figures: 110 means 110%, and the writing number is on your contracting letter. Saves once both are in.`}
+          {`${carrierName} sells without these. They save once all three are filled in.`}
         </p>
       )}
     </section>
