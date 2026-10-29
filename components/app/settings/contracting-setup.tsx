@@ -122,6 +122,21 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   // (owner, 29 Oct); never more than ten. A phone scrolls anyway and keeps ten.
   const listRef = useRef<HTMLUListElement | null>(null);
   const [perPage, setPerPage] = useState(CARRIERS_PER_PAGE);
+  // On a desktop the step's card reaches the bottom of the window (owner, 29 Oct: no empty band under
+  // it); the state tiles and the carriers card grow into the room.
+  const stepCard = useRef<HTMLElement | null>(null);
+  const [stepMinHeight, setStepMinHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const card = stepCard.current;
+      if (!card || window.innerWidth < 1024) { setStepMinHeight(null); return; }
+      // 32px: the shell's bottom padding.
+      setStepMinHeight(Math.max(0, Math.floor(window.innerHeight - card.getBoundingClientRect().top - 32)));
+    };
+    const timer = window.setTimeout(measure, 0);
+    window.addEventListener("resize", measure);
+    return () => { window.clearTimeout(timer); window.removeEventListener("resize", measure); };
+  }, [step]);
   useEffect(() => {
     const measure = () => {
       const list = listRef.current;
@@ -210,7 +225,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
         ))}
       </ol>
       {step === 1 ? (
-        <section aria-labelledby="contracting-step-1" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
+        <section ref={stepCard} style={stepMinHeight ? { minHeight: stepMinHeight } : undefined} aria-labelledby="contracting-step-1" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 id="contracting-step-1" className="m-0 flex items-center gap-1 text-card-title text-[var(--ink)]">
               Which carriers are you contracted with?
@@ -254,7 +269,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           </footer>
         </section>
       ) : (
-        <section aria-labelledby="contracting-step-2" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
+        <section ref={stepCard} style={stepMinHeight ? { minHeight: stepMinHeight } : undefined} aria-labelledby="contracting-step-2" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
           {/* Owner, 29 Oct: no scrolling. All 51 states fit as tiles; the state in focus shows its
               carriers on the right, one tick each (manager review 29 Oct, 08:05: "a card … showing
               me all the carriers, tick by tick"). A tile only opens its state: nothing is ticked until the
@@ -276,8 +291,8 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
             <p className="m-0 text-sm text-[var(--body)]">Choose your carriers first. <button type="button" className="font-medium text-[var(--accent-ink)] hover:underline" onClick={() => setStep(1)}>Go to step 1</button></p>
           ) : (
             <>
-              <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_240px] @6xl:grid-cols-[minmax(0,1fr)_300px]">
-                <ul aria-label="States" className="m-0 grid list-none content-start gap-1.5 p-0 grid-cols-[repeat(auto-fill,minmax(62px,1fr))] @6xl:grid-cols-[repeat(auto-fill,minmax(96px,1fr))]">
+              <div className="grid flex-1 gap-4 @3xl:grid-cols-[minmax(0,1fr)_240px] @6xl:grid-cols-[minmax(0,1fr)_300px]">
+                <ul aria-label="States" className="m-0 grid list-none auto-rows-[minmax(36px,1fr)] gap-1.5 p-0 grid-cols-[repeat(auto-fill,minmax(62px,1fr))] @6xl:grid-cols-[repeat(auto-fill,minmax(96px,1fr))]">
                   {states.length === 0 && <li className="col-span-full py-3 text-sm text-[var(--muted)]">No state matches.</li>}
                   {states.map(([code, name]) => {
                     const here = carriersHere(code);
@@ -292,7 +307,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                           title={name}
                           onClick={() => setOpen(code)}
                           className={cn(
-                            "flex h-9 w-full flex-col items-start justify-center rounded-[8px] border px-2 text-left transition-colors",
+                            "flex h-full min-h-9 w-full flex-col items-start justify-center rounded-[8px] border px-2 text-left transition-colors",
                             on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-alt)]",
                             focused && "ring-2 ring-[var(--primary)] ring-offset-1 ring-offset-[var(--surface)]",
                           )}
@@ -307,9 +322,9 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                     );
                   })}
                 </ul>
-                {/* The card runs the tiles' full length, and grows past it for a long carrier list (it was once held
-                    to the tiles' height and squeezed its list, owner 29 Oct). Past 400px the list scrolls inside. */}
-                <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                {/* The card is exactly the tiles' length, which now fills the step to the window's bottom, so
+                    the list has room; only a very long carrier list scrolls, inside the card. */}
+                <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 @3xl:h-0 @3xl:min-h-full">
                   {(() => {
                     const focus = open ? US_STATES.find(([code]) => code === open) : null;
                     if (!focus) return <p className="m-0 py-8 text-center text-sm text-[var(--muted)]">Pick a state to see its carriers here.</p>;
@@ -321,7 +336,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                           <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]">{name}</span>
                           <span className="shrink-0 text-xs text-[var(--muted)] tabular-nums">{here.length} of {mine.length} carriers</span>
                         </div>
-                        <div className="flex max-h-[min(45vh,400px)] flex-1 flex-col overflow-y-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
+                        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
                           {mine.map((carrier) => {
                             const has = here.includes(carrier.id);
                             return (
