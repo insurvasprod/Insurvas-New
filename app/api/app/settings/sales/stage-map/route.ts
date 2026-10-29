@@ -27,7 +27,7 @@ export async function PUT(request: Request) {
   const input = await body(request, stageMapSchema);
   if (input instanceof NextResponse) return input;
   try {
-    return NextResponse.json(await saveStageMap(actorOf(auth, request), input.map));
+    return NextResponse.json(await saveStageMap(actorOf(auth, request), input.map, input.pipeline_id));
   } catch (error) {
     return failure(error);
   }

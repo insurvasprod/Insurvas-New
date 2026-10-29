@@ -35,6 +35,7 @@ export function Pager({
   suffix,
   disabled = false,
   approximate = false,
+  compact = false,
 }: {
   page: number;
   total: number;
@@ -49,6 +50,8 @@ export function Pager({
   disabled?: boolean;
   /** The total is an estimate ("about 4,120"). */
   approximate?: boolean;
+  /** A narrow card (the Dialer's queue, 2026-10-29): the phone layout at every width, so the pager stays one line. */
+  compact?: boolean;
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(Math.max(1, page), pages);
@@ -72,10 +75,10 @@ export function Pager({
       </span>
       {pages > 1 && (
         <nav aria-label={`${noun} pages`} className="flex items-center gap-1">
-          <Step {...go(1)} label="First page" hrefFor={hrefFor} onPage={onPage} className="hidden sm:inline-flex"><ChevronsLeft className="size-4" aria-hidden="true" /></Step>
+          <Step {...go(1)} label="First page" hrefFor={hrefFor} onPage={onPage} className={compact ? "hidden" : "hidden sm:inline-flex"}><ChevronsLeft className="size-4" aria-hidden="true" /></Step>
           <Step {...go(current - 1)} label="Previous page" hrefFor={hrefFor} onPage={onPage}><ChevronLeft className="size-4" aria-hidden="true" /></Step>
-          <span className="px-2 text-xs font-semibold text-foreground tabular-nums sm:hidden">Page {current} of {pages}</span>
-          <span className="hidden items-center gap-1 sm:flex">
+          <span className={cn("px-2 text-xs font-semibold text-foreground tabular-nums", !compact && "sm:hidden")}>Page {current} of {pages}</span>
+          <span className={cn("hidden items-center gap-1", !compact && "sm:flex")}>
             {pageItems(current, pages).map((item, index) =>
               item === "gap" ? (
                 <span key={`gap-${index}`} className="inline-flex size-8 items-center justify-center text-muted-foreground" aria-hidden="true">…</span>
@@ -87,7 +90,7 @@ export function Pager({
             )}
           </span>
           <Step {...go(current + 1)} label="Next page" hrefFor={hrefFor} onPage={onPage}><ChevronRight className="size-4" aria-hidden="true" /></Step>
-          <Step {...go(pages)} label="Last page" hrefFor={hrefFor} onPage={onPage} className="hidden sm:inline-flex"><ChevronsRight className="size-4" aria-hidden="true" /></Step>
+          <Step {...go(pages)} label="Last page" hrefFor={hrefFor} onPage={onPage} className={compact ? "hidden" : "hidden sm:inline-flex"}><ChevronsRight className="size-4" aria-hidden="true" /></Step>
         </nav>
       )}
     </>

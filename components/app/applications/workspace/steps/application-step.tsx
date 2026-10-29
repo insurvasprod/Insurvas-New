@@ -156,15 +156,30 @@ function BuildField({ required }: { required: boolean }) {
   const num = (key: string, v: string) => setValue(key, v === "" ? null : Number(v));
   const hint = isPrefilled(h) ? h : isPrefilled(w) ? w : undefined;
   const heightIn = typeof h?.value === "number" ? h.value : null;
+  // Feet and inches, as people say a height (owner 2026-10-29: one box for total inches read like
+  // centimetres). Stored as total inches, as before. A box being typed in keeps its text until the
+  // other is filled, so "5" then "8" never jumps.
+  const [feetText, setFeetText] = useState(() => (heightIn === null ? "" : String(Math.floor(heightIn / 12))));
+  const [inchText, setInchText] = useState(() => (heightIn === null ? "" : String(heightIn % 12)));
+  function setHeight(feet: string, inches: string) {
+    setFeetText(feet); setInchText(inches);
+    const f = feet === "" ? null : Number(feet);
+    const i = inches === "" ? 0 : Number(inches);
+    num("insured.height_in", f === null || !Number.isFinite(f) || !Number.isFinite(i) ? "" : String(f * 12 + i));
+  }
+  const box = (prefilled: boolean) => cn(control, "mt-0 w-16 min-w-0 text-right", prefilled && PREFILL_SURFACE);
+  const unit = "text-sm text-[var(--muted)]";
   return (
-    <Field label="Height / weight" htmlFor="insured.height_in" required={required}>
-      <div className="mt-1.5 flex items-center gap-2">
-        <input id="insured.height_in" type="number" inputMode="numeric" aria-label="Height in inches" placeholder="in" className={cn(control, "mt-0 min-w-0 flex-1", isPrefilled(h) && PREFILL_SURFACE)} value={asText(h?.value)} disabled={readOnly} onChange={(e) => num("insured.height_in", e.target.value)} />
-        <span className="text-sm text-[var(--muted)]">in</span>
-        <input id="insured.weight_lb" type="number" inputMode="numeric" aria-label="Weight in pounds" placeholder="lb" className={cn(control, "mt-0 min-w-0 flex-1", isPrefilled(w) && PREFILL_SURFACE)} value={asText(w?.value)} disabled={readOnly} onChange={(e) => num("insured.weight_lb", e.target.value)} />
-        <span className="text-sm text-[var(--muted)]">lb</span>
+    <Field label="Height / weight" htmlFor="insured.height_ft" required={required}>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <input id="insured.height_ft" type="number" inputMode="numeric" min={3} max={8} aria-label="Height, feet" placeholder="5" className={box(isPrefilled(h))} value={feetText} disabled={readOnly} onChange={(e) => setHeight(e.target.value, inchText)} />
+        <span className={unit}>ft</span>
+        <input id="insured.height_in" type="number" inputMode="numeric" min={0} max={11} aria-label="Height, inches" placeholder="8" className={box(isPrefilled(h))} value={inchText} disabled={readOnly} onChange={(e) => setHeight(feetText, e.target.value)} />
+        <span className={unit}>in</span>
+        <input id="insured.weight_lb" type="number" inputMode="numeric" aria-label="Weight in pounds" placeholder="180" className={cn(control, "mt-0 w-24 min-w-0 text-right", isPrefilled(w) && PREFILL_SURFACE)} value={asText(w?.value)} disabled={readOnly} onChange={(e) => num("insured.weight_lb", e.target.value)} />
+        <span className={unit}>lb</span>
       </div>
-      <PrefillHint fv={hint} fieldKey={["insured.height_in", "insured.weight_lb"]} readOnly={readOnly} extra={heightIn ? `${Math.floor(heightIn / 12)}′${heightIn % 12}″` : undefined} />
+      <PrefillHint fv={hint} fieldKey={["insured.height_in", "insured.weight_lb"]} readOnly={readOnly} />
     </Field>
   );
 }

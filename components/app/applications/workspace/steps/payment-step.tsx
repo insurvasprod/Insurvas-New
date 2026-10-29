@@ -170,6 +170,16 @@ function NumberField({ id, label, fieldKey, stored, value, onChange, onLeave, er
   );
 }
 
+/** A numbered part of the section, drawn like the draft day's and the quote form's. */
+function PartHeading({ n, title }: { n: number; title: string }) {
+  return (
+    <header className="flex items-center gap-2.5">
+      <span aria-hidden="true" className="inline-grid size-6 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-xs font-bold text-[var(--accent-ink)]">{n}</span>
+      <h4 className="m-0 text-card-title text-[var(--ink)]">{title}</h4>
+    </header>
+  );
+}
+
 function PaymentStepFor() {
   const { attempt, interview, readOnly: closed, sample, updateAttempt, actions, goTo } = useWorkspace();
   const stored = attempt.payment;
@@ -368,10 +378,10 @@ function PaymentStepFor() {
   const inputs = stored?.incomeInputs ?? {};
   const num = (v: unknown) => (typeof v === "number" ? v : null);
   const text = (v: unknown) => (typeof v === "string" ? v : null);
-  // An answer like "3rd Wednesday" in the interview is a Social Security pay date: start from it.
-  const saidSocialSecurity = typeof depositAnswer === "string" && /wednesday|social security|ssdi|\b3rd\b/i.test(depositAnswer);
+  // What the client said in the interview shows as a hint over the tiles; nothing is chosen for the
+  // agent (owner 2026-10-29: no pre-selected income source).
   const draftInitial: DraftDateInitial = {
-    incomeType: (stored?.incomeType ?? (saidSocialSecurity ? "ssa" : null)) as IncomeType | null,
+    incomeType: (stored?.incomeType ?? null) as IncomeType | null,
     birthDay: num(inputs.birthDay),
     before1997: inputs.before1997 === true,
     pensionDay: num(inputs.pensionDay),
@@ -429,6 +439,8 @@ function PaymentStepFor() {
       <FoldSection heading="How they pay" done={methodSaved ? 1 : 0} total={1} complete={methodSaved} progressLabel={method ? `${METHOD_SHORT[method]} · not saved yet` : "Choose a method"} completeLabel={stored ? `Complete · ${METHOD_SHORT[stored.method]}` : "Complete"}>
         {/* Leaving a field saves what is on screen. */}
         <div className="flex flex-col gap-[18px]" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) autosave(); }}>
+          {/* Numbered like the draft day and the quote form (owner 2026-10-29): pick the method, then its details. */}
+          <PartHeading n={1} title="How do they pay?" />
           <div className="flex flex-col gap-2">
             <div id="pay.method" tabIndex={-1} role="radiogroup" aria-label="How the premium is paid" className="grid grid-cols-2 gap-2 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-3 xl:grid-cols-5">
               {PAYMENT_METHODS.map((m) => {
@@ -458,6 +470,8 @@ function PaymentStepFor() {
             {!method && <p className="text-sm text-[var(--muted)]">Choose how they&apos;ll pay.</p>}
             {notAccepted && <p className="text-xs text-[var(--warning-ink)]">{attempt.carrierName ?? "This carrier"} does not list {PAYMENT_METHOD_LABEL[method].toLowerCase()} — check the carrier&apos;s rules before submitting.</p>}
           </div>
+
+          {method && <PartHeading n={2} title={method === "ach" ? "Their bank account" : isCard ? "Their card" : "How the bill goes out"} />}
 
           {method === "ach" && (
             <div className="grid gap-4 sm:grid-cols-2">

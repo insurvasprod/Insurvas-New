@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { customerName, formatInTimezone, stateFromLeadValues, STATE_TIMEZONES } from "@/lib/callbacks/timezone";
 import { productLineLabel } from "@/lib/format/productLine";
-import { describeEmptyQueue, EMPTY_QUEUE_NORMAL, explainEmptyQueue, pickRefusalMessage, returnWindowLine, suppressionRefusal, windowOpeningCandidates, type EmptyQueueFacts, type ReturnWindow, type StateWindowRow } from "./display";
+import { describeEmptyQueue, EMPTY_QUEUE_NORMAL, explainEmptyQueue, formatUsPhone, pickRefusalMessage, returnWindowLine, suppressionRefusal, windowOpeningCandidates, type EmptyQueueFacts, type ReturnWindow, type StateWindowRow } from "./display";
 import { campaignDialRefusal, storedLitigatorRefusal } from "./dialGate";
 import { normalizeDialPhone } from "@/lib/compliance/scrub";
 import { getCallingWindows, staleRulesReason } from "@/lib/callingWindow/service";
@@ -1331,7 +1331,15 @@ export type QueuePreviewRow = {
   assignedToYou: boolean;
   /** The customer's clock now, "10:42", from the lead's state (one zone per state; see STATE_TIMEZONES). */
   localTime: string | null;
+  /** The campaign the lead came in on, so an agent working one campaign's list can see it is that list (owner 2026-10-29). */
+  campaignId: string | null;
+  campaignName: string | null;
+  /** The number that will be dialled, "(512) 555-0142", read the way the lead panel reads it. */
+  phone: string | null;
 };
+
+/** The queue list reads the preview's own ceiling (dialer_queue_preview clamps p_limit to 100). */
+export const QUEUE_PREVIEW_LIMIT = 100;
 
 export type QueuePreview = { available: true; count: number; capped: boolean; cap: number; rows: QueuePreviewRow[] } | { available: false; message: string };
 
@@ -1349,7 +1357,7 @@ export type QueuePreview = { available: true; count: number; capped: boolean; ca
  */
 export async function getQueuePreview(input: { tenantId: string; agentId: string; tiers: number[] | null; limit?: number; scope?: ProducerScope }): Promise<QueuePreview> {
   const db = getSupabaseServiceClient() as unknown as Db;
-  const limit = input.limit ?? 25;
+  const limit = Math.min(input.limit ?? QUEUE_PREVIEW_LIMIT, QUEUE_PREVIEW_LIMIT);
   const result = await db.rpc("dialer_queue_preview", { p_tenant_id: input.tenantId, p_agent_user_id: input.agentId, p_tiers: input.tiers, p_limit: input.scope ? ASSIGNED_SERVE_WINDOW : limit, p_cap: 1000 });
   if (result.error) {
     if (isPendingSchema(result.error)) return { available: false, message: "The queue list needs a database update that has not been applied yet. Serve next lead still works." };
@@ -1361,6 +1369,7 @@ export async function getQueuePreview(input: { tenantId: string; agentId: string
   const own = input.scope ? allRows.filter((row) => row.assigned_to_you === true) : allRows;
   const rows = input.scope ? own.slice(0, limit) : allRows;
   const windowFull = allRows.length >= ASSIGNED_SERVE_WINDOW && (Number(body.count ?? 0) || 0) > ASSIGNED_SERVE_WINDOW;
+  const facts = await queueLeadFacts(db, input.tenantId, rows.map((row) => text(row.lead_id)));
   return {
     available: true,
     count: input.scope ? own.length : Number(body.count ?? 0) || 0,
@@ -1369,6 +1378,7 @@ export async function getQueuePreview(input: { tenantId: string; agentId: string
     rows: rows.map((row) => {
       const state = text(row.state) || null;
       const timezone = state ? STATE_TIMEZONES[state] ?? null : null;
+      const fact = facts.get(text(row.lead_id));
       return {
         workItemId: text(row.work_item_id),
         leadId: text(row.lead_id),
@@ -1379,9 +1389,34 @@ export async function getQueuePreview(input: { tenantId: string; agentId: string
         attemptsMade: Number(row.attempts_made ?? 0) || 0,
         assignedToYou: row.assigned_to_you === true,
         localTime: timezone ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(now)) : null,
+        campaignId: fact?.campaignId ?? null,
+        campaignName: fact?.campaignName ?? null,
+        phone: fact?.phone ?? null,
       };
     }),
   };
+}
+
+/**
+ * Each listed lead's campaign and phone: one read of the leads and one of their campaigns, both
+ * filtered to the tenant (the service client has no RLS predicate), never a read per row. A failed
+ * read leaves the columns empty rather than failing the list: the queue still serves.
+ */
+async function queueLeadFacts(db: Db, tenantId: string, leadIds: string[]) {
+  const facts = new Map<string, { campaignId: string | null; campaignName: string | null; phone: string | null }>();
+  const ids = [...new Set(leadIds.filter(Boolean))];
+  if (ids.length === 0) return facts;
+  const leads = await db.from("agent_leads").select("id, campaign_id, values").eq("tenant_id", tenantId).in("id", ids);
+  const leadRows = (!leads.error && Array.isArray(leads.data) ? leads.data : []) as Row[];
+  const campaignIds = [...new Set(leadRows.map((row) => text(row.campaign_id)).filter(Boolean))];
+  const campaigns = campaignIds.length > 0 ? await db.from("tenant_campaigns").select("id, name").eq("tenant_id", tenantId).in("id", campaignIds) : null;
+  const names = new Map(((campaigns && !campaigns.error && Array.isArray(campaigns.data) ? campaigns.data : []) as Row[]).map((row) => [text(row.id), text(row.name) || null]));
+  for (const row of leadRows) {
+    const campaignId = text(row.campaign_id) || null;
+    const values = (row.values && typeof row.values === "object" ? row.values : {}) as Row;
+    facts.set(text(row.id), { campaignId, campaignName: campaignId ? names.get(campaignId) ?? null : null, phone: formatUsPhone(leadPhone(values)) || null });
+  }
+  return facts;
 }
 
 function servedView(served: Row) {

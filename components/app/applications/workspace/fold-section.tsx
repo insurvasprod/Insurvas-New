@@ -15,7 +15,13 @@ import { ChevronDown } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { cn } from "@/lib/utils";
 
-export function FoldSection({ heading, done, total, complete, keepOpen = false, unit = "answered", progressLabel, completeLabel, footer, children }: {
+export function FoldSection({ heading, done, total, complete, keepOpen = false, unit = "answered", progressLabel, completeLabel, footer, folded: foldedProp, onFoldedChange, children }: {
+  /**
+   * Controlled folding, for a section that folds whether or not it is finished (Submit's copy-assist,
+   * owner 2026-10-29): the header always toggles it, and its parent can fold it (a Next button).
+   */
+  folded?: boolean;
+  onFoldedChange?: (folded: boolean) => void;
   heading: string;
   done: number;
   total: number;
@@ -36,7 +42,9 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
   // Never fold under the agent's cursor: while they are typing in a field here, the section stays open
   // until they leave it ("Done", Enter, or a click elsewhere).
   const [typing, setTyping] = useState(false);
-  const folded = complete && !keepOpen && !reopened && !typing;
+  const controlled = foldedProp !== undefined;
+  const folded = controlled ? foldedProp : complete && !keepOpen && !reopened && !typing;
+  const foldable = controlled || complete;
   const isTyped = (el: EventTarget | null) => el instanceof HTMLElement && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !["checkbox", "radio", "button"].includes((el as HTMLInputElement).type)));
   const rows = Children.toArray(children);
   const id = `fold-${heading.toLowerCase().replace(/[^\w-]+/g, "-")}`;
@@ -65,8 +73,8 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
         type="button"
         aria-expanded={!folded}
         aria-controls={id}
-        disabled={!complete}
-        onClick={() => setReopened((r) => !r)}
+        disabled={!foldable}
+        onClick={() => (controlled ? onFoldedChange?.(!folded) : setReopened((r) => !r))}
         className={cn(
           "flex w-full items-center justify-between gap-3 rounded-[10px] px-3.5 py-2.5 text-left outline-none transition-colors duration-300 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
           complete ? "bg-[var(--primary-soft)] hover:bg-[color-mix(in_srgb,var(--primary)_18%,transparent)]" : "bg-[color-mix(in_srgb,var(--ink)_4%,transparent)]",
@@ -78,7 +86,7 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
           {complete
             ? <StatusChip tone="good" dot>{completeLabel ?? (total ? `Complete · ${done} of ${total}` : "Complete")}</StatusChip>
             : <StatusChip tone="neutral" dot>{progressLabel ?? (total ? `${done} of ${total} ${unit}` : "Nothing required")}</StatusChip>}
-          {complete && <ChevronDown aria-hidden="true" className={cn("size-4 text-[var(--muted)] transition-transform duration-300", !folded && "rotate-180")} />}
+          {foldable && <ChevronDown aria-hidden="true" className={cn("size-4 text-[var(--muted)] transition-transform duration-300", !folded && "rotate-180")} />}
         </span>
       </button>
       {/* grid-rows 1fr → 0fr animates the real height; closing waits a beat so the last answer is seen. */}

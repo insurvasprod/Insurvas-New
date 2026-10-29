@@ -5,7 +5,7 @@
  * Renamed the same day from Take a caller, Transfer check and Underwriting (owner); the `?phase=`
  * names stay as they were, so links keep working.
  */
-export const INBOUND_STEPS = ["Incoming calls", "Caller profile", "Verification", "Application", "Finish the call"] as const;
+export const INBOUND_STEPS = ["Incoming calls", "Caller Profile", "Verification", "Application", "Finish the call"] as const;
 
 /** The call page's steps, as `?phase=` names them (the application inside keeps its own `?step=`). */
 export const CALL_PHASES = ["check", "verify", "underwriting", "finish"] as const;

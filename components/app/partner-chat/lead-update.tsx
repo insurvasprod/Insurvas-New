@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Check, CheckCircle2, ChevronRight, PhoneCall, PhoneForwarded, PhoneOff, UserPlus, Zap } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { cardTitle, type PartnerMessage } from "@/lib/partnerChat/cards";
 import { LEAD_STATE_LABEL, LEAD_STEPS, leadLanes, type LeadState, type LeadStep } from "@/lib/partnerChat/leadLanes";
@@ -10,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * An automatic lead update in the thread (owner, 2026-10-28): a card of its own with room around it,
- * saying what happened and to whom. A click opens the lead — where it is now, the four steps, the
+ * saying what happened and to whom. A click opens the lead in place, under the card — where it is now, the four steps, the
  * facts (product, state, agent, outcome, how fast it was picked up) and every update about it.
  */
 
@@ -49,24 +48,25 @@ export function LeadUpdate({ message, thread }: { message: PartnerMessage; threa
         {facts && <span className="block truncate text-xs text-muted-foreground">{facts}</span>}
       </span>
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{clock(message.createdAt)}</span>
-      {clickable && <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover/update:translate-x-0.5" aria-hidden="true" />}
+      {clickable && <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-90")} aria-hidden="true" />}
     </>
   );
   return (
-    <article aria-label="Automatic update" className="my-2 max-w-[820px]">
+    <article aria-label="Automatic update" className={cn("my-2 max-w-[820px] overflow-hidden rounded-xl border bg-card transition-colors", open ? "border-[var(--border-strong)] shadow-[var(--shadow-rest)]" : "border-border")}>
       {clickable ? (
-        <button type="button" onClick={() => setOpen(true)} className="group/update flex w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 text-left shadow-[var(--shadow-rest)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-alt)]" title="Open this lead">
+        <button type="button" onClick={() => setOpen((current) => !current)} aria-expanded={open} aria-controls={`lead-update-${message.id}`} className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-alt)]" title={open ? "Hide the lead" : "Show the lead"}>
           {body}
         </button>
       ) : (
-        <div className="flex w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">{body}</div>
+        <div className="flex w-full items-center gap-3 px-3 py-2.5">{body}</div>
       )}
-      {open && <LeadDialog message={message} thread={thread} onClose={() => setOpen(false)} />}
+      {open && <LeadDetails id={`lead-update-${message.id}`} message={message} thread={thread} />}
     </article>
   );
 }
 
-function LeadDialog({ message, thread, onClose }: { message: PartnerMessage; thread: PartnerMessage[]; onClose: () => void }) {
+/** The lead, opened in place under its update (owner, 2026-10-29: no pop-up). */
+function LeadDetails({ id, message, thread }: { id: string; message: PartnerMessage; thread: PartnerMessage[] }) {
   const lane = leadLanes(thread.filter((item) => item.workItemId === message.workItemId))[0];
   const steps = lane?.steps ?? [message];
   // The newest value each fact has had across the lead's updates.
@@ -88,15 +88,11 @@ function LeadDialog({ message, thread, onClose }: { message: PartnerMessage; thr
   const connected = steps.find((step) => step.cardType === "connected");
   const sentAt = lane?.reached.new_lead ? lane.firstAt : connected && pickedUp !== undefined ? new Date(new Date(connected.createdAt).getTime() - pickedUp * 60_000).toISOString() : null;
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="gap-5">
-        <DialogHeader className="gap-1.5 pr-8 text-left">
-          <DialogTitle>{lane?.customer ?? text(message.cardPayload.customer) ?? "Lead"}</DialogTitle>
-          <DialogDescription className="flex flex-wrap items-center gap-2">
-            <StatusChip tone={STATE_TONE[state]}>{LEAD_STATE_LABEL[state]}</StatusChip>
-            {sentAt && <span>Sent {new Date(sentAt).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span>}
-          </DialogDescription>
-        </DialogHeader>
+    <div id={id} className="m-swap flex flex-col gap-4 border-t border-border px-4 pt-3 pb-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--body)]">
+          <StatusChip tone={STATE_TONE[state]}>{LEAD_STATE_LABEL[state]}</StatusChip>
+          {sentAt && <span>Sent {new Date(sentAt).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span>}
+        </div>
 
         {/* Where it is: the four steps, the failed outcome in red. */}
         <ol className="m-0 grid list-none grid-cols-4 gap-2 p-0" aria-label="Progress">
@@ -139,7 +135,6 @@ function LeadDialog({ message, thread, onClose }: { message: PartnerMessage; thr
             })}
           </ol>
         </div>
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }

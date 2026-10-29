@@ -23,6 +23,9 @@ export type PartnerMessageAttachment = {
   downloadUrl: string | null;
 };
 
+/** A chat search match (GET /api/app/partner-chat?search=): the message, and the file name when an attachment's name matched. */
+export type ChatSearchHit = { messageId: string; channelId: string; createdAt: string; createdBy: string | null; message: string; messageKind: "text" | "system_card"; cardType: string | null; fileName: string | null };
+
 export function isPartnerCardType(value: unknown): value is PartnerCardType {
   return typeof value === "string" && (PARTNER_CARD_TYPES as readonly string[]).includes(value);
 }
