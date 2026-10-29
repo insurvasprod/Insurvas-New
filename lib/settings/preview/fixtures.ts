@@ -14,6 +14,7 @@ import { CARRIER_HANDLERS } from "@/lib/settings/preview/carriers";
 import { DIALING_HANDLERS } from "@/lib/settings/preview/dialing";
 import { FORM_HANDLERS } from "@/lib/settings/preview/forms";
 import { MONEY_HANDLERS } from "@/lib/settings/preview/money";
+import { PARTNER_HANDLERS } from "@/lib/settings/preview/partners";
 
 export type PreviewState = "loaded" | "empty" | "error" | "readonly";
 export const PREVIEW_STATES: PreviewState[] = ["loaded", "empty", "error", "readonly"];
@@ -242,6 +243,16 @@ export const PREVIEW_SECTIONS = new Set([
 
 /** The sample answer for a request, or null when the preview has none (the request then goes out as usual). */
 export function previewAnswer(method: string, path: string, state: PreviewState, body: unknown): Answer | null {
-  const handler = HANDLERS[`${method.toUpperCase()} ${path}`];
-  return handler ? handler(state, body) : null;
+  const key = `${method.toUpperCase()} ${path}`;
+  const handler = HANDLERS[key];
+  if (handler) return handler(state, body);
+  // Keys with ":name" segments (the Partners pages' /api/app/partners/:id/...), matched segment by segment.
+  for (const [pattern, run] of Object.entries(PARTNER_HANDLERS)) {
+    const want = pattern.split(/[ /]/);
+    const got = key.split(/[ /]/);
+    if (want.length !== got.length) continue;
+    const params: Record<string, string> = {};
+    if (want.every((part, index) => (part.startsWith(":") ? ((params[part.slice(1)] = got[index]), true) : part === got[index]))) return run(state, body, params);
+  }
+  return null;
 }
