@@ -3722,6 +3722,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   position: relative;
   margin-left: 2.5rem !important; /* under the group's icon */
   padding-left: .7rem !important;
+  border-left: 0 !important; /* the older straight guide; the elbows replace it */
 }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li { position: relative; }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li::before {
@@ -3731,8 +3732,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   bottom: 50%;
   left: -.7rem;
   width: .55rem;
-  border-left: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
-  border-bottom: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-left: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
   border-bottom-left-radius: .45rem;
   pointer-events: none;
 }

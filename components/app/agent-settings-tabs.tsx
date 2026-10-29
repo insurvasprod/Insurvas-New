@@ -179,12 +179,22 @@ export function AgentSettingsTabs({
 
   // The open section's menu item in view inside the menu (not the page), so a section low in the
   // list, like Accounting on its own route, is visibly the current one.
+  // The item's group heading stays in view with it (owner, 2026-10-29: "Carriers" was cut off above
+  // Contracting). Re-run after the browser's own jump to the #hash, which pins the item to the top.
   useEffect(() => {
-    const nav = document.querySelector<HTMLElement>("[data-settings-rail] .portal-settings-nav");
-    const item = nav?.querySelector<HTMLElement>("[aria-current=page]");
-    if (!nav || !item) return;
-    const top = item.offsetTop - nav.offsetTop;
-    if (top < nav.scrollTop || top + item.offsetHeight > nav.scrollTop + nav.clientHeight) nav.scrollTop = top - nav.clientHeight / 3;
+    const place = () => {
+      const nav = document.querySelector<HTMLElement>("[data-settings-rail] .portal-settings-nav");
+      const item = nav?.querySelector<HTMLElement>("[aria-current=page]");
+      if (!nav || !item) return;
+      const group = item.closest<HTMLElement>(".portal-settings-nav-group") ?? item;
+      const groupTop = group.offsetTop - nav.offsetTop;
+      const itemBottom = item.offsetTop - nav.offsetTop + item.offsetHeight;
+      const fits = groupTop >= nav.scrollTop && itemBottom <= nav.scrollTop + nav.clientHeight;
+      if (!fits) nav.scrollTop = itemBottom - groupTop <= nav.clientHeight ? Math.max(0, groupTop - 4) : itemBottom - nav.clientHeight / 2;
+    };
+    place();
+    const timer = window.setTimeout(place, 120);
+    return () => window.clearTimeout(timer);
   }, [active?.id]);
 
   // After the tab has rendered (its panel may still be loading), reveal the setting search named.
