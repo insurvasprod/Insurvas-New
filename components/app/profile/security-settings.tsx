@@ -307,7 +307,7 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
                         <p className="m-0 text-[var(--body)]">Scan it with Google Authenticator, 1Password, Authy or similar. Or type this key:</p>
                         <code className="break-all rounded-md bg-[var(--surface-alt)] px-2 py-1 font-mono text-xs">{enrolment.secret}</code>
                         <Field label="The six-digit code it shows" htmlFor="security-enrol-code">
-                          <input id="security-enrol-code" className={`${control} max-w-40 font-mono tabular-nums`} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+                          <input id="security-enrol-code" className={`${control} block max-w-40 font-mono tabular-nums`} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
                         </Field>
                       </div>
                     </div>

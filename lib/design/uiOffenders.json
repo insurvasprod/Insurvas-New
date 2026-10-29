@@ -31,7 +31,6 @@
   "local-chip": {
     "components/app/confirm-email-panel.tsx": 1,
     "components/app/pipeline-views.tsx": 1,
-    "components/app/settings/business-identity.tsx": 1,
     "components/app/settings/sales/underwriting.tsx": 1,
     "components/marketing/landing-mocks.tsx": 1
   },
