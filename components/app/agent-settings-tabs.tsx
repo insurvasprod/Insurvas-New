@@ -309,7 +309,9 @@ export function AgentSettingsTabs({
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
         />
       )}
-      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[224px_minmax(0,1fr)] 2xl:grid-cols-[256px_minmax(0,1fr)]">
+      {/* In a Get set up step the menu is hidden, so the grid must drop its column too: with the
+          column kept, the whole page sat in the 224px menu track (owner, 2026-10-29). */}
+      <div className={cn("grid min-w-0 grid-cols-1 items-start gap-6", !guiding && "lg:grid-cols-[224px_minmax(0,1fr)] 2xl:grid-cols-[256px_minmax(0,1fr)]")}>
       {/* The menu is a list, not a card (no surface, border or blur). Sticky under the top bar and
           only as tall as its list, capped at the window less the top bar, this header and the page's
           padding (10.5rem), so on its own it never makes the page scroll; past that the list scrolls. */}
