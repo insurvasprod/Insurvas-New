@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, ChevronDown, Search, X } from "lucide-react";
+import {
+  ArrowUpRight, Search, X,
+  Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, Sparkles, UserRound, Users, Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
@@ -22,6 +26,42 @@ export type AgentSettingsTab = SettingsSection;
 
 /** Sections a read-only account can still act in: Billing is how the account is reactivated. */
 const READ_ONLY_EXEMPT = new Set(["billing"]);
+
+/** One icon per Settings page, so the menu reads like the app sidebar (owner's reference, 2026-10-29). */
+const SECTION_ICON: Record<string, LucideIcon> = {
+  "my-profile": UserRound,
+  "business-identity": Building2,
+  "products": Package,
+  "team-access": Users,
+  "billing": CreditCard,
+  "carriers": FileSignature,
+  "sales-extension": Puzzle,
+  "sales-underwriting": ClipboardList,
+  "sales-quotation": Calculator,
+  "sales-field-sets": ListChecks,
+  "sales-disclosures": FileText,
+  "sales-preferences": ShieldCheck,
+  "sales-welcome-pack": Mail,
+  "sales-ai": Sparkles,
+  "sales-pipeline-sync": RefreshCw,
+  "pipelines": Workflow,
+  "form-templates": LayoutTemplate,
+  "lead-posting": Send,
+  "calendar": CalendarDays,
+  "cadence": Repeat,
+  "queue-sla": PhoneIncoming,
+  "calling-windows": Clock,
+  "accounting": Landmark,
+  "retention": LifeBuoy,
+  "compliance": Scale,
+  "integrations": KeyRound,
+  "settings-history": History,
+};
+
+function SectionIcon({ id }: { id: string }) {
+  const Icon = SECTION_ICON[id];
+  return Icon ? <Icon aria-hidden="true" className="portal-settings-item-icon size-4 shrink-0" /> : null;
+}
 
 export function AgentSettingsTabs({
   tabs: registered,
@@ -86,8 +126,9 @@ export function AgentSettingsTabs({
 
   // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
   const grouped = useMemo(() => groupSections(visible), [visible]);
-  // A new Settings visit starts with every group open. Users may collapse groups independently.
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  // Groups never collapse (settings shell plan, 2026-10-29): six short groups are the map of Settings,
+  // and a chevron on each was noise. The setter stays so older reveal calls keep working.
+  const [, setCollapsedGroups] = useState<Set<string>>(() => new Set());
 
   const revealGroupForSection = useCallback((id: string) => {
     const parent = grouped.find((entry) => entry.items.some((item) => item.id === id));
@@ -99,15 +140,6 @@ export function AgentSettingsTabs({
       return next;
     });
   }, [grouped]);
-
-  function toggleGroup(group: string) {
-    setCollapsedGroups((current) => {
-      const next = new Set(current);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
-  }
 
   // Search only the settings this person can open. Results may point to a section or to one of its
   // controls; the existing hash/reveal path handles in-page destinations.
@@ -260,7 +292,7 @@ export function AgentSettingsTabs({
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
         />
       )}
-      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[232px_minmax(0,1fr)]">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[256px_minmax(0,1fr)]">
       {/* The menu is a list, not a card (no surface, border or blur). Sticky under the top bar and
           only as tall as its list, capped at the window less the top bar, this header and the page's
           padding (10.5rem), so on its own it never makes the page scroll; past that the list scrolls. */}
@@ -319,20 +351,10 @@ export function AgentSettingsTabs({
             for the whole page: the settings rail stopped responding to clicks entirely. */}
         {grouped.map(({ group, items }, index) => {
           const groupId = `settings-group-${index}`;
-          const groupOpen = !collapsedGroups.has(group);
           return (
-            <section key={`${group}-${index}`} className="portal-settings-nav-group">
-              <button
-                type="button"
-                className="portal-settings-group-toggle"
-                aria-expanded={groupOpen}
-                aria-controls={groupId}
-                onClick={() => toggleGroup(group)}
-              >
-                <span>{group}</span>
-                <ChevronDown aria-hidden="true" className={cn("portal-settings-group-chevron", groupOpen && "is-open")} />
-              </button>
-              <div id={groupId} className="portal-settings-nav-subsections" hidden={!groupOpen}>
+            <section key={`${group}-${index}`} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
+              <h2 id={`${groupId}-label`} className="portal-settings-group-label">{group}</h2>
+              <div id={groupId} className="portal-settings-nav-subsections">
                 {items.map((tab) => {
                   if (tab.route) {
                     // A section with its own route: a link to it, drawn in the same frame there
@@ -351,6 +373,7 @@ export function AgentSettingsTabs({
                           here ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]" : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
                         )}
                       >
+                        <SectionIcon id={tab.id} />
                         <span className="min-w-0 flex-grow">{tab.label}</span>
                       </Link>
                     );
@@ -376,6 +399,7 @@ export function AgentSettingsTabs({
                             : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
                       )}
                     >
+                      <SectionIcon id={tab.id} />
                       <span className="min-w-0 flex-grow">{tab.label}</span>
                       {badge && (
                         <span
