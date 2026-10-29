@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
@@ -15,7 +15,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { RebookButton } from "@/components/app/appointment-rebook";
-import { ViewTabs } from "@/components/app/view-tabs";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { MiniMonth, type YearMonth } from "@/components/app/calendar/mini-month";
 import { faceLabel } from "@/lib/appointments/appointmentFacts";
 import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type BlockRepeat, type PickerContext } from "@/lib/appointments/calendarMath";
@@ -64,8 +64,34 @@ const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "Jul
 const LIVE = new Set(["booked", "confirmed", "showed", "no_show"]);
 const STATUS_LABEL: Record<string, string> = { booked: "Booked", confirmed: "Confirmed", pending: "Awaiting close-out", showed: "Showed", no_show: "No-show", cancelled: "Cancelled", rescheduled: "Rescheduled" };
 const STATUS_TONE: Record<string, StatusTone> = { booked: "action", confirmed: "good", pending: "warning", showed: "good", no_show: "danger", cancelled: "neutral", rescheduled: "neutral" };
-/** The card reaches the bottom of the window; the grid or list scrolls inside it. */
-const FILL = "flex h-[calc(100dvh-var(--top-bar-h)-330px)] min-h-[420px] flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto";
+/**
+ * The card reaches the bottom of the window from xl, in every view; the slots or the list scroll
+ * inside it while the toolbar, the day headings and the footer stay put (owner 2026-10-28: "full
+ * height … inner scroll"). Its height is measured from where it starts (useFillHeight).
+ */
+const FILL = "flex min-h-0 flex-1 flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto";
+const FILL_H = "xl:[height:var(--fill-h)]";
+/** A week day heading: pinned to the top of the scrolling slots, on the card's own ground. */
+const WEEK_HEAD = "sticky top-0 z-10 bg-[var(--color-card)] py-2";
+/** The space the page keeps under the card (its block gap). */
+const FILL_GAP = 24;
+
+/** From the card's top to one block gap above the window's foot, re-measured as the page changes. */
+function useFillHeight() {
+  const [node, setNode] = useState<HTMLElement | null>(null);
+  const [height, setHeight] = useState(640);
+  useEffect(() => {
+    if (!node) return;
+    const fit = () => setHeight(Math.max(420, Math.floor(window.innerHeight - (node.getBoundingClientRect().top + window.scrollY) - FILL_GAP)));
+    fit();
+    // Again when something above it appears or goes (an error line) or the window changes size.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    observer?.observe(document.body);
+    window.addEventListener("resize", fit);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", fit); };
+  }, [node]);
+  return { setNode, height };
+}
 const REPEAT_LABEL: Record<string, string> = { daily: "Blocked every day", weekdays: "Blocked every weekday", weekly: "Blocked every week", yearly: "Blocked every year" };
 
 
@@ -244,7 +270,9 @@ function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFut
 
 export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   // Calendar B (owner pick 2026-10-25): the day agenda first; Week and List stay one click away.
-  const [view, setView] = useState<View>("day");
+  // Week first (owner 2026-10-28), then Day; List stays.
+  const [view, setView] = useState<View>("week");
+  const { setNode: setFillNode, height: fillHeight } = useFillHeight();
   const [showCallbacks, setShowCallbacks] = useState(true);
   const [showBlocked, setShowBlocked] = useState(true);
   const [monthShown, setMonthShown] = useState<YearMonth | null>(null);
@@ -448,8 +476,6 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   // Figures. "This week" is always the week around the anchor, whatever the view.
   const weekLive = mine.filter((item) => LIVE.has(item.status));
   const today = now == null ? null : dayOf(now, zone);
-  const todays = today ? weekLive.filter((item) => sameDay(wallClock(item.startsAtUtc, zone), today)) : [];
-  const next = now == null ? null : todays.filter((item) => Date.parse(item.startsAtUtc) >= now).sort((a, b) => a.startsAtUtc.localeCompare(b.startsAtUtc))[0] ?? null;
   const settled = lastWeek.filter((item) => item.agentUserId === selected && (item.status === "showed" || item.status === "no_show"));
   const showed = settled.filter((item) => item.status === "showed").length;
   const noShows = settled.length - showed;
@@ -532,41 +558,33 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     agenda.sort((a, b) => a.minute - b.minute);
   }
 
-  // The one line on top: what to do next in this diary.
-  const toConfirm = weekLive.filter((item) => item.status === "booked" && !item.redacted && now != null && Date.parse(item.startsAtUtc) > now && stepsFor(item).includes("confirm")).sort((a, b) => a.startsAtUtc.localeCompare(b.startsAtUtc))[0] ?? null;
-  const toRebook = weekLive.find((item) => item.status === "no_show" && !item.redacted && !item.rebookedAs) ?? null;
-  const whenLabel = (item: Appointment) => {
-    const clock = wallClock(item.startsAtUtc, zone);
-    return today && sameDay(clock, today) ? clockLabel(clock.minutes) : `${WEEKDAY_LONG[clock.weekday]} ${clockLabel(clock.minutes)}`;
-  };
   const needConfirming = weekLive.filter((item) => item.status === "booked" && now != null && Date.parse(item.startsAtUtc) > now).length;
   const freeToday = today ? [...cellsFor(today).values()].filter((cell) => cell.kind === "free" && !cell.past).length : 0;
   const busyDays = new Set(mine.filter((item) => LIVE.has(item.status)).map((item) => { const clock = wallClock(item.startsAtUtc, zone); return `${clock.year}-${clock.month}-${clock.day}`; }));
   const step = (days: number) => { if (anchor != null) { setAnchor(anchor + days * DAY_MS); setListPage(1); } };
 
   const SIDE = "m-glass rounded-xl border border-border p-4";
+  const SIDE_RULE = "border-t border-border pt-3";
   const sideLabel = "block text-xs font-semibold text-muted-foreground";
-  const nextStep = toConfirm ? (
-    <>
-      <span>Confirm <strong className="font-semibold text-[var(--ink)]">{toConfirm.customerName}</strong> before {whenLabel(toConfirm)}{toRebook ? <>, then rebook {toRebook.customerName}</> : null}.</span>
-      <Button type="button" size="sm" disabled={stepping === toConfirm.appointmentId} onClick={() => void takeStep(toConfirm, "confirm")}>{stepping === toConfirm.appointmentId ? "Saving…" : "Confirm"}</Button>
-    </>
-  ) : toRebook ? (
-    <>
-      <span><strong className="font-semibold text-[var(--ink)]">{toRebook.customerName}</strong> didn&rsquo;t show. Rebook them while the interest is warm.</span>
-      <RebookButton appointmentId={toRebook.appointmentId} agentUserId={toRebook.agentUserId} customerName={toRebook.customerName} onRebooked={() => { void load(); }} />
-    </>
-  ) : next ? (
-    <span>Nothing needs you. Next up: <strong className="font-semibold text-[var(--ink)]">{next.redacted ? "a booking" : next.customerName}</strong> at {whenLabel(next)}.</span>
-  ) : (
-    <span>Nothing booked ahead today. Pick a free stretch below to book one.</span>
-  );
 
   return (
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Calendar"
         actions={<Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>}
+      />
+      {/* The page's views, on the header's row (2026-10-28): out of the grid's toolbar, which keeps
+          only the dates, the search and Refresh. */}
+      <ViewTabs
+        label="View"
+        value={view}
+        controls="calendar-panel"
+        onChange={(nextView) => { setView(nextView); setListPage(1); }}
+        tabs={[
+          { key: "week", label: "Week" },
+          { key: "day", label: "Day" },
+          { key: "list", label: "List", count: listRows.length },
+        ]}
       />
 
       {error && (
@@ -578,8 +596,10 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
 
       {/* Calendar B (owner pick 2026-10-25): month and filters on the left, the day on the right. */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-[280px]" aria-label="Month and filters">
-          <section className={SIDE}>
+        {/* One card (2026-10-28): month, filters and figures, ruled apart, so the column is no taller
+            than the grid beside it; on a short window it scrolls on its own. */}
+        <aside className={`${SIDE} flex w-full shrink-0 flex-col gap-3 xl:max-h-[var(--fill-h)] xl:w-[280px] xl:overflow-y-auto`} style={{ "--fill-h": `${fillHeight}px` } as React.CSSProperties} aria-label="Month and filters">
+          <section>
             <MiniMonth
               shown={monthShown ?? (shownDay ? { year: shownDay.year, month: shownDay.month } : { year: 2026, month: 1 })}
               onShown={setMonthShown}
@@ -589,7 +609,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
               onPick={(day) => { setAnchor(zonedInstant(day.year, day.month, day.day, 720, zone)); setListPage(1); }}
             />
           </section>
-          <section className={`${SIDE} flex flex-col gap-3`}>
+          <section className={`${SIDE_RULE} flex flex-col gap-3`}>
             <label className="flex flex-col gap-1.5">
               <span className={sideLabel}>Calendar of</span>
               <select aria-label="Calendar of" value={agentId} onChange={(event) => { setAgentId(event.target.value); setListPage(1); }} className={toolbarControl}>
@@ -611,7 +631,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
               <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={showBlocked} onChange={(event) => setShowBlocked(event.target.checked)} className="size-4 accent-[var(--primary)]" />Blocked time</label>
             </fieldset>
           </section>
-          <section className={`${SIDE} flex flex-col gap-2`} aria-label="Calendar figures">
+          <section className={`${SIDE_RULE} flex flex-col gap-1.5`} aria-label="Calendar figures">
             <span className={sideLabel}>This week</span>
             {([
               ["Appointments", weekLive.length, ""],
@@ -629,24 +649,14 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
           </section>
         </aside>
 
+        <div ref={setFillNode} className={`flex min-h-[420px] min-w-0 flex-1 flex-col ${FILL_H}`} style={{ "--fill-h": `${fillHeight}px` } as React.CSSProperties}>
         <TableCard
-          className={`min-w-0 flex-1 ${view === "day" ? "" : FILL}`}
+          className={FILL}
           toolbar={
             <DataToolbar
               actions={<>
                 {filtered && <ClearFiltersButton onClick={clearFilters} />}
                 <RefreshButton onClick={refresh} refreshing={loading} />
-                <ViewTabs
-                  label="View"
-                  value={view}
-                  controls="calendar-panel"
-                  onChange={(nextView) => { setView(nextView); setListPage(1); }}
-                  tabs={[
-                    { key: "day", label: "Day" },
-                    { key: "week", label: "Week" },
-                    { key: "list", label: "List", count: listRows.length },
-                  ]}
-                />
               </>}
             >
               <span className="inline-flex items-center gap-1.5">
@@ -681,14 +691,6 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
             <div className="p-4"><EmptyState title={`No working hours for ${agentName}`} hint="Set hours to open bookable slots." action={<Button asChild variant="outline"><Link href="/app/settings#calendar">Set calendar &amp; availability</Link></Button>} /></div>
           ) : (
             <>
-              <div className="px-4 pt-4 pb-2">
-                <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-[var(--surface-alt)] px-4 py-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-[var(--accent-ink)]"><ArrowRight className="size-4" aria-hidden="true" /></span>
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-sm text-[var(--body)]">
-                    <span className="flex flex-col"><span className="text-xs font-semibold text-[var(--accent-ink)]">Next step</span>{nextStep}</span>
-                  </div>
-                </div>
-              </div>
               {agenda.length === 0
                 ? <p className="m-0 px-5 py-6 text-sm text-muted-foreground">Nothing on this day.</p>
                 : <ol className="m-0 list-none p-0">{agenda.map((row) => <AgendaLine key={`${row.kind}:${row.minute}:${row.kind === "appointment" ? row.item.appointmentId : row.kind === "callback" ? row.callback.id : ""}`} row={row} zone={zone} slotLength={slotLength} highlightId={highlightId} steps={row.kind === "appointment" ? stepsFor(row.item) : []} stepping={stepping} isFuture={(iso) => now != null && Date.parse(iso) > now} onStep={(item, chosen) => void takeStep(item, chosen)} onBook={(startIso) => setBooking({ agentUserId: selected, startIso })} onRebooked={() => { void load(); }} />)}</ol>}
@@ -707,12 +709,13 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
               />
             ) : (
               <div className="grid min-w-[720px] gap-2" style={{ gridTemplateColumns: `78px repeat(${days.length}, minmax(0, 1fr))` }}>
-                <span />
+                {/* The day headings stay at the top while the slots scroll under them. */}
+                <span className={WEEK_HEAD} />
                 {days.map((day) => {
                   const isToday = Boolean(today && sameDay(day, today));
                   const isPast = Boolean(today && !isToday && dateKey(day) < dateKey(today));
                   return (
-                    <span key={dateKey(day)} className={`flex items-center gap-2 pb-1 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] ${isToday ? "text-[var(--accent-ink)]" : isPast ? "text-muted-foreground opacity-70" : "text-foreground"}`}>
+                    <span key={dateKey(day)} className={`${WEEK_HEAD} flex items-center gap-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] ${isToday ? "text-[var(--accent-ink)]" : isPast ? "text-muted-foreground opacity-70" : "text-foreground"}`}>
                       {WEEKDAY[day.weekday]} {day.day}
                       {isToday && <span className="rounded-full bg-[var(--primary-soft)] px-2 py-px text-xs font-semibold normal-case tracking-normal text-[var(--accent-ink)]">Today</span>}
                     </span>
@@ -832,6 +835,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
         )}
         </div>
         </TableCard>
+        </div>
       </div>
 
       {booking && context && (

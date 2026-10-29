@@ -1,13 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, ChevronLeft } from "lucide-react";
+import { ArrowRight, ChevronLeft, Columns3, Download, ShieldCheck } from "lucide-react";
 
 import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadListClaimButton } from "@/components/app/lead-list-claim-button";
 import { TabbedPanels } from "@/components/app/lead-ops-view-tabs";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
-import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
 import { Meter, StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 import { EmptyState } from "@/components/ui/page-states";
@@ -22,6 +21,10 @@ import { StatusChip } from "@/components/ui/status-chip";
  * p-app-lead-list-detail. Rendered on the server: nothing here changes without a new read, and
  * every action is a place to go (export, edit the mapping), not a state to hold — except assigning,
  * whose drawer (lead-list-assign-drawer) is the one client island and refreshes the page when done.
+ *
+ * Its sections are exported one by one: the Lists step opens the same list in a side panel
+ * (lead-list-panel.tsx, owner 2026-10-29) and composes them there, so nothing is drawn twice. No
+ * server-only import may land here for that reason; the data arrives as props.
  */
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -121,7 +124,7 @@ function statesLine(groups: PoolBlockers["groups"], limit = 4) {
   return sorted.length > limit ? `${shown} · +${sorted.length - limit} more` : shown;
 }
 
-function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: PoolBlockers): ReactNode {
+function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: PoolBlockers, scrubFix: ReactNode = null): ReactNode {
   const states = statesLine(groups);
   const link = "font-semibold text-foreground underline underline-offset-2";
   switch (blocker) {
@@ -132,6 +135,8 @@ function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: Po
         pool.campaign.status && pool.campaign.status !== "active" ? `is ${pool.campaign.status}` : null,
         pool.campaign.scrubStatus !== "scrubbed" ? "has not been scrubbed" : null,
       ].filter(Boolean).join(" and ") || "is not servable";
+      // In the Lists panel the scrub runs right here (scrubFix); the list's own page sends you to it.
+      if (scrubFix && pool.campaign.scrubStatus !== "scrubbed") return <span className="flex flex-col items-start gap-2">This list {why}, so Serve next hands out none of it.{scrubFix}</span>;
       return <>This list {why}, so Serve next hands out none of it. Change it on <Link href="/app/campaigns" className={link}>Vendors &amp; campaigns</Link>.</>;
     }
     case "no_agent":
@@ -167,7 +172,7 @@ function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: Po
   }
 }
 
-function PoolBlockersCard({ pool }: { pool: PoolBlockers }) {
+export function PoolBlockersCard({ pool, scrubFix = null }: { pool: PoolBlockers; scrubFix?: ReactNode }) {
   const byBlocker = new Map<PoolBlocker, PoolBlockers["groups"]>();
   for (const group of pool.groups) byBlocker.set(group.blocker, [...(byBlocker.get(group.blocker) ?? []), group]);
   const rows = BLOCKER_ORDER.filter((blocker) => byBlocker.has(blocker)).map((blocker) => {
@@ -198,11 +203,401 @@ function PoolBlockersCard({ pool }: { pool: PoolBlockers }) {
                 </span>
               </td>
               <td className={cn("text-right font-semibold tabular-nums", row.blocker !== "ready" && row.blocker !== "waiting" && "text-[var(--error-ink)]")}>{count(row.leads)}</td>
-              <td className="text-[var(--body)]">{unblocks(row.blocker, row.groups, pool)}</td>
+              <td className="text-[var(--body)]">{unblocks(row.blocker, row.groups, pool, scrubFix)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+    </TableCard>
+  );
+}
+
+/**
+ * The figures one detail read gives both the list's page and the Lists panel (lead-list-panel.tsx),
+ * so the two never count a list differently.
+ */
+export function listFigures(d: LeadListDetail) {
+  const removed = d.removals.reduce((sum, row) => sum + row.rows, 0);
+  const claimableCents = d.removals.reduce((sum, row) => sum + (row.claimableCents ?? 0), 0);
+  // Rows a later re-scrub found stay "removed" but are never claimable (20260925707900).
+  const claimableRows = d.removals.reduce((sum, row) => sum + (row.claimableCents != null ? row.claimableRows : 0), 0);
+  const windowOpen = d.returnDaysLeft == null || d.returnDaysLeft > 0;
+  const netSpend = d.totalSpendCents - d.creditsReceivedCents;
+  const exportHref = `/api/app/vendor-returns/import-removals?campaign_id=${d.campaignId}`;
+  // What each usable record costs once the credit still being argued lands: net spend less that
+  // credit, over the same usable rows. Not "back to the invoice price" — rows on your own list are
+  // never credited, so the two only meet when every removal is creditable.
+  const postCreditCents = d.recordsUsable > 0 ? (netSpend - d.claims.pendingCents) / d.recordsUsable : null;
+  return { removed, claimableCents, claimableRows, windowOpen, netSpend, exportHref, postCreditCents, unassigned: Math.max(0, d.leadsReceived - d.assigned) };
+}
+
+/** Two decimals, as every figure on the list is drawn. */
+export const listMoney = money;
+
+/** "Vendor · Product · $1,750.00 for 5,000 records, imported 18 August" */
+export function listSubtitle(d: LeadListDetail, timeZone: string | null, spend = true) {
+  return [
+    d.vendorName,
+    d.productName ?? d.productCode,
+    // A list nothing was paid for (your own book) says only when it arrived, not "$0.00 for 0 records".
+    d.recordsPurchased === 0 && d.totalSpendCents === 0
+      ? (d.firstImportAt ? `imported ${longDay(d.firstImportAt, timeZone)}` : "nothing imported yet")
+      : `${spend ? `${money(d.totalSpendCents)} for ` : ""}${count(d.recordsPurchased)} records${d.firstImportAt ? `, imported ${longDay(d.firstImportAt, timeZone)}` : ", nothing imported yet"}`,
+  ].filter(Boolean).join(" · ");
+}
+
+/**
+ * What each removal reason asks of you (owner 2026-10-29: "help the user create faster solutions"):
+ * the vendor's defects are claimed back, the do-not-call hits are already kept off the dialer, and a
+ * repeat inside the file was merged at import.
+ */
+const REMOVAL_FIX: Record<RemovalReason, { state: string; tone: "good" | "neutral"; tip: string }> = {
+  tcpa_litigator: { state: "Blocked from dialing", tone: "good", tip: "A known TCPA plaintiff. Never dialed; the vendor owes credit for the row." },
+  dnc: { state: "Kept off the dialer", tone: "good", tip: "On a federal or state do-not-call list. Never dialed; the vendor owes credit for selling it." },
+  internal_dnc: { state: "Kept off the dialer", tone: "good", tip: "On your own do-not-call list. Never dialed. Your list, so not the vendor's to credit." },
+  invalid: { state: "Not a working number", tone: "neutral", tip: "Invalid or disconnected. Nobody could dial it; the vendor owes credit for the row." },
+  duplicate_in_file: { state: "Already merged", tone: "good", tip: "The same number twice in one file, merged at import: nothing to do. The vendor charged for both, so the repeat is creditable." },
+  suppressed: { state: "Kept off the dialer", tone: "good", tip: "Suppressed after import. Never dialed." },
+};
+
+/** Where the removed rows went, and the quickest thing to do about each reason. */
+export function RemovalsCard({ detail: d, money: canSeeMoney, claim }: {
+  detail: LeadListDetail;
+  money: boolean;
+  /** Per-reason "Claim credit" in the Lists panel; without it the list's page refreshes after a claim. */
+  claim?: { blocked: string | null; onDone?: () => void };
+}) {
+  const { removed, claimableCents, windowOpen, exportHref, postCreditCents } = listFigures(d);
+  const rows = d.removals.filter((row) => row.rows > 0);
+  const closingSoon = d.returnDaysLeft != null && d.returnDaysLeft > 0 && d.returnDaysLeft <= 3;
+  const daysLeft = d.returnDaysLeft == null ? null : windowOpen ? `${d.returnDaysLeft} ${d.returnDaysLeft === 1 ? "day" : "days"} left` : "window closed";
+
+  if (!d.firstImportAt) {
+    return (
+      <TableCard title="Removed at import">
+        <EmptyState
+          title="Nothing imported yet"
+          hint="Import a file against this list to see what the scrub removes."
+          action={<Button asChild type="button" variant="outline"><Link href={importHref(d)}>Import a list</Link></Button>}
+        />
+      </TableCard>
+    );
+  }
+  if (rows.length === 0) {
+    // One clean state, not a table of zeros. An unscrubbed list has not been checked yet, which is
+    // not the same as clean.
+    const checked = d.scrubStatus === "scrubbed";
+    return (
+      <TableCard title="Removed at import">
+        <EmptyState
+          title={checked ? "Nothing was removed from this list" : "Not scrubbed yet"}
+          hint={checked ? (d.recordsUsable > 0 ? `All ${count(d.recordsUsable)} rows passed the scrub.` : "Every row passed the scrub.") : "Run the scrub to see what it removes."}
+        />
+      </TableCard>
+    );
+  }
+
+  return (
+    <TableCard
+      title={`${count(removed)} ${removed === 1 ? "row" : "rows"} removed at import`}
+      action={
+        canSeeMoney && claimableCents > 0 ? (
+          <StatusChip tone={!windowOpen ? "neutral" : closingSoon ? "warning" : "good"}>
+            {money(claimableCents)} {windowOpen ? "claimable" : "creditable"}{daysLeft && ` · ${daysLeft}`}
+          </StatusChip>
+        ) : undefined
+      }
+      footer={
+        canSeeMoney && d.costPerRecordCents != null && d.costPerUsableCents != null ? (
+          <span>
+            Each usable record cost <strong className="text-foreground">{perRecord(d.costPerUsableCents)}</strong>, not {perRecord(d.costPerRecordCents)}
+            {postCreditCents != null && d.claims.pendingCents > 0
+              ? <> · <strong className="text-foreground">{perRecord(postCreditCents)}</strong> if the {money(d.claims.pendingCents)} still claimable is credited</>
+              : null}
+          </span>
+        ) : undefined
+      }
+    >
+      <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
+        <thead>
+          <tr>
+            <th>Reason</th>
+            <th className="w-[74px] text-right">Rows</th>
+            {canSeeMoney && <th className="w-[100px] text-right">Claimable</th>}
+            <th className="w-[300px] text-right">Next step</th>
+          </tr>
+        </thead>
+        <tbody className="m-seq">
+          {rows.map((row) => {
+            const ui = REMOVAL[row.reason];
+            const fix = REMOVAL_FIX[row.reason];
+            const creditable = row.claimableCents != null;
+            const canClaim = canSeeMoney && creditable && d.claims.supported && row.unclaimedRows > 0 && windowOpen;
+            const onClaim = creditable && d.claims.supported && row.claimableRows > 0 && row.unclaimedRows === 0 && windowOpen;
+            // Your own list and later suppressions are exported whole; the vendor's defects as the claimable rows.
+            const exportRows = row.reason === "internal_dnc" || row.reason === "suppressed" ? row.rows : row.claimableRows;
+            return (
+              <tr key={row.reason} className="m-row">
+                <td>
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
+                    <span className={cn("size-[7px] shrink-0 rounded-full", ui.tone === "danger" ? "bg-[var(--error)]" : "bg-[var(--muted-foreground)]")} aria-hidden="true" />
+                    {ui.label}
+                  </span>
+                  {row.rescrubRows > 0 && <span className="block text-xs text-[var(--muted)]">{count(row.rescrubRows)} found by a later re-scrub · not claimable</span>}
+                </td>
+                <td className="text-right tabular-nums">{count(row.rows)}</td>
+                {canSeeMoney && <td className="text-right tabular-nums">{row.claimableCents == null ? "—" : money(row.claimableCents)}</td>}
+                <td>
+                  <span className="flex flex-wrap items-center justify-end gap-2">
+                    {canClaim ? (
+                      <LeadListClaimButton
+                        campaignId={d.campaignId}
+                        reason={row.reason}
+                        rows={row.unclaimedRows}
+                        amount={money(Math.round(row.unclaimedRows * (d.costPerRecordCents ?? 0)))}
+                        blocked={claim?.blocked ?? null}
+                        onDone={claim?.onDone}
+                        label={`Claim credit · ${count(row.unclaimedRows)}`}
+                        size="sm"
+                      />
+                    ) : onClaim ? (
+                      <StatusChip tone="info">On a claim</StatusChip>
+                    ) : canSeeMoney && (row.reason === "tcpa_litigator" || row.reason === "invalid") && row.claimableRows > 0 && !windowOpen ? (
+                      // The do-not-call and repeat rows keep saying what happened to them; these two
+                      // only had a claim to offer, and it has run out.
+                      <StatusChip tone="neutral">Window closed</StatusChip>
+                    ) : (
+                      <StatusChip tone={fix.tone}>{fix.state}</StatusChip>
+                    )}
+                    {canSeeMoney && exportRows > 0 && (
+                      <Button asChild type="button" variant="ghost" size="sm">
+                        <a href={`${exportHref}&reason=${row.reason}`} download aria-label={`Export the ${count(exportRows)} ${ui.label} rows`}>
+                          <Download aria-hidden="true" />Export
+                        </a>
+                      </Button>
+                    )}
+                    <InfoTip label={`About ${ui.label}`} side="left">{fix.tip}</InfoTip>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        {rows.length > 1 && (
+          <tfoot>
+            <tr className="bg-[var(--surface-alt)] text-sm font-semibold text-foreground [&>td]:border-t [&>td]:border-[var(--border-strong)] [&>td]:px-3 [&>td]:py-2.5">
+              <td>{count(d.recordsUsable)} usable · {count(removed)} removed</td>
+              <td className="text-right tabular-nums">{count(removed)}</td>
+              {canSeeMoney && <td className="text-right tabular-nums">{money(claimableCents)}</td>}
+              <td />
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </TableCard>
+  );
+}
+
+/** The import that opens with this list (and its vendor) already chosen, as Source's "Import its list". */
+const importHref = (d: LeadListDetail) => `/app/import?campaign=${d.campaignId}`;
+
+/**
+ * The vendor's saved column map: which of their headers became which field, so their next file
+ * imports without mapping again.
+ */
+export function MappingCard({ detail: d }: { detail: LeadListDetail }) {
+  const mapped = d.mapping.rows.filter((row) => row.field).length;
+  const tip = <InfoTip label="About the column map">Remembered per vendor and product. Their next file maps itself on import.</InfoTip>;
+  if (d.mapping.rows.length === 0) {
+    return (
+      <TableCard>
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--surface-alt)] text-muted-foreground"><Columns3 className="size-4" aria-hidden="true" /></span>
+          <span className="inline-flex min-w-0 flex-1 items-center gap-0.5 text-sm font-semibold text-foreground">No column map saved for {d.vendorName}{tip}</span>
+          <Button asChild type="button" variant="outline" size="sm"><Link href={importHref(d)}>Map on next import</Link></Button>
+        </div>
+      </TableCard>
+    );
+  }
+  return (
+    <PagedTableCard
+      total={d.mapping.rows.length}
+      noun="columns"
+      title="Column map"
+      action={
+        <>
+          <StatusChip tone="good">{count(mapped)} of {count(d.mapping.rows.length)} mapped · {d.vendorName}</StatusChip>
+          {tip}
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link href={importHref(d)}>Edit on next import</Link>
+          </Button>
+        </>
+      }
+    >
+      <table className="portal-lead-table w-full min-w-[480px]! text-left text-sm">
+        <thead>
+          <tr>
+            <th className="w-[200px]">Their column</th>
+            <th className="w-[28px]"><span className="sr-only">becomes</span></th>
+            <th>Your field</th>
+            <th className="w-[180px]">Sample</th>
+          </tr>
+        </thead>
+        <PagedBody className="m-seq">
+          {d.mapping.rows.map((row) => (
+            <tr key={row.header} className="m-row">
+              <td className="font-semibold">{row.header}</td>
+              <td className="text-muted-foreground"><ArrowRight className="size-3.5" aria-hidden="true" /></td>
+              <td>{row.field ? row.fieldLabel : <span className="text-muted-foreground">Ignored</span>}</td>
+              <td className="max-w-[180px] truncate text-muted-foreground" title={row.sample || undefined}>{row.sample || "—"}</td>
+            </tr>
+          ))}
+        </PagedBody>
+      </table>
+    </PagedTableCard>
+  );
+}
+
+/** What the list cost per record bought, per record usable, and per policy it turned into. */
+export function ListEconomics({ detail: d, money: canSeeMoney, spend = true }: {
+  detail: LeadListDetail;
+  money: boolean;
+  /** May this person see what the list cost (owner, producer)? An assistant sees the inventory only. */
+  spend?: boolean;
+}) {
+  const { netSpend } = listFigures(d);
+  const contactRate = d.dialed > 0 ? (100 * d.contacted) / d.dialed : null;
+  if (!spend) {
+    return (
+      <StatStrip label="List figures">
+        <StatTile label="Records bought" value={count(d.recordsPurchased)} footnote={`${count(d.recordsUsable)} usable after scrub`} />
+        <StatTile
+          label="Contact rate"
+          value={contactRate == null ? "—" : `${contactRate.toFixed(1)}%`}
+          valueTone={contactRate == null ? undefined : "good"}
+          footnote={d.dialed > 0 ? `${count(d.contacted)} of ${count(d.dialed)} dialed` : "nobody dialed yet"}
+        />
+      </StatStrip>
+    );
+  }
+  return (
+    <StatStrip label="List economics">
+      <StatTile label="Paid per record" value={perRecord(d.costPerRecordCents)} footnote={`${wholeMoney(d.totalSpendCents)} / ${count(d.recordsPurchased)} rows`} />
+      <StatTile
+        label="Cost per usable record"
+        value={perRecord(d.costPerUsableCents)}
+        valueTone="primary"
+        footnote={
+          <span className="inline-flex items-center gap-0.5">
+            {`${wholeMoney(netSpend)} / ${count(d.recordsUsable)} after scrub`}
+            <InfoTip label="About cost per usable record">Net spend over the rows that survived the scrub. From {REPEATS_COUNTED_FROM}, a number repeated inside a file counts as removed.</InfoTip>
+          </span>
+        }
+      />
+      <StatTile
+        label="Contact rate"
+        value={contactRate == null ? "—" : `${contactRate.toFixed(1)}%`}
+        valueTone={contactRate == null ? undefined : "good"}
+        footnote={d.dialed > 0 ? `${count(d.contacted)} of ${count(d.dialed)} dialed` : "nobody dialed yet"}
+      />
+      <StatTile
+        label="Issued"
+        value={d.outcome ? count(d.outcome.issued) : "—"}
+        valueTone={d.outcome ? "good" : undefined}
+        footnote={d.outcome ? `of ${count(d.outcome.applications)} applications` : canSeeMoney ? "scorecard unavailable" : "needs True CPA"}
+      />
+      <StatTile
+        label="Cost per issued policy"
+        value={d.outcome?.costPerIssuedCents != null ? money(d.outcome.costPerIssuedCents) : "—"}
+        valueTone={d.outcome?.costPerIssuedCents != null ? "primary" : undefined}
+        reserveFootnote
+      />
+    </StatStrip>
+  );
+}
+
+/** How far the list is worked through, as five meters. */
+export function ListHealthCard({ detail: d }: { detail: LeadListDetail }) {
+  return (
+    <TableCard title="List health">
+      <div className="px-4 pb-1.5">
+        <HealthRow label="Dialed at least once" value={d.dialed} of={d.leadsReceived} tone="info" />
+        <HealthRow label="Never dialed" value={d.neverDialed} of={d.leadsReceived} tone="warning" />
+        <HealthRow label="Stuck outside their window" value={d.outsideWindow} of={d.leadsReceived} tone={d.outsideWindow ? "warning" : "good"} />
+        <HealthRow label={`Exhausted at ${(d.attemptCeilings ?? [d.attemptCeiling]).join(" or ")} attempts`} value={d.exhausted} of={d.leadsReceived} tone="neutral" />
+        <HealthRow label="Contacted" value={d.contacted} of={d.leadsReceived} tone="good" />
+      </div>
+    </TableCard>
+  );
+}
+
+/**
+ * Consent proof: the TrustedForm / Jornaya certificates that show each person agreed to be called,
+ * which is what you produce when a lead complains. A meter coloured by how much of the list is
+ * covered, the gap with its export, and the vendor's own rate across everything it sold.
+ */
+export function ConsentCard({ detail: d, timeZone, exportHref = null }: {
+  detail: LeadListDetail;
+  timeZone: string | null;
+  /** "Export missing": the leads with no certificate, as a CSV. Null hides it (no consent locker). */
+  exportHref?: string | null;
+}) {
+  const total = d.leadsReceived;
+  const proof = d.consent.supplied;
+  const missing = Math.max(0, total - proof);
+  const share = total > 0 ? proof / total : null;
+  const tone: MeterTone = share == null ? "neutral" : share >= 0.9 ? "good" : share >= 0.5 ? "warning" : "danger";
+  const ink = tone === "good" ? "text-[var(--success-ink)]" : tone === "warning" ? "text-[var(--warning-ink)]" : tone === "danger" ? "text-[var(--error-ink)]" : "text-foreground";
+  const vendorRate = d.consent.vendorRatePct;
+  return (
+    <TableCard
+      title="Consent proof"
+      action={<InfoTip label="About consent proof" side="left">A TrustedForm or Jornaya certificate shows the person agreed to be called. Keep one for every lead you dial: it is your answer to a TCPA complaint.</InfoTip>}
+    >
+      <div className="flex flex-col gap-3 border-t border-border px-4 py-4">
+        {total === 0 ? (
+          <p className="text-sm text-muted-foreground">No leads have arrived yet.</p>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <ShieldCheck className={cn("size-4 shrink-0", ink)} aria-hidden="true" />
+              <span className={cn("shrink-0 text-sm font-semibold tabular-nums", ink)}>{count(proof)} of {count(total)} have proof</span>
+              <Meter value={proof} max={total} tone={tone} label={`Consent proof: ${proof} of ${total} leads`} className="h-1.5 flex-1 bg-[var(--border)] [&>span]:h-1.5" />
+            </div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Missing</dt>
+                <dd className={cn("mt-0.5 flex flex-wrap items-center gap-2 text-sm font-semibold tabular-nums", missing > 0 ? "text-[var(--error-ink)]" : "text-foreground")}>
+                  {count(missing)}
+                  {missing > 0 && exportHref && (
+                    <Button asChild type="button" variant="ghost" size="sm">
+                      <a href={exportHref} download aria-label={`Export the ${count(missing)} leads with no consent proof`}><Download aria-hidden="true" />Export missing</a>
+                    </Button>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">TrustedForm</dt>
+                <dd className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{count(d.consent.trustedForm)}</dd>
+              </div>
+              <div>
+                <dt className="inline-flex items-center gap-0.5 text-xs font-semibold text-muted-foreground">
+                  Oldest certificate
+                  <InfoTip label="About the oldest certificate">When the earliest certificate on this list was captured.</InfoTip>
+                </dt>
+                <dd className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{d.consent.oldestCapturedAt ? fullDay(d.consent.oldestCapturedAt, timeZone) : "—"}</dd>
+              </div>
+              <div>
+                <dt className="inline-flex items-center gap-0.5 text-xs font-semibold text-muted-foreground">
+                  Vendor rate
+                  <InfoTip label="About the vendor's consent rate">Share of every lead {d.vendorName} sold you that came with a certificate.</InfoTip>
+                </dt>
+                <dd className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{vendorRate == null ? "—" : `${vendorRate.toFixed(1)}%`}</dd>
+              </div>
+            </dl>
+          </>
+        )}
+      </div>
     </TableCard>
   );
 }
@@ -223,19 +618,7 @@ export function LeadListDetailView({
   claimBlocked?: string | null;
 }) {
   const d = detail;
-  const unassigned = Math.max(0, d.leadsReceived - d.assigned);
-  const removed = d.removals.reduce((sum, row) => sum + row.rows, 0);
-  const claimableCents = d.removals.reduce((sum, row) => sum + (row.claimableCents ?? 0), 0);
-  // Rows a later re-scrub found stay "removed" but are never claimable (20260925707900).
-  const claimableRows = d.removals.reduce((sum, row) => sum + (row.claimableCents != null ? row.claimableRows : 0), 0);
-  const windowOpen = d.returnDaysLeft == null || d.returnDaysLeft > 0;
-  const netSpend = d.totalSpendCents - d.creditsReceivedCents;
-  const contactRate = d.dialed > 0 ? (100 * d.contacted) / d.dialed : null;
-  const exportHref = `/api/app/vendor-returns/import-removals?campaign_id=${d.campaignId}`;
-  // What each usable record costs once the credit still being argued lands: net spend less that
-  // credit, over the same usable rows. Not "back to the invoice price" — rows on your own list are
-  // never credited, so the two only meet when every removal is creditable.
-  const postCreditCents = d.recordsUsable > 0 ? (netSpend - d.claims.pendingCents) / d.recordsUsable : null;
+  const { removed, claimableRows, exportHref, unassigned } = listFigures(d);
 
   const canClaim = canSeeMoney && d.claims.supported && d.claims.unclaimedRows > 0 && !claimBlocked;
   const canAssign = assign.manager && d.assignable > 0 && !assign.blocked;
@@ -251,125 +634,6 @@ export function LeadListDetailView({
             ? { text: <>{count(d.poolBlockers.total)} leads in the pool are not being served. The <strong className="font-semibold text-[var(--ink)]">Not being served</strong> tab says what unblocks each.</>, action: null }
             : null;
 
-  const subtitle = [
-    d.vendorName,
-    d.productName ?? d.productCode,
-    `${money(d.totalSpendCents)} for ${count(d.recordsPurchased)} records${d.firstImportAt ? `, imported ${longDay(d.firstImportAt, timeZone)}` : ", nothing imported yet"}`,
-  ].filter(Boolean).join(" · ");
-
-  const removalsCard = (
-    <TableCard
-      title={`Where the ${count(removed)} went`}
-      action={
-        claimableCents > 0 ? (
-          <StatusChip tone={windowOpen ? "good" : "neutral"}>
-            {money(claimableCents)} claimable
-            {d.returnDaysLeft != null && ` · ${windowOpen ? `${d.returnDaysLeft} ${d.returnDaysLeft === 1 ? "day" : "days"} left` : "window closed"}`}
-          </StatusChip>
-        ) : undefined
-      }
-      footer={
-        removed > 0 && d.costPerRecordCents != null && d.costPerUsableCents != null ? (
-          <span>
-            Each usable record cost <strong className="text-foreground">{perRecord(d.costPerUsableCents)}</strong>, not {perRecord(d.costPerRecordCents)}
-            {postCreditCents != null && d.claims.pendingCents > 0
-              ? <> · <strong className="text-foreground">{perRecord(postCreditCents)}</strong> if the {money(d.claims.pendingCents)} still claimable is credited</>
-              : null}
-          </span>
-        ) : undefined
-      }
-    >
-      {/* The reasons are always listed (zeros included), so the empty case is a list with no file yet. */}
-      {!d.firstImportAt ? (
-        <EmptyState
-          title="Nothing imported yet"
-          hint="Import a file against this list to see what the scrub removes."
-          action={<Button asChild type="button" variant="outline"><Link href="/app/import">Import a list</Link></Button>}
-        />
-      ) : (
-      <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
-        <thead>
-          <tr>
-            <th>Removed at import</th>
-            <th className="w-[140px]">Outcome</th>
-            <th className="w-[74px] text-right">Rows</th>
-            <th className="w-[100px] text-right">Claimable</th>
-            <th className="w-[100px] text-right"><span className="sr-only">Claim</span></th>
-          </tr>
-        </thead>
-        <tbody className="m-seq">
-          {d.removals.map((row) => {
-            const ui = REMOVAL[row.reason];
-            return (
-              <tr key={row.reason} className="m-row">
-                <td>{ui.label}{row.rescrubRows > 0 && <span className="block text-xs text-[var(--muted)]">{count(row.rescrubRows)} found by a later re-scrub · not claimable</span>}</td>
-                <td><StatusChip tone={ui.tone}>{ui.chip}</StatusChip></td>
-                <td className="text-right tabular-nums">{count(row.rows)}</td>
-                <td className="text-right tabular-nums">{row.claimableCents == null ? "—" : money(row.claimableCents)}</td>
-                <td className="text-right">
-                  {canSeeMoney && row.claimableCents != null && row.claimableRows > 0 && windowOpen && (
-                    <LinkArrow href={`${exportHref}&reason=${row.reason}`} download aria-label={`Claim: download the ${row.claimableRows} ${ui.label} rows for the vendor`}>Claim</LinkArrow>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr className="bg-[var(--surface-alt)] text-sm font-semibold text-foreground [&>td]:border-t [&>td]:border-[var(--border-strong)] [&>td]:px-3 [&>td]:py-2.5">
-            <td>{count(d.recordsUsable)} usable + {count(removed)} removed</td>
-            <td />
-            <td className="text-right tabular-nums">{count(d.recordsUsable + removed)}</td>
-            <td className="text-right tabular-nums">{money(claimableCents)}</td>
-            <td />
-          </tr>
-        </tfoot>
-      </table>
-      )}
-    </TableCard>
-  );
-
-  const mappingCard = (
-    <PagedTableCard
-      total={d.mapping.rows.length}
-      noun="columns"
-      title="Column mapping"
-      action={
-        <>
-          {d.mapping.saved && <StatusChip tone="good">Saved for {d.vendorName}</StatusChip>}
-          <Button asChild type="button" variant="outline">
-            <Link href="/app/import">Edit mapping</Link>
-          </Button>
-        </>
-      }
-    >
-      {d.mapping.rows.length > 0 ? (
-        <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
-          <thead>
-            <tr>
-              <th className="w-[190px]">Their header</th>
-              <th>Our field</th>
-              <th className="w-[200px]">Sample</th>
-              <th className="w-[110px]"><span className="sr-only">Status</span></th>
-            </tr>
-          </thead>
-          <PagedBody className="m-seq">
-            {d.mapping.rows.map((row) => (
-              <tr key={row.header} className="m-row">
-                <td>{row.header}</td>
-                <td>{row.fieldLabel ?? "— not mapped"}</td>
-                <td className="max-w-[200px] truncate" title={row.sample || undefined}>{row.sample || <span className="text-muted-foreground">—</span>}</td>
-                <td>{row.field ? <StatusChip tone="good" dot>Remembered</StatusChip> : <StatusChip tone="neutral" dot>Ignored</StatusChip>}</td>
-              </tr>
-            ))}
-          </PagedBody>
-        </table>
-      ) : (
-        <EmptyState title={`No mapping saved for ${d.vendorName}`} hint="Save one on your next import from this vendor." />
-      )}
-    </PagedTableCard>
-  );
-
   return (
     // 2026-10-26: a list's page on the moving ribbon, like Lead sources it opens from.
     <>
@@ -383,7 +647,7 @@ export function LeadListDetailView({
       </Link>
       <PageHeader
         title={d.campaignName}
-        description={subtitle}
+        description={listSubtitle(d, timeZone, assign.manager)}
         actions={
           <>
             {canSeeMoney && d.claims.supported && d.claims.unclaimedRows > 0 && (
@@ -416,38 +680,7 @@ export function LeadListDetailView({
         <p id="assign-blocked" role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">{assign.blocked}</p>
       )}
 
-      <StatStrip label="List economics">
-        <StatTile label="Paid per record" value={perRecord(d.costPerRecordCents)} footnote={`${wholeMoney(d.totalSpendCents)} / ${count(d.recordsPurchased)} rows`} />
-        <StatTile
-          label="Cost per usable record"
-          value={perRecord(d.costPerUsableCents)}
-          valueTone="primary"
-          footnote={
-            <span className="inline-flex items-center gap-0.5">
-              {`${wholeMoney(netSpend)} / ${count(d.recordsUsable)} after scrub`}
-              <InfoTip label="About cost per usable record">Net spend over the rows that survived the scrub. From {REPEATS_COUNTED_FROM}, a number repeated inside a file counts as removed.</InfoTip>
-            </span>
-          }
-        />
-        <StatTile
-          label="Contact rate"
-          value={contactRate == null ? "—" : `${contactRate.toFixed(1)}%`}
-          valueTone={contactRate == null ? undefined : "good"}
-          footnote={d.dialed > 0 ? `${count(d.contacted)} of ${count(d.dialed)} dialed` : "nobody dialed yet"}
-        />
-        <StatTile
-          label="Issued"
-          value={d.outcome ? count(d.outcome.issued) : "—"}
-          valueTone={d.outcome ? "good" : undefined}
-          footnote={d.outcome ? `of ${count(d.outcome.applications)} applications` : canSeeMoney ? "scorecard unavailable" : "needs True CPA"}
-        />
-        <StatTile
-          label="Cost per issued policy"
-          value={d.outcome?.costPerIssuedCents != null ? money(d.outcome.costPerIssuedCents) : "—"}
-          valueTone={d.outcome?.costPerIssuedCents != null ? "primary" : undefined}
-          reserveFootnote
-        />
-      </StatStrip>
+      <ListEconomics detail={d} money={canSeeMoney} spend={assign.manager} />
 
       {nextStep && (
         <section aria-label="Next step" className="m-glass flex flex-wrap items-center gap-4 rounded-xl border border-border px-4 py-3">
@@ -464,40 +697,17 @@ export function LeadListDetailView({
           <TabbedPanels
             label="List sections"
             tabs={[
-              { key: "removals", label: "Removed at import", count: removed, panel: removalsCard },
+              { key: "removals", label: "Removed at import", count: removed, panel: <RemovalsCard detail={d} money={canSeeMoney} /> },
               ...(d.poolBlockers && d.poolBlockers.total > 0
                 ? [{ key: "pool", label: "Not being served", count: d.poolBlockers.total, panel: <PoolBlockersCard pool={d.poolBlockers} /> }]
                 : []),
-              { key: "mapping", label: "Column mapping", count: d.mapping.rows.length, panel: mappingCard },
+              { key: "mapping", label: "Column map", count: d.mapping.rows.length, panel: <MappingCard detail={d} /> },
             ]}
           />
         </div>
         <div className="flex w-full shrink-0 flex-col gap-6 xl:w-[420px]">
-          <TableCard title="List health">
-            <div className="px-4 pb-1.5">
-              <HealthRow label="Dialed at least once" value={d.dialed} of={d.leadsReceived} tone="info" />
-              <HealthRow label="Never dialed" value={d.neverDialed} of={d.leadsReceived} tone="warning" />
-              <HealthRow label="Stuck outside their window" value={d.outsideWindow} of={d.leadsReceived} tone={d.outsideWindow ? "warning" : "good"} />
-              <HealthRow label={`Exhausted at ${(d.attemptCeilings ?? [d.attemptCeiling]).join(" or ")} attempts`} value={d.exhausted} of={d.leadsReceived} tone="neutral" />
-              <HealthRow label="Contacted" value={d.contacted} of={d.leadsReceived} tone="good" />
-            </div>
-          </TableCard>
-
-          <TableCard title="Consent artefacts">
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border px-4 py-4">
-              {[
-                ["TrustedForm present", `${count(d.consent.trustedForm)} of ${count(d.leadsReceived)}`],
-                ["Missing", count(Math.max(0, d.leadsReceived - d.consent.supplied))],
-                ["Oldest certificate", d.consent.oldestCapturedAt ? fullDay(d.consent.oldestCapturedAt, timeZone) : "—"],
-                ["Vendor signal", d.leadsReceived > 0 ? `${((100 * d.consent.supplied) / d.leadsReceived).toFixed(1)}% supplied` : "—"],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</dt>
-                  <dd className="mt-1 text-sm font-semibold tabular-nums leading-normal tracking-[-0.02em] text-foreground">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </TableCard>
+          <ListHealthCard detail={d} />
+          <ConsentCard detail={d} timeZone={timeZone} />
         </div>
       </div>
     </div>

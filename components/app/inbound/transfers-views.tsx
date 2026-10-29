@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
+import { useSolo } from "@/components/app/solo-context";
 
 /**
  * Team's two views (Inbound A, 2026-10-27; was the Queue/Floor switch): Now (who needs you, the
@@ -8,6 +9,9 @@ import { cn } from "@/lib/utils";
  * filters, lost-transfer recovery) at /app/inbound/team?tab=all. Agents work on Inbound itself.
  */
 export function TeamViews({ current }: { current: "now" | "all" }) {
+  // Solo mode: there is no Now (the team) to switch to, so no switch at all.
+  const solo = useSolo();
+  if (solo) return null;
   const views = [
     { key: "now", label: "Now", href: "/app/inbound/team" },
     { key: "all", label: "All callers", href: "/app/inbound/team?tab=all" },

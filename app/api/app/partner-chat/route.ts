@@ -4,13 +4,28 @@ import { z } from "zod";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { audit } from "@/lib/audit/log";
 import { getPartnerChannelFacts } from "@/lib/partnerChat/partnerFacts";
-import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, createAgentChannel, getAgentChatChannels, getAgentChatDirectory, markChannelRead, markPartnerChatRead, postChannelText, postPartnerText, setAgentChannelArchived, type ChatAttachmentInput } from "@/lib/partnerChat/service";
+import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, addChannelMembers, createAgentChannel, getAgentChatChannels, getAgentChatDirectory, markChannelRead, markPartnerChatRead, postChannelText, postPartnerText, removeChannelMember, renameChannel, setAgentChannelArchived, setChannelMember, setConversationState, type ChatAttachmentInput } from "@/lib/partnerChat/service";
+import { GroupsNotLiveError } from "@/lib/partnerChat/groups";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
 
 const roles = ["owner", "producer"] as const;
 const messageSchema = z.object({ channel_id: z.string().uuid().optional(), partner_id: z.string().uuid().optional(), message: z.string().trim().min(1).max(2000), mentions: z.array(z.string().uuid()).max(20).optional() }).strict().refine((value) => Boolean(value.channel_id || value.partner_id), { message: "Choose a chat channel" });
-const createSchema = z.object({ action: z.literal("create_channel"), channel_type: z.enum(["direct", "group"]), name: z.string().trim().max(160).optional(), user_ids: z.array(z.string().uuid()).min(1).max(50) }).strict();
+const stateSchema = z.object({ channel_id: z.string().uuid(), pinned: z.boolean().optional(), archived: z.boolean().optional(), deleted: z.literal(true).optional() }).strict();
+const groupSchema = z.object({
+  action: z.enum(["add_members", "remove_member", "set_member", "rename_channel"]),
+  channel_id: z.string().uuid(),
+  user_ids: z.array(z.string().uuid()).min(1).max(50).optional(),
+  user_id: z.string().uuid().optional(),
+  role: z.enum(["admin", "member", "viewer"]).optional(),
+  can_add_members: z.boolean().optional(),
+  name: z.string().trim().min(1).max(160).optional(),
+}).strict()
+  .refine((value) => value.action !== "add_members" || Boolean(value.user_ids?.length), { message: "Choose who to add" })
+  .refine((value) => (value.action !== "remove_member" && value.action !== "set_member") || Boolean(value.user_id), { message: "Choose a member" })
+  .refine((value) => value.action !== "set_member" || Boolean(value.role), { message: "Choose a role" })
+  .refine((value) => value.action !== "rename_channel" || Boolean(value.name), { message: "Give the group a name" });
+const createSchema =z.object({ action: z.literal("create_channel"), channel_type: z.enum(["direct", "group"]), name: z.string().trim().max(160).optional(), user_ids: z.array(z.string().uuid()).min(1).max(50) }).strict();
 
 async function readInput(request: NextRequest) {
   if (request.headers.get("content-type")?.startsWith("multipart/form-data")) {
@@ -75,6 +90,30 @@ export async function POST(request: NextRequest) {
       await audit({ actorType: "tenant", actorId: auth.context.userId, action: archived ? "tenant.partner_chat_channel_archived" : "tenant.partner_chat_channel_restored", targetType: "partner_channel", targetId: channel.id, metadata: { channelType: channel.channel_type }, request });
       return NextResponse.json({ channel });
     } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not change the channel" }, { status: 400 }); }
+  }
+  // Each person's own pin, archive and delete (owner, 2026-10-28): nobody else's list changes.
+  if (input.action === "conversation_state") {
+    const parsedState = stateSchema.safeParse({ channel_id: input.channel_id, pinned: input.pinned, archived: input.archived, deleted: input.deleted });
+    if (!parsedState.success) return NextResponse.json({ error: "Choose a valid conversation" }, { status: 400 });
+    try {
+      await setConversationState({ tenantId: auth.context.tenantId, userId: auth.context.userId, channelId: parsedState.data.channel_id, pinned: parsedState.data.pinned, archived: parsedState.data.archived, deleted: parsedState.data.deleted });
+      return NextResponse.json({ ok: true });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not change the conversation" }, { status: error instanceof GroupsNotLiveError ? 503 : 400 }); }
+  }
+  // Group membership: add, remove (or leave), change a role, rename. The rules are lib/partnerChat/groupRules.ts.
+  if (input.action === "add_members" || input.action === "remove_member" || input.action === "set_member" || input.action === "rename_channel") {
+    const parsedGroup = groupSchema.safeParse({ action: input.action, channel_id: input.channel_id, user_ids: input.user_ids, user_id: input.user_id, role: input.role, can_add_members: input.can_add_members, name: input.name });
+    if (!parsedGroup.success) return NextResponse.json({ error: parsedGroup.error.issues[0]?.message ?? "Write a valid group change" }, { status: 400 });
+    const g = parsedGroup.data;
+    const base = { tenantId: auth.context.tenantId, userId: auth.context.userId, channelId: g.channel_id };
+    try {
+      if (g.action === "add_members") await addChannelMembers({ ...base, userIds: g.user_ids ?? [], role: g.role });
+      else if (g.action === "remove_member") await removeChannelMember({ ...base, memberId: g.user_id ?? "" });
+      else if (g.action === "set_member") await setChannelMember({ ...base, memberId: g.user_id ?? "", role: g.role ?? "member", canAddMembers: g.can_add_members ?? false });
+      else await renameChannel({ ...base, name: g.name ?? "" });
+      await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_chat_group_changed", targetType: "partner_channel", targetId: g.channel_id, metadata: { change: g.action, role: g.role ?? null, count: g.user_ids?.length ?? (g.user_id ? 1 : 0) }, request });
+      return NextResponse.json({ ok: true });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not change the group" }, { status: error instanceof GroupsNotLiveError ? 503 : 400 }); }
   }
   const rawMessage = typeof input.message === "string" ? input.message.trim() : "";
   const attachmentMessage = input.attachments.length === 1 ? "Shared an attachment" : input.attachments.length > 1 ? `Shared ${input.attachments.length} attachments` : "";

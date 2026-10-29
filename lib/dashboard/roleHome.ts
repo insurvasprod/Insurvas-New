@@ -312,12 +312,14 @@ export type TodayReads = { dialing: boolean; policies: boolean; inbound: boolean
 export type HomePlan = { code: string | null; features: readonly string[]; disabled?: readonly string[] };
 
 /** The path of the first menu entry in `opens` that this person's menu holds, or null. */
-export function firstOpenable(opens: Opens, granted: Iterable<string>, role: TenantRole): string | null {
+export function firstOpenable(opens: Opens, granted: Iterable<string>, role: TenantRole, solo = false): string | null {
   const features = new Set(granted);
   const items = allMenuItems();
   for (const key of opens) {
     const entry = items.find((item) => item.key === key);
     if (!entry || !entry.built) continue;
+    // Solo mode (lib/tenantTeam/solo.ts): a team-only page is not in this person's menu.
+    if (solo && entry.teamOnly) continue;
     if (entry.required_feature && !features.has(entry.required_feature)) continue;
     if (entry.required_roles && !entry.required_roles.includes(role)) continue;
     return entry.path;
@@ -336,10 +338,10 @@ const DIALING_FIGURES: ReadonlySet<HomeFigureKey> = new Set(["dials", "reached",
  * `plan` is the raw plan (before kill switches): it picks the dashboard profile and decides the
  * upgrade tile. `granted` stays the effective list every link is gated by.
  */
-export function resolveRoleHome(granted: Iterable<string>, role: TenantRole, plan?: HomePlan | null): ResolvedHome {
+export function resolveRoleHome(granted: Iterable<string>, role: TenantRole, plan?: HomePlan | null, options: { solo?: boolean } = {}): ResolvedHome {
   const features = [...granted];
   const layout = ROLE_HOMES[role];
-  const open = (opens: Opens) => firstOpenable(opens, features, role);
+  const open = (opens: Opens) => firstOpenable(opens, features, role, options.solo === true);
   const profile = dashboardProfile(plan, role);
   const moneyProfile = DASHBOARD_PROFILES[profile];
 

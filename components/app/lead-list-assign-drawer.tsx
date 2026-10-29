@@ -1,118 +1,186 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { ScrollText, X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
-import { SectionLoading } from "@/components/ui/page-states";
-import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
+import { Meter, type MeterTone } from "@/components/ui/stat";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { Segmented } from "@/components/ui/view-tabs";
 import { Callout, control } from "@/components/app/settings/primitives";
-import { LICENCE_WARNING_DAYS, LIST_CHANGED_MESSAGE, daysUntil, lapseDay, ownerWhy, shortDate, type LeadListAssignMode, type LeadListAssignmentPreview, type LicenceExpiry } from "@/lib/assignment/constants";
+import { LICENCE_WARNING_DAYS, LIST_CHANGED_MESSAGE, daysUntil, lapseDay, shortDate, type LeadListAssignmentPreview, type LeadListOwnerRow, type LicenceExpiry } from "@/lib/assignment/constants";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 /**
- * "Assign N leads" — the board's p-ov-assign-drawer. Opens from a lead list's page and moves every
- * unowned pool lead in the list in ONE transaction (assign_lead_list, 20260924342000): all the
- * routable ones, or none. What the table shows is not an estimate: it is the real router run over
- * every one of those leads and rolled back (assign_lead_list_preview), and the commit refuses if the
- * number it would move is not the number shown here.
+ * "Assign N leads" — the board's p-ov-assign-drawer. Opens from a lead list and moves every unowned
+ * pool lead in the list in ONE transaction (assign_lead_list, 20260924342000): all the routable
+ * ones, or none. What it shows is not an estimate: it is the real router run over every one of those
+ * leads and rolled back (assign_lead_list_preview), and the commit refuses if the number it would
+ * move is not the number shown here.
+ *
+ * Owner 2026-10-29: two ways in — "By the rules" (the published chain) or "Pick leads myself" (the
+ * one-by-one picker, shown here in place) — and the preview as people, each with what they get, why,
+ * and how full they are, with an at-capacity agent's ceiling raised right here (the Route step's own
+ * PATCH /api/app/assignments, same owner/producer gate).
+ *
+ * Speed (same day): the preview runs about 10 ms per lead in the database, but the drawer used to ask
+ * for it only once the list's panel had loaded AND the drawer had opened, then read the whole routing
+ * workspace again for the roster. The preview is now cached per list for a short while and started
+ * by the panel as soon as it opens on an assignment (prefetchListPreview); the roster comes in from
+ * the Lists step, which already holds it.
  *
  * Built on the Radix Dialog primitive directly (focus trap, Escape, focus back to the trigger)
  * because the shared DialogContent is centred and this is a right-hand drawer.
  */
 
-type Member = { id: string; name: string; role: string; status: string; capacity: number; currentOpen: number; licenceExpiring?: LicenceExpiry[] };
+export type AssignDrawerMember = { id: string; name: string; role: string; status?: string; capacity: number; currentOpen: number; licenceExpiring?: LicenceExpiry[] };
 
-const MODE_LABEL: Record<LeadListAssignMode, string> = {
-  chain: "The published rule chain",
-  owner: "One owner",
-  // The board says "across a team"; there are no teams, so the choice is of members.
-  round_robin: "Round robin across members",
-};
+type Way = "rules" | "pick";
 
 const count = (value: number) => value.toLocaleString("en-US");
 const leads = (value: number) => `${count(value)} ${value === 1 ? "lead" : "leads"}`;
-const REASON_MAX = 500;
+
+// ── the preview, cached per list ──────────────────────────────────────────────────────────────────
+
+type PreviewResult =
+  | { ok: true; preview: LeadListAssignmentPreview }
+  | { ok: false; message: string; pending: boolean; tooSlow: boolean };
+
+/** A preview this young is shown as is; the commit still refuses a count that moved (409 list_changed). */
+const PREVIEW_TTL_MS = 30_000;
+const previews = new Map<string, { at: number; promise: Promise<PreviewResult> }>();
+
+async function readPreview(campaignId: string): Promise<PreviewResult> {
+  const params = new URLSearchParams({ view: "list_preview", campaign_id: campaignId, mode: "chain" });
+  try {
+    const response = await fetch(`/api/app/assignments?${params}`, { cache: "no-store" });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return {
+        ok: false,
+        message: body?.error ?? "Could not work out who would get these leads.",
+        pending: response.status === 503,
+        tooSlow: body?.code === "list_too_slow",
+      };
+    }
+    return { ok: true, preview: body.preview as LeadListAssignmentPreview };
+  } catch {
+    return { ok: false, message: "Could not reach the server to preview this assignment.", pending: false, tooSlow: false };
+  }
+}
+
+/**
+ * Starts (or reuses) the rule-chain preview for a list. The Lists panel calls it the moment it opens
+ * on an assignment, in parallel with its own read, so the drawer usually opens on a finished answer.
+ * A failed preview is not kept.
+ */
+export function prefetchListPreview(campaignId: string, fresh = false): Promise<PreviewResult> {
+  const held = previews.get(campaignId);
+  if (!fresh && held && Date.now() - held.at < PREVIEW_TTL_MS) return held.promise;
+  const promise = readPreview(campaignId).then((result) => {
+    if (!result.ok && previews.get(campaignId)?.promise === promise) previews.delete(campaignId);
+    return result;
+  });
+  previews.set(campaignId, { at: Date.now(), promise });
+  return promise;
+}
+
+/** After anything that changes who would get what: the next open runs the router again. */
+export function forgetListPreview(campaignId: string) {
+  previews.delete(campaignId);
+}
+
+// ── why a person gets what they get, as short chips ───────────────────────────────────────────────
+
+const RULE_CHIP: Record<string, string> = {
+  fallback: "Fallback rule",
+  state: "State rule",
+  campaign: "List rule",
+  language: "Language rule",
+  product: "Product rule",
+  realtime: "Real-time rule",
+  roster: "No rule matched",
+  manual: "Chosen",
+};
+
+function whyChips(row: LeadListOwnerRow): Array<{ label: string; tone: StatusTone }> {
+  const chips: Array<{ label: string; tone: StatusTone }> = [];
+  for (const type of row.rule_types ?? []) chips.push({ label: RULE_CHIP[type] ?? "Rule", tone: "info" });
+  if (row.capacity_skips > 0) chips.push({ label: row.gets > 0 ? `Full after ${count(row.gets)}` : "At capacity", tone: "warning" });
+  if (row.gets === 0 && row.capacity_skips === 0) chips.push({ label: "None they can take", tone: "neutral" });
+  return chips;
+}
 
 type PreviewState =
-  | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; preview: LeadListAssignmentPreview }
-  | { status: "error"; message: string; pending: boolean };
+  | { status: "error"; message: string; pending: boolean; tooSlow: boolean };
 
-export function LeadListAssignDrawer({ campaignId, listName, assignable }: { campaignId: string; listName: string; assignable: number }) {
+export function LeadListAssignDrawer({ campaignId, listName, assignable, defaultOpen = false, onDone, members: givenMembers, picker }: {
+  campaignId: string;
+  listName: string;
+  assignable: number;
+  /** Open on mount: a Lists row's "Assign" lands in the list's panel with the drawer already up. */
+  defaultOpen?: boolean;
+  /** After a commit, instead of refreshing the route (the Lists panel reloads its own data). */
+  onDone?: () => void;
+  /** The roster with capacities, when the page already holds it (the Lists step); read here otherwise. */
+  members?: AssignDrawerMember[] | null;
+  /** "Pick leads myself": the one-by-one picker, shown in place. Without it, a link to the Lists step. */
+  picker?: ReactNode;
+}) {
   const router = useRouter();
   const ids = useId();
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<LeadListAssignMode>("chain");
-  const [owner, setOwner] = useState("");
-  const [rotation, setRotation] = useState<string[]>([]);
-  const [reason, setReason] = useState("");
-  const [reasonTouched, setReasonTouched] = useState(false);
-  const [members, setMembers] = useState<Member[] | null>(null);
-  const [membersError, setMembersError] = useState("");
-  const [state, setState] = useState<PreviewState>({ status: "idle" });
+  const [open, setOpen] = useState(defaultOpen);
+  const [way, setWay] = useState<Way>("rules");
+  const [fetchedMembers, setFetchedMembers] = useState<AssignDrawerMember[] | null>(null);
+  const [state, setState] = useState<PreviewState>({ status: "loading" });
   const [changed, setChanged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [commitError, setCommitError] = useState("");
+  // Capacities raised here, over what the roster said, until the page reads it again.
+  const [raised, setRaised] = useState<Record<string, number>>({});
   const request = useRef(0);
 
-  const userIds = useMemo(() => (mode === "owner" ? (owner ? [owner] : []) : mode === "round_robin" ? rotation : []), [mode, owner, rotation]);
-  const needsPeople = mode !== "chain" && userIds.length === 0;
+  const members = (givenMembers ?? fetchedMembers)?.filter((member) => !member.status || member.status === "active") ?? null;
 
-  const loadPreview = useCallback(async () => {
+  const loadPreview = useCallback(async (fresh = false) => {
     const ticket = ++request.current;
-    if (needsPeople) { setState({ status: "idle" }); return; }
     setState({ status: "loading" });
-    const params = new URLSearchParams({ view: "list_preview", campaign_id: campaignId, mode });
-    if (userIds.length) params.set("user_ids", userIds.join(","));
-    try {
-      const response = await fetch(`/api/app/assignments?${params}`, { cache: "no-store" });
-      const body = await response.json().catch(() => null);
-      if (ticket !== request.current) return;
-      if (!response.ok) {
-        setState({ status: "error", message: body?.error ?? "Could not work out who would get these leads.", pending: response.status === 503 });
-        return;
-      }
-      setState({ status: "ready", preview: body.preview as LeadListAssignmentPreview });
-    } catch {
-      if (ticket === request.current) setState({ status: "error", message: "Could not reach the server to preview this assignment.", pending: false });
-    }
-  }, [campaignId, mode, needsPeople, userIds]);
+    const result = await prefetchListPreview(campaignId, fresh);
+    if (ticket !== request.current) return;
+    setState(result.ok ? { status: "ready", preview: result.preview } : { status: "error", message: result.message, pending: result.pending, tooSlow: result.tooSlow });
+  }, [campaignId]);
 
-  // The roster, with how full each person is, from the same read the Lead assignment page uses.
+  // The roster, only when the page did not hand it in (the list's own page).
   useEffect(() => {
-    if (!open || members) return;
+    if (!open || givenMembers || fetchedMembers) return;
     let live = true;
     fetch("/api/app/assignments", { cache: "no-store" })
-      .then(async (response) => ({ ok: response.ok, body: await response.json().catch(() => null) }))
-      .then(({ ok, body }) => {
-        if (!live) return;
-        if (!ok) { setMembersError(body?.error ?? "Could not load the members who can take leads."); return; }
-        setMembers(((body?.members ?? []) as Member[]).filter((member) => member.status === "active"));
-      })
-      .catch(() => { if (live) setMembersError("Could not load the members who can take leads."); });
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((body) => { if (live && body) setFetchedMembers((body.members ?? []) as AssignDrawerMember[]); })
+      .catch(() => undefined);
     return () => { live = false; };
-  }, [open, members]);
+  }, [open, givenMembers, fetchedMembers]);
 
   useEffect(() => {
-    if (!open) return;
-    // Asynchronous: the state it sets lands after the fetch, not during this effect.
+    if (!open || way !== "rules") return;
+    // Asynchronous: the state it sets lands after the (usually already cached) read, not during this effect.
     const timer = window.setTimeout(() => { void loadPreview(); }, 0);
     return () => window.clearTimeout(timer);
-  }, [open, loadPreview]);
+  }, [open, way, loadPreview]);
 
   function reset() {
     request.current += 1;
-    setState({ status: "idle" });
+    setState({ status: "loading" });
     setChanged(false);
     setCommitError("");
-    setReasonTouched(false);
+    setWay("rules");
   }
 
   function onOpenChange(next: boolean) {
@@ -126,27 +194,22 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
   const total = preview?.total ?? assignable;
   const routable = preview?.routable ?? 0;
   const nobody = preview?.nobody_count ?? 0;
-  const trimmedReason = reason.trim();
-  const reasonMissing = mode !== "chain" && trimmedReason.length === 0;
-  const capacitySkips = preview?.per_owner.some((row) => row.capacity_skips > 0) ?? false;
+  const memberById = new Map((members ?? []).map((member) => [member.id, member]));
   // Owners who would get leads in a state where their own licence lapses within the warning window:
   // those leads go back to the pool on the day it lapses (20260925702200).
   const lapsing = (preview?.per_owner ?? []).flatMap((row) => {
     if (row.gets === 0) return [];
-    const member = (members ?? []).find((item) => item.id === row.user_id);
-    return (member?.licenceExpiring ?? [])
+    return (memberById.get(row.user_id)?.licenceExpiring ?? [])
       .filter((entry) => row.states.includes(entry.state) && daysUntil(entry.expiresOn) >= 0 && daysUntil(entry.expiresOn) <= LICENCE_WARNING_DAYS)
       .map((entry) => ({ name: row.name, entry }));
   });
 
   const blockedBy =
     busy ? "Assigning…"
-      : needsPeople ? (mode === "owner" ? "Choose the owner first." : "Choose at least one member first.")
-        : state.status === "loading" || state.status === "idle" ? "Waiting for the preview."
-          : state.status === "error" ? "The preview did not run, so there is nothing to confirm."
-            : routable === 0 ? "None of these leads can be assigned right now."
-              : reasonMissing ? "Give a reason for overriding the rule chain."
-                : null;
+      : state.status === "loading" ? "Waiting for the preview."
+        : state.status === "error" ? "The preview did not run, so there is nothing to confirm."
+          : routable === 0 ? "Nobody can take these leads right now."
+            : null;
 
   async function commit() {
     if (blockedBy || !preview) return;
@@ -156,13 +219,13 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
       const response = await fetch("/api/app/assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "assign_list", campaignId, mode, userIds, reason: mode === "chain" ? null : trimmedReason, expected: preview.routable }),
+        body: JSON.stringify({ action: "assign_list", campaignId, mode: "chain", userIds: [], reason: null, expected: preview.routable }),
       });
       const body = await response.json().catch(() => null);
       if (response.status === 409 && body?.code === "list_changed") {
         setBusy(false);
         setChanged(true);
-        await loadPreview();
+        await loadPreview(true);
         return;
       }
       if (!response.ok) {
@@ -170,18 +233,25 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
         setCommitError(body?.error ?? "Could not assign the list.");
         return;
       }
+      forgetListPreview(campaignId);
       const moved = typeof body?.routable === "number" ? body.routable : preview.routable;
       const left = typeof body?.nobody_count === "number" ? body.nobody_count : 0;
       notify.done(`${leads(moved)} assigned`, left ? { detail: `${leads(left)} stay unassigned in the pool.` } : undefined);
       setBusy(false);
       setOpen(false);
       reset();
-      setReason("");
-      router.refresh();
+      if (onDone) onDone(); else router.refresh();
     } catch {
       setBusy(false);
       setCommitError("Could not reach the server. Nothing was assigned.");
     }
+  }
+
+  /** A ceiling raised here: the router runs again with it. */
+  async function capacityRaised(userId: string, capacity: number) {
+    setRaised((current) => ({ ...current, [userId]: capacity }));
+    setChanged(false);
+    await loadPreview(true);
   }
 
   function nobodySummary(p: LeadListAssignmentPreview) {
@@ -192,24 +262,23 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
     return `${listed}${more}.${detail ? ` ${detail}` : ""}`;
   }
 
-  const modeId = `${ids}-mode`;
-  const ownerId = `${ids}-owner`;
-  const reasonId = `${ids}-reason`;
   const whyId = `${ids}-why`;
+  const pickHere = way === "pick" && Boolean(picker);
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Trigger asChild>
-        <Button type="button">Assign the {count(assignable)}</Button>
+        <Button type="button" onPointerEnter={() => void prefetchListPreview(campaignId)} onFocus={() => void prefetchListPreview(campaignId)}>Assign the {count(assignable)}</Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(10,12,16,0.55)] transition-opacity duration-200 starting:opacity-0" />
         <DialogPrimitive.Content
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col overflow-hidden border-l border-[var(--border-strong)] bg-[var(--surface)] shadow-[-24px_0_64px_rgba(0,0,0,0.24)] outline-none sm:w-[600px]",
+            "fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col overflow-hidden border-l border-[var(--border-strong)] bg-[var(--surface)] shadow-[-24px_0_64px_rgba(0,0,0,0.24)] outline-none",
+            pickHere ? "sm:w-[min(980px,94vw)]" : "sm:w-[600px]",
             // Slides in from the right. @starting-style, so no keyframes are needed; the global
             // reduced-motion rule cuts the transition to nothing.
-            "transition-transform duration-[260ms] ease-[cubic-bezier(.16,1,.3,1)] starting:translate-x-full motion-reduce:transition-none",
+            "transition-[transform,width] duration-[260ms] ease-[cubic-bezier(.16,1,.3,1)] starting:translate-x-full motion-reduce:transition-none",
           )}
         >
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px]">
@@ -221,214 +290,135 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                 {listName} · the usable remainder
               </DialogPrimitive.Description>
             </div>
-            <div className="flex items-center gap-3.5">
-              <DialogPrimitive.Close asChild>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  disabled={busy}
-                  className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--muted)] hover:bg-[var(--surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <X className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
-                </button>
-              </DialogPrimitive.Close>
-            </div>
+            <DialogPrimitive.Close asChild>
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={busy}
+                className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--muted)] hover:bg-[var(--surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
+              </button>
+            </DialogPrimitive.Close>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto p-[22px]">
-            <div className="block">
-              <span className="inline-flex items-center gap-0.5">
-                <label htmlFor={modeId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Assign by</label>
-                <InfoTip label="About the rule chain" side="right">The chain is what Assign next follows. Choosing anything else here applies to this assignment only.</InfoTip>
-              </span>
-              <select id={modeId} className={control} value={mode} disabled={busy} onChange={(event) => { setMode(event.target.value as LeadListAssignMode); setChanged(false); setCommitError(""); }}>
-                {(Object.keys(MODE_LABEL) as LeadListAssignMode[]).map((value) => <option key={value} value={value}>{MODE_LABEL[value]}</option>)}
-              </select>
-              {/* The board said "what the dialer already follows"; the dialer serves what is assigned
-                  and follows no rules. Assign next is what walks the chain (the InfoTip above). */}
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-[22px]">
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented
+                label="How to assign"
+                options={[{ key: "rules", label: "By the rules" }, { key: "pick", label: "Pick leads myself" }]}
+                value={way}
+                onChange={(next: Way) => { if (!busy) { setWay(next); setCommitError(""); } }}
+              />
+              {way === "rules" && <InfoTip label="About the rules" side="right">The published rule chain on Lead routing, exactly as Assign next follows it, over every lead in the pool.</InfoTip>}
             </div>
 
-            {mode !== "chain" && (
+            {way === "pick" ? (
+              picker ?? (
+                <p className="text-sm text-[var(--body)]">
+                  <Link href={`/app/lead-lists#${campaignId}`} className="font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">Open the picker</Link> on Lead sources › Lists.
+                </p>
+              )
+            ) : (
               <>
-                {membersError ? (
-                  <Callout tone="error" title="Could not load the members">{membersError}</Callout>
-                ) : mode === "owner" ? (
-                  <div className="block">
-                    <label htmlFor={ownerId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Owner</label>
-                    <select id={ownerId} className={control} value={owner} disabled={busy || !members} onChange={(event) => { setOwner(event.target.value); setChanged(false); }}>
-                      <option value="">Choose a member…</option>
-                      {(members ?? []).map((member) => (
-                        <option key={member.id} value={member.id}>{member.name} · {count(member.currentOpen)} of {count(member.capacity)} open</option>
+                {changed && <Callout tone="warning" title={LIST_CHANGED_MESSAGE}>Nothing was assigned. The numbers below are from a fresh run.</Callout>}
+
+                <section aria-label="Who gets what" aria-busy={state.status === "loading"} className="flex flex-col gap-2">
+                  {state.status === "loading" ? (
+                    <>
+                      {[0, 1, 2].map((index) => (
+                        <div key={index} className="flex items-center gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2.5" aria-hidden="true">
+                          <span className="m-skel block size-8 shrink-0 rounded-full" />
+                          <span className="flex flex-1 flex-col gap-1.5"><span className="m-skel block h-[14px] w-32 rounded" /><span className="m-skel block h-[5px] w-full rounded" /></span>
+                          <span className="m-skel block h-[14px] w-12 rounded" />
+                        </div>
                       ))}
-                    </select>
-                  </div>
-                ) : (
-                  <fieldset className="m-0 min-w-0 border-0 p-0">
-                    <legend className="p-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Members, in turn</legend>
-                    {!members ? (
-                      <div className="mt-1.5 rounded-[8px] border border-[var(--border-strong)]"><SectionLoading rows={3} columns={2} label="Loading members" /></div>
-                    ) : members.length === 0 ? (
-                      <p className="mt-1.5 text-sm leading-[1.5] text-[var(--muted)]">Nobody in this workspace can be given leads yet.</p>
-                    ) : (
-                      <div className="mt-1.5 max-h-[220px] overflow-y-auto rounded-[8px] border border-[var(--border-strong)]">
-                        {members.map((member, index) => {
-                          const id = `${ids}-rr-${member.id}`;
-                          const checked = rotation.includes(member.id);
-                          return (
-                            <label key={member.id} htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] hover:bg-[var(--surface-alt)]", index > 0 && "border-t border-[var(--border)]")}>
-                              <input
-                                id={id}
-                                type="checkbox"
-                                className="size-4 shrink-0 accent-[var(--primary)]"
-                                checked={checked}
-                                disabled={busy}
-                                onChange={(event) => { setRotation((current) => event.target.checked ? [...current, member.id] : current.filter((value) => value !== member.id)); setChanged(false); }}
-                              />
-                              <span className="min-w-0 flex-1 truncate font-semibold text-[var(--ink)]">{member.name}</span>
-                              <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">{count(member.currentOpen)} of {count(member.capacity)} open</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Leads go round in this order.</span>
-                  </fieldset>
+                      <span className="text-xs text-[var(--muted)]">
+                        Running the rules over {leads(assignable)}{assignable > 150 ? ` · about ${Math.max(2, Math.round(assignable / 100))} s` : ""}
+                      </span>
+                    </>
+                  ) : state.status === "error" ? (
+                    <Callout tone={state.pending ? "warning" : "error"} title={state.message}>
+                      <span className="mt-1 flex flex-wrap gap-2">
+                        {state.tooSlow ? (
+                          <Button type="button" variant="outline" size="sm" onClick={() => setWay("pick")}>Pick leads myself</Button>
+                        ) : !state.pending ? (
+                          <Button type="button" variant="outline" size="sm" onClick={() => void loadPreview(true)}>Try again</Button>
+                        ) : null}
+                      </span>
+                    </Callout>
+                  ) : preview && preview.total === 0 ? (
+                    <p className="rounded-[10px] border border-[var(--border)] px-3 py-3 text-sm text-[var(--muted)]">Nothing in this list is waiting in the pool: every lead is owned or closed.</p>
+                  ) : preview ? (
+                    <>
+                      {preview.per_owner.map((row) => (
+                        <PersonRow
+                          key={row.user_id}
+                          row={row}
+                          member={memberById.get(row.user_id) ?? null}
+                          raisedTo={raised[row.user_id]}
+                          busy={busy}
+                          onRaised={(capacity) => capacityRaised(row.user_id, capacity)}
+                        />
+                      ))}
+                      {preview.nobody.map((group) => (
+                        <div key={`${group.state ?? ""}|${group.reason}`} className="flex items-center gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2.5">
+                          <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--error-surface)] text-sm font-semibold text-[var(--error-ink)]">?</span>
+                          <span className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="text-sm font-semibold text-[var(--ink)]">Nobody</span>
+                            <span className="flex flex-wrap gap-1"><StatusChip tone="danger">{group.reason}</StatusChip></span>
+                          </span>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-[var(--error-ink)]">{count(group.count)}</span>
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                </section>
+
+                {lapsing.length > 0 && (
+                  <p className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
+                    {lapsing.slice(0, 3).map(({ name, entry }) => `${name}'s own ${entry.state} licence is valid through ${shortDate(entry.expiresOn)}; the ${entry.state} leads they get here return to the pool on ${lapseDay(entry)}.`).join(" ")}
+                    {lapsing.length > 3 ? ` And ${lapsing.length - 3} more.` : ""}
+                  </p>
                 )}
-                <div className="block">
-                  <label htmlFor={reasonId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
-                    Reason<span className="text-[var(--error-ink)]"> *</span>
-                  </label>
-                  <textarea
-                    id={reasonId}
-                    required
-                    maxLength={REASON_MAX}
-                    rows={3}
-                    value={reason}
-                    disabled={busy}
-                    aria-invalid={reasonTouched && reasonMissing}
-                    onBlur={() => setReasonTouched(true)}
-                    onChange={(event) => setReason(event.target.value)}
-                    className={cn(control, "h-auto min-h-[88px] resize-y py-2.5")}
-                  />
-                  {reasonTouched && reasonMissing ? (
-                    <span role="alert" className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">Give a reason for overriding the rule chain.</span>
-                  ) : (
-                    <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Recorded on every move and in the audit log. It also lets a move go through inside a household&apos;s rest days.</span>
-                  )}
-                </div>
+
+                {preview && nobody > 0 && (
+                  <Callout tone="error" title={`${leads(nobody)} would land on nobody`} className="m-deny">
+                    They stay in the pool, where nobody licensed can be served them. {nobodySummary(preview)}
+                  </Callout>
+                )}
+
+                {commitError && <Callout tone="error" title="Nothing was assigned">{commitError}</Callout>}
               </>
             )}
-
-            {changed && <Callout tone="warning" title={LIST_CHANGED_MESSAGE}>Nothing was assigned. The numbers below are from a fresh run.</Callout>}
-
-            <PagedProvider>
-            <div>
-              <div className="mb-2 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
-                {mode === "chain" ? "What the chain would do" : "What this would do"}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[440px] border-collapse" aria-busy={state.status === "loading"}>
-                  <thead>
-                    <tr className="bg-[var(--surface-alt)]">
-                      <th scope="col" className="px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Owner</th>
-                      <th scope="col" className="w-[110px] px-3 py-2 text-right text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Gets</th>
-                      <th scope="col" className="w-[210px] px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Why</th>
-                    </tr>
-                  </thead>
-                  {preview && preview.total > 0 ? (
-                    <PagedBody className="m-seq">
-                          {preview.per_owner.map((row) => (
-                            <tr key={row.user_id} className="m-row">
-                              <Cell>{row.name}</Cell>
-                              <Cell className="text-right tabular-nums">{count(row.gets)}</Cell>
-                              <Cell>{ownerWhy(row)}</Cell>
-                            </tr>
-                          ))}
-                          {preview.nobody.map((group) => (
-                            <tr key={`${group.state ?? ""}|${group.reason}`} className="m-row">
-                              <Cell>Nobody</Cell>
-                              <Cell className="text-right tabular-nums">{count(group.count)}</Cell>
-                              <Cell>{group.reason}</Cell>
-                            </tr>
-                          ))}
-                    </PagedBody>
-                  ) : (
-                  <tbody className="m-seq">
-                    {preview ? (
-                      <PlainRow>Nothing in this list is waiting in the pool: every lead is owned or closed.</PlainRow>
-                    ) : state.status === "loading" || (state.status === "idle" && mode === "chain") ? (
-                      [0, 1, 2].map((index) => (
-                        <tr key={index}>
-                          <Cell><span className="m-skel block h-[14px] w-32 rounded" aria-hidden="true" /></Cell>
-                          <Cell><span className="m-skel ml-auto block h-[14px] w-10 rounded" aria-hidden="true" /></Cell>
-                          <Cell><span className="m-skel block h-[14px] w-36 rounded" aria-hidden="true" />{index === 0 && <span className="sr-only">Running the router over the list…</span>}</Cell>
-                        </tr>
-                      ))
-                    ) : state.status === "error" ? (
-                      <PlainRow>
-                        <span className={state.pending ? "text-[var(--warning-ink)]" : "text-[var(--error-ink)]"} role="alert">{state.message}</span>
-                        {!state.pending && <Button type="button" variant="outline" size="sm" className="ml-3 align-middle" onClick={() => void loadPreview()}>Try again</Button>}
-                      </PlainRow>
-                    ) : (
-                      <PlainRow>{mode === "owner" ? "Choose an owner to see what this would do." : "Choose the members to rotate between to see what this would do."}</PlainRow>
-                    )}
-                  </tbody>
-                  )}
-                </table>
-              </div>
-              {preview && preview.per_owner.length + preview.nobody.length > 10 && (
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <PagedPager total={preview.per_owner.length + preview.nobody.length} noun="rows" />
-                </div>
-              )}
-              {capacitySkips && (
-                // User decision: capacity is respected, with no override from here.
-                <p className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
-                  Agents at capacity get no more. <Link href="/app/assignments" className="font-semibold text-inherit underline underline-offset-2">Raise capacity on Lead routing</Link> to assign more.
-                </p>
-              )}
-              {lapsing.length > 0 && (
-                <p className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
-                  {lapsing.slice(0, 3).map(({ name, entry }) => `${name}'s own ${entry.state} licence is valid through ${shortDate(entry.expiresOn)}; the ${entry.state} leads they get here return to the pool on ${lapseDay(entry)}.`).join(" ")}
-                  {lapsing.length > 3 ? ` And ${lapsing.length - 3} more.` : ""}
-                </p>
-              )}
-            </div>
-            </PagedProvider>
-
-            {preview && nobody > 0 && (
-              <Callout tone="error" title={`${leads(nobody)} would land on nobody`} className="m-deny">
-                They stay in the pool, where nobody licensed can be served them. {nobodySummary(preview)}
-              </Callout>
-            )}
-
-            {commitError && <Callout tone="error" title="Nothing was assigned">{commitError}</Callout>}
-
-            {/* The per-lead picker (lead-list-workspace's hash view) stays one click away. */}
-            <p className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-              Rather choose the leads yourself? <Link href={`/app/lead-lists#${campaignId}`} className="font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">Pick leads one by one</Link>
-            </p>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5">
-            <span className="max-w-[380px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-              {/* The board said "with the rule version"; rules have no version number, so the entry
-                  carries each published rule's id, priority and last change instead. */}
-              Written to the audit log as one entry, with the rules as published.
-              {blockedBy && !busy && <span id={whyId} className="mt-0.5 block text-[var(--body)]">{blockedBy}</span>}
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5">
+            <span className="inline-flex min-w-0 items-center gap-1 text-xs text-[var(--muted)]">
+              {way === "rules" && (
+                <>
+                  <ScrollText className="size-3.5 shrink-0" aria-hidden="true" />
+                  {/* The board said "with the rule version"; rules have no version number, so the entry
+                      carries each published rule's id, priority and last change instead. */}
+                  <InfoTip label="About the audit entry">Written to the audit log as one entry, with the rules as published.</InfoTip>
+                  {blockedBy && !busy && <span id={whyId} className="text-[var(--body)]">{blockedBy}</span>}
+                </>
+              )}
             </span>
             <span className="ml-auto flex gap-2.5">
               <DialogPrimitive.Close asChild>
-                <Button type="button" variant="outline" disabled={busy}>Cancel</Button>
+                <Button type="button" variant="outline" disabled={busy}>{way === "pick" ? "Close" : "Cancel"}</Button>
               </DialogPrimitive.Close>
-              <Button
-                type="button"
-                disabled={Boolean(blockedBy)}
-                aria-describedby={blockedBy && !busy ? whyId : undefined}
-                onClick={() => void commit()}
-              >
-                {busy ? "Assigning…" : `Assign ${count(routable)}`}
-              </Button>
+              {way === "rules" && (
+                <Button
+                  type="button"
+                  disabled={Boolean(blockedBy)}
+                  aria-describedby={blockedBy && !busy ? whyId : undefined}
+                  onClick={() => void commit()}
+                >
+                  {busy ? "Assigning…" : `Assign ${count(routable)}`}
+                </Button>
+              )}
             </span>
           </div>
         </DialogPrimitive.Content>
@@ -437,14 +427,106 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
   );
 }
 
-function Cell({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={cn("border-t border-[var(--border)] px-3 py-2 text-left text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]", className)}>{children}</td>;
+/** One person in the preview: who, what they get and why, and how full that leaves them. */
+function PersonRow({ row, member, raisedTo, busy, onRaised }: {
+  row: LeadListOwnerRow;
+  member: AssignDrawerMember | null;
+  raisedTo: number | undefined;
+  busy: boolean;
+  onRaised: (capacity: number) => Promise<void>;
+}) {
+  const capacity = raisedTo ?? member?.capacity ?? null;
+  const open = member?.currentOpen ?? null;
+  const after = open == null ? null : open + row.gets;
+  // Zero is no ceiling, as on the Leads picker.
+  const ceiling = capacity != null && capacity > 0 ? capacity : null;
+  const tone: MeterTone = ceiling == null || after == null ? "neutral" : after >= ceiling ? "warning" : after / ceiling >= 0.8 ? "info" : "good";
+  const initial = (row.name.trim()[0] ?? "?").toUpperCase();
+  return (
+    <div className="flex flex-col gap-2 rounded-[10px] border border-[var(--border)] px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-sm font-semibold text-[var(--accent-ink)]">{initial}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate text-sm font-semibold text-[var(--ink)]">{row.name}</span>
+            {row.states.length > 0 && <span className="shrink-0 text-xs text-[var(--muted)]">{row.states.slice(0, 4).join(" · ")}{row.states.length > 4 ? ` +${row.states.length - 4}` : ""}</span>}
+          </span>
+          <span className="flex flex-wrap gap-1">
+            {whyChips(row).map((chip) => <StatusChip key={chip.label} tone={chip.tone}>{chip.label}</StatusChip>)}
+          </span>
+        </span>
+        <span className={cn("shrink-0 text-sm font-semibold tabular-nums", row.gets > 0 ? "text-[var(--ink)]" : "text-[var(--muted)]")}>gets {count(row.gets)}</span>
+      </div>
+      {after != null && (
+        <div className="flex items-center gap-3 pl-11">
+          <Meter value={after} max={ceiling ?? Math.max(after, 1)} tone={tone} label={`${row.name}: ${after} open of ${ceiling ?? "no ceiling"}`} className="flex-1" />
+          <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">{count(after)}{ceiling != null ? ` of ${count(ceiling)}` : ""} open</span>
+          {row.capacity_skips > 0 && member && <RaiseCapacity userId={member.id} name={row.name} capacity={capacity ?? 0} disabled={busy} onRaised={onRaised} />}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function PlainRow({ children }: { children: ReactNode }) {
+/**
+ * "Raise capacity" for one agent, in place: the Route step's own write (PATCH /api/app/assignments
+ * { userId, maxOpenLeads }), behind the same owner/producer gate the preview already passed.
+ */
+function RaiseCapacity({ userId, name, capacity, disabled, onRaised }: {
+  userId: string; name: string; capacity: number; disabled: boolean; onRaised: (capacity: number) => Promise<void>;
+}) {
+  const id = useId();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(capacity + 10));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const next = Number(value);
+  const valid = Number.isInteger(next) && next > capacity && next <= 100000;
+
+  async function save() {
+    if (!valid || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/app/assignments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, maxOpenLeads: next }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setError(body?.error ?? "Could not raise the capacity."); return; }
+      notify.done(`${name} can hold ${count(next)} open leads`);
+      setEditing(false);
+      await onRaised(next);
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => { setValue(String(capacity + 10)); setEditing(true); }}>Raise capacity</Button>;
+  }
   return (
-    <tr>
-      <td colSpan={3} className="border-t border-[var(--border)] px-3 py-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{children}</td>
-    </tr>
+    <span className="flex flex-wrap items-center gap-1.5">
+      <label htmlFor={id} className="sr-only">New capacity for {name}</label>
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={capacity + 1}
+        max={100000}
+        value={value}
+        autoFocus
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void save(); } if (event.key === "Escape") { event.stopPropagation(); setEditing(false); } }}
+        aria-invalid={!valid}
+        className={cn(control, "mt-0 h-8 w-20 tabular-nums")}
+      />
+      <Button type="button" size="sm" disabled={!valid || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</Button>
+      <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => setEditing(false)}>Cancel</Button>
+      {error && <span role="alert" className="w-full text-xs text-[var(--error-ink)]">{error}</span>}
+    </span>
   );
 }

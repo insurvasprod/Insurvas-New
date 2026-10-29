@@ -117,8 +117,9 @@ export function useAssignmentWorkspace(canManage: boolean) {
     finally { setBusy(null); }
   }
 
-  async function publish() {
-    if (!canManage || !dirty || problems.some(Boolean)) return;
+  /** Resolves true once the chain is live, so the leave guard can publish before a move away. */
+  async function publish(): Promise<boolean> {
+    if (!canManage || !dirty || problems.some(Boolean)) return false;
     setBusy("publish");
     setPublishError(null);
     try {
@@ -129,8 +130,10 @@ export function useAssignmentWorkspace(canManage: boolean) {
       setOpenKey(null);
       notify.done("Rules published. They apply to the next assignment.");
       await refresh(false);
+      return true;
     } catch (error) {
       setPublishError(error instanceof Error ? error.message : "Could not publish rules");
+      return false;
     } finally { setBusy(null); }
   }
 

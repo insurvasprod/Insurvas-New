@@ -102,6 +102,7 @@ export const AUDIT_ACTIONS = [
   "tenant.partner_chat_channel_created",
   "tenant.partner_chat_channel_archived",
   "tenant.partner_chat_channel_restored",
+  "tenant.partner_chat_group_changed",
   "tenant.partner_system_card_posted",
   "tenant.partner_updated",
   "tenant.partner_timezone_updated",
@@ -301,6 +302,8 @@ export const AUDIT_ACTIONS = [
   "tenant.callback_completed",
   "tenant.callback_missed",
   "tenant.callback_replaced",
+  "tenant.callback_reassigned",
+  "tenant.callback_released",
   "tenant.queue_sla_settings_updated",
   "tenant.agent_notification_settings_updated",
   "tenant.own_profile_updated",
@@ -466,6 +469,11 @@ export const AUDIT_ACTIONS = [
   "tenant.access_preset_saved",
   "tenant.access_preset_deleted",
   "tenant.sales_template_deleted",
+  // Lead sources clean-up (2026-10-29): an empty campaign or vendor deleted for good, and a staged
+  // file discarded from Review (its batch marked failed, never a committed one).
+  "tenant.campaign_deleted",
+  "tenant.lead_vendor_deleted",
+  "tenant.lead_import_discarded",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -573,6 +581,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.partner_chat_channel_created": "Partner chat channel created",
   "tenant.partner_chat_channel_archived": "Chat channel archived",
   "tenant.partner_chat_channel_restored": "Chat channel restored",
+  "tenant.partner_chat_group_changed": "Chat group members or roles changed",
   "tenant.partner_system_card_posted": "Partner system card posted",
   "tenant.partner_updated": "Partner updated",
   "tenant.partner_timezone_updated": "Partner timezone changed",
@@ -768,6 +777,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.agent_floor_nudged": "Agent Floor nudge sent",
   "tenant.callback_scheduled": "Callback scheduled",
   "tenant.callback_rescheduled": "Callback rescheduled",
+  "tenant.callback_reassigned": "Callback given to another agent",
+  "tenant.callback_released": "Callback put in the shared queue",
   "tenant.callback_cancelled": "Callback cancelled",
   "tenant.callback_completed": "Callback completed",
   "tenant.callback_missed": "Callback missed",
@@ -937,4 +948,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.access_preset_saved": "Team access preset saved",
   "tenant.access_preset_deleted": "Team access preset deleted",
   "tenant.sales_template_deleted": "Sales template deleted",
+  "tenant.campaign_deleted": "An empty campaign was deleted (no leads, files, claims or invoices pointed at it)",
+  "tenant.lead_vendor_deleted": "A lead vendor with no campaigns or history was deleted",
+  "tenant.lead_import_discarded": "A file staged for review was discarded before import",
 };

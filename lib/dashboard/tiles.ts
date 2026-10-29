@@ -39,6 +39,8 @@ export type DashboardTile = {
    * without it — never the agency's number dressed as theirs.
    */
   shared?: boolean;
+  /** Its page is team-only (lib/menu/definition.ts `teamOnly`): left out in solo mode. */
+  teamOnly?: boolean;
 };
 
 /** Whether this reader sees the tile's live figure (see `shared`). */
@@ -111,6 +113,7 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
     required_feature: "inbound_transfers",
     required_roles: ["owner", "producer", "assistant"],
     shared: true,
+    teamOnly: true,
   },
 
   // ── LA-2. Outbound work. ───────────────────────────────────────────────────────────────────
@@ -135,6 +138,7 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
     icon: "route",
     required_feature: "outbound_dialing",
     required_roles: ["owner", "producer", "assistant", "setter"],
+    teamOnly: true,
   },
   {
     key: "insight.activity",
@@ -213,9 +217,11 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
 export function visibleDashboardTiles(
   grantedFeatureKeys: Iterable<string>,
   role: TenantRole = "owner",
+  options: { solo?: boolean } = {},
 ): DashboardTile[] {
   const granted = new Set(grantedFeatureKeys);
   return DASHBOARD_TILES.filter((tile) =>
+    !(options.solo && tile.teamOnly) &&
     (!tile.required_feature || granted.has(tile.required_feature)) &&
     (!tile.required_roles || tile.required_roles.includes(role)),
   );
