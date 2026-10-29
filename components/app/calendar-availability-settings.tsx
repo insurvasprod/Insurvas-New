@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
@@ -300,15 +301,9 @@ export function CalendarAvailabilitySettings() {
   // page's own one became. Clicks inside rootRef are the page's own.
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const header = (
-    <SettingsSectionHeader
-      actions={
-        editable && draft ? (
-          <DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void save()} />
-        ) : undefined
-      }
-    />
-  );
+  // Save and Discard appear in the bottom save bar only when something changed, as on every other
+  // Settings page (2026-10-29), not as two greyed buttons in the header all the time.
+  const header = <SettingsSectionHeader />;
 
   if (loading)
     return (
@@ -693,6 +688,11 @@ export function CalendarAvailabilitySettings() {
       />
 
       <LeaveGuard dirty={dirty} scope={rootRef} onSave={save} onDiscard={discard} what={`${draft.name}’s calendar`} />
+      {editable && (
+        <SettingsSaveBar visible={dirty} note={`Unsaved changes to ${draft.name}’s calendar`}>
+          <DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void save()} />
+        </SettingsSaveBar>
+      )}
     </SettingsStack>
     </div>
   );
