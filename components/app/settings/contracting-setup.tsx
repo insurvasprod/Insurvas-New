@@ -156,8 +156,9 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
     const measure = () => {
       const list = listRef.current;
       if (!list || window.innerWidth < 1024) { setPerPage(CARRIERS_PER_PAGE); setRowHeight(null); return; }
-      // 32px: the shell's bottom padding; then the footer (its own height once drawn) and the 16px gap above it.
-      const room = window.innerHeight - list.getBoundingClientRect().top - 32 - (footerRef.current?.offsetHeight ?? 64) - 16;
+      // 32px: the shell's bottom padding; then the footer (its own height once drawn), which sits right
+      // under the last row with no gap.
+      const room = window.innerHeight - list.getBoundingClientRect().top - 32 - (footerRef.current?.offsetHeight ?? 64);
       const rows = Math.max(1, Math.floor(room / CARRIER_ROW_HEIGHT));
       setPerPage(rows);
       setRowHeight(Math.max(CARRIER_ROW_HEIGHT, Math.floor(room / rows)));
@@ -262,7 +263,9 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           <div aria-hidden="true" className={cn(ROW, "hidden border-b border-[var(--border)] pb-2 text-label text-[var(--muted)] sm:grid")}>
             <span>Carrier</span><span>Level</span><span>Contracted from</span><span>Writing number</span>
           </div>
-          <ul ref={listRef} className="-mt-4 m-0 flex list-none flex-col p-0">
+          {/* The list takes all the room down to the footer; on a full page its rows share it, so the
+              last row meets the footer with no blank band (owner, 29 Oct). */}
+          <ul ref={listRef} className="-mt-4 m-0 flex flex-1 list-none flex-col p-0">
             {library.length === 0 && <li className="py-3 text-sm text-[var(--muted)]">No carrier matches. <a className="font-medium text-[var(--accent-ink)] hover:underline" href="mailto:support@insurvas.com?subject=Please%20add%20a%20carrier%20to%20the%20library">Ask Insurvas to add it</a></li>}
             {library.slice((shownPage - 1) * perPage, shownPage * perPage).map((carrier) => (
               <CarrierRow
@@ -271,6 +274,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                 on={mineIds.has(carrier.id)}
                 contract={vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active) ?? null}
                 height={rowHeight}
+                fill={rowHeight !== null && library.length - (shownPage - 1) * perPage >= perPage}
                 onToggle={() => toggleCarrier(carrier)}
                 send={send}
                 enqueue={enqueue}
@@ -280,7 +284,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           {/* Always in view while the step is done (manager review 29 Oct, 05:39). The pages sit here
               with Next, one bar of controls, rather than loose under the list. */}
           {/* One bar, as under the States cards: the count on the left, the pages and Next on the right. */}
-          <footer ref={footerRef} className={STEP_FOOTER}>
+          <footer ref={footerRef} className={cn(STEP_FOOTER, "-mt-4")}>
             <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted)]">
               <Pager page={shownPage} total={library.length} noun="carriers" pageSize={perPage} onPage={setLibraryPage} />
             </div>
@@ -400,11 +404,13 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
 }
 
 /** One library carrier: its tick, and once ticked its three optional contract fields on the same row. */
-function CarrierRow({ carrier, on, contract, height, onToggle, send, enqueue }: {
+function CarrierRow({ carrier, on, contract, height, fill, onToggle, send, enqueue }: {
   carrier: { id: string; name: string };
   on: boolean;
   /** The row's height on a desktop, shared out so the page of rows reaches the footer. */
   height: number | null;
+  /** On a full page: the row also takes its share of what is left, so the rows reach the footer. */
+  fill: boolean;
   contract: TenantCarrierRow | null;
   onToggle: () => void;
   send: Send;
@@ -425,7 +431,7 @@ function CarrierRow({ carrier, on, contract, height, onToggle, send, enqueue }: 
 
   const id = `contracting-${carrier.id}`;
   return (
-    <li style={height ? { height } : undefined} className={cn("-mx-4 flex flex-col justify-center border-b border-[var(--border)] px-4 py-1.5 last:border-b-0", on && "bg-[color-mix(in_srgb,var(--primary-soft)_45%,transparent)]")}>
+    <li style={height ? { minHeight: height } : undefined} className={cn("-mx-4 flex flex-col justify-center", fill && "flex-1", "border-b border-[var(--border)] px-4 py-1.5 last:border-b-0", on && "bg-[color-mix(in_srgb,var(--primary-soft)_45%,transparent)]")}>
       <div className={cn("flex flex-col gap-2 sm:grid", ROW)}>
         <button type="button" role="checkbox" aria-checked={on} onClick={onToggle} className="flex min-w-0 items-center gap-3 rounded-md py-1.5 text-left">
           <span aria-hidden="true" className={cn("inline-grid size-[18px] shrink-0 place-items-center rounded-[5px] border", on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)]")}>{on && <Check className="size-3" />}</span>

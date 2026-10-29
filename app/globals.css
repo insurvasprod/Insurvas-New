@@ -1822,10 +1822,12 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 .portal-settings-nav { max-height: min(55dvh, 480px); scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent; }
 .portal-settings-nav-group { min-width: 0; }
 .portal-settings-nav-group + .portal-settings-nav-group { margin-top: .75rem; }
-/* Group names are headings, not toggles (2026-10-29): every group stays open. */
+/* Group names are headings, not toggles (2026-10-29): every group stays open. The group reads as the
+   parent of its pages (owner, 29 Oct: "the pages are bigger than their group"): the heading is the
+   menu's strongest text, ink and semibold at 14px, and the pages under it are 13px regular. */
 .portal-settings-group-label {
-  margin: 0; padding: .375rem .625rem .25rem; color: var(--muted);
-  font-size: .6875rem; font-weight: 700; line-height: 1.35; letter-spacing: .06em; text-transform: uppercase;
+  margin: 0; padding: .375rem .625rem .25rem; color: var(--ink);
+  font-size: .875rem; font-weight: 600; line-height: 1.35; letter-spacing: -.01em;
 }
 .portal-settings-group-toggle {
   display: flex; width: 100%; min-height: 38px; align-items: center; justify-content: space-between; gap: .5rem;
@@ -1847,6 +1849,8 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 .portal-settings-item-icon { color: var(--muted); display: none; }
 @media (min-width: 1536px) { .portal-settings-item-icon { display: block; } }
 .portal-settings-subsection[aria-current="page"] .portal-settings-item-icon { color: var(--accent-ink); }
+/* Folded to an icon strip, the icons are the menu at every width. */
+[data-settings-rail][data-folded] .portal-settings-item-icon { display: block; }
 .dark .portal-settings-nav-subsections { --settings-nav-guide: var(--border-strong); }
 @media (min-width: 1024px) {
   .portal-settings-nav { max-height: none; }
@@ -1854,6 +1858,7 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
   /* A navigation card (manager review 29 Oct, 03:48: "some outer card … give it some space, remove
      this line"): its own surface and padding, no divider, no tree lines. */
   [data-settings-rail] { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: .75rem .5rem .5rem; }
+  [data-settings-rail][data-folded] { padding-inline: .375rem; }
   [data-settings-rail] .portal-settings-nav { flex: 1 1 auto; min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowUpRight, Search, X,
+  ArrowUpRight, PanelLeftClose, PanelLeftOpen, Search, X,
   Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, Sparkles, UserRound, Users, Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -60,6 +60,14 @@ const SECTION_ICON: Record<string, LucideIcon> = {
   "integrations": KeyRound,
   "settings-history": History,
 };
+
+/** The fold, unfold and search buttons at the menu's top. */
+const RAIL_ICON_BUTTON = "inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-[var(--muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]";
+/** A menu item folded to its icon: a centred square. */
+const ICON_ITEM = "mx-auto size-9 min-h-0 justify-center px-0 py-0";
+
+/** The menu folded to its icons is remembered for this browser (a convenience, so storage may fail). */
+const FOLD_KEY = "insurvas.settings.menuFolded";
 
 function SectionIcon({ id }: { id: string }) {
   const Icon = SECTION_ICON[id];
@@ -151,6 +159,25 @@ export function AgentSettingsTabs({
       return next;
     });
   }, [grouped]);
+
+  // The menu folds to an icon strip on a desktop (owner, 29 Oct: "collapsible to close on the left"),
+  // giving the page its width. Below lg the menu stacks above the page, so it never folds there.
+  const [folded, setFolded] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setDesktop(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from this browser's storage
+    try { setFolded(window.localStorage.getItem(FOLD_KEY) === "1"); } catch { /* storage blocked: start open */ }
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  const fold = (next: boolean) => {
+    setFolded(next);
+    try { window.localStorage.setItem(FOLD_KEY, next ? "1" : "0"); } catch { /* not remembered */ }
+  };
+  const iconsOnly = folded && desktop;
 
   // Search only the settings this person can open. Results may point to a section or to one of its
   // controls; the existing hash/reveal path handles in-page destinations.
@@ -317,13 +344,24 @@ export function AgentSettingsTabs({
       )}
       {/* In a Get set up step the menu is hidden, so the grid must drop its column too: with the
           column kept, the whole page sat in the 224px menu track (owner, 2026-10-29). */}
-      <div className={cn("grid min-w-0 grid-cols-1 items-start gap-6 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)] lg:items-stretch", !guiding && "lg:grid-cols-[224px_minmax(0,1fr)] 2xl:grid-cols-[256px_minmax(0,1fr)]")}>
+      <div className={cn("grid min-w-0 grid-cols-1 items-start gap-6 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)] lg:items-stretch", !guiding && (iconsOnly ? "lg:grid-cols-[52px_minmax(0,1fr)]" : "lg:grid-cols-[224px_minmax(0,1fr)] 2xl:grid-cols-[256px_minmax(0,1fr)]"), "lg:transition-[grid-template-columns] lg:duration-200")}>
       {/* The menu is a list, not a card (no surface, border or blur). Sticky under the top bar and
           only as tall as its list, capped at the window less the top bar, this header and the page's
           padding (10.5rem), so on its own it never makes the page scroll; past that the list scrolls. */}
-      <div data-settings-rail="" className={cn("box-border flex w-full min-h-0 shrink-0 flex-col lg:h-full", guiding && "hidden")}>
-        <div className="shrink-0 pb-2">
-          <label className="relative block">
+      <div data-settings-rail="" data-folded={iconsOnly ? "" : undefined} className={cn("box-border flex w-full min-h-0 shrink-0 flex-col lg:h-full", guiding && "hidden")}>
+        {iconsOnly ? (
+          // Folded: open again, and search (which opens the menu with the box ready).
+          <div className="flex shrink-0 flex-col items-center gap-1 pb-2">
+            <button type="button" onClick={() => fold(false)} aria-label="Show the settings menu" title="Show menu" className={RAIL_ICON_BUTTON}>
+              <PanelLeftOpen aria-hidden="true" className="size-4" />
+            </button>
+            <button type="button" onClick={() => { fold(false); requestAnimationFrame(() => searchRef.current?.focus()); }} aria-label="Search settings" title="Search settings" className={RAIL_ICON_BUTTON}>
+              <Search aria-hidden="true" className="size-4" />
+            </button>
+          </div>
+        ) : (
+        <div className="flex shrink-0 items-center gap-1.5 pb-2">
+          <label className="relative block min-w-0 flex-1">
             <span className="sr-only">Search settings</span>
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--muted)]" />
             <input
@@ -346,8 +384,12 @@ export function AgentSettingsTabs({
               <kbd aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-[4px] border border-[var(--border)] px-1.5 font-sans text-xs leading-[1.4] text-[var(--muted)] lg:block">/</kbd>
             )}
           </label>
+          <button type="button" onClick={() => fold(true)} aria-label="Hide the settings menu" title="Hide menu" className={cn(RAIL_ICON_BUTTON, "hidden lg:inline-flex")}>
+            <PanelLeftClose aria-hidden="true" className="size-4" />
+          </button>
         </div>
-        {searching ? (
+        )}
+        {searching && !iconsOnly ? (
           <div id="settings-search-results" ref={resultsRef} onKeyDown={onResultsKey} className="flex max-h-[60dvh] min-h-0 flex-col overflow-y-auto overscroll-contain pb-2.5 lg:max-h-none">
             <p role="status" className="m-0 px-2.5 pt-2.5 pb-1.5 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
               {hits.length ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}` : "No matches"}
@@ -367,7 +409,7 @@ export function AgentSettingsTabs({
         ) : (
       <nav
         aria-label="Settings navigation"
-        className="portal-settings-nav box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain pb-2.5"
+        className="portal-settings-nav relative box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain pb-2.5"
       >
         {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
             caller's order, and the same name can legitimately open a second run — so the name is not
@@ -378,7 +420,9 @@ export function AgentSettingsTabs({
           const groupId = `settings-group-${index}`;
           return (
             <section key={`${group ?? "ungrouped"}-${index}`} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
-              <h2 id={`${groupId}-label`} className="portal-settings-group-label">{group}</h2>
+              {/* Folded, a hairline stands between groups; the name stays for screen readers. */}
+              <h2 id={`${groupId}-label`} className={cn("portal-settings-group-label", iconsOnly && "sr-only")}>{group ? titleCase(group) : group}</h2>
+              {iconsOnly && index > 0 && <div aria-hidden="true" className="mx-2 mb-1.5 h-px bg-[var(--border)]" />}
               <div id={groupId} className="portal-settings-nav-subsections">
                 {items.map((tab) => {
                   if (tab.route) {
@@ -391,15 +435,17 @@ export function AgentSettingsTabs({
                         id={`settings-nav-${tab.id}`}
                         href={sectionHref(tab)}
                         aria-current={here ? "page" : undefined}
+                        title={iconsOnly ? titleCase(tab.label) : undefined}
                         onClick={() => revealGroupForSection(tab.id)}
                         className={cn(
-                          "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] no-underline transition-colors",
+                          "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-label font-normal no-underline transition-colors",
+                          iconsOnly && ICON_ITEM,
                           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
                           here ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]" : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
                         )}
                       >
                         <SectionIcon id={tab.id} />
-                        <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
+                        <span className={iconsOnly ? "sr-only" : "min-w-0 flex-grow"}>{titleCaseNode(tab.label)}</span>
                       </Link>
                     );
                   }
@@ -412,10 +458,12 @@ export function AgentSettingsTabs({
                       type="button"
                       aria-current={isActive ? "page" : undefined}
                       aria-controls={`settings-panel-${tab.id}`}
+                      title={iconsOnly ? `${titleCase(tab.label)}${badge ? ` · ${badge.text}` : ""}` : undefined}
                       disabled={Boolean(tab.disabled)}
                       onClick={() => selectTab(tab.id)}
                       className={cn(
-                        "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] transition-colors",
+                        "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-label font-normal transition-colors",
+                        iconsOnly && ICON_ITEM,
                         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
                         isActive
                           ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]"
@@ -425,8 +473,15 @@ export function AgentSettingsTabs({
                       )}
                     >
                       <SectionIcon id={tab.id} />
-                      <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
-                      {badge && (
+                      <span className={iconsOnly ? "sr-only" : "min-w-0 flex-grow"}>{titleCaseNode(tab.label)}</span>
+                      {/* Folded, a badge is a dot on the icon; its words stay in the item's name. */}
+                      {badge && iconsOnly && (
+                        <>
+                          <span aria-hidden="true" className={cn("absolute top-1.5 right-1.5 size-1.5 rounded-full", badge.warn ? "bg-[var(--warning)]" : "bg-[var(--muted)]")} />
+                          <span className="sr-only">, {badge.text}</span>
+                        </>
+                      )}
+                      {badge && !iconsOnly && (
                         <span
                           className={cn(
                             "ml-auto shrink-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] tabular-nums",
@@ -436,7 +491,7 @@ export function AgentSettingsTabs({
                           {badge.text}
                         </span>
                       )}
-                      {tab.managed && (
+                      {tab.managed && !iconsOnly && (
                         <span className="ml-auto inline-flex shrink-0 text-[var(--muted)]" aria-label="Managed elsewhere">
                           <LockIcon />
                         </span>
