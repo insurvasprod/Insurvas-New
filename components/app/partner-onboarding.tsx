@@ -19,7 +19,9 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
  * the real prerequisite is an approved product. Its "Who" column is "Detail" here, because who
  * completed a step is not recorded per step (the Activity tab has the audit trail).
  */
-type Step = { step: string; state: string; tone: StatusTone; detail: string };
+export type OnboardingTarget = "terms" | "products" | "people";
+/** `go`: the step still to do, as a link to where it is done (2026-10-29: say where, then take you there). */
+type Step = { step: string; state: string; tone: StatusTone; detail: string; go?: { label: string; to: OnboardingTarget } };
 type PartnerUserLite = { status: "active" | "revoked"; accepted_at: string | null };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -27,8 +29,10 @@ const day = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.ge
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 
-export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, lastSubmission }: {
+export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, lastSubmission, onGo }: {
   partnerId: string;
+  /** Opens the tab or section where a step is done; without it the steps are plain text. */
+  onGo?: (to: OnboardingTarget) => void;
   termText: string;
   hasTerm: boolean;
   approved: { count: number; total: number } | null;
@@ -55,13 +59,13 @@ export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, last
   const invited = (users ?? []).filter((user) => user.status === "active");
   const accepted = invited.filter((user) => user.accepted_at).length;
   const steps: Step[] = [
-    hasTerm ? { step: "Commercial terms agreed", state: "Done", tone: "good", detail: termText } : { step: "Commercial terms agreed", state: "Not started", tone: "neutral", detail: "No terms recorded — set them on Commercial terms" },
+    hasTerm ? { step: "Commercial terms agreed", state: "Done", tone: "good", detail: termText } : { step: "Commercial terms agreed", state: "Not started", tone: "neutral", detail: "No terms recorded yet", go: { label: "Set terms", to: "terms" } },
     !approved ? { step: "Products approved", state: "Checking…", tone: "neutral", detail: "—" }
       : approved.count > 0 ? { step: "Products approved", state: "Done", tone: "good", detail: `${approved.count} of ${approved.total} approved` }
-      : { step: "Products approved", state: "Not started", tone: "neutral", detail: "Approve at least one product on Products" },
+      : { step: "Products approved", state: "Not started", tone: "neutral", detail: "None approved yet", go: { label: "Approve products", to: "products" } },
     usersError ? { step: "Portal users invited", state: "Unknown", tone: "neutral", detail: "The team could not be read" }
       : !users ? { step: "Portal users invited", state: "Checking…", tone: "neutral", detail: "—" }
-      : invited.length === 0 ? { step: "Portal users invited", state: "Not started", tone: "neutral", detail: "Invite them from Team" }
+      : invited.length === 0 ? { step: "Portal users invited", state: "Not started", tone: "neutral", detail: "Nobody invited yet", go: { label: "Invite people", to: "people" } }
       : accepted === invited.length ? { step: "Portal users invited", state: "Done", tone: "good", detail: `${accepted} of ${invited.length} accepted` }
       : { step: "Portal users invited", state: `${accepted} of ${invited.length} accepted`, tone: accepted > 0 ? "warning" : "info", detail: "Waiting on the invitations" },
     lastSubmission ? { step: "First lead submitted", state: "Done", tone: "good", detail: `Latest ${day(lastSubmission)}` } : { step: "First lead submitted", state: "Not started", tone: "neutral", detail: "Nothing submitted yet" },
@@ -82,7 +86,12 @@ export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, last
           <tbody>{steps.map((step) => <tr key={step.step} className="m-row">
             <td className={`${td} font-semibold text-foreground`}>{step.step}</td>
             <td className={td}><StatusChip tone={step.tone}>{step.state}</StatusChip></td>
-            <td className={`${td} text-muted-foreground`}>{step.detail}</td>
+            <td className={`${td} text-muted-foreground`}>
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                {step.detail}
+                {step.go && onGo && <button type="button" className="text-sm font-medium text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]" onClick={() => onGo(step.go!.to)}>{step.go.label} →</button>}
+              </span>
+            </td>
           </tr>)}</tbody>
         </table>
       </div>

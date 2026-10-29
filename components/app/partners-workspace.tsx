@@ -290,7 +290,7 @@ function PlanRoom({ label, used, limit }: { label: string; used: number; limit: 
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
         <span className="truncate text-xs text-muted-foreground">{label}</span>
-        <span className={cn("text-sm font-semibold tabular-nums", full ? "text-[var(--warning-ink)]" : "text-foreground")}>{limit == null ? used : `${used} of ${limit}`}</span>
+        <span className={cn("text-sm font-semibold tabular-nums", full ? "text-[var(--warning-ink)]" : "text-foreground")}>{limit == null ? `${used} active` : `${used} of ${limit}`}</span>
       </div>
       {limit != null && (
         <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
@@ -794,7 +794,9 @@ export function PartnersWorkspace({
           )
         }
       />
-      {!detailOnly && partners.length > 0 && (
+      {/* Only when the plan sets a limit: four bare counts of active sources read as wrong beside the
+          table (owner's demo account, 2026-10-29). */}
+      {!detailOnly && partners.length > 0 && [limits.max_publishers, limits.max_marketing_partners, limits.max_affiliates, limits.max_partner_users].some((limit) => limit != null) && (
         <section aria-label="Room on your plan" className="m-glass grid grid-cols-2 gap-x-6 gap-y-3 rounded-[12px] border border-border px-4 py-3 lg:grid-cols-4">
           <PlanRoom label="Live transfer sources" used={usage.publishers} limit={limits.max_publishers} />
           <PlanRoom label="Lead sellers" used={usage.marketing} limit={limits.max_marketing_partners} />
@@ -978,6 +980,10 @@ export function PartnersWorkspace({
                     termText={termText(selectedPartner.active_term)}
                     approved={partnerProducts[selectedPartner.id] ? { count: selectedProducts.filter((product) => product.approved).length, total: selectedProducts.length } : null}
                     lastSubmission={selectedPartner.last_submission}
+                    onGo={readOnly || selectedPartner.status === "offboarded" ? undefined : (to) => {
+                      if (to === "people") document.getElementById("partner-section-team")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      else setDetailTab(to);
+                    }}
                   />
                   {extraTabs.quality && (
                     <section id="partner-section-quality" className="scroll-mt-24 space-y-3">
