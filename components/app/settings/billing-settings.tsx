@@ -265,8 +265,10 @@ export function BillingSettings() {
       />
 
       {tab === "overview" && (
-        <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="flex min-w-0 flex-col gap-3.5">
+        // Two rows that both end level (owner, 2026-10-29: no empty space beside a short column): the
+        // plan beside the charge and the last invoice, then usage across the whole width.
+        <div className="grid items-stretch gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-w-0 flex-col gap-3.5 [&>section]:flex-1">
             {sub && view.plan ? (
               <Card>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -295,12 +297,36 @@ export function BillingSettings() {
               </Card>
             ) : null}
 
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-3.5">
+            {sub && view.plan ? (
+              <Card title="Next charge">
+                <strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">
+                  {sub.status === "paused" ? "Nothing while paused" : !sub.renewsAt ? "None — it does not renew" : view.plan.priceCents !== null ? `${formatCentsAsCurrency(view.plan.priceCents)} on ${day(sub.renewsAt)}` : day(sub.renewsAt)}
+                </strong>
+                {view.plan.addons.length ? <span className="text-xs text-[var(--muted)]">Plus your add-ons</span> : null}
+                {paymentMethod}
+              </Card>
+            ) : null}
+            <Card title="Last invoice" className="flex-1">
+              {lastInvoice ? (
+                <>
+                  <span className="flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2 text-[var(--body)] tabular-nums">{day(lastInvoice.issuedAt ?? lastInvoice.periodStart)} · {lastInvoice.number}<StatusChip tone={INVOICE_TONE[lastInvoice.status] ?? "neutral"}>{INVOICE_LABEL[lastInvoice.status] ?? lastInvoice.status}</StatusChip></span><strong className="text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(lastInvoice.totalCents)}</strong></span>
+                  <span className="flex flex-wrap gap-2">{invoiceActions(lastInvoice)}<Button type="button" size="sm" variant="ghost" onClick={() => setTab("invoices")}>See all invoices</Button></span>
+                </>
+              ) : <p className="m-0 text-sm text-[var(--muted)]">No invoices yet.</p>}
+            </Card>
+          </div>
+
             <Card
               id="billing-limits"
+              className="lg:col-span-2"
               title={view.limits.length ? `Usage · ${warned.length ? `${warned.length} limit${warned.length === 1 ? "" : "s"} close to full` : "all limits comfortable"}` : "Usage"}
               hint={`Warnings come at ${view.warnPercent}% and ${Math.round(USAGE_CRITICAL_FRACTION * 100)}%, with the plan change one click away. Metered limits reset each billing period.`}
             >
               {view.limits.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">Your plan sets no limits.</p>}
+              <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(260px,1fr))]">
               {view.limits.map((l) => {
                 const look = TIER_LOOK[l.tier];
                 const caption = tierCaption(l, view.warnPercent);
@@ -317,6 +343,7 @@ export function BillingSettings() {
                   </div>
                 );
               })}
+              </div>
               {warned.length && actions?.canChangePlan && (view.options.length || view.planChangeBySupport) ? (
                 <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--body)]">
                   {warned.length === 1 ? `${warned[0].label} is running out.` : `${warned.length} limits are running out.`}
@@ -324,27 +351,6 @@ export function BillingSettings() {
                 </div>
               ) : null}
             </Card>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-3.5">
-            {sub && view.plan ? (
-              <Card title="Next charge">
-                <strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">
-                  {sub.status === "paused" ? "Nothing while paused" : !sub.renewsAt ? "None — it does not renew" : view.plan.priceCents !== null ? `${formatCentsAsCurrency(view.plan.priceCents)} on ${day(sub.renewsAt)}` : day(sub.renewsAt)}
-                </strong>
-                {sub.periodStart && <span className="text-xs text-[var(--muted)]">This period {day(sub.periodStart)} – {day(sub.periodEnd)}{view.plan.addons.length ? " · plus your add-ons" : ""}</span>}
-                {paymentMethod}
-              </Card>
-            ) : null}
-            <Card title="Last invoice">
-              {lastInvoice ? (
-                <>
-                  <span className="flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2 text-[var(--body)] tabular-nums">{day(lastInvoice.issuedAt ?? lastInvoice.periodStart)} · {lastInvoice.number}<StatusChip tone={INVOICE_TONE[lastInvoice.status] ?? "neutral"}>{INVOICE_LABEL[lastInvoice.status] ?? lastInvoice.status}</StatusChip></span><strong className="text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(lastInvoice.totalCents)}</strong></span>
-                  <span className="flex flex-wrap gap-2">{invoiceActions(lastInvoice)}<Button type="button" size="sm" variant="ghost" onClick={() => setTab("invoices")}>See all invoices</Button></span>
-                </>
-              ) : <p className="m-0 text-sm text-[var(--muted)]">No invoices yet.</p>}
-            </Card>
-          </div>
         </div>
       )}
           {tab === "overview" && sub && actions && (actions.canPause || actions.canCancel) ? (
@@ -456,15 +462,14 @@ export function BillingSettings() {
                 <Button type="button" variant="outline" disabled={busy} onClick={() => { setImpact(null); setTarget(""); }}>Keep my plan</Button>
               </div>
             </Card>
-          ) : view.options.length ? <p className="m-0 text-sm text-[var(--muted)]">Pick a plan to see its price, when it starts, and what changes.</p> : null}
+          ) : null}
         </div>
       )}
 
       {tab === "invoices" && (
-        <div className="flex flex-col gap-3.5">
-          <Card id="billing-card" title="Payment method">{paymentMethod}</Card>
-
-          <Card id="billing-invoices" title="Invoices">
+        // Side by side, like Overview: the invoice list beside the one payment method (2026-10-29).
+        <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <Card id="billing-invoices" title="Invoices" className="lg:order-1">
             {view.invoices.length ? (
               <ul className="m-0 flex list-none flex-col p-0">
                 {view.invoices.map((inv) => (
@@ -485,7 +490,7 @@ export function BillingSettings() {
               </ul>
             ) : <p className="m-0 text-sm text-[var(--muted)]">No invoices yet.</p>}
           </Card>
-
+          <Card id="billing-card" title="Payment method" className="lg:order-2">{paymentMethod}</Card>
         </div>
       )}
     </SettingsStack>
