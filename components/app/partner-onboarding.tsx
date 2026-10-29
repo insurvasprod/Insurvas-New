@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { cn } from "@/lib/utils";
 
 /**
  * Onboarding (p-app-publisher-detail): the four things a partner needs before its leads flow, each
@@ -26,8 +29,6 @@ type PartnerUserLite = { status: "active" | "revoked"; accepted_at: string | nul
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const day = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
-const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
-const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 
 export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, lastSubmission, onGo }: {
   partnerId: string;
@@ -72,29 +73,48 @@ export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, last
   ];
   const done = steps.filter((step) => step.state === "Done").length;
 
+  const pct = Math.round((done / steps.length) * 100);
+  // A checklist with a progress bar, not a data table (2026-10-29): each step says whether it is done,
+  // what is missing, and links to where it is done.
   return (
     <section aria-labelledby={`onboarding-${partnerId}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-1"><h2 id={`onboarding-${partnerId}`} className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Onboarding</h2><InfoTip label="About onboarding">A partner moves from created to onboarded, active, paused and offboarded. Nothing skips a step.</InfoTip></div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1">
+          <h2 id={`onboarding-${partnerId}`} className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Onboarding</h2>
+          <InfoTip label="About onboarding">A partner moves from created to onboarded, active, paused and offboarded. Nothing skips a step.</InfoTip>
         </div>
-        <StatusChip tone={done === steps.length ? "good" : "neutral"}>{done} of {steps.length} done</StatusChip>
+        <div className="flex min-w-[180px] items-center gap-3">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" role="progressbar" aria-label="Onboarding progress" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={done}>
+            <div className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-300" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-[var(--ink)]">{done} of {steps.length}</span>
+        </div>
       </div>
-      <div className="mt-3.5 overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[360px] border-collapse text-left">
-          <thead><tr><th className={th}>Step</th><th className={`${th} w-[190px]`}>State</th><th className={th}>Detail</th></tr></thead>
-          <tbody>{steps.map((step) => <tr key={step.step} className="m-row">
-            <td className={`${td} font-semibold text-foreground`}>{step.step}</td>
-            <td className={td}><StatusChip tone={step.tone}>{step.state}</StatusChip></td>
-            <td className={`${td} text-muted-foreground`}>
-              <span className="flex flex-wrap items-center justify-between gap-2">
-                {step.detail}
-                {step.go && onGo && <button type="button" className="text-sm font-medium text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]" onClick={() => onGo(step.go!.to)}>{step.go.label} →</button>}
+      <ol className="mt-3.5 flex list-none flex-col overflow-hidden rounded-lg border border-border p-0">
+        {steps.map((step, index) => {
+          const isDone = step.state === "Done";
+          return (
+            <li key={step.step} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-3 first:border-t-0">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums",
+                  isDone ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "border border-[var(--border-strong)] text-[var(--muted)]",
+                )}
+              >
+                {isDone ? <Check className="size-4" /> : index + 1}
               </span>
-            </td>
-          </tr>)}</tbody>
-        </table>
-      </div>
+              <span className="min-w-0 flex-1">
+                <span className={cn("block text-sm font-semibold", isDone ? "text-[var(--body)]" : "text-[var(--ink)]")}>{step.step}</span>
+                <span className="block text-xs text-[var(--muted)]">{step.detail}</span>
+              </span>
+              {isDone ? <StatusChip tone="good">Done</StatusChip>
+                : step.go && onGo ? <Button type="button" variant="outline" size="sm" onClick={() => onGo(step.go!.to)}>{step.go.label}</Button>
+                : <StatusChip tone={step.tone}>{step.state}</StatusChip>}
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }
