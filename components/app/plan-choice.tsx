@@ -59,7 +59,7 @@ const seatsFor = (plan: PlanChoiceOption, wanted: number | null) => {
 };
 
 /**
- * Step 4 of 5, Your plan (owner pick B, 2026-10-26). One state shared by the form on the left and the
+ * Step 2 of 3, Plan & payment: the plan screen (owner pick B, 2026-10-26). One state shared by the form on the left and the
  * summary that replaces the brand story on the right, so the total moves as the owner chooses.
  */
 export function PlanChoiceProvider({ plans, modules, initial, trialEnds, noPayment, children }: {
@@ -351,7 +351,7 @@ function TrialLine({ className }: { className?: string }) {
 function ContinueButton({ submit = false }: { submit?: boolean }) {
   const { saving, save } = useChoice();
   return (
-    <FunnelStepFooter backHref="/app/onboarding/about-you" continueLabel="Continue to payment" busy={saving} busyLabel="Saving…" onContinue={submit ? undefined : save} />
+    <FunnelStepFooter continueLabel="Continue to payment" busy={saving} busyLabel="Saving…" onContinue={submit ? undefined : save} />
   );
 }
 

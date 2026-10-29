@@ -103,7 +103,7 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
       email={context.email}
       environment={whopEnvironment()}
       noPayment={checkoutPaymentMode() === "none"}
-      backHref={choice?.selectedFromPricing ? "/app/onboarding/about-you" : "/app/onboarding/plan"}
+      backHref={choice?.selectedFromPricing ? undefined : "/app/onboarding/plan"}
     />
   );
 }

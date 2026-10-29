@@ -10,9 +10,12 @@ import { cn } from "@/lib/utils";
 /**
  * The sign-up steps: account, email, about you, plan, payment, optional business setup.
  */
-export const FUNNEL_STEPS = ["Your account", "Your email", "About you", "Your plan", "Payment", "Business setup"] as const;
-/** 7 is the welcome screen after optional business setup: every step done. */
-export type FunnelStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/**
+ * Three steps, as the manager asked (review 2026-10-28, §1.9): the account (with its email check), the
+ * plan and payment, then About you with optional business details. 4 is the "workspace ready" screen.
+ */
+export const FUNNEL_STEPS = ["Your account", "Plan & payment", "About you"] as const;
+export type FunnelStep = 1 | 2 | 3 | 4;
 
 /** A consistent bottom navigation row for steps that can move both backward and forward. */
 export function FunnelStepFooter({ backHref, continueLabel = "Continue", busyLabel, busy = false, disabled = false, onContinue }: {

@@ -47,5 +47,5 @@ export default async function BusinessProfilePage() {
       ? "/app/checkout"
       : "/app/onboarding/plan";
   const postPayment = context.onboardingState === "business_profile" && Boolean(subscription);
-  return <FunnelFrame step={postPayment ? 6 : 3} wide><BusinessProfileForm initial={initial} email={context.email} fullName={context.name} phone={context.phone ?? ""} backHref={backHref} audience={audienceForPlanType(plan?.plan_type)} postPayment={postPayment} /></FunnelFrame>;
+  return <FunnelFrame step={postPayment ? 3 : 2} wide><BusinessProfileForm initial={initial} email={context.email} fullName={context.name} phone={context.phone ?? ""} backHref={backHref} audience={audienceForPlanType(plan?.plan_type)} postPayment={postPayment} /></FunnelFrame>;
 }

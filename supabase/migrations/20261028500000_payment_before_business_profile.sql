@@ -1,4 +1,5 @@
--- Signup order: verify email -> About you -> plan/payment -> optional business profile.
+-- Signup order (manager review, 3 steps): account + email -> plan/payment -> About you (name, phone,
+-- optional business details). Older accounts on the separate pre-payment About you screen still finish it.
 -- No existing business profile or licensing data is rewritten. Existing in-flight states remain
 -- accepted by the save RPC so a tenant can finish the path it started on.
 
@@ -40,7 +41,7 @@ begin
    where invitation.user_id = v_token.user_id and invitation.purpose = 'email_verification' and invitation.accepted_at is null;
   update public.tenant_users as membership set accepted_at = coalesce(membership.accepted_at, now())
    where membership.user_id = v_token.user_id and membership.tenant_id = v_tenant_id;
-  update public.tenants as tenant set onboarding_state = 'about_you'
+  update public.tenants as tenant set onboarding_state = 'ready_for_checkout'
    where tenant.id = v_tenant_id and tenant.onboarding_state = 'pending_verification';
   return query select v_token.user_id, v_tenant_id, v_email;
 end;
@@ -70,10 +71,10 @@ begin
    where membership.user_id = p_user_id and membership.role = 'owner' and account.status = 'active'
    for update of membership;
   if not found then raise exception using errcode = 'P0001', message = 'VERIFIED_OWNER_NOT_FOUND'; end if;
-  -- First save moves the owner on to the plan. Going Back from the plan or payment step to correct
-  -- a detail is allowed and keeps the state where it is.
+  -- Saved on the About you step after payment (state unchanged), or, for an older account still on the
+  -- pre-payment About you screen, moves it on to the plan.
   select tenant.onboarding_state into v_state from public.tenants tenant where tenant.id = v_tenant_id for update;
-  if v_state is null or v_state not in ('about_you', 'ready_for_checkout', 'awaiting_payment') then
+  if v_state is null or v_state not in ('about_you', 'ready_for_checkout', 'awaiting_payment', 'business_profile') then
     raise exception using errcode = 'P0001', message = 'ABOUT_YOU_NOT_AVAILABLE';
   end if;
   if v_state = 'about_you' then

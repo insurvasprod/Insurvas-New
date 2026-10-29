@@ -21,11 +21,9 @@ export async function POST(request: NextRequest) {
   }
   const profile = parsed.data;
   const supabase = getSupabaseServiceClient();
-  const { data: existingSubscription } = await supabase.from("subscriptions").select("id")
-    .eq("tenant_id", context.tenantId).in("status", ["trialing", "active"]).limit(1).maybeSingle();
-  const postPayment = context.onboardingState === "business_profile" && Boolean(existingSubscription);
-  const personal = postPayment ? null : aboutYouSchema.safeParse(body);
-  if (personal && !personal.success) {
+  // Name and phone ride along on every save: the About you step asks for them with the business details.
+  const personal = aboutYouSchema.safeParse(body);
+  if (!personal.success) {
     return NextResponse.json({ error: personal.error.issues[0]?.message ?? "Check your personal details" }, { status: 400 });
   }
   const setupSteps = deriveRecommendedSetupSteps(profile);
@@ -56,7 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not save your business profile" }, { status: 500 });
   }
 
-  if (personal?.success) {
+  if (personal.success) {
     const fullName = `${personal.data.firstName} ${personal.data.lastName}`;
     const { error: userError } = await supabase.from("users").update({ name: fullName, phone: personal.data.phone }).eq("id", context.userId);
     if (userError) {

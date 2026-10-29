@@ -50,7 +50,7 @@ export default async function WelcomePage() {
   const found = owed?.available && owed.totalCents > 0 ? owed : null;
 
   return (
-    <FunnelFrame step={6}>
+    <FunnelFrame step={4}>
       {found ? (
         <>
           <FunnelHeading title="Here is your first number.">Every line of your statement was matched to a policy and compared with what your contract says you should be paid.</FunnelHeading>

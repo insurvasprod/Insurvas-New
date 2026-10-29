@@ -4,8 +4,8 @@ import { aboutYouSchema } from "@/lib/signup/schemas";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-/** First visit, or Back from the plan/payment step before the plan starts. */
-const ABOUT_YOU_STATES = new Set(["about_you", "ready_for_checkout", "awaiting_payment"]);
+/** The About you step after payment (and older accounts still on the pre-payment About you screen). */
+const ABOUT_YOU_STATES = new Set(["about_you", "ready_for_checkout", "awaiting_payment", "business_profile"]);
 
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
@@ -32,5 +32,6 @@ export async function POST(request: NextRequest) {
   const { data: selection, error: selectionError } = await supabase.from("signup_selections")
     .select("selected_from_pricing").eq("tenant_id", context.tenantId).maybeSingle();
   if (selectionError) console.error("Could not read signup plan intent", selectionError.code, selectionError.message);
+  if (data[0].onboarding_state === "business_profile") return NextResponse.json({ ok: true, redirectTo: "/app/onboarding/business-profile" });
   return NextResponse.json({ ok: true, redirectTo: selection?.selected_from_pricing ? "/app/checkout" : "/app/onboarding/plan" });
 }

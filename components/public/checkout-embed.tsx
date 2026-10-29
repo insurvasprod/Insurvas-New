@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /**
- * Step 5 of 5, Payment (owner pick A, 2026-10-26): Whop's Checkout element embedded on our page
+ * Step 2 of 3, Plan & payment: the payment screen (owner pick A, 2026-10-26): Whop's Checkout element embedded on our page
  * instead of a redirect to whop.com. It opens from the checkout configuration (`ch_…`) our server
  * creates — the plan, the trial and the tenant metadata the webhook reads all live there — so the
  * card still goes straight to Whop and never touches Insurvas.

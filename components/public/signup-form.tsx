@@ -64,7 +64,7 @@ export function SignupForm({ initialPlanCode, initialCycle, noPayment = false }:
         body: JSON.stringify({
           email: form.get("email"),
           password,
-          // A plan picked on the pricing page; Step 4 of 5 is where it is chosen or changed.
+          // A plan picked on the pricing page; the plan screen (step 2) is where it is chosen or changed.
           planCode: initialPlanCode || undefined,
           billingCycle: BILLING_CYCLES.includes(initialCycle as BillingCycle) ? initialCycle : undefined,
           // The exact versions shown next to the box that was ticked.

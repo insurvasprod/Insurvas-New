@@ -31,3 +31,8 @@ SQL to run: `tasks/branch-migrations-redesign-my-profile.sql` (one transaction, 
 
 ## Review
 - [ ] A9 Full journey on a preview deploy with the SQL applied: both entry paths (Pricing / header "Start free trial"), skip business info, desktop + phone
+
+## Sign-up cut to 3 steps (29 Oct, manager review §1.9)
+- [x] Step 1 Your account: email + password, then the email check (same step number)
+- [x] Step 2 Plan & payment: plan screen only when no plan was picked on Pricing, then Whop checkout
+- [x] Step 3 About you: name and phone (required) plus business details; Skip for now saves the name/phone and skips only the business part

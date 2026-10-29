@@ -17,7 +17,7 @@ function trialEndDate() {
 }
 
 /**
- * Step 4 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, seats, and the
+ * Step 2 of 3, Plan & payment: the plan screen (owner pick B, 2026-10-26): who it is for, plan and billing, seats, and the
  * add-on modules the plan offers. The brand story makes way for a live summary of the choice.
  */
 export default async function PlanStepPage({ searchParams }: { searchParams: Promise<{ change?: string }> }) {
@@ -31,7 +31,7 @@ export default async function PlanStepPage({ searchParams }: { searchParams: Pro
   if (context.onboardingState === "ready_for_checkout" && saved?.selectedFromPricing && change !== "1") redirect("/app/checkout");
   if (plans.length === 0) {
     return (
-      <FunnelFrame step={4}>
+      <FunnelFrame step={2}>
         <FunnelHeading title="Choose your plan">No plan is open for sign-up right now. Write to support@insurvas.com and we will set you up.</FunnelHeading>
       </FunnelFrame>
     );
@@ -45,7 +45,7 @@ export default async function PlanStepPage({ searchParams }: { searchParams: Pro
       trialEnds={dayMonthYear(trialEndDate(), "UTC")}
       noPayment={checkoutPaymentMode() === "none"}
     >
-      <FunnelFrame step={4} wide aside={<PlanChoiceSummary />}>
+      <FunnelFrame step={2} wide aside={<PlanChoiceSummary />}>
         <PlanChoiceForm />
       </FunnelFrame>
     </PlanChoiceProvider>

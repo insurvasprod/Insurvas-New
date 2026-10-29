@@ -42,7 +42,7 @@ export default async function CheckoutReturnPage({ searchParams }: { searchParam
   if (!session) redirect("/app/dashboard");
 
   return (
-    <FunnelFrame step={5}>
+    <FunnelFrame step={2}>
       <FunnelHeading title="Starting your trial">This usually takes a few seconds.</FunnelHeading>
       <CheckoutReturnStatus />
     </FunnelFrame>

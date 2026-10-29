@@ -28,13 +28,13 @@ export type CheckoutViewProps = {
   failed?: boolean;
   /** CHECKOUT_PAYMENT_MODE=none: the button starts the plan at once; no card, no provider. */
   noPayment?: boolean;
-  /** Add-ons ticked on Step 4 of 5. They are attached when the plan starts and billed on the Insurvas invoice. */
+  /** Add-ons ticked on the plan screen. They are attached when the plan starts and billed on the Insurvas invoice. */
   addons?: { name: string; price: string; cycle: BillingCycle }[];
   /** Prefills the email field in Whop's form. */
   email?: string;
   /** Which Whop environment the embedded form talks to: the one our API key belongs to. */
   environment?: "production" | "sandbox";
-  /** Where Back goes: About you when the plan came from Pricing (no plan step was shown), else the plan step. */
+  /** The plan screen, when one was shown; a plan picked on Pricing has no screen to go back to (Change plan stays). */
   backHref?: string;
 };
 
@@ -93,7 +93,7 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
           <h2 className={cn("mt-1 text-2xl font-semibold leading-tight tracking-[-0.02em]", strong)}>{planName ?? "Your plan"}</h2>
           {planLine && <p className={cn("text-sm", muted)}>{planLine}</p>}
         </div>
-        {/* Back to Step 4 of 5: a buyer who picked the wrong plan must not be stuck paying for it. */}
+        {/* Back to the plan screen: a buyer who picked the wrong plan must not be stuck paying for it. */}
         <Link href="/app/onboarding/plan?change=1" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
       </div>
 
@@ -122,12 +122,12 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
 }
 
 export function CheckoutView(props: CheckoutViewProps) {
-  const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production", backHref = "/app/onboarding/plan" } = props;
+  const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production", backHref } = props;
 
   // Kept short on purpose (manager review, 2026-10-28): the Whop form cannot shrink, so everything
   // around it does, and the whole step fits a 1536×826 screen without scrolling.
   const body = (
-    <FunnelFrame step={5} wide aside={<Receipt props={props} dark />}>
+    <FunnelFrame step={2} wide aside={<Receipt props={props} dark />}>
       <FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day trial` : "Start your plan"}>
         {noPayment
           ? "No payment is taken. Your workspace opens as soon as you continue."
@@ -158,11 +158,13 @@ export function CheckoutView(props: CheckoutViewProps) {
           : <PaymentEmbed email={email} environment={environment} />}
 
         {/* Back sits under the form, where every other step keeps it. Whop's own button submits payment. */}
-        <div>
-          <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-6">
-            <Link href={backHref}>Back</Link>
-          </Button>
-        </div>
+        {backHref && (
+          <div>
+            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-6">
+              <Link href={backHref}>Back</Link>
+            </Button>
+          </div>
+        )}
       </div>
     </FunnelFrame>
   );

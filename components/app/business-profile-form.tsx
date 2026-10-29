@@ -81,7 +81,7 @@ export type BusinessProfileInitial = {
 };
 
 /**
- * Step 3 of 5. The answers decide the setup checklist shown after checkout; the server derives it
+ * Step 3 of 3, About you. The answers decide the setup checklist shown after checkout; the server derives it
  * when it saves the profile.
  *
  * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
@@ -114,9 +114,9 @@ export function BusinessProfileForm({ initial = null, email = null, fullName = "
 
   const missing = [
     businessName.trim().length < 2 && "business name",
-    !postPayment && !firstName.trim() && "first name",
-    !postPayment && !lastName.trim() && "last name",
-    !postPayment && !phoneCheck.ok && phoneCheck.error,
+    !firstName.trim() && "first name",
+    !lastName.trim() && "last name",
+    !phoneCheck.ok && phoneCheck.error,
     !primaryState && "primary state",
     products.length === 0 && "a product",
     !volume && "monthly applications",
@@ -138,7 +138,7 @@ export function BusinessProfileForm({ initial = null, email = null, fullName = "
       const response = await fetch("/api/app/onboarding/business-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(!postPayment ? { firstName: firstName.trim(), lastName: lastName.trim(), phone: phoneCheck.ok ? phoneCheck.e164 : "" } : {}), businessName, primaryState, productsSold: products, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phoneCheck.ok ? phoneCheck.e164 : "", businessName, primaryState, productsSold: products, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not save your business profile"); return; }
@@ -151,10 +151,19 @@ export function BusinessProfileForm({ initial = null, email = null, fullName = "
     }
   }
 
+  // Skip covers the business details only: the name and phone are still saved (manager review, 13:49).
   async function skipForNow() {
-    setSkipping(true);
     setError(null);
+    const personalMissing = [!firstName.trim() && "first name", !lastName.trim() && "last name", !phoneCheck.ok && phoneCheck.error].filter(Boolean);
+    if (personalMissing.length) { setPhoneTouched(true); setError(`Still needed: ${personalMissing.join(", ")}.`); return; }
+    setSkipping(true);
     try {
+      const personal = await fetch("/api/app/onboarding/about-you", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phoneCheck.ok ? phoneCheck.e164 : "" }),
+      });
+      if (!personal.ok) { const body = await personal.json().catch(() => null); setError(body?.error ?? "Could not save your details. Try again."); return; }
       const response = await fetch("/api/app/onboarding/business-profile/skip", { method: "POST" });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not finish setup right now."); return; }
@@ -170,9 +179,9 @@ export function BusinessProfileForm({ initial = null, email = null, fullName = "
   return (
     <div>
       {/* Owner pick A, 2026-10-26: no subtitle and no setup preview; the NPN is asked later in Settings. */}
-      <div className="mb-7"><FunnelHeading title={postPayment ? "Set up your business profile" : audience === "agency" ? "Tell us about your agency" : "Tell us about you"}>{postPayment ? "These details help tailor your workspace. You can finish this now or come back to it later." : audience === "agency" ? "Share a few details about your agency so we can tailor the workspace for your team." : "Add your personal details first, then we’ll tailor your workspace to the business you run."}</FunnelHeading></div>
+      <div className="mb-7"><FunnelHeading title={audience === "agency" ? "Tell us about your agency" : "Tell us about you"}>{postPayment ? "Your trial is running. Add your name and phone; the business details can wait if you skip them." : audience === "agency" ? "Share a few details about your agency so we can tailor the workspace for your team." : "Add your personal details first, then we’ll tailor your workspace to the business you run."}</FunnelHeading></div>
       <form onSubmit={(event) => void save(event)} noValidate className="flex flex-col gap-5">
-        {!postPayment && <fieldset className="flex flex-col gap-4">
+        <fieldset className="flex flex-col gap-4">
           <legend className="text-base font-semibold text-foreground">About you</legend>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="block"><span className={authLabel}>First Name</span><input className={authControl} autoComplete="given-name" maxLength={60} required value={firstName} onChange={(event) => setFirstName(event.target.value)} /></label>
@@ -182,7 +191,7 @@ export function BusinessProfileForm({ initial = null, email = null, fullName = "
             <PhoneField id="business-phone" country={phoneCountryCode} onCountryChange={setPhoneCountryCode} number={phoneValue} onNumberChange={setPhoneValue} onBlur={() => setPhoneTouched(true)} invalid={phoneTouched && !phoneCheck.ok} describedBy="about-phone-note" />
             <span id="about-phone-note" className="mt-1.5 block text-xs text-muted-foreground">Used for your account and payment support{phoneTouched && !phoneCheck.ok ? ` · ${phoneCheck.error}` : "."}</span>
           </div>
-        </fieldset>}
+        </fieldset>
 
         <fieldset className="flex flex-col gap-5">
           <legend className="text-base font-semibold text-foreground">Your business</legend>
