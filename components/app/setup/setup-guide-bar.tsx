@@ -156,33 +156,39 @@ export function SetupGuideBar() {
   };
   const markDone = () => void markSetupStep("done", step.key).then((ok) => { if (ok) void load(); });
 
+  // A floating box at the bottom right, over the page rather than in it (manager review 29 Oct,
+  // 01:13: "an overlay … so the pages stay on their own design … it stays until he finishes"). Raised
+  // clear of a page's save bar, so it never covers Save.
   return (
     <div
       data-setup-guide=""
-      className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-primary bg-[var(--color-card)] px-4 py-3"
+      role="region"
+      aria-label="Get set up"
+      className="fixed right-6 bottom-24 z-40 flex w-[min(380px,calc(100vw-3rem))] flex-col gap-3 rounded-[12px] border border-primary bg-[var(--color-card)] p-4 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))]"
     >
       <span role="status" aria-live="polite" className="sr-only">{announcement}</span>
-      {step.complete ? (
-        <span aria-hidden="true" className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--success)] text-[var(--on-success)]">
-          <Check className="size-3" strokeWidth={3} />
-        </span>
-      ) : null}
-      <p className="min-w-0 flex-1 text-sm">
-        <span className="text-muted-foreground tabular-nums">{position} · </span>
-        <span className="font-semibold">{step.label}</span>
-        <span className="text-muted-foreground"> — {step.complete ? "done." : step.instruction}</span>
-        {step.key === "statement" ? <> <InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip></> : null}
-      </p>
-      <span className="flex shrink-0 flex-wrap items-center gap-2">
-        <Link href="/app/setup" className={buttonVariants({ variant: "ghost" })}>Back to setup</Link>
+      <div className="flex items-start gap-2.5">
+        {step.complete ? (
+          <span aria-hidden="true" className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--success)] text-[var(--on-success)]">
+            <Check className="size-3" strokeWidth={3} />
+          </span>
+        ) : null}
+        <p className="m-0 min-w-0 flex-1 text-sm">
+          <span className="block text-xs text-muted-foreground tabular-nums">{position}</span>
+          <span className="block font-semibold">{step.label}{step.key === "statement" ? <> <InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip></> : null}</span>
+          <span className="mt-0.5 block text-muted-foreground">{step.complete ? "Done." : step.instruction}</span>
+        </p>
+      </div>
+      <span className="flex flex-wrap items-center justify-end gap-2">
+        <Link href="/app/setup" className={buttonVariants({ variant: "ghost", size: "sm" })}>Back to setup</Link>
         {!step.complete && isManualStep(step.key) ? (
-          <Button type="button" variant="outline" onClick={markDone}>Mark done</Button>
+          <Button type="button" variant="outline" size="sm" onClick={markDone}>Mark done</Button>
         ) : null}
         {!step.complete && !step.optional ? (
-          <Button type="button" variant="ghost" onClick={skip}>Skip</Button>
+          <Button type="button" variant="outline" size="sm" onClick={skip}>Skip</Button>
         ) : null}
         {step.complete ? (
-          <Link href={next ? next.href : data.checklist.complete ? "/app/setup?celebrate=1" : "/app/setup"} className={buttonVariants({ variant: "default" })}>
+          <Link href={next ? next.href : data.checklist.complete ? "/app/setup?celebrate=1" : "/app/setup"} className={buttonVariants({ variant: "default", size: "sm" })}>
             {next ? `Next: ${next.label}` : "Finish"}
           </Link>
         ) : null}
