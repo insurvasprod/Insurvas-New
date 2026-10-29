@@ -3706,3 +3706,37 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   :has(> .portal-agent-rail) .portal-top-bar .portal-top-search { flex: 0 1 520px; margin-inline: 0; }
   :has(> .portal-agent-rail) .portal-top-bar .portal-top-actions { flex: 1 1 0; justify-content: flex-end; }
 }
+
+/* ── Sidebar sub-navigation as a tree (manager review 28 Oct §3.1, settings redesign 2026-10-29) ──
+   The group is the heading (icon, bold); its pages hang off one continuous 1px line drawn under the
+   group's icon, with a short elbow to each page, so the eye reads parent → children at a glance.
+   Children are text only (the reference he showed); the active page's elbow takes the accent.
+   Only for groups in the open rail: the collapsed icon rail hides sublists already. */
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) {
+  position: relative;
+  margin-left: 2.5rem !important; /* under the group's icon */
+  padding-left: .7rem !important;
+}
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested)::before {
+  content: "";
+  position: absolute;
+  top: .1rem;
+  bottom: 1.07rem;
+  left: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li { position: relative; }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -.7rem;
+  width: .5rem;
+  height: 1px;
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li:has(.is-active)::before { background: var(--accent-ink); }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested .portal-agent-nav-icon { display: none; }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested { padding-left: .5rem; font-weight: 400; }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested.is-active { font-weight: 600; }
