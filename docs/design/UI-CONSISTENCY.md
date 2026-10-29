@@ -22,6 +22,10 @@ rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx
 `lib/design/uiOffenders.json`. A new offender fails the build; a fix must lower the baseline (see the
 top of the test). The numbers only go down.
 
+Typography stays token-based. Foundation v3 adds shared semantic `text-card-title` (15px) and
+`text-field-label` (13px) steps alongside Tailwind's 12/14/16px body scale; use those tokens across
+surfaces instead of introducing one-off `text-[Npx]` utilities.
+
 ## 1. Chrome (done centrally — do not re-add)
 - No workspace/context strip under the top bar. The top bar and the sidebar brand block are one band
   (same 56px height, same `--nav-*` colours).

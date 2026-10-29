@@ -20,12 +20,15 @@ function trialEndDate() {
  * Step 4 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, seats, and the
  * add-on modules the plan offers. The brand story makes way for a live summary of the choice.
  */
-export default async function PlanStepPage() {
+export default async function PlanStepPage({ searchParams }: { searchParams: Promise<{ change?: string }> }) {
   const context = await resolveSignupContext();
   if (!context) redirect("/app/login");
   if (context.userStatus !== "active" || !CHOOSABLE.has(context.onboardingState)) redirect(signupDestination(context) ?? "/app/dashboard");
 
   const [{ plans, modules }, saved] = await Promise.all([fetchPlanChoices(), readPlanChoice(context.tenantId)]);
+  // A plan picked on Pricing skips this step, unless the owner asked to change it from Payment.
+  const { change } = await searchParams;
+  if (context.onboardingState === "ready_for_checkout" && saved?.selectedFromPricing && change !== "1") redirect("/app/checkout");
   if (plans.length === 0) {
     return (
       <FunnelFrame step={4}>

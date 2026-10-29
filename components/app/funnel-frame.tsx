@@ -1,20 +1,41 @@
-import type { ReactNode } from "react";
+import { ViewTransition, type ReactNode } from "react";
 import Link from "next/link";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { AuthBrand, PortalAuthSplitShell } from "@/components/portal/portal-auth-split-shell";
-import { StoryPanel } from "@/components/app/tenant-auth-workspace";
+import { AuthShowcase } from "@/components/app/auth-showcase";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * The five sign-up steps (owner, 2026-10-26): account, email, agency, plan, payment. The plan has its
- * own step now; before, it sat on the account form and step 4 was the trial.
+ * The sign-up steps: account, email, about you, plan, payment, optional business setup.
  */
-export const FUNNEL_STEPS = ["Your account", "Your email", "Your agency", "Your plan", "Payment"] as const;
-/** 6 is the welcome screen after the plan starts: every step done. */
-export type FunnelStep = 1 | 2 | 3 | 4 | 5 | 6;
+export const FUNNEL_STEPS = ["Your account", "Your email", "About you", "Your plan", "Payment", "Business setup"] as const;
+/** 7 is the welcome screen after optional business setup: every step done. */
+export type FunnelStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-/** "Step 2 of 5 · Your email" over five bars. One stepper for the whole journey, so no screen counts differently. */
+/** A consistent bottom navigation row for steps that can move both backward and forward. */
+export function FunnelStepFooter({ backHref, continueLabel = "Continue", busyLabel, busy = false, disabled = false, onContinue }: {
+  backHref?: string;
+  continueLabel?: string;
+  busyLabel?: string;
+  busy?: boolean;
+  disabled?: boolean;
+  onContinue?: () => void;
+}) {
+  return (
+    <div className={`mt-2 grid ${backHref ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
+      {backHref && <Button type="button" asChild variant="outline" className="h-12 w-full border-[var(--border-strong)]">
+        <Link href={backHref}>Back</Link>
+      </Button>}
+      <Button type={onContinue ? "button" : "submit"} className="h-12 w-full" disabled={disabled || busy} onClick={onContinue}>
+        {busy ? busyLabel ?? "Saving…" : continueLabel}
+      </Button>
+    </div>
+  );
+}
+
+/** One progress indicator for the full sign-up journey, so no screen counts differently. */
 export function FunnelStepper({ step }: { step: FunnelStep }) {
   const done = step > FUNNEL_STEPS.length;
   return (
@@ -24,7 +45,7 @@ export function FunnelStepper({ step }: { step: FunnelStep }) {
           ? <span className="text-foreground">All {FUNNEL_STEPS.length} steps done</span>
           : <><span className="text-foreground">Step {step} of {FUNNEL_STEPS.length}</span> · {FUNNEL_STEPS[step - 1]}</>}
       </p>
-      <ol className="mt-3 grid grid-cols-5 gap-1.5" aria-label="Sign-up progress">
+      <ol className="mt-3 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${FUNNEL_STEPS.length}, minmax(0, 1fr))` }} aria-label="Sign-up progress">
         {FUNNEL_STEPS.map((label, index) => (
           <li
             key={label}
@@ -58,10 +79,13 @@ export function FunnelFrame({ step, children, wide = false, aside }: {
       className="portal-agent portal-tenant-auth-shell"
       form={
         <div className="m-stagger portal-auth-form-inner" style={wide ? { maxWidth: 720 } : undefined}>
+          {/* Logo and progress stay put between steps; only the step's own content moves (manager review, 14:41). */}
           <AuthBrand href="/" label="Insurvas home">
             <InsurvasLogo size="auth" />
           </AuthBrand>
-          <FunnelStepper step={step} />
+          <ViewTransition name="funnel-stepper" share="funnel-still" default="none">
+            <div><FunnelStepper step={step} /></div>
+          </ViewTransition>
           {children}
           <nav className="portal-login-footer" aria-label="Legal links">
             <Link href="/legal/privacy">Privacy</Link>
@@ -70,7 +94,7 @@ export function FunnelFrame({ step, children, wide = false, aside }: {
           </nav>
         </div>
       }
-      story={aside ?? <StoryPanel mode={step === 6 ? "sign-in" : "sign-up"} />}
+      story={aside ?? <AuthShowcase step={step} key={step} />}
     />
   );
 }

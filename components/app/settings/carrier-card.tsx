@@ -23,7 +23,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
-import { Callout, control } from "@/components/app/settings/primitives";
+import { control } from "@/components/app/settings/primitives";
 import { copyUsername, openPortal } from "@/components/app/settings/sales/carriers-portal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { PAYMENT_METHOD_LABEL } from "@/lib/applications/constants";
 import { PORTAL_MFA_LABEL, PORTAL_MFA_TYPES } from "@/lib/salesSettings/portalSchemas";
 import type { TenantCarrierRow } from "@/lib/carriers/service";
-import { bpToLevel, levelToBp, todayIso } from "@/lib/appointments/tickModel";
+import { bpToLevel, todayIso } from "@/lib/appointments/tickModel";
 import type { CarrierFacts, CarrierProductView, FieldMapChip, PortalAccountView, ProductLine, SalesCarrierView } from "@/lib/salesSettings/views";
 import { FACT_REPORT_LABEL, type FactReportKey, type FactReportView } from "@/lib/carriers/factReportConstants";
 
@@ -207,7 +207,14 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales
 
       {!progress.ready && !switchedOff && <ToFinish name={carrier.name} progress={progress} hasLogin={Boolean(sales?.portal)} ids={ids} />}
 
-      <ContractSection key={`${contract?.id ?? "none"}-${contract?.contract_level_bp ?? ""}-${contract?.writing_number ?? ""}`} carrierId={carrier.id} carrierName={carrier.name} contract={contract} canEdit={canEdit} levelId={ids.contract} portal={sales?.portal ?? null} onSaved={onSaved} />
+      <section id={ids.contract} aria-label="Contract" className="flex flex-col gap-1.5">
+        <span className={KICKER}>Contract</span>
+        {contract ? (
+          <p className="m-0 text-sm text-[var(--body)]">{bpToLevel(contract.contract_level_bp)}% level · contracted from {contract.effective_from} · writing number {contract.writing_number}</p>
+        ) : (
+          <p className="m-0 text-sm text-[var(--muted)]">Add your contract level, start date and writing number in the carrier list. These details stay optional until you have them.</p>
+        )}
+      </section>
 
       {salesAvailable && sales && (<>
         <div className="h-px bg-[var(--border)]" />
@@ -233,65 +240,6 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, sales
         )}
       </div>
     </div>
-  );
-}
-
-/* ── contract ───────────────────────────────────────────────────────────────────────────────── */
-
-function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, portal, onSaved }: {
-  carrierId: string; carrierName: string; contract: TenantCarrierRow | null; canEdit: boolean; levelId: string; portal: PortalAccountView | null; onSaved: () => Promise<void>;
-}) {
-  const [level, setLevel] = useState(bpToLevel(contract?.contract_level_bp));
-  const [from, setFrom] = useState(contract?.effective_from ?? todayIso());
-  const [writing, setWriting] = useState(contract?.writing_number ?? portal?.writingNumber ?? "");
-  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const levelBad = level.trim() !== "" && levelToBp(level) === null;
-
-  async function save() {
-    const bp = levelToBp(level);
-    if (bp === null || !from || !writing.trim()) return;
-    if (contract && bp === contract.contract_level_bp && from === contract.effective_from && writing.trim() === contract.writing_number) return;
-    setState("saving");
-    setError(null);
-    const result = await send("/api/app/carrier-library/tenant-carriers", "POST", { carrier_id: carrierId, contract_level_bp: bp, writing_number: writing.trim(), effective_from: from });
-    if (!result.ok) { setState("idle"); setError(result.error); return; }
-    setState("saved");
-    await onSaved();
-  }
-
-  const missing = !contract && (level.trim() === "" || writing.trim() === "");
-  return (
-    <section aria-label="Contract" className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className={KICKER}>Contract</span>
-        {state === "saving" ? <span className="text-xs text-[var(--muted)]">Saving…</span> : state === "saved" ? <StatusChip tone="good">Saved</StatusChip> : null}
-      </div>
-      <div className="grid gap-3.5 sm:grid-cols-[150px_180px_200px]">
-        <label className={FIELD}>
-          Contract level
-          <span className="relative">
-            <input id={levelId} className={cn(control, "mt-0 pr-7")} inputMode="decimal" disabled={!canEdit} aria-invalid={levelBad || undefined} value={level} onChange={(event) => setLevel(event.target.value)} onBlur={() => void save()} placeholder="110" />
-            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-[var(--muted)]">%</span>
-          </span>
-        </label>
-        <label className={FIELD}>
-          Contracted from
-          <input className={cn(control, "mt-0")} type="date" disabled={!canEdit} value={from} onChange={(event) => setFrom(event.target.value)} onBlur={() => void save()} />
-        </label>
-        <label className={FIELD}>
-          Writing number
-          <input className={cn(control, "mt-0")} disabled={!canEdit} value={writing} autoComplete="off" spellCheck={false} placeholder="e.g. TA-20914" onChange={(event) => setWriting(event.target.value)} onBlur={() => void save()} />
-        </label>
-      </div>
-      {levelBad && <p className="m-0 text-xs text-[var(--error-ink)]">Write the level as a number, like 110.</p>}
-      {error && <Callout tone="error" title={error} />}
-      <p className="m-0 text-xs text-[var(--muted)]">
-        {missing
-          ? `Type the level as ${carrierName} quotes it: 110 means 110%. The writing number is on your contracting letter or in the carrier’s portal. It saves once both are in.`
-          : "The level every commission figure is worked out from. A new level from a later date keeps the earlier one for older policies."}
-      </p>
-    </section>
   );
 }
 

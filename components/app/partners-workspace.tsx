@@ -75,6 +75,8 @@ import { productLineLabel } from "@/lib/format/productLine";
 import { PARTNER_LIMIT_KEYS, capacityLabel } from "@/lib/partners/limits";
 import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
 import { cn } from "@/lib/utils";
+import { PHONE_COUNTRIES } from "@/lib/signup/phone";
+import { WORKSPACE_TIMEZONES } from "@/lib/agencyProfile/types";
 
 type Term = {
   id: string;
@@ -200,9 +202,31 @@ const emptyDraft: PartnerDraft = {
   country: "US",
   contact_name: "",
   contact_email: "",
-  timezone: "UTC",
+  timezone: "America/New_York",
   notes: "",
 };
+const DEFAULT_PARTNER_TIMEZONE: Record<string, string> = {
+  US: "America/New_York", CA: "America/Toronto", GB: "Europe/London", IE: "Europe/Dublin",
+  FR: "Europe/Paris", DE: "Europe/Berlin", ES: "Europe/Madrid", IT: "Europe/Rome",
+  NL: "Europe/Amsterdam", BE: "Europe/Brussels", CH: "Europe/Zurich", SE: "Europe/Stockholm",
+  NO: "Europe/Oslo", DK: "Europe/Copenhagen", PL: "Europe/Warsaw", TR: "Europe/Istanbul",
+  AE: "Asia/Dubai", IN: "Asia/Kolkata", SG: "Asia/Singapore", MY: "Asia/Kuala_Lumpur",
+  PH: "Asia/Manila", JP: "Asia/Tokyo", KR: "Asia/Seoul", CN: "Asia/Shanghai", HK: "Asia/Hong_Kong",
+  AU: "Australia/Sydney", NZ: "Pacific/Auckland", ZA: "Africa/Johannesburg", NG: "Africa/Lagos",
+  EG: "Africa/Cairo", BR: "America/Sao_Paulo", AR: "America/Argentina/Buenos_Aires",
+  MX: "America/Mexico_City", CO: "America/Bogota", CL: "America/Santiago", PE: "America/Lima",
+  PR: "America/Puerto_Rico",
+};
+const PARTNER_TIMEZONES = [...new Set([
+  ...WORKSPACE_TIMEZONES,
+  "America/Toronto", "America/Vancouver", "America/Mexico_City", "America/Bogota", "America/Lima",
+  "America/Santiago", "America/Sao_Paulo", "America/Argentina/Buenos_Aires", "Europe/London", "Europe/Dublin",
+  "Europe/Paris", "Europe/Berlin", "Europe/Madrid", "Europe/Rome", "Europe/Amsterdam", "Europe/Brussels",
+  "Europe/Zurich", "Europe/Stockholm", "Europe/Oslo", "Europe/Copenhagen", "Europe/Warsaw", "Europe/Istanbul",
+  "Asia/Dubai", "Asia/Kolkata", "Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Manila", "Asia/Tokyo",
+  "Asia/Seoul", "Asia/Shanghai", "Asia/Hong_Kong", "Africa/Johannesburg", "Africa/Lagos", "Africa/Cairo",
+  "Australia/Sydney", "Pacific/Auckland", "UTC",
+])];
 // Keep server and browser markup identical. The publisher page is rendered on the
 // server before the client takes over, so locale/timezone-sensitive formatters and
 // a current-date default can otherwise trigger a hydration mismatch.
@@ -344,6 +368,8 @@ export function PartnersWorkspace({
   // Header, capacity strip, toolbar, column heads and pager around the directory's rows.
   const listPageSize = useFittingRows(400, 49);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailTouched, setEmailTouched] = useState(false);
   const [offboardFor, setOffboardFor] = useState<Partner | null>(null);
   const [offboardText, setOffboardText] = useState("");
 
@@ -578,10 +604,14 @@ export function PartnersWorkspace({
   function openCreate() {
     setEditing(null);
     setDraft(emptyDraft);
+    setEmailError(null);
+    setEmailTouched(false);
     setDialogOpen(true);
   }
   function openEdit(partner: Partner) {
     setEditing(partner.id);
+    setEmailError(null);
+    setEmailTouched(false);
     setDraft({
       name: partner.name,
       partner_type: partner.partner_type,
@@ -1349,8 +1379,8 @@ export function PartnersWorkspace({
                 : "A publisher, marketing company or affiliate."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={savePartner} className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5 md:col-span-2">
+          <form onSubmit={savePartner} className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="partner-name">Partner name</Label>
               <Input
                 id="partner-name"
@@ -1367,7 +1397,7 @@ export function PartnersWorkspace({
               <Label htmlFor="partner-type">Type</Label>
               <select
                 id="partner-type"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                className={cn(toolbarControl, "w-full")}
                 value={draft.partner_type}
                 onChange={(event) =>
                   setDraft({
@@ -1382,19 +1412,6 @@ export function PartnersWorkspace({
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="partner-country">Country</Label>
-              <Input
-                id="partner-country"
-                value={draft.country}
-                onChange={(event) =>
-                  setDraft({ ...draft, country: event.target.value })
-                }
-                placeholder="US"
-                required
-                maxLength={2}
-              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="partner-contact">Contact name</Label>
@@ -1413,26 +1430,52 @@ export function PartnersWorkspace({
                 id="partner-email"
                 type="email"
                 value={draft.contact_email}
-                onChange={(event) =>
-                  setDraft({ ...draft, contact_email: event.target.value })
-                }
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setDraft({ ...draft, contact_email: value });
+                  if (emailTouched) setEmailError(value && event.currentTarget.validity.typeMismatch ? "Enter a valid email address." : null);
+                }}
+                onBlur={(event) => {
+                  setEmailTouched(true);
+                  setEmailError(event.currentTarget.validity.typeMismatch ? "Enter a valid email address." : null);
+                }}
+                aria-invalid={Boolean(emailError) || undefined}
+                aria-describedby={emailError ? "partner-email-error" : undefined}
                 placeholder="ops@example.com"
               />
+              {emailError && <p id="partner-email-error" role="alert" className="m-0 text-sm text-destructive">{emailError}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="partner-country">Country</Label>
+              <select
+                id="partner-country"
+                className={cn(toolbarControl, "w-full")}
+                value={draft.country}
+                required
+                onChange={(event) => {
+                  const country = event.target.value;
+                  setDraft({ ...draft, country, timezone: editing ? draft.timezone : DEFAULT_PARTNER_TIMEZONE[country] ?? "UTC" });
+                }}
+              >
+                {!PHONE_COUNTRIES.some((country) => country.code === draft.country) && <option value={draft.country}>{draft.country}</option>}
+                {PHONE_COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="partner-timezone">Timezone</Label>
-              <Input
+              <select
                 id="partner-timezone"
+                className={cn(toolbarControl, "w-full")}
                 value={draft.timezone}
-                onChange={(event) =>
-                  setDraft({ ...draft, timezone: event.target.value })
-                }
-                placeholder="America/Phoenix"
+                onChange={(event) => setDraft({ ...draft, timezone: event.target.value })}
                 required
-                maxLength={100}
-              />
+              >
+                {!PARTNER_TIMEZONES.includes(draft.timezone as (typeof PARTNER_TIMEZONES)[number]) && <option value={draft.timezone}>{draft.timezone}</option>}
+                {[DEFAULT_PARTNER_TIMEZONE[draft.country] ?? "UTC", ...PARTNER_TIMEZONES.filter((zone) => zone !== (DEFAULT_PARTNER_TIMEZONE[draft.country] ?? "UTC"))].map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+              </select>
+              {editing && draft.timezone !== (DEFAULT_PARTNER_TIMEZONE[draft.country] ?? "UTC") && <p className="m-0 text-xs text-muted-foreground">Your saved time zone is kept. Suggested for this country: {DEFAULT_PARTNER_TIMEZONE[draft.country] ?? "UTC"}.</p>}
             </div>
-            <div className="space-y-1.5 md:col-span-2">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="partner-notes">Notes</Label>
               <textarea
                 id="partner-notes"

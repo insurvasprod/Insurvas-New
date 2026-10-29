@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { AuthShowcase } from "@/components/app/auth-showcase";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
@@ -13,7 +14,7 @@ import { AuthBrand, PortalAuthSplitShell, type PortalAuthMode } from "@/componen
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { OtpInput } from "@/components/app/otp-input";
 import { TRIAL_DAYS } from "@/lib/checkout/constants";
-import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
+import { TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
 import type { MaintenanceStatus } from "@/lib/system/constants";
 
 /** The address that last signed in on this browser, so a returning agent types only the password. */
@@ -132,11 +133,7 @@ export function TenantAuthWorkspace({
   const [remember, setRemember] = useState(true);
   const [trustDevice, setTrustDevice] = useState(false);
 
-  // "Email me a sign-in link": the request panel, and the link itself when this page was opened from one.
-  const [linkRequest, setLinkRequest] = useState<"closed" | "open" | "sending" | "sent">("closed");
-  const [linkEmail, setLinkEmail] = useState("");
-  const [linkError, setLinkError] = useState<string | null>(null);
-  const [linkCooldown, setLinkCooldown] = useState(0);
+  // A sign-in link may still arrive from an existing email; the password page no longer offers a new request.
   const [linkToken, setLinkToken] = useState<string | null>(null);
 
   // A link arrives as /app/login#link=…: the fragment never reaches a server, and it is cleared from
@@ -148,12 +145,6 @@ export function TenantAuthWorkspace({
     setLinkToken(decodeURIComponent(match[1]));
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []);
-
-  useEffect(() => {
-    if (linkCooldown <= 0) return;
-    const timer = window.setInterval(() => setLinkCooldown((value) => Math.max(0, value - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [linkCooldown]);
 
   // A remembered address fills the field and puts the cursor in the password; otherwise the email.
   useEffect(() => {
@@ -195,30 +186,6 @@ export function TenantAuthWorkspace({
     } catch {
       setResetError("Could not send a reset link. Check your connection and try again.");
       setResetState("idle");
-    }
-  }
-
-  function openLinkRequest() {
-    setLinkEmail(loginEmail);
-    setLinkError(null);
-    setLinkRequest("open");
-  }
-
-  async function requestLink(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    if (linkCooldown > 0) return;
-    setLinkError(null);
-    if (!linkEmail.trim()) { setLinkError("Enter the email address you sign in with."); return; }
-    setLinkRequest("sending");
-    try {
-      const response = await fetch("/api/app/auth/sign-in-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: linkEmail, remember }) });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) { setLinkError(body?.error ?? "Could not send a sign-in link. Try again."); setLinkRequest("open"); return; }
-      setLinkRequest("sent");
-      setLinkCooldown(30);
-    } catch {
-      setLinkError("Could not send a sign-in link. Check your connection and try again.");
-      setLinkRequest("open");
     }
   }
 
@@ -300,7 +267,7 @@ export function TenantAuthWorkspace({
         Welcome back
       </h1>
       <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-        Sign in to your agency&rsquo;s workspace.
+        Sign in to your workspace.
       </p>
 
       <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
@@ -373,26 +340,20 @@ export function TenantAuthWorkspace({
         </Button>
       </form>
 
-      <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
-        <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
-      </div>
-      <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={openLinkRequest} disabled={maintenance?.level === "locked"}>
-        Email me a sign-in link
-      </Button>
-
-      <p className="mt-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
-        New to Insurvas?{" "}
-        <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
-          Start a {TRIAL_DAYS}-day trial
-        </Link>
-      </p>
-
-      <p className="mt-3 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-        Partner or affiliate?{" "}
-        <Link href="/partner/login" className="font-semibold text-foreground">
-          Use the partner portal instead
-        </Link>
-        .
+      {/* One line, one style (manager review, 16:43): the partner link matches the trial link and sits beside it. */}
+      <p className="mt-6 flex flex-wrap gap-x-4 gap-y-1.5 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+        <span>
+          New to Insurvas?{" "}
+          <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            Start a {TRIAL_DAYS}-day trial
+          </Link>
+        </span>
+        <span>
+          Partner?{" "}
+          <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            Partner portal
+          </Link>
+        </span>
       </p>
 
       <nav className="portal-login-footer" aria-label="Legal links">
@@ -504,59 +465,10 @@ export function TenantAuthWorkspace({
   const backToPassword = (
     <div className="mt-[22px]">
       <LinkArrow asChild>
-        <button type="button" onClick={() => { setLinkRequest("closed"); setLinkToken(null); setLoginError(null); }}>
+        <button type="button" onClick={() => { setLinkToken(null); setLoginError(null); }}>
           Use my password instead
         </button>
       </LinkArrow>
-    </div>
-  );
-
-  const linkRequestPanel = (
-    <div className="m-stagger portal-auth-form-inner">
-      {brand}
-      <h1 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">
-        {linkRequest === "sent" ? "Check your inbox" : "Sign in with a link"}
-      </h1>
-      {linkRequest === "sent" ? (
-        <>
-          <p className="mb-6 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            If <strong className="font-semibold text-foreground">{linkEmail.trim()}</strong> belongs to an agent account, a sign-in link is on its way. It works once, for {SIGN_IN_LINK_MINUTES} minutes.
-          </p>
-          <div className="flex flex-wrap gap-2.5">
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
-              <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
-            </Button>
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
-              <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
-            </Button>
-          </div>
-          {linkError && <p className="portal-auth-alert mt-4" role="alert">{linkError}</p>}
-          <p className="mt-5 text-sm leading-normal text-[var(--body)]">
-            Nothing arrived?{" "}
-            <button type="button" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline disabled:text-muted-foreground disabled:no-underline" disabled={linkCooldown > 0} onClick={() => void requestLink()}>
-              {linkCooldown > 0 ? `Send it again in ${linkCooldown}s` : "Send it again"}
-            </button>
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="mb-7 mt-2.5 text-base leading-normal tracking-[-0.02em] text-muted-foreground">
-            We email you a link that signs you in once, within {SIGN_IN_LINK_MINUTES} minutes. No password needed.
-          </p>
-          <form className="flex flex-col gap-4" onSubmit={(event) => void requestLink(event)} noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="tenant-link-email">Email</Label>
-              <Input id="tenant-link-email" type="email" inputMode="email" autoComplete="username" autoFocus required value={linkEmail} onChange={(event) => { setLinkEmail(event.target.value); setLinkError(null); }} />
-            </div>
-            {rememberBox}
-            {linkError && <p className="portal-auth-alert" role="alert">{linkError}</p>}
-            <Button type="submit" className="mt-1 h-12 w-full" disabled={linkRequest === "sending" || maintenance?.level === "locked"}>
-              {linkRequest === "sending" ? "Sending…" : "Email me the link"}
-            </Button>
-          </form>
-        </>
-      )}
-      {backToPassword}
     </div>
   );
 
@@ -582,7 +494,7 @@ export function TenantAuthWorkspace({
     </div>
   );
 
-  const form = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
+  const form = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : resetting ? reset : signIn;
 
-  return <PortalAuthSplitShell mode="sign-in" className="portal-agent portal-tenant-auth-shell" form={form} story={<StoryPanel mode="sign-in" />} />;
+  return <PortalAuthSplitShell mode="sign-in" className="portal-agent portal-tenant-auth-shell" form={form} story={<AuthShowcase step={0} />} />;
 }

@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   const input = parsed.data;
+  const profileName = input.fullName ?? "New user";
 
   // Before anything is created or sent. This endpoint is open to the internet and each call makes
   // a user, a tenant and an email from our sending domain — unthrottled, it is both a way to fill
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     // The address is confirmed by our own token, sent below. Confirming here only tells Auth not to
     // send a second, competing email of its own.
     email_confirm: true,
-    user_metadata: { name: input.fullName, full_name: input.fullName },
+    user_metadata: { name: profileName, full_name: profileName },
   });
   if (authUser.error || !authUser.data.user) {
     // Auth reports an existing address as a 422. It is the same answer as the RPC's EMAIL_EXISTS and
@@ -103,13 +104,14 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase.rpc("self_serve_signup_with_auth", {
     p_auth_user_id: authUser.data.user.id,
-    p_name: input.fullName,
+    p_name: profileName,
     p_email: input.email,
-    p_phone: input.phone,
+    p_phone: input.phone ?? "",
     p_plan_id: plan.id,
     p_billing_cycle: billingCycle,
     p_token_hash: verification.tokenHash,
     p_expires_at: verification.expiresAt.toISOString(),
+    p_selected_from_pricing: Boolean(input.planCode),
   });
 
   // The Auth identity is created before the workspace, so a failure below would strand one with no
@@ -145,7 +147,8 @@ export async function POST(request: NextRequest) {
 
   const delivery = await sendVerificationEmail({
     email: input.email,
-    name: input.fullName,
+    // Avoid addressing an account-first user with the temporary database profile label.
+    name: input.fullName ?? "there",
     verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
     audience: audienceForPlanType(plan.plan_type),
@@ -164,7 +167,7 @@ export async function POST(request: NextRequest) {
     ok: true,
     email: input.email,
     emailDelivered: delivery.delivered,
-    redirectTo: "/app/verify-email",
+    redirectTo: "/app/verify-email?created=1",
   });
   response.cookies.set(TENANT_SESSION_COOKIE, token, tenantSessionCookieOptions);
   return response;

@@ -6,10 +6,35 @@ import { ArrowRight, LoaderCircle } from "lucide-react";
 
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { FunnelHeading } from "@/components/app/funnel-frame";
-import { LogoutButton } from "@/components/app/logout-button";
 import { Button } from "@/components/ui/button";
+import { GmailMark, OutlookMark } from "@/components/ui/brand-marks";
+import Link from "next/link";
 
 const linkButton = "inline-flex items-center gap-1.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground hover:text-[var(--accent-ink)] disabled:opacity-50 [&_svg]:transition-transform hover:[&_svg]:translate-x-[3px]";
+
+/** The account-created step has one way forward; email verification is the next step. */
+export function AccountCreatedPanel() {
+  return (
+    <div>
+      <FunnelHeading title="Your account is created">Next, confirm your email to continue setting up your workspace.</FunnelHeading>
+      <Button asChild className="h-12 w-full">
+        <Link href="/app/verify-email" replace>Continue</Link>
+      </Button>
+    </div>
+  );
+}
+
+/** Allows Back from About you to revisit the completed email step without redirecting in a loop. */
+export function EmailConfirmedPanel({ nextHref = "/app/onboarding/about-you" }: { nextHref?: string }) {
+  return (
+    <div>
+      <FunnelHeading title="Email confirmed">Your address is verified. Continue when you’re ready to finish setting up your workspace.</FunnelHeading>
+      <Button asChild className="h-12 w-full">
+        <Link href={nextHref}>Continue</Link>
+      </Button>
+    </div>
+  );
+}
 
 /**
  * Step 2 of 5: the only screen a pending account can reach. It watches for the verification to
@@ -101,32 +126,47 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
         <div className="flex h-28 items-center justify-center" role="status" aria-label="Loading your account"><LoaderCircle className="animate-spin text-muted-foreground" /></div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-alt)] px-4 py-3.5">
-            <span className="min-w-0 break-all text-base font-semibold tracking-[-0.02em] text-foreground">{email || "—"}</span>
-            <span className={sentNow ? "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--success-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--success-ink)]" : "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-card px-2.5 py-[3px] text-xs font-semibold text-[var(--body)]"}>
-              <span className={sentNow ? "size-1.5 rounded-full bg-[var(--success)]" : "size-1.5 rounded-full bg-[var(--muted)]"} aria-hidden="true" />
-              {sentNow ? "Sent just now" : "Sent at sign-up"}
-            </span>
-          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <div className="min-w-0">
+                <span className="block text-xs font-medium text-muted-foreground">Sent to</span>
+                <span className="block min-w-0 break-all text-base font-semibold tracking-[-0.02em] text-foreground">{email || "—"}</span>
+              </div>
+              <span className={sentNow ? "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--success-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--success-ink)]" : "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--surface-alt)] px-2.5 py-[3px] text-xs font-semibold text-[var(--body)]"}>
+                <span className={sentNow ? "size-1.5 rounded-full bg-[var(--success)]" : "size-1.5 rounded-full bg-[var(--muted)]"} aria-hidden="true" />
+                {sentNow ? "Sent just now" : "Sent at sign-up"}
+              </span>
+            </div>
 
-          <div className="mt-4 flex flex-wrap gap-2.5">
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
-              <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
-            </Button>
-            <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-4">
-              <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
-            </Button>
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
+              <Button asChild variant="outline" className="h-12 justify-center gap-2.5 border-[var(--border-strong)] px-3 text-sm font-semibold">
+                <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer"><GmailMark className="size-[18px] shrink-0" />Open Gmail</a>
+              </Button>
+              <Button asChild variant="outline" className="h-12 justify-center gap-2.5 border-[var(--border-strong)] px-3 text-sm font-semibold">
+                <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer"><OutlookMark className="size-[18px] shrink-0" />Open Outlook</a>
+              </Button>
+            </div>
           </div>
 
           <p className="mt-4 flex items-center gap-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" role="status">
             <LoaderCircle className="size-4 shrink-0 animate-spin text-[var(--accent-ink)] motion-reduce:animate-none" aria-hidden="true" />
-            Waiting for the link to be opened. This page moves on by itself, even if you open it on your phone.
+            Waiting for you to open the link. This page moves on by itself, even if you open it on your phone.
           </p>
 
+          <div className="mt-7 border-t border-border pt-5">
+            <p className="text-sm font-semibold text-foreground">Didn’t get it?</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Check spam or promotions first. Links can take a minute to arrive.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
+              <Button type="button" variant="outline" className="h-12 border-[var(--border-strong)] px-5" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
+                {cooldown > 0 ? `Send again in ${cooldown}s` : submitting && !changing ? "Sending…" : "Send the link again"}
+              </Button>
+              <button type="button" className={linkButton} aria-expanded={changing} onClick={() => setChanging((value) => !value)}>Wrong address?<ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" /></button>
+            </div>
+          </div>
           {changing && (
             <form onSubmit={(event) => send("change_email", event)} className="mt-4 rounded-lg border border-border p-4">
               <label className="block">
-                <span className={authLabel}>Correct work email</span>
+                <span className={authLabel}>Correct Work Email</span>
                 <input type="email" required autoComplete="email" className={authControl} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
               </label>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -139,15 +179,6 @@ export function VerifyEmailPanel({ ttlHours, noPayment = false }: { ttlHours: nu
           {message && <p role="status" className="mt-4 text-center text-sm font-semibold text-[var(--success-ink)]">{message}</p>}
           {error && <p role="alert" className="mt-4 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
 
-          <div className="mt-7 flex flex-col gap-3">
-            <Button type="button" variant="outline" className="h-12 w-full border-[var(--border-strong)]" onClick={() => void send("resend")} disabled={submitting || cooldown > 0}>
-              {cooldown > 0 ? `Send again in ${cooldown} ${cooldown === 1 ? "second" : "seconds"}` : submitting && !changing ? "Sending…" : "Send the link again"}
-            </Button>
-            <div className="flex flex-wrap justify-between gap-4">
-              <button type="button" className={linkButton} aria-expanded={changing} onClick={() => setChanging((value) => !value)}>Wrong address?<ArrowRight className="size-[13px] stroke-[2.4]" aria-hidden="true" /></button>
-              <LogoutButton variant="link" className={linkButton} />
-            </div>
-          </div>
         </>
       )}
     </div>

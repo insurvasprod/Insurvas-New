@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
+import { Button } from "@/components/ui/button";
 import { CheckoutStart } from "@/components/public/checkout-start";
 import { PaymentCoupon, PaymentEmbed, PaymentProvider } from "@/components/public/checkout-embed";
 import { BILLING_CYCLE_LABELS, type BillingCycle } from "@/lib/money";
@@ -33,6 +34,8 @@ export type CheckoutViewProps = {
   email?: string;
   /** Which Whop environment the embedded form talks to: the one our API key belongs to. */
   environment?: "production" | "sandbox";
+  /** Where Back goes: About you when the plan came from Pricing (no plan step was shown), else the plan step. */
+  backHref?: string;
 };
 
 /**
@@ -91,7 +94,7 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
           {planLine && <p className={cn("text-sm", muted)}>{planLine}</p>}
         </div>
         {/* Back to Step 4 of 5: a buyer who picked the wrong plan must not be stuck paying for it. */}
-        <Link href="/app/onboarding/plan" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
+        <Link href="/app/onboarding/plan?change=1" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
       </div>
 
       <dl className="text-sm">
@@ -119,14 +122,16 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
 }
 
 export function CheckoutView(props: CheckoutViewProps) {
-  const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production" } = props;
+  const { trialDays, pending, failed = false, noPayment = false, email = "", environment = "production", backHref = "/app/onboarding/plan" } = props;
 
+  // Kept short on purpose (manager review, 2026-10-28): the Whop form cannot shrink, so everything
+  // around it does, and the whole step fits a 1536×826 screen without scrolling.
   const body = (
     <FunnelFrame step={5} wide aside={<Receipt props={props} dark />}>
       <FunnelHeading title={noPayment ? "Confirm your plan" : trialDays > 0 ? `Start your ${trialDays}-day trial` : "Start your plan"}>
         {noPayment
           ? "No payment is taken. Your workspace opens as soon as you continue."
-          : "Pay on this page. Your card goes straight to Whop, our payment provider, and never touches Insurvas."}
+          : trialDays > 0 ? "$0 today. Your card goes straight to Whop, our payment provider." : "Your card goes straight to Whop, our payment provider."}
       </FunnelHeading>
 
       {/* "Pending" also covers a payment the provider has not finished recording, so this must not
@@ -152,10 +157,12 @@ export function CheckoutView(props: CheckoutViewProps) {
           ? <CheckoutStart noPayment />
           : <PaymentEmbed email={email} environment={environment} />}
 
-        <p className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          Leave now and come back any time: you will return to this same step.{" "}
-          <Link href="/app/onboarding/business-profile" className="font-semibold text-foreground hover:underline">Edit your agency details</Link>
-        </p>
+        {/* Back sits under the form, where every other step keeps it. Whop's own button submits payment. */}
+        <div>
+          <Button asChild variant="outline" className="h-12 border-[var(--border-strong)] px-6">
+            <Link href={backHref}>Back</Link>
+          </Button>
+        </div>
       </div>
     </FunnelFrame>
   );

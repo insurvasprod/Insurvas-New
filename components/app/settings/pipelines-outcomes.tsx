@@ -65,7 +65,7 @@ const PARTNER_TYPES: Array<{ value: string | null; label: string }> = [
   { value: null, label: "No partner type" }, { value: "publisher", label: "Publisher / transfer" }, { value: "marketing", label: "Marketing" }, { value: "affiliate", label: "Affiliate" },
 ];
 const SCROLL = "overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:color-mix(in_srgb,var(--primary)_45%,transparent)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--primary)_45%,transparent)]";
-const CARD = "rounded-[12px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] backdrop-blur-[20px] backdrop-saturate-150";
+const CARD = "rounded-[12px] border border-[var(--border)] bg-[var(--surface)]";
 const KICKER = "inline-flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
 const CHIP = (on: boolean) => cn("inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold tracking-[-0.01em] transition-colors disabled:cursor-not-allowed disabled:opacity-50", on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border-strong)] bg-transparent text-[var(--body)] hover:border-[var(--accent-ink)]");
 const BIG = (on: boolean) => cn("relative flex w-[84px] flex-col items-center gap-1 rounded-[12px] border-[1.5px] px-1 py-2 text-xs font-bold transition-colors", on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border-strong)] bg-transparent text-[var(--body)] hover:border-[var(--accent-ink)]");

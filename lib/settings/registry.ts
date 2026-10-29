@@ -13,7 +13,7 @@ import type { SettingsGroup, SettingsItem, SettingsSection } from "./sections";
  */
 
 /** Fixed, in this order. A section moves group by changing its one `group` field. */
-export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["Your account", "Agency", "Carriers", "Sales process", "Leads & dialing", "Money & compliance", "Platform"];
+export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["Your account", "Agency", "Contracting", "Sales process", "Leads & dialing", "Money & compliance", "Platform"];
 
 /** The menu's gate: feature AND role. A section that fails either is absent, never greyed out. */
 export function sectionAllowed(section: Pick<SettingsSection, "required_feature" | "required_roles" | "disabled">, granted: ReadonlySet<string>, role: TenantRole): boolean {
@@ -143,4 +143,23 @@ export function searchSettings(sections: readonly SettingsSection[], granted: It
     }
   }
   return hits.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/** Words that stay lower-case inside a Title Case label, unless they start it. */
+const MINOR_WORDS = new Set(["a", "an", "and", "as", "at", "by", "for", "in", "of", "on", "or", "the", "to", "via", "vs"]);
+
+/**
+ * Settings names as they are shown (manager review, 2026-10-28: "C should be capital"): Title Case
+ * for navigation, tabs and headings. The registry keeps its sentence-case data, which search and
+ * tests match on. "API keys & webhooks" → "API Keys & Webhooks"; acronyms are left as written.
+ */
+export function titleLabel(label: string): string {
+  return label
+    .split(" ")
+    .map((word, index) => {
+      if (!word || /[A-Z]/.test(word.slice(1))) return word;
+      if (index > 0 && MINOR_WORDS.has(word.toLowerCase())) return word.toLowerCase();
+      return word.replace(/^(\p{L})/u, (letter) => letter.toUpperCase()).replace(/-(\p{L})/gu, (_, letter: string) => `-${letter.toUpperCase()}`);
+    })
+    .join(" ");
 }

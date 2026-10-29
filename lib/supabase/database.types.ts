@@ -3927,18 +3927,21 @@ export type Database = {
         Row: {
           billing_cycle: Database["public"]["Enums"]["billing_cycle"];
           plan_id: string;
+          selected_from_pricing: boolean;
           selected_at: string;
           tenant_id: string;
         };
         Insert: {
           billing_cycle: Database["public"]["Enums"]["billing_cycle"];
           plan_id: string;
+          selected_from_pricing?: boolean;
           selected_at?: string;
           tenant_id: string;
         };
         Update: {
           billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
           plan_id?: string;
+          selected_from_pricing?: boolean;
           selected_at?: string;
           tenant_id?: string;
         };
@@ -4443,6 +4446,7 @@ export type Database = {
       tenants: {
         Row: {
           billing_mode: Database["public"]["Enums"]["billing_mode"];
+          business_profile_skipped_at: string | null;
           created_at: string;
           id: string;
           name: string;
@@ -4453,6 +4457,7 @@ export type Database = {
         };
         Insert: {
           billing_mode?: Database["public"]["Enums"]["billing_mode"];
+          business_profile_skipped_at?: string | null;
           created_at?: string;
           id?: string;
           name: string;
@@ -4463,6 +4468,7 @@ export type Database = {
         };
         Update: {
           billing_mode?: Database["public"]["Enums"]["billing_mode"];
+          business_profile_skipped_at?: string | null;
           created_at?: string;
           id?: string;
           name?: string;
@@ -4776,6 +4782,7 @@ export type Database = {
           p_name: string;
           p_phone: string;
           p_plan_id: string;
+          p_selected_from_pricing: boolean;
           p_token_hash: string;
         };
         Returns: {
@@ -4783,6 +4790,14 @@ export type Database = {
           user_id: string;
           verification_id: string;
         }[];
+      };
+      save_signup_about_you: {
+        Args: { p_first_name: string; p_last_name: string; p_phone: string; p_user_id: string };
+        Returns: { onboarding_state: string; tenant_id: string }[];
+      };
+      skip_signup_business_profile: {
+        Args: { p_user_id: string };
+        Returns: { onboarding_state: string; tenant_id: string }[];
       };
       self_serve_signup: {
         Args: {

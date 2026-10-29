@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { SettingsRailTabs } from "@/components/ui/settings-rail-tabs";
 import { METHOD_LABELS, VERIFICATION_METHODS } from "@/lib/compliance/dataSubject";
 import { TILE_KEYS, TILE_LABELS } from "@/lib/compliance/dashboardCore";
 import { GAP_CATEGORIES } from "@/lib/compliance/evidenceGaps";
@@ -131,7 +131,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div id={tab} className="flex scroll-mt-24 flex-col gap-4">
-      <ViewTabs label="Compliance settings" tabs={tabs} value={tab} onChange={setTab} />
+      <SettingsRailTabs label="Compliance settings" tabs={tabs} value={tab} onChange={setTab} />
       {tab === "deadlines" ? <Deadlines data={data} disabled={disabled} save={save} post={post} /> : null}
       {tab === "retention" ? <Retention data={data} disabled={disabled} post={post} /> : null}
       {tab === "purge" ? <Purge data={data} disabled={disabled} save={save} post={post} /> : null}

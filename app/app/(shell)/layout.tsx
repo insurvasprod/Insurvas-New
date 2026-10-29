@@ -24,6 +24,7 @@ import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboar
 import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
 import { LiveTransferCard } from "@/components/app/inbound/live-transfer-card";
 import { Suspense } from "react";
+import { AppPageBreadcrumbs } from "@/components/app/app-page-breadcrumbs";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -167,6 +168,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
         {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
         <Suspense fallback={null}><SetupGuideBar /></Suspense>
+        <AppPageBreadcrumbs menu={menu} />
         <PortalPageTransition>{children}</PortalPageTransition>
       </div>
       </main>

@@ -31,17 +31,20 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  /* Montserrat is loaded and self-hosted by next/font in app/layout.tsx (--font-montserrat). */
-  --font-sans: var(--font-montserrat), 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  /* Display (campaign banners, the hero): Coolvetica per the brand guide, once its licensed files are
-     added with next/font/local; Montserrat 600 until then. */
-  --font-display: var(--font-montserrat), 'Montserrat', system-ui, sans-serif;
+  /* Selected in Insurvas UI Foundation v3; both faces are self-hosted by next/font. */
+  --font-sans: var(--font-inter), 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-inter-tight), 'Inter Tight', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* The type scale above 16px (docs/design/00-FOUNDATION.md §3), as classes: text-title-sm 18,
      text-title-md 24, text-title-lg 32, text-headline-lg 40, text-hero 56. 12/14/16 are Tailwind's
      text-xs / text-sm / text-base. Nothing should need text-[Npx] (2026-10-09). */
   --text-title-sm: 1.125rem;
   --text-title-sm--line-height: 1.28;
+  /* Insurvas UI Foundation v3: named intermediate sizes, shared across product surfaces. */
+  --text-card-title: 0.9375rem;
+  --text-card-title--line-height: 1.4;
+  --text-field-label: 0.8125rem;
+  --text-field-label--line-height: 1.5;
   --text-title-md: 1.5rem;
   --text-title-md--line-height: 1.21;
   --text-title-lg: 2rem;
@@ -229,6 +232,10 @@
   --portal-line-strong:   var(--border-strong);
   --portal-ink:           var(--ink);
   --portal-muted:         var(--muted);
+}
+
+@layer base {
+  h1, h2 { font-family: var(--font-display); }
 }
 
 /*
@@ -1853,7 +1860,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .portal-agent-nav-icon { width: 1.05rem; height: 1.05rem; flex: 0 0 auto; color: var(--muted); stroke-width: 1.8; }
 .portal-agent-nav-waypoint { width: .38rem; height: .38rem; flex: 0 0 auto; border-radius: 999px; background: var(--muted); }
-.portal-agent-nav-link-nested { min-height: 2.15rem; margin-left: 0; padding: .4rem .625rem; font-size: .77rem; }
+.portal-agent-nav-link-nested { min-height: 2.15rem; margin-left: 0; padding: .4rem .625rem; font-size: .8125rem; font-weight: 400; }
 .portal-agent-nav-link-nested .portal-agent-nav-icon { width: 1rem; height: 1rem; }
 .portal-agent-module-stack { display: grid; gap: .3rem; }
 .portal-agent-module-button { min-height: 3.25rem; padding: .52rem .6rem; }
@@ -1871,12 +1878,12 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent-module-items,
 .portal-agent-nav-sublist { margin: .125rem 0 0 !important; padding-left: 0 !important; border-left: 0; }
 .portal-agent-nav-section { min-width: 0; }
-.portal-agent-nav-disclosure { min-height: 2.25rem; padding: .45rem .65rem; font-size: .8rem; font-weight: 600; }
+.portal-agent-nav-disclosure { min-height: 2.25rem; padding: .45rem .65rem; font-size: .875rem; font-weight: 600; }
 .portal-agent-nav-section.is-active > .portal-agent-nav-disclosure { color: var(--accent-ink); }
 .portal-agent-nav-section.is-active > .portal-agent-nav-disclosure .portal-agent-nav-icon { color: var(--accent-ink); }
 .portal-agent-nav-disclosure-content { min-width: 0; }
 .portal-agent-nav-business-groups { display: grid; gap: 0; margin: 0; padding-left: 0; border-left: 0; }
-.portal-agent-nav-business-group .portal-agent-nav-disclosure { min-height: 2.15rem; padding: .4rem .6rem .4rem .65rem; font-size: .77rem; font-weight: 600; }
+.portal-agent-nav-business-group .portal-agent-nav-disclosure { min-height: 2.15rem; padding: .4rem .6rem .4rem .65rem; font-size: .875rem; font-weight: 600; }
 .portal-agent-nav-business-group .portal-agent-nav-icon { width: 1rem; height: 1rem; }
 .portal-agent-nav-business-group .portal-agent-nav-sublist-nested { margin-left: 0 !important; padding-left: 0 !important; }
 .portal-agent-nav-settings { margin-top: .125rem !important; }
@@ -2378,20 +2385,26 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent-nav-business-groups {
   margin: .125rem 0 .25rem 1.3rem !important;
   padding-left: .375rem !important;
-  border-left: 1px solid rgba(255, 255, 255, .2) !important;
+  border-left: 1px solid var(--nav-line) !important;
 }
 .portal-agent-nav-business-group .portal-agent-nav-sublist-nested {
   margin: .125rem 0 .25rem 1.05rem !important;
   padding-left: .375rem !important;
-  border-left: 1px solid rgba(255, 255, 255, .2) !important;
+  border-left: 1px solid var(--nav-line) !important;
 }
+.portal-agent-nav-sublist > li { position: relative; }
+.portal-agent-nav-sublist > li::before {
+  position: absolute; top: 50%; left: -.375rem; width: .375rem; height: 1px;
+  background: var(--nav-line); content: "";
+}
+.portal-agent-nav-sublist > li:has(.is-active)::before { background: var(--portal-primary); }
 /* A group heading is a level below the capitals: sentence case, the rail's ink, its arrow leading. */
 .portal-agent-nav-business-group > .portal-agent-nav-disclosure {
   height: 2rem;
   margin-top: .0625rem;
   padding: 0 .5rem;
   color: var(--nav-ink);
-  font-size: .8125rem;
+  font-size: .875rem;
   font-weight: 600;
   letter-spacing: -.01em;
   text-transform: none;
@@ -2935,6 +2948,10 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 /* Arriving from the landing page (no pair yet): the form rises in; leaving, it fades. */
 ::view-transition-new(.auth-rise) { animation: auth-rise-in 560ms cubic-bezier(.22, 1, .36, 1) 120ms both; }
 ::view-transition-old(.auth-fade) { animation: auth-fade-out 220ms ease both; }
+/* Sign-up steps: the logo and progress bar hold still while the step below them changes. */
+::view-transition-group(.funnel-still) { animation-duration: 320ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+::view-transition-old(.funnel-still) { animation: none; opacity: 0; }
+::view-transition-new(.funnel-still) { animation: none; }
 @keyframes auth-rise-in { from { opacity: 0; transform: translateY(16px); } }
 @keyframes auth-fade-out { to { opacity: 0; transform: translateY(-6px); } }
 
@@ -2997,7 +3014,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent-rail-fly ul { list-style: none; margin: 0; padding: 0; }
 .portal-agent-rail-fly a {
   display: flex; align-items: center; gap: .625rem; padding: .5rem; border-radius: 9px;
-  color: var(--nav-ink); text-decoration: none; font-size: .875rem; line-height: 1.5; letter-spacing: -.02em;
+  color: var(--nav-ink); text-decoration: none; font-size: .8125rem; font-weight: 400; line-height: 1.5; letter-spacing: -.01em;
 }
 .portal-agent-rail-fly a svg { color: var(--nav-muted); }
 .portal-agent-rail-fly a:hover,
@@ -3017,24 +3034,6 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   content: ""; position: absolute; top: var(--top-bar-h, 56px); bottom: 0; right: 0; width: 1px;
   background: var(--nav-line); pointer-events: none;
 }
-/* The account at the foot of the rail (AppTopBar portals its button and menu here). */
-.portal-agent-rail-account { display: flex; justify-content: center; width: 100%; margin-top: .25rem; }
-.portal-rail-account {
-  display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
-  border: 0; border-radius: 12px; background: transparent; cursor: pointer;
-  transition: background-color var(--t-micro) var(--e);
-}
-.portal-rail-account:hover,
-.portal-rail-account:focus-visible { background: color-mix(in srgb, var(--nav-ink), transparent 90%); }
-.portal-rail-account:focus-visible { outline: 2px solid var(--nav-success); outline-offset: 2px; }
-.portal-rail-account[aria-expanded="true"] .portal-top-avatar { box-shadow: 0 0 0 2px var(--nav-success); }
-/* With the account in the rail, the bar drops its own button (the phone keeps it: no rail there). */
-@media (min-width: 768px) {
-  :has(> .portal-agent-rail) .portal-top-account,
-  :has(> .portal-agent-rail) .portal-top-divider { display: none; }
-}
-/* Its menu opens beside the rail, from the bottom. */
-.portal-top-panel.portal-top-panel-rail { position: fixed; top: auto; right: auto; left: 80px; bottom: 12px; z-index: 45; }
 /* The plan, a line in the account menu. */
 .portal-top-account-extra { border-bottom: 1px solid var(--border); }
 .portal-top-plan { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .625rem .875rem; }

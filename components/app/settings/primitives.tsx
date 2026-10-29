@@ -13,7 +13,9 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { StatusChip } from "@/components/ui/status-chip";
+import { useSettingsRailSlots } from "@/components/ui/settings-rail-context";
 import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
 
 import { cn } from "@/lib/utils";
@@ -39,18 +41,21 @@ export function SettingsSectionProvider({ value, children }: { value: SectionMet
  */
 export function SettingsSectionHeader({ actions }: { actions?: ReactNode }) {
   const meta = useContext(SectionContext);
+  const rail = useSettingsRailSlots();
   if (!meta) return null;
-  return (
-    // Wraps only on narrow screens. At desktop width the board keeps the pair on the right however
-    // long the purpose line runs, so the text takes what is left rather than pushing them under it.
-    <div className="flex flex-wrap items-end justify-between gap-6 lg:flex-nowrap">
-      <div className="min-w-0 flex-1">
-        <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{meta.title}</h2>
-        <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{meta.description}</p>
-        {meta.history && meta.id && <SectionLastChanged sectionKey={meta.id} />}
-      </div>
-      {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
+  const heading = (
+    <div className="min-w-0">
+      <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{meta.title}</h2>
+      <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{meta.description}</p>
+      {meta.history && meta.id && <SectionLastChanged sectionKey={meta.id} />}
     </div>
+  );
+  const placedHeading = rail?.heading ? createPortal(heading, rail.heading) : heading;
+  return (
+    <>
+      {placedHeading}
+      {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
+    </>
   );
 }
 
@@ -141,7 +146,7 @@ export function SettingsCard({
   children,
   className,
   bodyClassName,
-  pad = 24,
+  pad = 20,
   action,
 }: {
   title?: ReactNode;
@@ -158,7 +163,7 @@ export function SettingsCard({
       {(title || sub || action) && (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            {title && <h3 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h3>}
+            {title && <h3 className="m-0 text-card-title font-semibold tracking-[-0.01em] text-[var(--ink)]">{title}</h3>}
             {sub && <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
           </div>
           {action}
@@ -185,11 +190,11 @@ export function DashedCard({ icon, title, children, action }: { icon?: ReactNode
 
 /* ── table card ─────────────────────────────────────────────────────────── */
 
-export function SettingsTableCard({ title, actions, children, className, headerClassName }: { title: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; /** e.g. a see-through header on a glass card. */ headerClassName?: string }) {
+export function SettingsTableCard({ title, actions, children, className, headerClassName }: { title: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; /** Optional semantic header surface override. */ headerClassName?: string }) {
   return (
     <section className={cn("flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]", className)}>
       <div className={cn("flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3", headerClassName)}>
-        <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
+        <span className="text-card-title font-semibold tracking-[-0.01em] text-[var(--ink)]">{title}</span>
         {actions && <span className="flex flex-wrap items-center gap-2.5">{actions}</span>}
       </div>
       <div className="min-w-0 overflow-x-auto">{children}</div>
@@ -252,7 +257,7 @@ export function Field({
 }) {
   return (
     <div className={cn("block min-w-0", className)}>
-      <label htmlFor={htmlFor} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
+      <label htmlFor={htmlFor} className="text-field-label font-medium tracking-[-0.005em] text-[var(--body)]">
         {label}
         {required && <span className="text-[var(--error-ink)]"> *</span>}
       </label>
@@ -285,7 +290,7 @@ export function ToggleRow({
   return (
     <div className="flex items-start justify-between gap-4">
       <span className="min-w-0">
-        <label htmlFor={id} className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{title}</label>
+        <label htmlFor={id} className="block text-field-label font-medium tracking-[-0.005em] text-[var(--body)]">{title}</label>
         {help && <span className="mt-1 block max-w-[420px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{help}</span>}
       </span>
       <Switch id={id} checked={checked} onChange={onChange} disabled={disabled} />

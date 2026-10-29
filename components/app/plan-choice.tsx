@@ -2,9 +2,9 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Check, LoaderCircle, Minus, Plus } from "lucide-react";
+import { Check, Minus, Plus } from "lucide-react";
 
-import { FunnelHeading } from "@/components/app/funnel-frame";
+import { FunnelHeading, FunnelStepFooter } from "@/components/app/funnel-frame";
 import { Button } from "@/components/ui/button";
 import { BILLING_CYCLES, BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import {
@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type Audience = PlanChoiceOption["audience"];
-const AUDIENCE_LABEL: Record<Audience, string> = { individual: "For one agent", agency: "For an agency" };
+const AUDIENCE_LABEL: Record<Audience, string> = { individual: "Independent agent", agency: "For an Agency" };
 const PER: Record<BillingCycle, string> = { monthly: "month", quarterly: "quarter", yearly: "year" };
 const SHORT: Record<BillingCycle, string> = { monthly: "mo", quarterly: "qtr", yearly: "yr" };
 
@@ -332,7 +332,7 @@ export function PlanChoiceForm() {
             <span className="text-2xl font-semibold tabular-nums tracking-[-0.02em] text-foreground">{choice.totalCents == null ? "—" : formatCentsAsCurrency(choice.totalCents)}<span className="text-sm font-normal text-muted-foreground"> / {PER[cycle]}</span></span>
           </div>
           <TrialLine className="text-[var(--accent-ink)]" />
-          <ContinueButton />
+          <ContinueButton submit />
         </div>
       </form>
     </div>
@@ -348,13 +348,10 @@ function TrialLine({ className }: { className?: string }) {
   );
 }
 
-function ContinueButton() {
+function ContinueButton({ submit = false }: { submit?: boolean }) {
   const { saving, save } = useChoice();
   return (
-    <Button type="button" className="h-12 w-full" disabled={saving} onClick={save}>
-      {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-      {saving ? "Saving…" : "Continue to payment"}
-    </Button>
+    <FunnelStepFooter backHref="/app/onboarding/about-you" continueLabel="Continue to payment" busy={saving} busyLabel="Saving…" onContinue={submit ? undefined : save} />
   );
 }
 

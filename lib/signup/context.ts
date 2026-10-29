@@ -11,6 +11,7 @@ export type SignupContext = {
   tenantId: string;
   email: string;
   name: string;
+  phone: string | null;
   userStatus: string;
   tenantStatus: string;
   onboardingState: string;
@@ -29,7 +30,7 @@ const readSignupContext = cache(async (): Promise<SignupContext | null> => {
 
   const supabase = getSupabaseServiceClient();
   const [{ data: user }, { data: tenant }, { data: membership }] = await Promise.all([
-    supabase.from("users").select("email, name, status").eq("id", session.sub).maybeSingle(),
+    supabase.from("users").select("email, name, phone, status").eq("id", session.sub).maybeSingle(),
     supabase.from("tenants").select("status, onboarding_state").eq("id", session.tenantId).maybeSingle(),
     supabase
       .from("tenant_users")
@@ -48,6 +49,7 @@ const readSignupContext = cache(async (): Promise<SignupContext | null> => {
     tenantId: session.tenantId,
     email: user.email,
     name: user.name,
+    phone: user.phone,
     userStatus: user.status,
     tenantStatus: tenant.status,
     onboardingState: tenant.onboarding_state,
@@ -58,8 +60,9 @@ const readSignupContext = cache(async (): Promise<SignupContext | null> => {
 export function signupDestination(context: Pick<SignupContext, "userStatus" | "onboardingState">): string | null {
   if (context.userStatus === "pending_verification") return "/app/verify-email";
   if (context.userStatus !== "active") return null;
+  if (context.onboardingState === "about_you") return "/app/onboarding/about-you";
   if (context.onboardingState === "business_profile") return "/app/onboarding/business-profile";
-  // Step 4 of 5 (2026-10-26): the plan, preselected with what is saved, then Payment.
+  // About You -> plan -> payment; business setup is gated only after a successful checkout.
   if (context.onboardingState === "ready_for_checkout") return "/app/onboarding/plan";
   // SA-5.2: a customer who opened checkout and abandoned it comes back to the same place rather
   // than being stranded — "recoverable by returning, not a broken half-account".

@@ -3,11 +3,13 @@ import { HubError, loadHub, type Hub } from "@/lib/retention/settingsHubStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionSettingsBoard } from "@/components/app/retention/retention-settings-board";
-import { SectionLastChanged } from "@/components/app/settings/last-changed";
-import { SettingsTrail } from "@/components/app/settings/settings-trail";
-import { PageHeader } from "@/components/ui/page-header";
+import { SettingsSectionHeader, SettingsSectionProvider } from "@/components/app/settings/primitives";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { SettingsPageFrame } from "@/components/app/settings/settings-page-frame";
+import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
+import { visibleSections } from "@/lib/settings/registry";
+import { effectiveFeatures } from "@/lib/features/killSwitch";
 
 /**
  * Settings › Retention (LA-5.11, Notion sprint). Every number the radar, the queue and the campaigns
@@ -22,6 +24,8 @@ export default async function RetentionSettingsPage() {
   if (guard.role !== "owner") {
     return <RoleGateNotice featureLabel="Retention settings" detail="Only the owner changes how the radar scores and who works retention." />;
   }
+  const granted = await effectiveFeatures(guard.entitlement.features, guard.context.tenantId);
+  const settingsSections = visibleSections(SETTINGS_SECTIONS, granted, guard.role);
   let hub: Hub | null = null;
   let problem: string | null = null;
   try {
@@ -31,17 +35,15 @@ export default async function RetentionSettingsPage() {
     problem = error.message;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <SettingsTrail label="Retention" />
-      <div>
-        <PageHeader title="Retention settings" description="Weights, thresholds, cooling-off periods and the holdout." />
-        <SectionLastChanged sectionKey="retention" />
-      </div>
+    <SettingsPageFrame sections={settingsSections} activeId="retention">
+      <SettingsSectionProvider value={{ title: "Retention settings", description: "Weights, thresholds, cooling-off periods and the holdout.", id: "retention", history: true }}>
+        <SettingsSectionHeader />
+      </SettingsSectionProvider>
       {hub ? (
         <RetentionSettingsBoard hub={hub} canEdit={guard.entitlement.access !== "read_only"} />
       ) : (
         <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>
       )}
-    </div>
+    </SettingsPageFrame>
   );
 }

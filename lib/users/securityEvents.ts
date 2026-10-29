@@ -26,19 +26,20 @@ export type SecurityEventType =
   // 2026-10-24 (migration 20261024100000).
   | "device_trusted" | "signed_in_with_link";
 
+// The words My profile › History uses (redesign 2026-10-27): two-step sign-in, spare codes, devices.
 export const SECURITY_EVENT_LABELS: Record<SecurityEventType | "failed_logins", string> = {
   password_changed: "Password changed",
-  email_change_requested: "Email change requested",
+  email_change_requested: "Asked to change the sign-in email",
   email_changed: "Sign-in email changed",
-  two_factor_enabled: "Two-factor turned on",
-  two_factor_disabled: "Two-factor turned off",
-  recovery_code_used: "Recovery code used to sign in",
-  recovery_codes_regenerated: "New recovery codes made",
-  session_ended: "A session was ended",
-  other_sessions_ended: "Every other session was ended",
-  device_trusted: "This device trusted for 30 days",
+  two_factor_enabled: "Two-step sign-in turned on",
+  two_factor_disabled: "Two-step sign-in turned off",
+  recovery_code_used: "Signed in with a spare code",
+  recovery_codes_regenerated: "New spare codes made",
+  session_ended: "A device was signed out",
+  other_sessions_ended: "Every other device was signed out",
+  device_trusted: "A device was trusted for 30 days",
   signed_in_with_link: "Signed in with an emailed link",
-  failed_logins: "Failed sign-in attempts",
+  failed_logins: "Wrong passwords",
 };
 
 /** Record one event. A failure is logged and never undoes the change it describes. */
@@ -89,7 +90,7 @@ export async function listSecurityEvents(userId: string, emailOrRead: string | P
     detail: (e.detail as Record<string, unknown>) ?? {},
   }));
   for (const burst of failedLoginBursts(((failures.data ?? []) as { ts: string; ip: string | null }[]))) {
-    rows.push({ id: `failed-${burst.to}`, type: "failed_logins", label: `${burst.count} failed sign-in attempts`, at: burst.to, ip: burst.ips.join(", ") || null, device: null, detail: { from: burst.from, count: burst.count } });
+    rows.push({ id: `failed-${burst.to}`, type: "failed_logins", label: `${burst.count} wrong passwords within a few minutes`, at: burst.to, ip: burst.ips.join(", ") || null, device: null, detail: { from: burst.from, count: burst.count } });
   }
   return rows.sort((a, b) => b.at.localeCompare(a.at));
 }
