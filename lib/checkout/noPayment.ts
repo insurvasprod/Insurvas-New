@@ -13,12 +13,14 @@ import { workspaceReadyEmail } from "@/lib/email/templates";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import type { BillingCycle } from "@/lib/money";
 import { completeCheckout } from "./complete";
+import { AFTER_PAYMENT } from "../signup/destination";
 
 /**
- * Where the owner goes once the plan is on: the dashboard, the same as a paid checkout (owner,
- * 2026-10-26: not the upload-a-statement welcome step). /app/welcome stays reachable from Get set up.
+ * Where the owner goes once the plan is on, the same as a paid checkout: "About you", the last
+ * sign-up step, which forwards to the dashboard when the profile is already saved (manager review,
+ * 2026-10-28: payment before the business questions). /app/welcome stays reachable from Get set up.
  */
-export const NO_PAYMENT_LANDING = "/app/dashboard";
+export const NO_PAYMENT_LANDING = AFTER_PAYMENT;
 
 export async function completeWithoutPayment(
   tenantId: string,

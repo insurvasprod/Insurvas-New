@@ -3,6 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { titleCaseChild, titleCaseNode } from "@/components/ui/title-case";
 
 // 8px corners (UI-CONSISTENCY §5a, foundation v3; the brand guide's pills stay only on marketing CTAs). The height stays 36px (§5).
 const buttonVariants = cva(
@@ -45,6 +46,7 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -59,7 +61,9 @@ function Button({
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {asChild ? titleCaseChild(children) : titleCaseNode(children)}
+    </Comp>
   )
 }
 

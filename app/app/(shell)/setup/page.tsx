@@ -6,7 +6,7 @@ import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
-import { guideHref, isManualStep, nextSetupStep, SETUP_MODULES } from "@/lib/dashboard/checklist";
+import { guideHref, isManualStep, nextSetupStep, SETUP_GROUPS } from "@/lib/dashboard/checklist";
 import { saveSetupGuideState } from "@/lib/dashboard/setupProgress";
 import { loadViewerSetup } from "@/lib/dashboard/setupViewer";
 import { hasImportedStatement } from "@/lib/dashboard/summaries";
@@ -16,7 +16,7 @@ import { SetupModules } from "@/components/app/setup/setup-modules";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { Meter } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -50,10 +50,13 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       ? "Set up the parts of Insurvas your plan includes. Each step opens the screen where you do it."
       : "A few first steps on the screens you will use every day.";
 
-  const modules = SETUP_MODULES.map((module) => ({
-    key: module.key,
-    label: module.label,
-    steps: checklist.steps.filter((step) => step.module === module.key).map((step) => ({ ...step, manual: isManualStep(step.key) })),
+  // Three groups (owner, 2026-10-28): Start working, Get paid right, and the folded Fine-tune later.
+  const modules = SETUP_GROUPS.map((group) => ({
+    key: group.key,
+    label: group.label,
+    hint: group.hint,
+    optional: group.key === "later",
+    steps: checklist.steps.filter((step) => (step.group ?? "start") === group.key).map((step) => ({ ...step, manual: isManualStep(step.key) })),
   })).filter((module) => module.steps.length > 0);
 
   // The first-value row (redesign, 2026-10-24): "Find money the carriers owe you" leads the page, as
@@ -64,7 +67,10 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
   const canFindMoney =
     available.includes("statement_ingestion") && entitlement.access !== "read_only" && hasTenantPermission(context.role, "statements.view");
   const statementStep = checklist.steps.find((step) => step.key === "statement");
-  const showFirstValue = canFindMoney && !(statementStep ? statementStep.complete : await hasImportedStatement(context.tenantId));
+  // Only where money is the work (owner, 2026-10-28): a plan that dials, takes transfers or sells starts
+  // with Start working, and its statement waits in Get paid right; a Ledger plan still leads with it.
+  const moneyPlan = !checklist.steps.some((step) => (step.group ?? "start") === "start" && step.key !== "carriers" && step.key !== "team");
+  const showFirstValue = canFindMoney && (viewer.audience !== "owner" || moneyPlan) && !(statementStep ? statementStep.complete : await hasImportedStatement(context.tenantId));
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
@@ -88,12 +94,14 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
           </div>
         </TableCard>
       ) : null}
+      {/* One line, not three counters (owner, 2026-10-28): the list below already shows every step. */}
       {checklist.total > 0 ? (
-        <StatStrip label="Setup progress">
-          <StatTile label="Done" value={`${checklist.completed} of ${checklist.total}`} />
-          <StatTile label="Left" value={left} />
-          <StatTile label="Skipped" value={checklist.skipped} labelTitle="Skipped steps stay here. Bring one back whenever you are ready." />
-        </StatStrip>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Meter value={checklist.completed} max={checklist.total} tone="primary" label={`${checklist.completed} of ${checklist.total} setup steps done`} className="w-full max-w-md" />
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {checklist.completed} of {checklist.total} done{left > 0 ? ` · ${left} to go` : ""}{checklist.skipped > 0 ? ` · ${checklist.skipped} skipped` : ""}
+          </span>
+        </div>
       ) : null}
       {modules.length === 0 ? (
         <TableCard>

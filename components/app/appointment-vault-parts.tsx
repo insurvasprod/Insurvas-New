@@ -22,6 +22,7 @@ import { US_STATES } from "@/lib/appointments/constants";
 import { dayMonthYear } from "@/lib/format/dates";
 import { SCHEMA_PENDING_MESSAGE } from "@/lib/appointments/pendingSchema";
 import { cn } from "@/lib/utils";
+import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
 import {
   LINES_OF_AUTHORITY,
   type LicenceType,
@@ -290,14 +291,14 @@ export function LicenceDialog({
   const blank = { state: "AZ", license_number: "", expires_at: "", licence_type: "" as "" | LicenceType, lines: [] as string[] };
   const [form, setForm] = useState(() => {
     const row = licences.find((item) => item.state === blank.state);
-    return row ? { state: row.state, license_number: row.license_number, expires_at: row.expires_at, licence_type: row.licence_type ?? ("" as const), lines: row.lines_of_authority ?? [] } : blank;
+    return row ? { state: row.state, license_number: licenceNumberValue(row.license_number), expires_at: licenceExpiryValue(row.expires_at), licence_type: row.licence_type ?? ("" as const), lines: row.lines_of_authority ?? [] } : blank;
   });
   const [error, setError] = useState("");
   const existing = licences.find((row) => row.state === form.state) ?? null;
 
   function pickState(state: string) {
     const row = licences.find((item) => item.state === state);
-    setForm(row ? { state, license_number: row.license_number, expires_at: row.expires_at, licence_type: row.licence_type ?? "", lines: row.lines_of_authority ?? [] } : { ...blank, state });
+    setForm(row ? { state, license_number: licenceNumberValue(row.license_number), expires_at: licenceExpiryValue(row.expires_at), licence_type: row.licence_type ?? "", lines: row.lines_of_authority ?? [] } : { ...blank, state });
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -345,17 +346,17 @@ export function LicenceDialog({
             <option value="non_resident">Non-resident</option>
           </select>
         </Field>
-        <Field label="Licence number" htmlFor="license-number" required>
+        {/* Optional (owner, 2026-10-28): a licence counts once it is ticked; the details can follow. */}
+        <Field label="Licence number" htmlFor="license-number" hint="Optional">
           <input
             id="license-number"
             className={control}
             value={form.license_number}
             onChange={(event) => setForm((current) => ({ ...current, license_number: event.target.value }))}
             maxLength={120}
-            required
           />
         </Field>
-        <Field label="Expires" htmlFor="license-expires" required>
+        <Field label="Expires" htmlFor="license-expires" hint="Optional">
           <input
             id="license-expires"
             type="date"
@@ -365,7 +366,6 @@ export function LicenceDialog({
             // Read before the updater runs: React clears currentTarget once the handler returns, and the
             // updater runs later — reading it there crashed the page (QA 2026-10-22).
             onInput={(event) => { const expiresAt = event.currentTarget.value; setForm((current) => ({ ...current, expires_at: expiresAt })); }}
-            required
           />
         </Field>
         <fieldset className="sm:col-span-2" disabled={!extended}>
@@ -397,7 +397,7 @@ export function LicenceDialog({
         <FormFooter saving={saving} label={existing ? "Update licence" : "Save licence"} error={error} onCancel={() => onOpenChange(false)} />
       </form>
       <RecordList
-        items={licences.map((row) => ({ key: row.id, tag: row.state, text: row.license_number, sub: `expires ${shortDate(row.expires_at)}` }))}
+        items={licences.map((row) => ({ key: row.id, tag: row.state, text: licenceNumberValue(row.license_number) || "No number yet", sub: licenceExpiryValue(row.expires_at) ? `expires ${shortDate(row.expires_at)}` : "No expiry" }))}
       />
     </RecordDialog>
   );

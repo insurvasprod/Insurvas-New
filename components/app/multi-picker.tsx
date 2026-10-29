@@ -198,7 +198,13 @@ export function MultiPicker({ options, value, onChange, placeholder, label, desc
     <div
       ref={fieldRef}
       className={cn(authControl, "relative flex cursor-pointer items-center gap-1.5 bg-transparent pl-3 pr-1.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]", open && "border-[var(--accent-ink)]")}
-      onClick={(event) => { if ((event.target as HTMLElement).closest("button")) return; if (open) hide(); else show(); }}
+      onClick={(event) => {
+        // The list is portalled to the shell, but React still bubbles its clicks to this field: a
+        // tick in the list closed it (owner, 2026-10-28). Only a click on the field itself toggles.
+        if (!fieldRef.current?.contains(event.target as Node)) return;
+        if ((event.target as HTMLElement).closest("button")) return;
+        if (open) hide(); else show();
+      }}
     >
       <span ref={tagsRef} className={cn("flex min-w-0 items-center overflow-hidden", picked.length ? "flex-1" : "hidden")}>
         {/* Plain text in the field's own type, like the state picker's "Arizona" (owner, 2026-10-27):

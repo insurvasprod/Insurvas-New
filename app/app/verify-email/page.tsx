@@ -6,7 +6,7 @@ import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { EMAIL_VERIFICATION_TTL_HOURS } from "@/lib/signup/verification";
 
 /** Back from step 2 is step 1, which shows the account already made (owner, 2026-10-27). */
-const BACK = { href: "/signup", label: "Back to your account" };
+const BACK = "/signup";
 
 export default async function VerifyEmailPage() {
   // Reached through Back from step 3: the email is confirmed, so the step shows that and Continue
@@ -15,21 +15,20 @@ export default async function VerifyEmailPage() {
   const destination = context && context.userStatus === "active" ? signupDestination(context) : null;
   if (context && destination) {
     return (
-      <FunnelFrame step={2} back={BACK}>
+      <FunnelFrame step={2}>
         <FunnelReview
           title="Your email is confirmed"
           subtitle="Nothing more to do here."
           rows={[{ label: "Email", value: context.email, done: true }]}
-          // Continue returns to where the signup stands; Next opens step 3 (owner, 2026-10-27).
           continueHref={destination}
-          next={{ href: "/app/onboarding/business-profile", label: "Your agency" }}
+          back={BACK}
         />
       </FunnelFrame>
     );
   }
   return (
-    <FunnelFrame step={2} back={BACK}>
-      <VerifyEmailPanel ttlHours={EMAIL_VERIFICATION_TTL_HOURS} noPayment={checkoutPaymentMode() === "none"} />
+    <FunnelFrame step={2}>
+      <VerifyEmailPanel ttlHours={EMAIL_VERIFICATION_TTL_HOURS} noPayment={checkoutPaymentMode() === "none"} back={BACK} />
     </FunnelFrame>
   );
 }

@@ -267,7 +267,8 @@ export function PayoutsBoard({ runs, partners, readOnly, openId, partnerFixed = 
       <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start">
       <TableCard
         className="min-w-0 flex-1"
-        toolbar={
+        // No runs at all: the empty state's one button is the whole page; filters over nothing are noise.
+        toolbar={runs.length === 0 ? undefined :
           <DataToolbar actions={<>{!readOnly && partners.length ? <Button onClick={() => setCreating(true)}>Draft a run</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>}>
             {!partnerFixed && <select aria-label="Partner" className={toolbarControl} value={partner} onChange={(e) => { setPartner(e.target.value); setPage(1); }}><option value="">All partners</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
             <select aria-label="Status" className={toolbarControl} value={status} onChange={(e) => { setStatus(e.target.value as "" | RunStatus); setPage(1); }}><option value="">Any status</option>{(["draft", "published", "paid", "void"] as RunStatus[]).map((s) => <option key={s} value={s}>{RUN_STATUS_LABELS[s]}</option>)}</select>

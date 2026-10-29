@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { STATE_CODES } from "./constants.ts";
+import { LICENCE_NO_EXPIRY, LICENCE_NUMBER_NOT_ENTERED } from "./tickModel.ts";
 
 const state = z.string().trim().toUpperCase().refine((value) => (STATE_CODES as readonly string[]).includes(value), "Choose a valid US state");
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date as YYYY-MM-DD");
@@ -28,8 +29,9 @@ export const appointmentsBatchSchema = z.object({ appointments: z.array(appointm
 // every older caller keeps working; an omitted field is left untouched, and a null clears it.
 export const licenseSchema = z.object({
   state,
-  license_number: z.string().trim().min(1, "Enter a licence number").max(120, "Licence number is too long"),
-  expires_at: date,
+  // Both optional (owner, 2026-10-28): ticking "Licensed" is enough; blanks store the placeholders.
+  license_number: z.string().trim().max(120, "Licence number is too long").optional().transform((value) => value || LICENCE_NUMBER_NOT_ENTERED),
+  expires_at: z.union([date, z.literal("")]).optional().transform((value) => value || LICENCE_NO_EXPIRY),
   licence_type: z.enum(["resident", "non_resident"], { message: "Choose resident or non-resident" }).nullable().optional(),
   lines_of_authority: z.array(z.string().trim().min(1).max(40, "A line of authority is too long")).max(12, "Choose 12 lines or fewer").optional(),
 });

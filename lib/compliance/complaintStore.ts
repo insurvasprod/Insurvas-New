@@ -9,6 +9,7 @@ import { buildEvidencePdf } from "./evidencePdf";
 import { buildEvidenceReport, EvidenceError, mayGenerateReports } from "./evidenceReport";
 import { lookupComplianceEvents } from "./recordIndex";
 import { getUsPhone10Digits } from "./scrub";
+import { LICENCE_NUMBER_NOT_ENTERED } from "@/lib/appointments/tickModel";
 import {
   COMPLAINT_CATEGORIES,
   COMPLAINT_CHANNELS,
@@ -187,7 +188,7 @@ export async function respondentFor(tenantId: string, regulatorState: string | n
   return {
     legalName: identity?.legalName ?? null,
     npn: identity?.npn ?? null,
-    licence: regulatorState && licence.data?.license_number ? { state: regulatorState, number: licence.data.license_number as string } : null,
+    licence: regulatorState && licence.data?.license_number && licence.data.license_number !== LICENCE_NUMBER_NOT_ENTERED ? { state: regulatorState, number: licence.data.license_number as string } : null,
     missing: missing.length ? requirementMessage("doi_response", missing) : null,
     fixHref: missing.length ? `/app/settings#business-identity/${BUSINESS_FIELD_ANCHORS[missing[0]]}` : null,
   };

@@ -6,7 +6,8 @@ import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { fetchPlans } from "@/lib/plans/queries";
 import { availableBillingCycles, type BillingCycle, type PlanPrices } from "@/lib/money";
 import { audienceForPlanType } from "@/lib/agency/constants";
-import { publicSignupSchema } from "@/lib/signup/schemas";
+import { markPlanChosen } from "@/lib/signup/planChoiceQueries";
+import { nameFromEmail, publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
 import { recordLastLogin } from "@/lib/loginEvents/record";
@@ -32,6 +33,8 @@ export async function POST(request: NextRequest) {
   }
 
   const input = parsed.data;
+  // Step 1 no longer asks for a name; step 3 replaces this one (lib/signup/schemas.ts).
+  const fullName = input.fullName ?? nameFromEmail(input.email);
 
   // Before anything is created or sent. This endpoint is open to the internet and each call makes
   // a user, a tenant and an email from our sending domain — unthrottled, it is both a way to fill
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
   const acceptance = verifySignupAcceptance(input.acceptedDocumentIds, required.documents);
   if (!acceptance.ok) return NextResponse.json({ error: acceptance.error }, { status: 400 });
 
-  // The plan is chosen on Step 4 of 5 (owner, 2026-10-26). Until then the workspace holds the plan
+  // The plan is chosen on the plan screen (step 2 of 3) (owner, 2026-10-26). Until then the workspace holds the plan
   // picked on the pricing page, or the default one, so signup_selections is never empty.
   const publicPlans = (await fetchPlans({ includeArchived: false })).filter((candidate) => candidate.is_public);
   const plan = input.planCode
@@ -89,7 +92,7 @@ export async function POST(request: NextRequest) {
     // The address is confirmed by our own token, sent below. Confirming here only tells Auth not to
     // send a second, competing email of its own.
     email_confirm: true,
-    user_metadata: { name: input.fullName, full_name: input.fullName },
+    user_metadata: { name: fullName, full_name: fullName },
   });
   if (authUser.error || !authUser.data.user) {
     // Auth reports an existing address as a 422. It is the same answer as the RPC's EMAIL_EXISTS and
@@ -103,9 +106,9 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase.rpc("self_serve_signup_with_auth", {
     p_auth_user_id: authUser.data.user.id,
-    p_name: input.fullName,
+    p_name: fullName,
     p_email: input.email,
-    p_phone: input.phone,
+    p_phone: input.phone ?? "",
     p_plan_id: plan.id,
     p_billing_cycle: billingCycle,
     p_token_hash: verification.tokenHash,
@@ -129,6 +132,8 @@ export async function POST(request: NextRequest) {
 
   const created = data?.[0];
   if (!created) return NextResponse.json({ error: "Could not create your account" }, { status: 500 });
+  // A plan picked on the pricing page is not asked for again (manager review, 2026-10-28).
+  if (input.planCode) await markPlanChosen(created.tenant_id);
 
   // After the user exists and before they are let in. Throws rather than logs: an acceptance we
   // failed to record is one we cannot prove, and the account has just been created on the strength
@@ -145,7 +150,7 @@ export async function POST(request: NextRequest) {
 
   const delivery = await sendVerificationEmail({
     email: input.email,
-    name: input.fullName,
+    name: fullName,
     verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
     audience: audienceForPlanType(plan.plan_type),

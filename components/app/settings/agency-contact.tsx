@@ -13,7 +13,8 @@
 
 import { useEffect, useState } from "react";
 
-import { Callout, control, Field, KeyValues, SettingsCard } from "@/components/app/settings/primitives";
+import { FormSection } from "@/components/app/settings/patterns";
+import { Callout, control, Field, KeyValues } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
 import { notify } from "@/lib/notify";
@@ -22,7 +23,7 @@ import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 
-export function PartnerSupportCard({ className }: { className?: string } = {}) {
+export function PartnerSupportCard() {
   const [support, setSupport] = useState<SupportContact | null>(null);
   const [draft, setDraft] = useState<{ email: string; phone: string }>({ email: "", phone: "" });
   const [error, setError] = useState<string | null>(null);
@@ -62,10 +63,9 @@ export function PartnerSupportCard({ className }: { className?: string } = {}) {
 
   return (
     // Not the agency's own phone (that is Address & contact): the help line partners see (owner, 2026-10-27).
-    <SettingsCard
-      title="Support contact for your partners"
-      sub="The email and phone your partners (publishers, call centres) see in their portal's Messages when they need help. Not your business phone: that is under Address & contact. Leave a field blank to hide it."
-      className={className}
+    <FormSection
+      title="Support contact for partners"
+      info="Publishers and call centres see this in their portal's Messages when they need help. It is not your business phone, which is on Contact & address. Leave a field blank to hide it."
     >
       <div id="identity-partner-support">
         <LeaveGuard dirty={dirty} onDiscard={() => { if (support) setDraft({ email: support.email ?? "", phone: support.phone ?? "" }); setError(null); }} what="the partner support contact" />
@@ -76,13 +76,13 @@ export function PartnerSupportCard({ className }: { className?: string } = {}) {
             {error && <Callout tone="error" title={error} className="mb-4" />}
             {support && !support.schemaReady && <Callout tone="warning" title="Saving the support contact needs a database update." className="mb-4" />}
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              <Field label="Support email for partners" htmlFor="agency-support-email">
+              <Field label="Email" htmlFor="agency-support-email">
                 <input id="agency-support-email" type="email" autoComplete="email" className={control} maxLength={SUPPORT_EMAIL_MAX} value={draft.email}
                   disabled={!support?.schemaReady} placeholder="support@youragency.com"
                   onChange={(event) => { setError(null); setDraft((current) => ({ ...current, email: event.target.value })); }} />
               </Field>
-              <Field label="Support phone for partners" htmlFor="agency-support-phone"
-                hint={support?.schemaReady ? (formatSupportPhone(draft.phone) ? `Partners see it as ${formatSupportPhone(draft.phone)}.` : "No phone set.") : undefined}>
+              <Field label="Phone" htmlFor="agency-support-phone"
+                hint={support?.schemaReady && formatSupportPhone(draft.phone) ? `Partners see it as ${formatSupportPhone(draft.phone)}.` : undefined}>
                 <input id="agency-support-phone" type="tel" autoComplete="tel" className={control} maxLength={SUPPORT_PHONE_MAX} value={draft.phone}
                   disabled={!support?.schemaReady} placeholder="(312) 555-0100"
                   onChange={(event) => { setError(null); setDraft((current) => ({ ...current, phone: event.target.value })); }} />
@@ -97,24 +97,24 @@ export function PartnerSupportCard({ className }: { className?: string } = {}) {
           </>
         )}
       </div>
-    </SettingsCard>
+    </FormSection>
   );
 }
 
-export function OwnershipCard({ team, workspace, className }: { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null; className?: string }) {
+export function OwnershipCard({ team, workspace }: { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null }) {
   const owners = (team?.members ?? []).filter((member) => member.role === "owner" && member.status === "active");
   return (
-    <SettingsCard title="Ownership" className={className}>
+    <FormSection title="Ownership">
       <div id="identity-ownership">
         <KeyValues
           items={[
             { label: owners.length > 1 ? "Owners" : "Owner", value: owners.length ? owners.map((owner) => owner.name).join(", ") : "—" },
             { label: owners.length > 1 ? "Owner emails" : "Owner email", value: owners.length ? owners.map((owner) => owner.email).join(", ") : "—" },
             { label: "Created", value: workspace?.createdAt ? new Date(workspace.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—" },
-            { label: "Workspace ID", value: workspace?.tenantId ?? "—" },
+            { label: "Workspace ID", value: workspace?.tenantId ? <span className="font-mono">{workspace.tenantId}</span> : "—" },
           ]}
         />
       </div>
-    </SettingsCard>
+    </FormSection>
   );
 }

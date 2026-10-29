@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   // A session row like every other sign-in (LA-8.2), so the owner can see and end it.
   const { token: session } = await issueTenantSession({ userId: verified.user_id, tenantId: verified.tenant_id, sessionVersion: 0, request });
-  const response = NextResponse.redirect(new URL("/app/onboarding/business-profile?verified=1", request.url));
+  const response = NextResponse.redirect(new URL("/app/onboarding/plan?verified=1", request.url));
   response.cookies.set(TENANT_SESSION_COOKIE, session, tenantSessionCookieOptions);
   return response;
 }

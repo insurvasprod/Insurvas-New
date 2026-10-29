@@ -2,9 +2,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ComplianceSettingsBoard } from "@/components/app/compliance/compliance-settings";
-import { PageHeader } from "@/components/ui/page-header";
-import { SettingsTrail } from "@/components/app/settings/settings-trail";
-import { SectionLastChanged } from "@/components/app/settings/last-changed";
+import { SettingsRouteFrame } from "@/components/app/settings/settings-route-frame";
 
 /**
  * Compliance › Settings (LA-6.8, Notion sprint). Everything LA-6 reads, in one place; the tenant
@@ -20,14 +18,12 @@ export default async function ComplianceSettingsPage() {
     return <RoleGateNotice featureLabel="Compliance settings" detail="Only the agency owner can change compliance settings." />;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <SettingsTrail label="Compliance" />
-      {/* LA-8.8: who last changed a setting here, beside the values (the page is owner-only, like the log). */}
-      <div>
-        <PageHeader title="Compliance settings" description="Deadlines, retention, holds, deletion and the transfer gate." />
-        <SectionLastChanged sectionKey="compliance" />
-      </div>
+    // The one Settings layout: header, breadcrumb and menu come from the frame (settings-shell plan,
+    // Task 6); this page keeps its gates above and draws only its board.
+    <SettingsRouteFrame sectionId="compliance">
+      <div className="flex min-h-0 flex-grow flex-col gap-4">
       <ComplianceSettingsBoard readOnly={guard.entitlement.access === "read_only"} />
-    </div>
+      </div>
+    </SettingsRouteFrame>
   );
 }

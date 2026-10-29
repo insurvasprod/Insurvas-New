@@ -212,7 +212,7 @@ export const AGENT_MENU: MenuSection[] = [
     id: "partners",
     label: "Partners",
     items: [
-      item("Partners", { key: "partners.publishers", label: "Partners", navLabel: "Publishers", path: "/app/publishers", icon: "handshake", required_feature: "publisher_records", required_roles: ["owner", "bookkeeper"], built: true }),
+      item("Partners", { key: "partners.publishers", label: "Lead sources", navLabel: "Lead sources", path: "/app/publishers", icon: "handshake", required_feature: "publisher_records", required_roles: ["owner", "bookkeeper"], built: true }),
       item("Partners", { key: "leads.partner-chat", label: "Partner chat", path: "/app/partner-chat", icon: "messages-square", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer"] }),
       item("Partners", { key: "partners.payouts", label: "Payout runs", path: "/app/payouts", icon: "wallet-cards", required_feature: "payout_runs", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Pay publishers from the ledger, not WhatsApp." }),
     ],

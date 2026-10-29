@@ -84,17 +84,29 @@ export async function fetchPlanChoices(): Promise<{ plans: PlanChoiceOption[]; m
   return { plans, modules: [...grouped.values()].sort((a, b) => a.order - b.order).map((group) => group.module) };
 }
 
-export type SavedPlanChoice = { planCode: string; billingCycle: BillingCycle; seats: number | null; addonCodes: string[] };
+/**
+ * `chosen`: the person picked this plan themselves, on the pricing page or the plan step
+ * (signup_selections.plan_chosen_at, 20261028210000). False for the default plan, and before that
+ * migration is applied, so the chooser is shown whenever we cannot tell.
+ */
+export type SavedPlanChoice = { planCode: string; billingCycle: BillingCycle; seats: number | null; addonCodes: string[]; chosen: boolean };
+
+/** Records that the person picked the plan on the signup_selections row. A missing column is not an error. */
+export async function markPlanChosen(tenantId: string): Promise<void> {
+  const { error } = await untyped().from("signup_selections").update({ plan_chosen_at: new Date().toISOString() }).eq("tenant_id", tenantId);
+  if (error && !notApplied(error)) console.error("[plan choice] plan_chosen_at not saved", tenantId, error.message);
+}
 
 /** What this tenant chose, for the plan step and Payment. Null before any choice. */
 export async function readPlanChoice(tenantId: string): Promise<SavedPlanChoice | null> {
   const supabase = getSupabaseServiceClient();
   const { data: selection } = await supabase.from("signup_selections").select("plan_id, billing_cycle").eq("tenant_id", tenantId).maybeSingle();
   if (!selection) return null;
-  const [{ data: plan }, seats, addons] = await Promise.all([
+  const [{ data: plan }, seats, addons, chosen] = await Promise.all([
     supabase.from("plans").select("code").eq("id", selection.plan_id).maybeSingle(),
     untyped().from("signup_selections").select("seats").eq("tenant_id", tenantId).maybeSingle(),
     untyped().from("signup_selection_addons").select("addons(code)").eq("tenant_id", tenantId),
+    untyped().from("signup_selections").select("plan_chosen_at").eq("tenant_id", tenantId).maybeSingle(),
   ]);
   if (!plan) return null;
   return {
@@ -102,6 +114,7 @@ export async function readPlanChoice(tenantId: string): Promise<SavedPlanChoice 
     billingCycle: selection.billing_cycle,
     seats: seats.error ? null : ((seats.data as { seats: number | null } | null)?.seats ?? null),
     addonCodes: addons.error ? [] : ((addons.data ?? []) as unknown as { addons: { code: string } | null }[]).flatMap((row) => (row.addons ? [row.addons.code] : [])),
+    chosen: !chosen.error && Boolean((chosen.data as { plan_chosen_at: string | null } | null)?.plan_chosen_at),
   };
 }
 
@@ -118,6 +131,8 @@ export async function savePlanChoice(tenantId: string, choice: { planCode: strin
     .from("signup_selections")
     .upsert({ tenant_id: tenantId, plan_id: plan.id, billing_cycle: choice.billingCycle, selected_at: new Date().toISOString() }, { onConflict: "tenant_id" });
   if (error) return { ok: false, error: "Could not save your plan. Try again.", status: 500 };
+  // Picked on the plan step: from now on the step shows it instead of asking again.
+  await markPlanChosen(tenantId);
 
   const seats = await untyped().from("signup_selections").update({ seats: choice.seats }).eq("tenant_id", tenantId);
   if (seats.error && !notApplied(seats.error)) console.error("[plan step] seats not saved", tenantId, seats.error.message);

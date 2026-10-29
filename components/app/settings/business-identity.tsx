@@ -6,11 +6,18 @@
  * One record of who the business is, used by every document the platform produces — so the page ends
  * with those documents and what each still needs, in the words the document itself will use to refuse.
  * Owners only (the route enforces it). The tax ID is masked; Reveal shows it once and is recorded.
+ *
+ * Settings redesign R5 (2026-10-29): four tabs instead of six, named for the job and without the
+ * field counts nobody could read (Business · Contact & address · Documents & logo · Partners & owner);
+ * two-column form sections; the time zone is a dropdown; the kit's chips; removing the tax ID asks first.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Callout, control, Field, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
+import { Callout, control, DraftActions, Field, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
+import { FieldRow, FormSection, FormSections } from "@/components/app/settings/patterns";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { OwnershipCard, PartnerSupportCard } from "@/components/app/settings/agency-contact";
 import type { SettingsPanelContext } from "@/components/app/settings/panels";
 import { Button } from "@/components/ui/button";
@@ -23,7 +30,6 @@ import { notify } from "@/lib/notify";
 import { formatDay } from "@/lib/carriers/contracts";
 import { BUSINESS_DOCUMENTS, BUSINESS_FIELD_LABELS, DOCUMENT_REQUIREMENTS, missingFor } from "@/lib/agencyProfile/requirements";
 import { ENTITY_TYPE_LABELS, maskTaxId, normalizeTaxId, npnHint, WORKSPACE_TIMEZONES, type AgencyProfileResponse, type AgencyProfileView, type EntityType, type TaxIdType } from "@/lib/agencyProfile/types";
-import { glass } from "@/components/ui/card";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Draft = {
@@ -36,25 +42,24 @@ const US_STATES = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "
 const OWNERS_ONLY = "Only owners can see and change the business identity.";
 
 /** The page's views, one at a time (owner pick A, 2026-10-27). */
-type IdentityTab = "business" | "tax" | "address" | "brand" | "documents" | "support";
-/** Frosted glass, as on Settings › Carriers and Calendar & availability: the page's glow shows through. */
+type IdentityTab = "business" | "address" | "documents" | "support";
 /**
  * Settings search links to one field ("#business-identity/identity-timezone"). Each field now lives on
  * a tab, so the link opens that tab first and revealAnchor then finds the field.
  */
 const ANCHOR_TABS: Record<string, IdentityTab> = {
   "identity-trading-name": "business", "identity-legal-name": "business", "identity-npn": "business",
-  "identity-tax-id": "tax", "identity-address-line1": "address", "identity-phone": "address",
-  "identity-logo": "brand", "identity-timezone": "brand", "identity-partner-support": "support", "identity-ownership": "support",
+  "identity-tax-id": "business", "identity-timezone": "business", "identity-address-line1": "address", "identity-phone": "address",
+  "identity-logo": "documents", "identity-partner-support": "support", "identity-ownership": "support",
 };
 function tabForHash(hash: string, fallback: IdentityTab = "business"): IdentityTab {
   const anchor = hash.replace(/^#/, "").split("/")[1] ?? "";
   return ANCHOR_TABS[anchor] ?? fallback;
 }
-/** Plain names for the workspace timezones the chips offer. */
+/** Time zones in words; the stored value stays the IANA name. */
 const ZONE_NAMES: Record<string, string> = {
-  "America/New_York": "Eastern", "America/Chicago": "Central", "America/Denver": "Mountain", "America/Phoenix": "Arizona",
-  "America/Los_Angeles": "Pacific", "America/Anchorage": "Alaska", "Pacific/Honolulu": "Hawaii", "America/Puerto_Rico": "Puerto Rico",
+  "America/New_York": "Eastern (New York)", "America/Chicago": "Central (Chicago)", "America/Denver": "Mountain (Denver)", "America/Phoenix": "Arizona (Phoenix)",
+  "America/Los_Angeles": "Pacific (Los Angeles)", "America/Anchorage": "Alaska (Anchorage)", "Pacific/Honolulu": "Hawaii (Honolulu)", "America/Puerto_Rico": "Atlantic (Puerto Rico)",
 };
 
 const draftFrom = (p: AgencyProfileView): Draft => ({
@@ -143,6 +148,8 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
   async function clearTaxId() {
     if (!draft) return;
+    const sure = await confirmAction({ title: "Remove the tax ID?", description: "Tax summaries and 1099 exports stop until a new one is added.", confirmLabel: "Remove tax ID", cancelLabel: "Keep it" });
+    if (!sure) return;
     setBusy(true);
     try {
       const res = await fetch("/api/app/agency-profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draftBody(original ?? draft), taxId: null }) });
@@ -196,124 +203,134 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
   const docs = BUSINESS_DOCUMENTS.map((doc) => ({ doc, missing: missingFor(facts, doc), label: DOCUMENT_REQUIREMENTS[doc].label }));
   const ready = docs.filter((item) => item.missing.length === 0).length;
-  const filled = (...values: string[]) => values.filter((value) => value.trim()).length;
+  const notReady = docs.length - ready;
+  // Named for the job; a number only where something needs you (documents that cannot be made yet).
   const tabs: Array<ViewTab<IdentityTab>> = [
-    { key: "business", label: "Business", count: filled(draft.dba, draft.legalName, draft.entityType, draft.npn) },
-    { key: "tax", label: "Tax ID", count: p.hasTaxId ? 1 : 0 },
-    { key: "address", label: "Address & contact", count: filled(draft.addressLine1, draft.city, draft.state, draft.postalCode, draft.phone, draft.email, draft.website) },
-    { key: "brand", label: "Logo & timezone", count: (p.logoUrl ? 1 : 0) + (draft.timezone ? 1 : 0) },
-    { key: "documents", label: "Documents", count: ready },
-    { key: "support", label: "Partner support & owner" },
+    { key: "business", label: "Business" },
+    { key: "address", label: "Contact & address" },
+    { key: "documents", label: "Documents & logo", count: notReady || null },
+    { key: "support", label: "Partners & owner" },
   ];
   const cityLine = [draft.city, [draft.state, draft.postalCode].filter(Boolean).join(" ")].filter((part) => part.trim()).join(", ");
+  const discard = () => { if (original) setDraft(original); setSaveError(null); };
 
   return (
     <SettingsStack>
       <SettingsSectionHeader />
-      {saveError && <Callout tone="error" title={saveError} />}
       {!response.schemaReady && <Callout tone="warning" title="Saving the business identity needs a database update." />}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <ViewTabs label="Business identity" tabs={tabs} value={tab} onChange={setTab} idPrefix="identity-tab" controls="identity-panel" />
-        <span className={cn("text-xs", ready === docs.length ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>{ready} of {docs.length} documents ready</span>
-      </div>
+      <ViewTabs label="Business identity" tabs={tabs} value={tab} onChange={setTab} idPrefix="identity-tab" controls="identity-panel" />
 
-      <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex flex-col gap-4">
+      <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex flex-col gap-6">
         {tab === "business" && (
-          <SettingsCard title="Who the business is" className={glass}>
-            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              <Field label="Trading name" htmlFor="identity-trading-name" hint="The name clients and partners see: the welcome pack, statements and letters.">
-                <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
-              </Field>
-              <Field label="Legal name" htmlFor="identity-legal-name" required hint="The name on tax forms and regulator responses.">
-                <input id="identity-legal-name" type="text" className={control} value={draft.legalName} onChange={set("legalName")} autoComplete="organization" required placeholder="Masood Insurance Services LLC" />
-              </Field>
-              <div>
-                <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Entity type</span>
-                <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Entity type">
+          <FormSections>
+            <FormSection title="Names and licence" info="Clients see the trading name on the welcome pack, statements and letters. Tax forms and regulators use the legal name.">
+              <FieldRow>
+                <Field label="Trading name" htmlFor="identity-trading-name">
+                  <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
+                </Field>
+                <Field label="Legal name" htmlFor="identity-legal-name" required>
+                  <input id="identity-legal-name" type="text" className={control} value={draft.legalName} onChange={set("legalName")} autoComplete="organization" required placeholder="Masood Insurance Services LLC" />
+                </Field>
+              </FieldRow>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-label text-[var(--body)]">Entity Type</span>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Entity type">
                   {(Object.keys(ENTITY_TYPE_LABELS) as EntityType[]).map((key) => (
-                    <Chip key={key} on={draft.entityType === key} onClick={() => pick("entityType", draft.entityType === key ? "" : key)}>{ENTITY_TYPE_LABELS[key]}</Chip>
+                    <ToggleChip key={key} role="radio" selected={draft.entityType === key} onClick={() => pick("entityType", draft.entityType === key ? "" : key)}>{ENTITY_TYPE_LABELS[key]}</ToggleChip>
                   ))}
                 </div>
               </div>
-              <Field label="National Producer Number" htmlFor="identity-npn" hint={npnHint(p, draft.npn, response.niprConfigured === true, formatDay)}>
-                <input id="identity-npn" type="text" inputMode="numeric" className={control} value={draft.npn} onChange={set("npn")} />
-              </Field>
-            </div>
-          </SettingsCard>
-        )}
+              <FieldRow>
+                <Field label="National producer number (NPN)" htmlFor="identity-npn" hint={npnHint(p, draft.npn, response.niprConfigured === true, formatDay)}>
+                  <input id="identity-npn" type="text" inputMode="numeric" className={cn(control, "font-mono tabular-nums")} value={draft.npn} onChange={set("npn")} />
+                </Field>
+              </FieldRow>
+            </FormSection>
 
-        {tab === "tax" && (
-          <SettingsCard title="Tax ID" className={glass}>
-            <div className="flex flex-col gap-4">
-              <div>
-                <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Type</span>
-                <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Tax ID type">
-                  <Chip on={draft.taxIdType === "ein"} onClick={() => pick("taxIdType", "ein")}>EIN</Chip>
-                  <Chip on={draft.taxIdType === "ssn"} onClick={() => pick("taxIdType", "ssn")}>Social Security number</Chip>
+            <FormSection title="Tax ID" info="Stored encrypted and shown masked; each reveal is recorded. A sole proprietor without an EIN uses their Social Security number." aside={p.hasTaxId ? <StatusChip tone="good">On file</StatusChip> : <StatusChip tone="warning">Not added</StatusChip>}>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-label text-[var(--body)]">Type</span>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tax ID type">
+                  <ToggleChip role="radio" selected={draft.taxIdType === "ein"} onClick={() => pick("taxIdType", "ein")}>EIN</ToggleChip>
+                  <ToggleChip role="radio" selected={draft.taxIdType === "ssn"} onClick={() => pick("taxIdType", "ssn")}>Social Security number</ToggleChip>
                 </div>
-                <span className="mt-1.5 block text-xs text-[var(--muted)]">A sole proprietor without an EIN files under their Social Security number.</span>
               </div>
               {p.hasTaxId && (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <span>On file: <span className="font-semibold tabular-nums">{revealed ?? maskTaxId(p.taxIdType, p.taxIdLast4)}</span></span>
+                  <span className="text-[var(--body)]">On file: <span className="font-mono font-semibold tabular-nums text-[var(--ink)]">{revealed ?? maskTaxId(p.taxIdType, p.taxIdLast4)}</span></span>
                   {revealed
-                    ? <Button type="button" variant="outline" onClick={() => setRevealed(null)}>Hide</Button>
-                    : p.taxIdReadable && <Button type="button" variant="outline" disabled={busy} onClick={() => void reveal()}>Reveal</Button>}
-                  <Button type="button" variant="ghost" disabled={busy} onClick={() => void clearTaxId()}>Remove</Button>
+                    ? <Button type="button" variant="outline" size="sm" onClick={() => setRevealed(null)}>Hide</Button>
+                    : p.taxIdReadable && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void reveal()}>Reveal</Button>}
+                  <Button type="button" variant="ghost" size="sm" disabled={busy} className="text-[var(--error-ink)]" onClick={() => void clearTaxId()}>Remove</Button>
                 </div>
               )}
               <Field
                 label={p.hasTaxId ? "Replace the tax ID" : "Tax ID"}
                 htmlFor="identity-tax-id"
-                hint={p.hasTaxId && !p.taxIdReadable ? `One ending ${p.taxIdLast4 ?? "····"} is stored, but this server has no key to show it. Typing a new one replaces it.` : "Stored encrypted and shown masked. Each reveal is recorded."}
+                hint={p.hasTaxId && !p.taxIdReadable ? `One ending ${p.taxIdLast4 ?? "····"} is stored, but this server has no key to show it. Typing a new one replaces it.` : undefined}
               >
-                <input id="identity-tax-id" type="text" inputMode="numeric" autoComplete="off" className={cn(control, "max-w-[260px]")} value={draft.taxId} onChange={set("taxId")} placeholder={draft.taxIdType === "ssn" ? "123-45-6789" : "12-3456789"} />
+                <input id="identity-tax-id" type="text" inputMode="numeric" autoComplete="off" className={cn(control, "block max-w-[260px] font-mono tabular-nums")} value={draft.taxId} onChange={set("taxId")} placeholder={draft.taxIdType === "ssn" ? "123-45-6789" : "12-3456789"} />
               </Field>
-            </div>
-          </SettingsCard>
+            </FormSection>
+
+            <FormSection title="Time zone" info="How times show for your team, and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state.">
+              <Field label="Business time zone" htmlFor="identity-timezone">
+                <select id="identity-timezone" className={cn(control, "block max-w-sm")} value={draft.timezone} onChange={set("timezone")}>
+                  <option value="">Not set</option>
+                  {timezoneOptions.map((zone) => <option key={zone} value={zone}>{ZONE_NAMES[zone] ?? zone}</option>)}
+                </select>
+              </Field>
+            </FormSection>
+          </FormSections>
         )}
 
         {tab === "address" && (
-          <SettingsCard title="Address and contact" sub="Your agency's own details, as clients and carriers see them." className={glass}>
-            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              <Field label="Address" htmlFor="identity-address-line1">
-                <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
-              </Field>
-              <Field label="Address line 2" htmlFor="identity-address-line2">
-                <input id="identity-address-line2" type="text" className={control} value={draft.addressLine2} onChange={set("addressLine2")} autoComplete="address-line2" />
-              </Field>
-              <Field label="City" htmlFor="identity-city">
-                <input id="identity-city" type="text" className={control} value={draft.city} onChange={set("city")} autoComplete="address-level2" />
-              </Field>
-              <div className="grid grid-cols-2 gap-x-4">
+          <FormSections>
+            <FormSection title="Address" info="Your agency’s own address, as clients and carriers see it. Letters and statements print it.">
+              <FieldRow>
+                <Field label="Address" htmlFor="identity-address-line1">
+                  <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
+                </Field>
+                <Field label="Address line 2" htmlFor="identity-address-line2">
+                  <input id="identity-address-line2" type="text" className={control} value={draft.addressLine2} onChange={set("addressLine2")} autoComplete="address-line2" placeholder="Suite, floor (optional)" />
+                </Field>
+              </FieldRow>
+              <FieldRow cols={3}>
+                <Field label="City" htmlFor="identity-city">
+                  <input id="identity-city" type="text" className={control} value={draft.city} onChange={set("city")} autoComplete="address-level2" />
+                </Field>
                 <Field label="State" htmlFor="identity-state">
                   <select id="identity-state" className={control} value={draft.state} onChange={set("state")}>
-                    <option value="">—</option>
+                    <option value="">Choose…</option>
                     {US_STATES.map((code) => <option key={code} value={code}>{code}</option>)}
                   </select>
                 </Field>
                 <Field label="ZIP code" htmlFor="identity-postal-code">
-                  <input id="identity-postal-code" type="text" inputMode="numeric" className={control} value={draft.postalCode} onChange={set("postalCode")} autoComplete="postal-code" />
+                  <input id="identity-postal-code" type="text" inputMode="numeric" className={cn(control, "tabular-nums")} value={draft.postalCode} onChange={set("postalCode")} autoComplete="postal-code" />
                 </Field>
-              </div>
-              <Field label="Business phone" htmlFor="identity-phone">
-                <input id="identity-phone" type="tel" className={control} value={draft.phone} onChange={set("phone")} autoComplete="tel" placeholder="(312) 555-0100" />
-              </Field>
-              <Field label="Business email" htmlFor="identity-email">
-                <input id="identity-email" type="email" className={control} value={draft.email} onChange={set("email")} autoComplete="email" />
-              </Field>
+              </FieldRow>
+            </FormSection>
+            <FormSection title="Contact" info="How clients and carriers reach the agency. Your own phone is on My profile.">
+              <FieldRow>
+                <Field label="Business phone" htmlFor="identity-phone">
+                  <input id="identity-phone" type="tel" className={control} value={draft.phone} onChange={set("phone")} autoComplete="tel" placeholder="(312) 555-0100" />
+                </Field>
+                <Field label="Business email" htmlFor="identity-email">
+                  <input id="identity-email" type="email" className={control} value={draft.email} onChange={set("email")} autoComplete="email" />
+                </Field>
+              </FieldRow>
               <Field label="Website" htmlFor="identity-website">
                 <input id="identity-website" type="url" className={control} value={draft.website} onChange={set("website")} placeholder="https://" />
               </Field>
-            </div>
-          </SettingsCard>
+            </FormSection>
+          </FormSections>
         )}
 
-        {tab === "brand" && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <SettingsCard title="Logo" sub="PNG or JPEG, up to 512 KB. On the welcome pack and statements." className={glass}>
-              <div className="mt-3 flex flex-wrap items-center gap-4">
+        {tab === "documents" && (
+          <FormSections>
+            <FormSection title="Logo" info="Without a logo, documents print your trading name as text.">
+              <div className="flex flex-wrap items-center gap-4">
                 <div id="identity-logo" className="flex h-16 min-w-40 items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] m-glass-inset px-4">
                   {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL from private storage */}
                   {p.logoUrl ? <img src={p.logoUrl} alt="Business logo" className="max-h-12 max-w-48 object-contain" />
@@ -322,37 +339,31 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                 <input ref={fileRef} type="file" accept="image/png,image/jpeg" className="hidden" aria-label="Choose a logo" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); }} />
                 <Button type="button" variant="outline" disabled={busy || !p.updatedAt} onClick={() => fileRef.current?.click()}>{p.logoUrl ? "Replace" : "Upload logo"}</Button>
                 {p.logoUrl && <Button type="button" variant="ghost" disabled={busy} onClick={() => void removeLogo()}>Remove</Button>}
+                <span className="text-xs text-[var(--muted)]">PNG or JPEG, up to 512 KB</span>
               </div>
-              <p className="m-0 mt-3 text-sm text-[var(--muted)]">{p.updatedAt ? "Without a logo, documents print your trading name as text." : "Save the business identity first, then add a logo."}</p>
-            </SettingsCard>
-            <SettingsCard title="Timezone" sub="How times show for your team and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state." className={glass}>
-              <div id="identity-timezone" tabIndex={-1} className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Business timezone">
-                {timezoneOptions.map((zone) => (
-                  <Chip key={zone} on={draft.timezone === zone} onClick={() => pick("timezone", draft.timezone === zone ? "" : zone)}>{ZONE_NAMES[zone] ?? zone}</Chip>
-                ))}
-              </div>
-            </SettingsCard>
-          </div>
-        )}
+              {!p.updatedAt && <p className="m-0 text-sm text-[var(--muted)]">Save the business identity first, then add a logo.</p>}
+            </FormSection>
 
-        {tab === "documents" && (
-          <div className="grid items-start gap-4 xl:grid-cols-[1fr_400px]">
-            <SettingsCard title="Documents that use it" sub="Each one checks these before it is generated, and says which field is missing." className={glass}>
-              <ul className="m-0 mt-3 flex list-none flex-col p-0">
+            <FormSection
+              title="Documents that use it"
+              info="Each document checks these details before it is made, and says which one is missing."
+              aside={<StatusChip tone={notReady ? "warning" : "good"}>{ready} of {docs.length} ready</StatusChip>}
+            >
+              <ul className="m-0 flex list-none flex-col p-0">
                 {docs.map(({ doc, missing, label }) => (
-                  <li key={doc} className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] py-2.5 text-sm first:border-t-0">
-                    <span className={cn("inline-flex size-6 items-center justify-center rounded-full text-xs font-bold", missing.length ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--primary)] text-[var(--on-primary)]")}>{missing.length ? "!" : "✓"}</span>
-                    <span className="min-w-0 flex-1 font-semibold">{label.charAt(0).toUpperCase() + label.slice(1)}</span>
+                  <li key={doc} className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] py-2.5 text-sm first:border-t-0 first:pt-0 last:pb-0">
+                    <span className="min-w-0 flex-1 font-medium text-[var(--ink)]">{label.charAt(0).toUpperCase() + label.slice(1)}</span>
                     {missing.length
                       ? <StatusChip tone="warning">Needs {missing.map((f) => BUSINESS_FIELD_LABELS[f]).join(", ")}</StatusChip>
                       : <StatusChip tone="good">Ready</StatusChip>}
                   </li>
                 ))}
               </ul>
-            </SettingsCard>
+            </FormSection>
+
             {/* How a letter prints with what is on screen now (owner, 2026-10-27: keep the letterhead from B). */}
-            <SettingsCard title="How it prints" sub="Live preview of a letter's head and foot." className={glass}>
-              <div className="mt-3 rounded-[8px] bg-white p-5 text-[rgb(16,32,27)] shadow-[0_10px_30px_rgba(0,0,0,.25)]">
+            <FormSection title="How it prints" info="A letter’s head and foot, from what is on screen now. It changes as you type.">
+              <div className="rounded-[8px] bg-white p-5 text-[rgb(16,32,27)] shadow-[0_10px_30px_rgba(0,0,0,.25)]">
                 <div className="flex items-start justify-between gap-4 border-b-2 border-[rgb(11,94,72)] pb-3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- the same signed logo URL as above */}
                   {p.logoUrl ? <img src={p.logoUrl} alt="" className="max-h-9 max-w-40 object-contain" />
@@ -370,42 +381,24 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                   {draft.legalName || "Legal name"}{draft.npn ? ` · NPN ${draft.npn}` : ""}{draft.website ? ` · ${draft.website}` : ""}
                 </p>
               </div>
-            </SettingsCard>
-          </div>
+            </FormSection>
+          </FormSections>
         )}
 
         {tab === "support" && (
-          <>
-            <PartnerSupportCard className={glass} />
-            <OwnershipCard team={team} workspace={workspace} className={glass} />
-          </>
+          <FormSections>
+            <PartnerSupportCard />
+            <OwnershipCard team={team} workspace={workspace} />
+          </FormSections>
         )}
       </div>
 
-      <LeaveGuard dirty={dirty} onDiscard={() => { if (original) setDraft(original); setSaveError(null); }} what="the business identity" />
+      {saveError && <Callout tone="error" title={saveError} />}
+      <LeaveGuard dirty={dirty} onDiscard={discard} what="the business identity" />
       <SettingsSaveBar visible={dirty} note="Unsaved changes to the business identity">
-        <Button type="button" variant="outline" onClick={() => { if (original) setDraft(original); setSaveError(null); }} disabled={saving}>Discard</Button>
-        <Button type="button" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>
+        <DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void save()} />
       </SettingsSaveBar>
     </SettingsStack>
-  );
-}
-
-/** A choice you tap, for the short lists on this page (entity type, tax ID type, timezone). */
-function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={on}
-      onClick={onClick}
-      className={cn(
-        "h-8 rounded-full px-3 text-sm font-semibold tracking-[-0.01em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        on ? "border-[1.5px] border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] text-[var(--body)] hover:border-[var(--accent-ink)]",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

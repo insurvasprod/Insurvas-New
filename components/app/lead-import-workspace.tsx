@@ -1,5 +1,6 @@
 "use client";
 
+import { csvCell } from "@/lib/csv/cell";
 import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -20,11 +21,22 @@ import { ColumnMappingDialog, columnMappingStatus, type MappingRow } from "@/com
 import { EMPTY_DATE_SCAN, inferredImportDateOrder, isImportDateOrder, parseCsv, previewLeadCsv, suggestLeadCsvMappings, type ImportDateOrder } from "@/lib/agentTemplates/csv";
 import { IMPORT_CSV_KEY, parseDollarsToCents, parseRecordCount } from "@/lib/agentTemplates/importReviewModel";
 import { isXlsxFile, readXlsxAsCsv, XLSX_TYPES } from "@/lib/agentTemplates/xlsx";
-import type { TemplateFieldType } from "@/lib/templates/constants";
+import { TEMPLATE_FIELD_TYPE_LABELS, type TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
 
 type SavedMap = { id: string; vendor_id: string; product_code: string; mapping: Record<string, string | null>; updated_at: string; date_order?: ImportDateOrder | null };
 type ImportInfo = { product: { name: string }; productCode: string; products?: Array<{ code: string; name: string }>; fields: Array<{ key: string; label: string; type: TemplateFieldType; required: boolean; options: string[]; sort_order: number }>; stages: Array<{ id: string; name: string }>; campaigns: Array<{ id: string; vendor_id: string; name: string; status: string }>; vendors: Array<{ id: string; name: string; lead_type: string; status: string }>; mappings: SavedMap[]; limits: Array<{ key: string; label: string; usage: number; limit: number | null; hardCap: boolean; allowed: boolean }>; maxRows: number; canCreateCampaigns?: boolean };
+
+function downloadFieldTemplate(fields: ImportInfo["fields"]) {
+  // The shared cell (lib/csv/cell.ts): the same quoting, plus the formula guard every export has.
+  const csv = `${fields.map((field) => csvCell(field.label)).join(",")}\r\n`;
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "insurvas-lead-template.csv";
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 /** Key-sorted, so two maps with the same entries compare equal. */
 const mapKey = (mapping: Record<string, string | null>) => JSON.stringify(Object.entries(mapping).sort(([left], [right]) => left.localeCompare(right)));
@@ -402,7 +414,7 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
     {embedded
       ? info && info.fields.length > 0 && <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setFieldsOpen(true)}>Expected fields</Button></div>
       : <PageHeader
-        title="List import"
+        title="Import leads"
         actions={info && info.fields.length > 0 ? <Button type="button" variant="outline" onClick={() => setFieldsOpen(true)}>Expected fields</Button> : undefined}
       />}
 
@@ -416,7 +428,7 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
         const pct = item.limit === null ? 0 : Math.min(100, Math.round((item.usage / Math.max(1, item.limit)) * 100));
         return <StatTile
           key={item.key}
-          label={item.label}
+          label={item.key === "dnc_scrub_lookups" ? "Do Not Call checks" : item.label}
           value={item.usage.toLocaleString()}
           meter={item.limit === null ? undefined : { value: item.usage, max: item.limit, tone: pct >= 90 ? "danger" : pct >= 75 ? "warning" : "info", label: `${item.label}: ${pct}% used` }}
           footnote={item.limit === null ? "no cap on this plan" : `of ${item.limit.toLocaleString()} · ${pct}%`}
@@ -445,7 +457,7 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
               onDrop={(event) => { event.preventDefault(); setDragging(false); void takeFile(event.dataTransfer.files?.[0]); }}
             >
               <span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]"><Upload className="size-4" aria-hidden /></span>
-              <p className="mt-2.5 text-base leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a vendor CSV or Excel file here</p>
+              <p className="mt-2.5 text-base leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a file from your lead source here</p>
               <p className="mt-1.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{reading ? "Reading the workbook…" : `.csv or .xlsx · up to ${(info?.maxRows ?? 20000).toLocaleString()} rows per file`}</p>
               <input id="lead-csv" className="peer sr-only" type="file" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => void takeFile(event.target.files?.[0])} />
               <Button data-guide="lead-import-upload" asChild variant="outline" className="mt-4 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
@@ -467,7 +479,7 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
           <p className="m-0 flex items-center gap-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
             {mapConfirmed
               ? <StatusChip tone="good" dot>Confirmed</StatusChip>
-              : <><StatusChip tone="warning" dot>Not confirmed</StatusChip>Check each column before the scrub.</>}
+              : <><StatusChip tone="warning" dot>Not confirmed</StatusChip>Check each column before checking phone numbers.</>}
           </p>
           {dateOrderToSend && (datePicked || dates.ambiguous === 0) && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Slash dates are read {dateOrderToSend === "dmy" ? "day first" : "month first (US)"}.</p>}
           {saveNote && <p role="status" className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</p>}
@@ -529,23 +541,23 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
         {info && campaigns.length === 0
           ? <DashedCard
               icon={<Store className="size-4" aria-hidden />}
-              title="Create a campaign first"
-              action={info.canCreateCampaigns ? <Button asChild variant="outline"><Link href="/app/campaigns">Go to Vendors &amp; campaigns</Link></Button> : undefined}
+              title="Create a campaign to continue"
+              action={info.canCreateCampaigns ? <Button asChild variant="outline"><Link href="/app/campaigns?guide=campaign">Create campaign</Link></Button> : undefined}
             >
               {info.canCreateCampaigns
                 ? "Every import is attributed to a campaign."
                 : "Every import is attributed to a campaign. Ask an owner or producer to create one."}
             </DashedCard>
           : <SettingsCard pad={20} title="Attribution" bodyClassName="flex flex-col gap-3.5">
-              {/* Settings › Products (2026-10-28): the list is for one product the agency sells. */}
+              {/* The list is for one product the agency sells. */}
               <Field label="Product" htmlFor="lead-product" required hint={(info?.products?.length ?? 0) > 1 ? "The leads are for this product: its form decides the columns." : undefined}>
                 <select id="lead-product" className={control} required value={info?.productCode ?? ""} disabled={(info?.products?.length ?? 0) < 2} onChange={(event) => chooseProduct(event.target.value)}>
                   {(info?.products ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
                 </select>
               </Field>
-              <Field label="Vendor" htmlFor="lead-vendor" hint={vendorId ? "Reuses this vendor's saved mapping." : undefined}>
+              <Field label="Lead source" htmlFor="lead-vendor" hint={vendorId ? "Reuses this lead source's saved mapping." : undefined}>
                 <select id="lead-vendor" className={control} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
-                  <option value="">Any vendor</option>
+                  <option value="">Any lead source</option>
                   {activeVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
                 </select>
               </Field>
@@ -584,7 +596,8 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Expected fields</DialogTitle>
-          <DialogDescription>The {info.product.name} lead record.</DialogDescription>
+          <DialogDescription>The details Insurvas can read for {info.product.name} leads.</DialogDescription>
+          <Button type="button" variant="outline" onClick={() => downloadFieldTemplate(info.fields)}>Download sample CSV</Button>
         </DialogHeader>
         <PagedProvider>
         <div className="max-h-[60dvh] min-w-0 overflow-y-auto rounded-lg border border-border">
@@ -592,8 +605,8 @@ export function LeadImportWorkspace({ embedded = false }: { embedded?: boolean }
         <thead><tr className={st.headRow}><th scope="col" className={st.th}>Field</th><th scope="col" className={st.th}>Type</th><th scope="col" className={st.th}>Required</th></tr></thead>
         <PagedBody>
           {info.fields.map((field) => <tr key={field.key}>
-            <td className={st.td}><code className={st.code}>{field.key}</code></td>
-            <td className={st.td}>{field.type}</td>
+            <td className={st.td}>{field.label}</td>
+            <td className={st.td}>{TEMPLATE_FIELD_TYPE_LABELS[field.type]}</td>
             <td className={st.td}>{field.required ? "Required" : "Optional"}</td>
           </tr>)}
         </PagedBody>

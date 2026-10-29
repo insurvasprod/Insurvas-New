@@ -52,7 +52,7 @@ export default async function CheckoutReturnPage({ searchParams }: { searchParam
   const trialDays = selection ? await trialDaysForPlan(selection.plan_id) : resolveTrialDays(null);
 
   return (
-    <FunnelFrame step={5}>
+    <FunnelFrame step={4}>
       <FunnelHeading title={trialDays > 0 ? "Starting your trial" : "Starting your plan"}>This usually takes a few seconds.</FunnelHeading>
       <CheckoutReturnStatus />
     </FunnelFrame>

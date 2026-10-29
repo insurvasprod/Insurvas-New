@@ -40,6 +40,21 @@ import { fieldLabel } from "@/components/ui/field";
  */
 const SECTIONS = ["deadlines", "retention", "purge", "holds", "deletion", "gate", "report", "dashboard", "log"] as const;
 type Section = (typeof SECTIONS)[number];
+/**
+ * Settings redesign R9 (2026-10-29): nine tabs ran off the edge at 1536px ("Evidence report" cut,
+ * "Dashboard" and "Change log" out of sight), so the sections sit in five tabs named for the job. Every
+ * section keeps its own anchor (#purge still opens Records & purge). The change log folds under
+ * Reports & dashboard: the page header's History covers the everyday question.
+ */
+const GROUPS = {
+  deadlines: ["deadlines"],
+  records: ["retention", "purge"],
+  holds: ["holds", "deletion"],
+  gate: ["gate"],
+  reports: ["report", "dashboard", "log"],
+} as const satisfies Record<string, readonly Section[]>;
+type Group = keyof typeof GROUPS;
+const groupOf = (section: Section): Group => (Object.keys(GROUPS) as Group[]).find((group) => (GROUPS[group] as readonly Section[]).includes(section)) ?? "deadlines";
 type Bundle = {
   settings: ComplianceSettings;
   caps: { deletionHoldFloorDays: number; lockedGateChecks: string[]; neverDelete: string[] };
@@ -118,27 +133,27 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
   if (!data) return <TableCard><SectionLoading rows={6} columns={3} /></TableCard>;
   const s = data.settings;
   const disabled = readOnly || busy;
-  const tabs = [
-    { key: "deadlines" as const, label: "Complaint deadlines", count: data.deadlines.coverage.missing.length || null, tone: "danger" as const },
-    { key: "retention" as const, label: "Retention rules" },
-    { key: "purge" as const, label: "Purge job" },
-    { key: "holds" as const, label: "Legal holds", count: data.holds.filter((h) => !h.releasedAt).length },
-    { key: "deletion" as const, label: "Deletion requests" },
-    { key: "gate" as const, label: "Transfer gate" },
-    { key: "report" as const, label: "Evidence report" },
-    { key: "dashboard" as const, label: "Dashboard" },
-    { key: "log" as const, label: "Change log" },
+  // A number only where something needs you: states with no deadline, holds still in force.
+  const openHolds = data.holds.filter((h) => !h.releasedAt).length;
+  const tabs: { key: Group; label: string; count?: number | null; tone?: "danger" }[] = [
+    { key: "deadlines", label: "Complaint deadlines", count: data.deadlines.coverage.missing.length || null, tone: "danger" },
+    { key: "records", label: "Records & purge" },
+    { key: "holds", label: "Holds & deletion", count: openHolds || null },
+    { key: "gate", label: "Transfer gate" },
+    { key: "reports", label: "Reports & dashboard" },
   ];
+  const group = groupOf(tab);
+  const show = (section: Section) => (GROUPS[group] as readonly Section[]).includes(section);
 
   return (
     <div id={tab} className="flex scroll-mt-24 flex-col gap-4">
-      <ViewTabs label="Compliance settings" tabs={tabs} value={tab} onChange={setTab} />
-      {tab === "deadlines" ? <Deadlines data={data} disabled={disabled} save={save} post={post} /> : null}
-      {tab === "retention" ? <Retention data={data} disabled={disabled} post={post} /> : null}
-      {tab === "purge" ? <Purge data={data} disabled={disabled} save={save} post={post} /> : null}
-      {tab === "holds" ? <Holds data={data} disabled={disabled} post={post} /> : null}
-      {tab === "deletion" ? (
-        <TableCard title="Deletion requests" description="How a consumer's deletion request is checked and when it may run.">
+      <ViewTabs label="Compliance settings" tabs={tabs} value={group} onChange={(next) => setTab(GROUPS[next][0])} />
+      {show("deadlines") ? <Deadlines data={data} disabled={disabled} save={save} post={post} /> : null}
+      {show("retention") ? <Retention data={data} disabled={disabled} post={post} /> : null}
+      {show("purge") ? <Purge data={data} disabled={disabled} save={save} post={post} /> : null}
+      {show("holds") ? <Holds data={data} disabled={disabled} post={post} /> : null}
+      {show("deletion") ? (
+        <TableCard title="Deletion requests" info="How a consumer's deletion request is checked and when it may run.">
           <div className="flex flex-col gap-4 px-4 pb-4">
             <label className={field}>Hold after verification, in days (platform floor {data.caps.deletionHoldFloorDays})
               <input type="number" min={data.caps.deletionHoldFloorDays} max={45} className={`${toolbarControl} w-28`} defaultValue={s.deletion.holdDays} disabled={disabled} onBlur={(e) => { const v = Number(e.target.value); if (v !== s.deletion.holdDays) void save({ "deletion.holdDays": v }); }} />
@@ -153,8 +168,8 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
           </div>
         </TableCard>
       ) : null}
-      {tab === "gate" ? (
-        <TableCard title="Transfer gate" description="The checks run before a partner's transfer is accepted.">
+      {show("gate") ? (
+        <TableCard title="Transfer gate" info="The checks run before a partner's transfer is accepted.">
           <div className="flex flex-col gap-4 px-4 pb-4">
             <div className="flex flex-col gap-1">
               <Toggle label="TCPA litigator" checked locked="Always on" />
@@ -177,8 +192,8 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
           </div>
         </TableCard>
       ) : null}
-      {tab === "report" ? (
-        <TableCard title="Evidence report" description="Which gap checks run, and who may generate a report.">
+      {show("report") ? (
+        <TableCard title="Evidence report" info="Which gap checks run, and who may generate a report.">
           <div className="flex flex-col gap-4 px-4 pb-4">
             <div className="flex flex-col gap-1"><span className="text-sm font-semibold">Gap checks</span>
               {GAP_CATEGORIES.map((g) => <Toggle key={g.key} label={g.label} checked={s.report.gapChecks.includes(g.key)} disabled={disabled} onChange={(on) => void save({ "report.gapChecks": on ? [...s.report.gapChecks, g.key] : s.report.gapChecks.filter((x) => x !== g.key) })} />)}
@@ -192,8 +207,8 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
           </div>
         </TableCard>
       ) : null}
-      {tab === "dashboard" ? (
-        <TableCard title="Dashboard" description="What the compliance dashboard shows, and the monthly email.">
+      {show("dashboard") ? (
+        <TableCard title="Dashboard" info="What the compliance dashboard shows, and the monthly email.">
           <div className="flex flex-col gap-4 px-4 pb-4">
             <div className="flex flex-col gap-1"><span className="text-sm font-semibold">Tiles</span>
               {TILE_KEYS.map((k) => <Toggle key={k} label={TILE_LABELS[k]} checked={!s.dashboard.hiddenTiles.includes(k)} disabled={disabled} onChange={(on) => void save({ "dashboard.hiddenTiles": on ? s.dashboard.hiddenTiles.filter((x) => x !== k) : [...s.dashboard.hiddenTiles, k] })} />)}
@@ -203,8 +218,11 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
           </div>
         </TableCard>
       ) : null}
-      {tab === "log" ? (
-        <TableCard title="Change log" description="Every change: who, what, from, to, when.">
+      {show("log") ? (
+        <details className="group">
+        <summary className="cursor-pointer list-none py-1 text-sm font-medium text-[var(--body)] hover:text-[var(--ink)] [&::-webkit-details-marker]:hidden">Change log <span className="text-xs font-normal text-muted-foreground">· every change made here, with what it was before</span></summary>
+        <div className="mt-3">
+        <TableCard title="Change log" info="Every change: who, what, from, to, when.">
           {data.changes.length === 0 ? <EmptyState title="No changes yet" hint="Every change made here is listed, with what it was before." /> : (
             <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
               <thead><tr><th className="w-[160px]">When</th><th className="w-[170px]">Section</th><th>Setting</th><th>From → to</th><th className="w-[160px]">By</th></tr></thead>
@@ -222,6 +240,8 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
             </table>
           )}
         </TableCard>
+        </div>
+        </details>
       ) : null}
     </div>
   );
@@ -268,7 +288,7 @@ function Deadlines({ data, disabled, save, post }: { data: Bundle; disabled: boo
           </table>
         )}
       </TableCard>
-      <TableCard title="Escalation" description="When a regulator complaint turns amber and red. Inside red it pins to the dashboard and the daily email starts.">
+      <TableCard title="Escalation" info="When a regulator complaint turns amber and red. Inside red it pins to the dashboard and the daily email starts.">
         <div className="flex flex-wrap gap-4 px-4 pb-4">
           <label className={field}>Amber at (days left)<input type="number" min={1} max={90} className={`${toolbarControl} w-24`} defaultValue={data.settings.complaints.amberDays} disabled={disabled} onBlur={(e) => { const v = Number(e.target.value); if (v !== data.settings.complaints.amberDays) void save({ "complaints.amberDays": v }); }} /></label>
           <label className={field}>Red at (days left)<input type="number" min={1} max={60} className={`${toolbarControl} w-24`} defaultValue={data.settings.complaints.redDays} disabled={disabled} onBlur={(e) => { const v = Number(e.target.value); if (v !== data.settings.complaints.redDays) void save({ "complaints.redDays": v }); }} /></label>
@@ -349,7 +369,7 @@ function Purge({ data, disabled, save, post }: { data: Bundle; disabled: boolean
           <Recipients team={data.team} value={p.recipients} disabled={disabled} onChange={(ids) => void save({ "purge.recipients": ids })} empty="The agency owners" />
         </div>
       </TableCard>
-      <TableCard title="Runs" description="Matched, held and purged, per record type.">
+      <TableCard title="Runs" info="Matched, held and purged, per record type.">
         {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Start with a dry run: it deletes nothing and shows what a live run would." /> : (
           <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
             <thead><tr><th className="w-[160px]">When</th><th className="w-[110px]">Mode</th><th>Per record type (matched / held / purged)</th><th className="w-[120px]">Unruled</th></tr></thead>

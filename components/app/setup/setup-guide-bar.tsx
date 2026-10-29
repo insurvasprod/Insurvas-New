@@ -6,7 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
-import { guideHref, isManualStep, type SetupChecklist } from "@/lib/dashboard/checklist";
+import { InfoTip } from "@/components/ui/info-tip";
+import { currentSetupStepKey, guideHref, isManualStep, STATEMENT_EXPLAINER, type SetupChecklist } from "@/lib/dashboard/checklist";
 
 import { markSetupStep } from "./setup-step-list";
 
@@ -30,7 +31,9 @@ export function SetupGuideBar() {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const stepKey = params.get("guide");
+  // An old link may carry a step that was folded into another; it lands on the one that replaced it.
+  const guide = params.get("guide");
+  const stepKey = guide ? currentSetupStepKey(guide) : null;
   const [data, setData] = useState<SetupResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const timers = useRef<number[]>([]);
@@ -138,9 +141,11 @@ export function SetupGuideBar() {
   if (!stepKey) return null;
   if (!data || !step) return retryLine && !data ? <div data-setup-guide="" className="mb-4">{retryLine}</div> : null;
 
-  const position = `Step ${index + 1} of ${steps.length}`;
-  // The next step after this one (wrapping round), not the first undone one: that may be this step.
-  const following = [...steps.slice(index + 1), ...steps.slice(0, index)].find((item) => !item.complete && !item.skipped);
+  // Counted steps only (owner, 2026-10-28): "Step 2 of 9", and an optional setting says so instead.
+  const counted = steps.filter((item) => !item.optional);
+  const position = step.optional ? "Optional setting" : `Step ${counted.findIndex((item) => item.key === step.key) + 1} of ${counted.length}`;
+  // The next counted step after this one (wrapping round), not the first undone one: that may be this step.
+  const following = [...steps.slice(index + 1), ...steps.slice(0, index)].find((item) => !item.optional && !item.complete && !item.skipped);
   const next = following ? { label: following.label, href: guideHref(following) } : null;
 
   const skip = () => {
@@ -166,13 +171,14 @@ export function SetupGuideBar() {
         <span className="text-muted-foreground tabular-nums">{position} · </span>
         <span className="font-semibold">{step.label}</span>
         <span className="text-muted-foreground"> — {step.complete ? "done." : step.instruction}</span>
+        {step.key === "statement" ? <> <InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip></> : null}
       </p>
       <span className="flex shrink-0 flex-wrap items-center gap-2">
         <Link href="/app/setup" className={buttonVariants({ variant: "ghost" })}>Back to setup</Link>
         {!step.complete && isManualStep(step.key) ? (
           <Button type="button" variant="outline" onClick={markDone}>Mark done</Button>
         ) : null}
-        {!step.complete ? (
+        {!step.complete && !step.optional ? (
           <Button type="button" variant="ghost" onClick={skip}>Skip</Button>
         ) : null}
         {step.complete ? (

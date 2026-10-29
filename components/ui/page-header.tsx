@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { Breadcrumbs, type Crumb } from "./breadcrumbs";
 import { PageHeaderActions } from "./page-header-actions";
 
 /**
@@ -18,22 +19,54 @@ import { PageHeaderActions } from "./page-header-actions";
  * right. A header with no actions takes no space at all.
  *
  * `size` and `eyebrow` are kept so no caller has to change.
+ *
+ * `visible` (settings-shell plan, 2026-10-28): the title shown again, top-left, with the breadcrumb
+ * above it and the description under it, the actions on the title's line on the right. Used by the
+ * Settings frame first; the rest of the app moves to it page by page (the top bar's crumb goes when
+ * every page has one).
  */
 export function PageHeader({
   title,
+  titleInfo,
   description,
   actions,
   size = "page",
+  visible = false,
+  breadcrumbs,
+  meta,
   className,
 }: {
+  /** Show the title, description and breadcrumb on the page (see above). */
+  visible?: boolean;
+  /** The trail above the title when `visible`: real pages only, the last one this page. */
+  breadcrumbs?: Crumb[];
+  /** One quiet line under the description when `visible` (Settings: who last changed something here). */
+  meta?: ReactNode;
   /** Accepted and ignored (2026-09-28 review): one title per page, and now that one is hidden too. */
   eyebrow?: string;
   title: string;
+  /** Optional help tip retained beside the page actions when the visible title moves to the top bar. */
+  titleInfo?: ReactNode;
   description?: string;
   actions?: ReactNode;
   size?: "page" | "hero";
   className?: string;
 }) {
+  if (visible) {
+    return (
+      <header data-page-header="visible" className={cn("flex flex-col gap-2", className)}>
+        {breadcrumbs && <Breadcrumbs crumbs={breadcrumbs} />}
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0 max-w-[44rem]">
+            <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
+            {description && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
+            {meta}
+          </div>
+          {(titleInfo || actions) && <div className="flex shrink-0 flex-wrap items-center gap-2">{titleInfo}{actions}</div>}
+        </div>
+      </header>
+    );
+  }
   return (
     <div className={cn("m-page-header", className)} data-has-actions={actions ? "" : undefined}>
       {/* The display face (Inter Tight, foundation v3) if it is ever shown again; sr-only for now. */}
@@ -41,7 +74,7 @@ export function PageHeader({
         {title}
       </h1>
       {description && <p className="sr-only">{description}</p>}
-      {actions && <PageHeaderActions>{actions}</PageHeaderActions>}
+      {(titleInfo || actions) && <PageHeaderActions>{titleInfo}{actions}</PageHeaderActions>}
     </div>
   );
 }

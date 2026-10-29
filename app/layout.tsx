@@ -36,6 +36,16 @@ export default function RootLayout({
     // The theme class is applied after hydration by ThemeProvider; suppressing the html attribute
     // keeps browser theme extensions from turning a cosmetic class change into a hydration error.
     <html lang="en" className={fontVariables} suppressHydrationWarning>
+      <head>
+        {/* The saved theme before the first paint (Next guide "preventing flash before hydration"):
+            without it a dark-mode page painted light, then switched. ThemeProvider keeps it in sync
+            afterwards with the same rule: a saved light/dark wins, otherwise the system's. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");var d=t==="dark"||((t===null||t==="system")&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;if(d)r.classList.add("dark");r.style.colorScheme=d?"dark":"light"}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body>
         <ThemeProvider>
           {children}

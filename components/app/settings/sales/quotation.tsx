@@ -16,7 +16,6 @@ import { Plus } from "lucide-react";
 
 import { Callout, Field, SettingsCard, SettingsStack, ToggleRow, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
@@ -28,8 +27,8 @@ import type { TemplateRowView } from "@/lib/salesSettings/views";
 import { cn } from "@/lib/utils";
 
 import {
-  DiscardSave, LifecyclePill, ReadOnlyNotice, RowAction, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, VersionPill, WithReason,
-  notRefreshed, warnUnsaved,
+  DiscardSave, LifecyclePill, ReadOnlyNotice, RowAction, RowMenu, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, VersionPill, WithReason,
+  warnUnsaved,
 } from "./shared";
 import { lineageKey, liveOf, tableRows, useSalesTemplates } from "./templates-data";
 import { PairDialog, PublishDialog, RetireDialog } from "./templates-dialogs";
@@ -138,18 +137,11 @@ export function SalesQuotationTemplates() {
             total={rowsShown.length}
             noun="templates"
             title="What each carrier and product needs"
-            description="One row per pair. A pair with no template falls back to the platform one."
-            toolbar={
-              <DataToolbar
-                actions={
-                  <>
+            info="One row per pair. A pair with no template falls back to the platform one."
+            action={
                     <WithReason reason={ownerOnly}>
                       <Button type="button" disabled={!canEdit} onClick={() => setDialog({ kind: "pair" })}><Plus aria-hidden="true" />Add a pair</Button>
                     </WithReason>
-                    <RefreshButton onClick={sample ? notRefreshed : () => { void api.reload(); }} refreshing={api.loading && !sample} />
-                  </>
-                }
-              />
             }
           >
             {rowsShown.length === 0 ? (
@@ -172,7 +164,11 @@ export function SalesQuotationTemplates() {
                     const isOpen = t.id === selectedId;
                     const verb = isOpen ? "Close" : canEdit && t.tenantOwned ? "Edit" : "View";
                     return (
-                      <tr key={t.id} className={cn("m-row", isOpen && "bg-[var(--brand-50)]")}>
+                      <tr
+                        key={t.id}
+                        className={cn("m-row cursor-pointer", isOpen && "bg-[var(--brand-50)]")}
+                        onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a, [role=menu]")) toggle(t); }}
+                      >
                         <td className={st.td}><span className={st.strong}>{carrierLabel(t)}</span></td>
                         <td className={st.td}>{productLabel(t)}</td>
                         <td className={st.td}>{quoteInputsSummary(t.definition)}</td>
@@ -181,16 +177,15 @@ export function SalesQuotationTemplates() {
                         <td className={st.td}><LifecyclePill state={!t.tenantOwned ? "platform" : t.status === "published" ? "live" : t.status === "draft" ? "draft" : "retired"} /></td>
                         <td className={cn(st.td, "whitespace-nowrap text-right")}>
                           <span className="inline-flex gap-2">
-                            {!t.tenantOwned && (
-                              <RowAction onClick={() => { void copyPlatform(t); }} disabled={!canEdit} reason={ownerOnly}>Copy to my agency</RowAction>
-                            )}
-                            {t.tenantOwned && t.status === "published" && (
-                              <RowAction onClick={() => setDialog({ kind: "retire", template: t })} disabled={!canEdit} reason={ownerOnly}>Retire</RowAction>
-                            )}
-                            {t.tenantOwned && t.status === "draft" && (
-                              <RowAction onClick={() => setDialog({ kind: "publish", template: t })} disabled={!canEdit || (isOpen && dirty)} reason={isOpen && dirty ? "Save your changes before publishing." : ownerOnly}>Publish</RowAction>
-                            )}
                             <RowAction onClick={() => toggle(t)} label={`${verb} ${carrierLabel(t)} · ${productLabel(t)} v${t.version}`}>{verb}</RowAction>
+                            <RowMenu
+                              label={`${carrierLabel(t)} · ${productLabel(t)} v${t.version}`}
+                              items={[
+                                !t.tenantOwned && { label: "Copy to my agency", onSelect: () => { void copyPlatform(t); }, disabled: !canEdit, reason: ownerOnly },
+                                t.tenantOwned && t.status === "draft" && { label: "Publish", onSelect: () => setDialog({ kind: "publish", template: t }), disabled: !canEdit || (isOpen && dirty), reason: isOpen && dirty ? "Save your changes before publishing." : ownerOnly },
+                                t.tenantOwned && t.status === "published" && { label: "Retire", onSelect: () => setDialog({ kind: "retire", template: t }), disabled: !canEdit, reason: ownerOnly },
+                              ]}
+                            />
                           </span>
                         </td>
                       </tr>
@@ -204,7 +199,7 @@ export function SalesQuotationTemplates() {
           {selected && (
             <SettingsCard
               title={`${carrierLabel(selected)} · ${productLabel(selected)} · v${selected.version}`}
-              sub="Switch an input on and the Quote step asks for it. Switch it off and it is not asked, not stored."
+              info="Switch an input on and the Quote step asks for it. Switch it off and it is not asked, not stored."
             >
               <div className="flex flex-col gap-5">
                 <div className="grid gap-[18px] sm:grid-cols-2">

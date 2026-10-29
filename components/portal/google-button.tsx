@@ -25,7 +25,8 @@ export function GoogleButton({ intent, plan, cycle, className }: {
       <a href={`/api/app/auth/google/start?${query}`}>
         {/* eslint-disable-next-line @next/next/no-img-element -- an 18px brand mark; next/image adds nothing */}
         <img src="/brand/google-g.svg" alt="" width={18} height={18} className="size-[18px] shrink-0" />
-        Continue with Google
+        {/* On the sign-in page it says what it does there (manager review, 2026-10-28). */}
+        {intent === "sign-in" ? "Sign in with Google" : "Continue with Google"}
       </a>
     </Button>
   );

@@ -1,15 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, Search, X } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowUpRight, Search, X,
+  Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, Sparkles, UserRound, Users, Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import { LoadingRows } from "@/components/ui/page-states";
+import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { cn } from "@/lib/utils";
+import { titleCaseNode } from "@/components/ui/title-case";
+import { titleCase } from "@/lib/format/titleCase";
 
 /**
  * The settings shell (LA-8.1). It draws whatever lib/settings/sections.ts registers, gated and
@@ -20,6 +30,42 @@ export type AgentSettingsTab = SettingsSection;
 /** Sections a read-only account can still act in: Billing is how the account is reactivated. */
 const READ_ONLY_EXEMPT = new Set(["billing"]);
 
+/** One icon per Settings page, so the menu reads like the app sidebar (owner's reference, 2026-10-29). */
+const SECTION_ICON: Record<string, LucideIcon> = {
+  "my-profile": UserRound,
+  "business-identity": Building2,
+  "products": Package,
+  "team-access": Users,
+  "billing": CreditCard,
+  "carriers": FileSignature,
+  "sales-extension": Puzzle,
+  "sales-underwriting": ClipboardList,
+  "sales-quotation": Calculator,
+  "sales-field-sets": ListChecks,
+  "sales-disclosures": FileText,
+  "sales-preferences": ShieldCheck,
+  "sales-welcome-pack": Mail,
+  "sales-ai": Sparkles,
+  "sales-pipeline-sync": RefreshCw,
+  "pipelines": Workflow,
+  "form-templates": LayoutTemplate,
+  "lead-posting": Send,
+  "calendar": CalendarDays,
+  "cadence": Repeat,
+  "queue-sla": PhoneIncoming,
+  "calling-windows": Clock,
+  "accounting": Landmark,
+  "retention": LifeBuoy,
+  "compliance": Scale,
+  "integrations": KeyRound,
+  "settings-history": History,
+};
+
+function SectionIcon({ id }: { id: string }) {
+  const Icon = SECTION_ICON[id];
+  return Icon ? <Icon aria-hidden="true" className="portal-settings-item-icon size-4 shrink-0" /> : null;
+}
+
 export function AgentSettingsTabs({
   tabs: registered,
   team,
@@ -29,6 +75,9 @@ export function AgentSettingsTabs({
   initialTab = "business-identity",
   readOnly = false,
   hidden,
+  renderPanel,
+  routeSection,
+  children,
 }: {
   tabs: AgentSettingsTab[];
   /** Owner-only panel context; null for everyone else, whose sections do not need it. */
@@ -47,7 +96,19 @@ export function AgentSettingsTabs({
   readOnly?: boolean;
   /** Sections the plan has no use for (LA-8.6: Team & access on a one-seat plan) — absent, like the rest. */
   hidden?: readonly string[];
+  /** The /design/settings preview only: sample content in place of the live panels, which need a session. */
+  renderPanel?: (id: string) => ReactNode;
+  /**
+   * A section with its own route (Accounting, Retention, Compliance): it is the active one, and
+   * `children` (the module's own board) is the content. Picking an in-page section from here opens it
+   * on /app/settings (settings-shell plan, Task 6).
+   */
+  routeSection?: string;
+  children?: ReactNode;
 }) {
+  // In a Get set up step (?guide=…) the screen shows only that task: the settings menu steps aside,
+  // and "Back to setup" on the guide bar is the way out (owner, 2026-10-28).
+  const guiding = useSearchParams().has("guide");
   // Sections the plan has no use for leave the list before anything else sees it.
   const tabs = useMemo(() => (hidden?.length ? registered.filter((tab) => !hidden.includes(tab.id)) : registered), [registered, hidden]);
   // Absent, not greyed out: a section this person may not open is not in the rail at all.
@@ -55,17 +116,28 @@ export function AgentSettingsTabs({
   // Only in-page sections are tabs; a section with a route is a link to its own module's screen.
   const inPage = useMemo(() => visible.filter((tab) => !tab.route), [visible]);
   const firstAvailable = inPage.find((tab) => tab.id === initialTab)?.id ?? inPage[0]?.id ?? initialTab;
+  const router = useRouter();
   const [activeId, setActiveId] = useState(firstAvailable);
   const [anchor, setAnchor] = useState<string | null>(null);
+  // Menu items are `settings-nav-<id>`, not the section's own name: with "#products" the browser
+  // would otherwise scroll the menu to the item and hide its group heading.
+  // The server cannot see "#products", so it would draw the default section and then jump to the
+  // linked one. Until the address has been read, the frame shows its loading look instead
+  // (2026-10-29: Business Identity flashed before Products). A routed section needs no hash.
+  const [hashRead, setHashRead] = useState(Boolean(routeSection));
+  // The page header's action slot: a section's Save / Add buttons are drawn there, on the title's line.
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const active = useMemo(
-    () => inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
-    [activeId, firstAvailable, inPage]
+    () => (routeSection ? visible.find((tab) => tab.id === routeSection) : undefined)
+      ?? inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
+    [activeId, firstAvailable, inPage, routeSection, visible]
   );
 
   // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
   const grouped = useMemo(() => groupSections(visible), [visible]);
-  // A new Settings visit starts with every group open. Users may collapse groups independently.
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  // Groups never collapse (settings shell plan, 2026-10-29): six short groups are the map of Settings,
+  // and a chevron on each was noise. The setter stays so older reveal calls keep working.
+  const [, setCollapsedGroups] = useState<Set<string>>(() => new Set());
 
   const revealGroupForSection = useCallback((id: string) => {
     const parent = grouped.find((entry) => entry.items.some((item) => item.id === id));
@@ -77,15 +149,6 @@ export function AgentSettingsTabs({
       return next;
     });
   }, [grouped]);
-
-  function toggleGroup(group: string) {
-    setCollapsedGroups((current) => {
-      const next = new Set(current);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
-  }
 
   // Search only the settings this person can open. Results may point to a section or to one of its
   // controls; the existing hash/reveal path handles in-page destinations.
@@ -144,18 +207,45 @@ export function AgentSettingsTabs({
         setActiveId(tab);
         setAnchor(target);
         revealGroupForSection(tab);
+        // "#carriers" is also the menu item's id, so the browser jumps to it and the page header
+        // (title, breadcrumb) leaves the screen. A section opens at the top; "#tab/anchor" still
+        // scrolls to its setting (revealAnchor below).
+        if (!target) requestAnimationFrame(() => window.scrollTo({ top: 0 }));
       }
+      setHashRead(true);
     };
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
     return () => window.removeEventListener("hashchange", syncFromHash);
   }, [inPage, revealGroupForSection]);
 
+  // The open section's menu item in view inside the menu (not the page), so a section low in the
+  // list, like Accounting on its own route, is visibly the current one.
+  // The item's group heading stays in view with it (owner, 2026-10-29: "Carriers" was cut off above
+  // Contracting). Re-run after the browser's own jump to the #hash, which pins the item to the top.
+  useEffect(() => {
+    const place = () => {
+      const nav = document.querySelector<HTMLElement>("[data-settings-rail] .portal-settings-nav");
+      const item = nav?.querySelector<HTMLElement>("[aria-current=page]");
+      if (!nav || !item) return;
+      const group = item.closest<HTMLElement>(".portal-settings-nav-group") ?? item;
+      const groupTop = group.offsetTop - nav.offsetTop;
+      const itemBottom = item.offsetTop - nav.offsetTop + item.offsetHeight;
+      const fits = groupTop >= nav.scrollTop && itemBottom <= nav.scrollTop + nav.clientHeight;
+      if (!fits) nav.scrollTop = itemBottom - groupTop <= nav.clientHeight ? Math.max(0, groupTop - 4) : itemBottom - nav.clientHeight / 2;
+    };
+    place();
+    const timers = [120, 450].map((ms) => window.setTimeout(place, ms));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [active?.id, hashRead]);
+
   // After the tab has rendered (its panel may still be loading), reveal the setting search named.
   useEffect(() => (anchor ? revealAnchor(anchor) : undefined), [anchor, activeId]);
 
   function selectTab(id: string) {
     if (!inPage.some((item) => item.id === id)) return;
+    // On a section's own route the in-page panels are not here: open the section on /app/settings.
+    if (routeSection) { router.push(`/app/settings#${id}`); return; }
     setActiveId(id);
     setAnchor(null);
     revealGroupForSection(id);
@@ -182,16 +272,49 @@ export function AgentSettingsTabs({
   // UX-4: the component for each section comes from the registry, keyed by the section's id.
   function renderActiveContent(): ReactNode {
     if (!active) return null;
+    if (routeSection) return children;
+    // The preview's stand-in, or undefined to render the real panel (its API answered by the preview).
+    if (renderPanel) {
+      const sample = renderPanel(active.id);
+      if (sample !== undefined) return sample;
+    }
     const panel = SETTINGS_PANELS[active.id];
     return panel ? panel({ team, workspace, granted }) : <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
   }
 
+  /*
+   * One layout for every Settings page (settings-shell plan, 2026-10-28; manager review 30:24–31:05:
+   * "put settings, the title of the page here and the description… so the cards start from the same
+   * side"). The header row: breadcrumb, the open section's name top-left, its purpose, its actions on
+   * the right. Under it, two columns that start on one line: the settings menu, a plain list only as
+   * tall as itself, and the section's cards.
+   */
   return (
-    <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
-      {/* Max height: the window less the top bar, the page title above the rail (84px) and the page's
-          bottom padding (32px), so the rail ends at the window's bottom and never makes the page scroll. */}
-      <div className="box-border flex w-full min-h-0 shrink-0 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)] lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-116px)] lg:w-[262px]">
-        <div className="shrink-0 p-2 pb-1">
+    <div className="flex min-w-0 flex-col gap-6" data-settings-frame="">
+      {active && !guiding && !hashRead && (
+        <div aria-hidden="true" className="flex flex-col gap-2">
+          <div className="h-3.5 w-36 m-skel rounded-full" />
+          <div className="h-7 w-52 m-skel rounded-md" />
+          <div className="h-3.5 w-96 max-w-full m-skel rounded-full" />
+        </div>
+      )}
+      {active && !guiding && hashRead && (
+        <PageHeader
+          visible
+          title={titleCase(active.label)}
+          description={active.short ?? active.description}
+          breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: titleCase(active.label) }]}
+          // Who last changed something here (LA-8.8), under the purpose line; owners only, like the log.
+          meta={role === "owner" ? <SectionLastChanged key={active.id} sectionKey={active.id} /> : undefined}
+          actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
+        />
+      )}
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[256px_minmax(0,1fr)]">
+      {/* The menu is a list, not a card (no surface, border or blur). Sticky under the top bar and
+          only as tall as its list, capped at the window less the top bar, this header and the page's
+          padding (10.5rem), so on its own it never makes the page scroll; past that the list scrolls. */}
+      <div data-settings-rail="" className={cn("box-border flex w-full min-h-0 shrink-0 flex-col lg:sticky lg:top-[calc(var(--top-bar-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-10.5rem)]", guiding && "hidden")}>
+        <div className="shrink-0 pb-2">
           <label className="relative block">
             <span className="sr-only">Search settings</span>
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--muted)]" />
@@ -217,7 +340,7 @@ export function AgentSettingsTabs({
           </label>
         </div>
         {searching ? (
-          <div id="settings-search-results" ref={resultsRef} onKeyDown={onResultsKey} className="flex max-h-[60dvh] min-h-0 flex-col overflow-y-auto overscroll-contain px-2 pb-2.5 lg:max-h-none">
+          <div id="settings-search-results" ref={resultsRef} onKeyDown={onResultsKey} className="flex max-h-[60dvh] min-h-0 flex-col overflow-y-auto overscroll-contain pb-2.5 lg:max-h-none">
             <p role="status" className="m-0 px-2.5 pt-2.5 pb-1.5 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
               {hits.length ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}` : "No matches"}
             </p>
@@ -236,7 +359,7 @@ export function AgentSettingsTabs({
         ) : (
       <nav
         aria-label="Settings navigation"
-        className="portal-settings-nav box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain px-2 pb-2.5"
+        className="portal-settings-nav box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain pb-2.5"
       >
         {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
             caller's order, and the same name can legitimately open a second run — so the name is not
@@ -245,45 +368,39 @@ export function AgentSettingsTabs({
             for the whole page: the settings rail stopped responding to clicks entirely. */}
         {grouped.map(({ group, items }, index) => {
           const groupId = `settings-group-${index}`;
-          const groupOpen = !collapsedGroups.has(group);
           return (
-            <section key={`${group}-${index}`} className="portal-settings-nav-group">
-              <button
-                type="button"
-                className="portal-settings-group-toggle"
-                aria-expanded={groupOpen}
-                aria-controls={groupId}
-                onClick={() => toggleGroup(group)}
-              >
-                <span>{group}</span>
-                <ChevronDown aria-hidden="true" className={cn("portal-settings-group-chevron", groupOpen && "is-open")} />
-              </button>
-              <div id={groupId} className="portal-settings-nav-subsections" hidden={!groupOpen}>
+            <section key={`${group ?? "ungrouped"}-${index}`} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
+              <h2 id={`${groupId}-label`} className="portal-settings-group-label">{group}</h2>
+              <div id={groupId} className="portal-settings-nav-subsections">
                 {items.map((tab) => {
                   if (tab.route) {
-                    // Another module's own screen: opened there, never copied here. It carries a trail
-                    // back to Settings (components/app/settings/settings-trail.tsx).
+                    // A section with its own route: a link to it, drawn in the same frame there
+                    // (components/app/settings/settings-route-frame.tsx), so it is one more menu item.
+                    const here = routeSection === tab.id;
                     return (
                       <Link
                         key={tab.id}
+                        id={`settings-nav-${tab.id}`}
                         href={sectionHref(tab)}
+                        aria-current={here ? "page" : undefined}
                         onClick={() => revealGroupForSection(tab.id)}
                         className={cn(
                           "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-sm leading-[1.5] tracking-[-0.02em] no-underline transition-colors",
-                          "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+                          here ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]" : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
                         )}
                       >
-                        <span className="min-w-0 flex-grow">{tab.label}</span>
-                        <ArrowUpRight aria-label="Opens its own screen" className="ml-auto size-3.5 shrink-0 text-[var(--muted)]" />
+                        <SectionIcon id={tab.id} />
+                        <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
                       </Link>
                     );
                   }
-                  const isActive = active?.id === tab.id;
+                  const isActive = hashRead && active?.id === tab.id;
                   const badge = badgeFor(tab.id);
                   return (
                     <button
                       key={tab.id}
-                      id={tab.id}
+                      id={`settings-nav-${tab.id}`}
                       type="button"
                       aria-current={isActive ? "page" : undefined}
                       aria-controls={`settings-panel-${tab.id}`}
@@ -299,7 +416,8 @@ export function AgentSettingsTabs({
                             : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
                       )}
                     >
-                      <span className="min-w-0 flex-grow">{tab.label}</span>
+                      <SectionIcon id={tab.id} />
+                      <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
                       {badge && (
                         <span
                           className={cn(
@@ -331,22 +449,29 @@ export function AgentSettingsTabs({
             id={`settings-panel-${active.id}`}
             className="portal-settings-panel min-w-0"
             role="region"
-            aria-labelledby={active.id}
+            aria-labelledby={`settings-nav-${active.id}`}
             tabIndex={-1}
             key={active.id}
           >
-            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner" }}>
-              {readOnly && !READ_ONLY_EXEMPT.has(active.id) ? (
+            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner", framed: !guiding, actionsSlot }}>
+              {/* A routed section's board handles its own read-only state. */}
+              {readOnly && !routeSection && !READ_ONLY_EXEMPT.has(active.id) ? (
                 <>
                   <p role="status" className="m-0 mb-4 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">
                     Your account is read-only, so settings can be read but not changed. Reactivate the subscription in Billing to change them.
                   </p>
                   <fieldset disabled aria-disabled="true" className="m-0 min-w-0 border-0 p-0">{renderActiveContent()}</fieldset>
                 </>
-              ) : renderActiveContent()}
+              ) : hashRead ? renderActiveContent() : (
+                <div role="status" aria-live="polite" className="overflow-hidden rounded-[12px] border border-[var(--border)]">
+                  <span className="sr-only">Loading</span>
+                  <LoadingRows rows={6} columns={3} />
+                </div>
+              )}
             </SettingsSectionProvider>
           </section>
         )}
+      </div>
       </div>
     </div>
   );

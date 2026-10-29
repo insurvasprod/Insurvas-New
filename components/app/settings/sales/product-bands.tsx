@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import type { CarrierProductView, CarriersPayload } from "@/lib/salesSettings/views";
+import { SectionLoading } from "@/components/ui/page-states";
 
 type Row = { product: CarrierProductView; carrier: string };
 const BAND = /^\d{1,4}(\.\d{1,2})?$/;
@@ -94,7 +95,7 @@ export function ProductBands() {
         </span>
       ) : undefined}
     >
-      {data === null ? <p className="m-0 px-4 py-3 text-sm text-[var(--muted)]">Loading your products…</p>
+      {data === null ? <SectionLoading rows={2} columns={3} label="Loading your products" />
         : rows.length === 0 ? <p className="m-0 px-4 py-3 text-sm text-[var(--muted)]">No product has its own band. Every product you sell uses the all-products band above.</p>
           : (
             <table className={st.table}>
