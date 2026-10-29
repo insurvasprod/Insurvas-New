@@ -25,6 +25,7 @@ What lives here and which rule owns it:
 | Inline filters: `FilterButton`, `FilterPanel`, `ActiveFilters`, `TableCard`'s `filters` slot | `data-toolbar.tsx`, `table-card.tsx` | §6a |
 | Loading, empty and error states | `page-states.tsx`, `page-loading.tsx` | §7 |
 | Side panel, tabs, info tip | `detail-panel.tsx`, `view-tabs.tsx`, `info-tip.tsx` | §8 |
+| Searchable select (one choice, search at the top; a quick filter beside a search): `SelectMenu` | `select-menu.tsx` | §5, §6a |
 | Dialog, confirm, sheet, popover, menu, toast, search | `dialog.tsx`, `confirm-dialog.tsx`, `sheet.tsx`, `popover.tsx`, `dropdown-menu.tsx`, `toaster.tsx` (raise toasts with `lib/notify`), `search-command.tsx` | §11 |
 | Status chip | `status-chip.tsx` | §12 |
 
