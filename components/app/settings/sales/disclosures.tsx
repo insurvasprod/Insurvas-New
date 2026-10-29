@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 
 import { DisclosureEditor, fieldKind, fieldLabel, toDraft, toInput, type DisclosureDraft } from "./disclosures-editor";
 import {
-  BackButton, DialogActions, DiscardSave, LifecyclePill, NOT_SAVED, ReadOnlyNotice, RowAction, SalesDialog, SalesLoadError, SalesLoading, SalesPanelTop,
+  BackButton, DialogActions, DiscardSave, LifecyclePill, NOT_SAVED, ReadOnlyNotice, RowAction, RowMenu, SalesDialog, SalesLoadError, SalesLoading, SalesPanelTop,
   SalesSetupPending, WithReason, useSalesSample, warnUnsaved, type Lifecycle,
 } from "./shared";
 
@@ -393,10 +393,11 @@ export function SalesDisclosures() {
                       <td className={st.td}><StatusCell doc={d} /></td>
                       <td className={cn(st.td, "whitespace-nowrap text-right")}>
                         <span className="inline-flex gap-2">
-                          {d.shown.platform && canEdit && (
-                            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => copyToAgency(d.shown)} aria-label={`Copy ${d.shown.title} to my agency`}>Copy to my agency</Button>
-                          )}
                           <RowAction onClick={() => openItem(d.shown)} label={`Open ${d.shown.title}`}>{canEdit && !d.shown.platform && d.shown.status !== "retired" ? "Edit" : "View"}</RowAction>
+                          <RowMenu
+                            label={d.shown.title}
+                            items={[d.shown.platform && canEdit && { label: "Copy to my agency", onSelect: () => copyToAgency(d.shown), disabled: busy }]}
+                          />
                         </span>
                       </td>
                     </tr>

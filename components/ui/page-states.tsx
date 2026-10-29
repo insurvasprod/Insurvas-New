@@ -25,7 +25,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+    <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
       <p className="text-sm font-semibold text-foreground">{title}</p>
       <p className="max-w-[52ch] text-sm text-muted-foreground">{hint}</p>
       {action && <div className="mt-2">{action}</div>}

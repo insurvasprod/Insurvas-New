@@ -119,9 +119,10 @@ export function SalesAiAssistant() {
               </ul>
             </TableCard>
             <TableCard title="Never sent" info="Fixed in code — an owner cannot remove one.">
-              <ul className="m-0 list-none p-0">
+              {/* Two across, so this list ends level with the shorter one beside it (2026-10-29). */}
+              <ul className="m-0 grid list-none grid-cols-2 p-0">
                 {NEVER.map((label) => (
-                  <li key={label} className="flex gap-2.5 border-t border-[var(--border)] px-4 py-2.5">
+                  <li key={label} className="flex gap-2.5 border-t border-[var(--border)] px-4 py-2.5 odd:border-r">
                     <X aria-hidden className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" />
                     <span className="text-sm leading-[1.5] text-[var(--body)]">{label}</span>
                   </li>
