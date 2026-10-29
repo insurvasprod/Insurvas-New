@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { parsePartnerMessage, type PartnerCardType, type PartnerMessage, type PartnerMessageAttachment } from "./cards";
+import { parsePartnerMessage, type ChatSearchHit, type PartnerCardType, type PartnerMessage, type PartnerMessageAttachment } from "./cards";
 import { notifyTenantAgents } from "@/lib/agentAlerts/service";
 import { notifyPartnerUsers } from "@/lib/partnerAlerts/service";
 import { productLineLabel } from "@/lib/format/productLine";
@@ -559,22 +559,31 @@ export async function setAgentChannelArchived(input: { tenantId: string; channel
   return data as ChatChannel;
 }
 
-export async function getAgentChatChannels(tenantId: string, userId: string, scope: ProducerScope = null) {
-  const supabase = getSupabaseServiceClient();
-  // The channel list and this user's memberships are independent, so they go out together; each
-  // visible channel then reuses the row already loaded instead of re-reading it (access is still
-  // asserted per channel inside chatForLoadedChannel before any message is read).
+/**
+ * Every channel an agency user can open: all of the agency's partner channels, and the direct and group
+ * channels they hold a current seat in (a removed member keeps their row with removed_at, so membership
+ * is read through membersOf). The caller reached here through requireFeatureRole, which resolved their
+ * tenant_users membership — exactly what isChannelMember accepts for a partner channel.
+ */
+async function agentVisibleChannels(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, userId: string) {
+  // The channel list and this user's memberships are independent, so they go out together.
   const [channels, memberships] = await Promise.all([
     supabase.from("partner_channels").select("id, tenant_id, partner_id, channel_type, name, status, created_by, created_at, archived_at, direct_key").eq("tenant_id", tenantId).order("created_at", { ascending: false }),
     supabase.from("partner_channel_members").select("channel_id").eq("tenant_id", tenantId).eq("user_id", userId),
   ]);
   if (channels.error || memberships.error) throw new Error("Could not load partner channels");
-  // A removed member keeps their row (removed_at), so membership is read through membersOf.
   const rowIds = new Set((memberships.data ?? []).map((row) => row.channel_id));
   const candidates = (channels.data ?? []).filter((channel) => channel.channel_type !== "partner" && rowIds.has(channel.id)) as ChatChannel[];
   const seats = await membersOf(supabase, tenantId, candidates);
   const memberIds = new Set(candidates.filter((channel) => seats.get(channel.id)?.some((member) => member.userId === userId)).map((channel) => channel.id));
   const visible = (channels.data ?? []).filter((channel) => channel.channel_type === "partner" || memberIds.has(channel.id)) as ChatChannel[];
+  return { visible, seats };
+}
+
+export async function getAgentChatChannels(tenantId: string, userId: string, scope: ProducerScope = null) {
+  const supabase = getSupabaseServiceClient();
+  // Each visible channel then reuses the row already loaded instead of re-reading it.
+  const { visible, seats } = await agentVisibleChannels(supabase, tenantId, userId);
   // Access is already proven for every channel in `visible`, so the per-channel check (two serial
   // queries for a partner channel) is skipped: the caller reached here through requireFeatureRole,
   // which resolved their tenant_users membership for this tenant — exactly what isChannelMember
@@ -606,6 +615,94 @@ function afterDelete(messages: PartnerMessage[], state: ConversationState) {
   if (!state.deletedAt) return messages;
   const cut = new Date(state.deletedAt).getTime();
   return messages.filter((message) => new Date(message.createdAt).getTime() > cut);
+}
+
+const MESSAGE_COLUMNS = "id, channel_id, partner_id, work_item_id, message, message_kind, card_type, card_payload, created_by, created_at, event_key";
+type SearchRow = MessageRow & { channel_id: string; message: string; created_by: string | null };
+
+/** A search term as an ILIKE pattern: its own %, _ and \ match themselves. */
+export function likePattern(query: string) {
+  return `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+/**
+ * Search the messages this person can read (owner, 2026-10-29): the text, and the names of attached
+ * files. `channelId` keeps it to one conversation. The same rules as the thread: only channels they
+ * can open, nothing before their own delete, no "nobody claimed" card in a partner channel, a partner
+ * channel's lead notes only while shared, and with a `scope` no card about a transfer they may not see.
+ * Newest first; `truncated` when there were more than `limit`.
+ */
+export async function searchAgentChat(input: { tenantId: string; userId: string; query: string; channelId?: string; scope?: ProducerScope; limit?: number }): Promise<{ hits: ChatSearchHit[]; truncated: boolean }> {
+  const supabase = getSupabaseServiceClient();
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const { visible } = await agentVisibleChannels(supabase, input.tenantId, input.userId);
+  const channels = input.channelId ? visible.filter((channel) => channel.id === input.channelId) : visible;
+  if (input.channelId && !channels.length) throw new Error("You do not have access to this chat channel");
+  if (!channels.length) return { hits: [], truncated: false };
+  const byId = new Map(channels.map((channel) => [channel.id, channel]));
+  const pattern = likePattern(input.query);
+  // Each read asks for more than the limit: rows the rules below drop must not leave the page short.
+  const fetchCount = limit * 2 + 1;
+  // Channel ids ride in the request URL, so they go in slices, the slices in parallel.
+  const ids = [...byId.keys()];
+  const slices = Array.from({ length: Math.ceil(ids.length / PREPARE_CHUNK) }, (_, i) => ids.slice(i * PREPARE_CHUNK, (i + 1) * PREPARE_CHUNK));
+  const [textParts, files, states] = await Promise.all([
+    Promise.all(slices.map((slice) => supabase.from("partner_messages").select(MESSAGE_COLUMNS).eq("tenant_id", input.tenantId).in("channel_id", slice).ilike("message", pattern).order("created_at", { ascending: false }).limit(fetchCount))),
+    supabase.from("partner_message_attachments").select(`file_name, partner_messages!inner(${MESSAGE_COLUMNS})`).eq("tenant_id", input.tenantId).ilike("file_name", pattern).limit(fetchCount),
+    conversationStates(supabase, input.tenantId, input.userId, ids),
+  ]);
+  const failed = textParts.find((part) => part.error)?.error ?? files.error;
+  if (failed) throw new Error(`Could not search the chat: ${failed.message}`);
+  const rows = new Map<string, SearchRow & { fileName: string | null }>();
+  for (const part of textParts) for (const row of (part.data ?? []) as SearchRow[]) rows.set(row.id, { ...row, fileName: null });
+  for (const item of (files.data ?? []) as unknown as Array<{ file_name: string; partner_messages: SearchRow | SearchRow[] }>) {
+    const message = Array.isArray(item.partner_messages) ? item.partner_messages[0] : item.partner_messages;
+    if (!message || !byId.has(message.channel_id)) continue;
+    // A message whose text matched keeps its text hit; the file name is the hit only when the text did not match.
+    if (!rows.has(message.id)) rows.set(message.id, { ...message, fileName: item.file_name });
+  }
+  const kept = [...rows.values()].filter((row) => {
+    const channel = byId.get(row.channel_id);
+    if (!channel) return false;
+    if (channel.channel_type === "partner" && row.card_type === "nobody_claimed") return false;
+    const deletedAt = states.get(row.channel_id)?.deletedAt;
+    return !deletedAt || new Date(row.created_at).getTime() > new Date(deletedAt).getTime();
+  });
+  const partnerRows = kept.filter((row) => byId.get(row.channel_id)?.channel_type === "partner");
+  const [visibleNoteIds, visibleItems] = await Promise.all([
+    visibleToPartner(supabase, input.tenantId, partnerRows),
+    input.scope ? visibleWorkItemIds(input.tenantId, input.scope, kept.map((row) => row.work_item_id).filter((id): id is string => Boolean(id)), input.userId) : Promise.resolve(null),
+  ]);
+  const allowed = kept.filter((row) => (!row.event_key?.startsWith("lead-note:") || byId.get(row.channel_id)?.channel_type !== "partner" || visibleNoteIds.has(row.event_key.slice("lead-note:".length)))
+    && (visibleItems === null || !row.work_item_id || visibleItems.has(row.work_item_id)));
+  allowed.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const hits = allowed.slice(0, limit).map((row) => ({ messageId: row.id, channelId: row.channel_id, createdAt: row.created_at, createdBy: row.created_by, message: row.message, messageKind: row.message_kind === "system_card" ? "system_card" as const : "text" as const, cardType: row.card_type, fileName: row.fileName }));
+  return { hits, truncated: allowed.length > limit || textParts.some((part) => (part.data?.length ?? 0) >= fetchCount) || (files.data?.length ?? 0) >= fetchCount };
+}
+
+const HISTORY_PAGE = 300;
+
+/**
+ * Older messages of one conversation, for a search match beyond the newest 200 the list loads: the
+ * page before `before`, oldest first, read under the same rules as the thread. `more` while older ones remain.
+ */
+export async function getAgentChannelHistory(input: { tenantId: string; userId: string; channelId: string; before: string; scope?: ProducerScope }): Promise<{ messages: PartnerMessage[]; more: boolean }> {
+  const supabase = getSupabaseServiceClient();
+  const { visible } = await agentVisibleChannels(supabase, input.tenantId, input.userId);
+  const channel = visible.find((item) => item.id === input.channelId);
+  if (!channel) throw new Error("You do not have access to this chat channel");
+  const [page, states] = await Promise.all([
+    supabase.from("partner_messages").select(MESSAGE_COLUMNS).eq("tenant_id", input.tenantId).eq("channel_id", channel.id).lt("created_at", input.before).order("created_at", { ascending: false }).limit(HISTORY_PAGE + 1),
+    conversationStates(supabase, input.tenantId, input.userId, [channel.id]),
+  ]);
+  if (page.error) throw new Error(`Could not load earlier messages: ${page.error.message}`);
+  const rows = (page.data ?? []) as Array<MessageRow & Record<string, unknown>>;
+  const chat = await chatForLoadedChannel(supabase, channel, input.userId, true, true, input.scope ?? null, { messages: rows.slice(0, HISTORY_PAGE), readAt: null });
+  const state = states.get(channel.id) ?? { pinnedAt: null, archivedAt: null, deletedAt: null };
+  const messages = afterDelete(chat.messages, state);
+  // Nothing before the person's own delete is theirs to page back to.
+  const reachedDelete = Boolean(state.deletedAt) && messages.length < chat.messages.length;
+  return { messages, more: rows.length > HISTORY_PAGE && !reachedDelete };
 }
 
 /**

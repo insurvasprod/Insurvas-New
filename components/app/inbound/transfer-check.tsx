@@ -10,13 +10,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronLeft, PhoneCall, Repeat, StickyNote } from "lucide-react";
+import { ArrowRight, ChevronLeft, Loader2, PhoneCall, Repeat, ShieldCheck, StickyNote } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/page-loading";
 import { Callout } from "@/components/app/settings/primitives";
 import { CallerCard, callerFacts, useNow } from "@/components/app/inbound/caller-card";
 import { ago } from "@/components/app/applications/outcome/model";
+import { notify } from "@/lib/notify";
 
 type Field = { field_key: string; label: string };
 type Panel = Parameters<typeof callerFacts>[0] & { sections: Array<{ section_key: string; label: string; fields: Field[] }> };
@@ -47,6 +48,7 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
   const [caller, setCaller] = useState<Caller | null>(null);
   const [error, setError] = useState<string | null>(null);
   const now = useNow(Boolean(panel?.context?.callStartedAt));
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -56,6 +58,18 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
     read(`/api/app/inbound/caller?work_item_id=${encodeURIComponent(workItemId)}`).then((b) => { if (live) setCaller(b as Caller); }).catch(() => { if (live) setCaller({ notes: null, calls: null, transfers: null }); });
     return () => { live = false; };
   }, [workItemId]);
+
+  /**
+   * DNC / TCPA check (owner 2026-10-29). PLACEHOLDER: no screening provider is wired to this button
+   * yet, so it always answers "clear" after a short pause. Replace the body with the real lookup (the
+   * import scrub's provider, lib/compliance) once one is connected — until then the notice says so.
+   */
+  async function checkDnc() {
+    setChecking(true);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setChecking(false);
+    notify.done(`${facts.name}'s number is clear`, { detail: "Not on the DNC or TCPA litigator list. Placeholder result — no screening provider is connected yet." });
+  }
 
   if (error) return <Callout tone="error" title={error} />;
   if (!panel) return <PageLoading strip={false} rows={6} />;
@@ -74,12 +88,12 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
         <CallerCard workItemId={workItemId} facts={facts} now={now} />
       </aside>
 
-      <section aria-label="Before you answer" className="m-glass flex min-w-0 flex-1 flex-col gap-5 rounded-[16px] border border-[var(--border)] p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="m-0 text-card-title text-[var(--ink)]">Before you answer</h2>
-            <p className="m-0 mt-0.5 text-sm text-[var(--body)]">Who {facts.name} is to us so far. You check the details with them on the next step.</p>
-          </div>
+      <section aria-label="Caller profile" className="m-glass flex min-w-0 flex-1 flex-col gap-5 rounded-[16px] border border-[var(--border)] p-5">
+        {/* Owner 2026-10-29: no "Before you answer" heading or line; the DNC / TCPA check sits on the left. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button type="button" variant="outline" disabled={checking} onClick={() => void checkDnc()}>
+            {checking ? <Loader2 className="motion-safe:animate-spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}{checking ? "Checking…" : "DNC / TCPA check"}
+          </Button>
           {/* Owner 2026-10-28: Back to the line on the left of the way on. The call stays yours. */}
           <span className="flex flex-wrap items-center gap-2">
             <Button asChild variant="ghost"><Link href="/app/inbound"><ChevronLeft aria-hidden="true" />Back to Incoming calls</Link></Button>

@@ -61,7 +61,7 @@ export function SubmissionDialog({ open, onOpenChange, existing, extensionDetect
 function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: {
   open: boolean; onOpenChange: (open: boolean) => void; existing: SubmissionView | null; extensionDetected: boolean; seed: CaptureSeed | null;
 }) {
-  const { caseView, attempt, qa, sample, actions, updateAttempt, goTo } = useWorkspace();
+  const { caseView, attempt, qa, sample, actions, updateAttempt } = useWorkspace();
   const [chosenKind, setKind] = useState<NonNullable<SubmissionView["referenceKind"]> | null>(existing?.referenceKind ?? null);
   const [reference, setReference] = useState(existing?.carrierReference ?? seed?.reference ?? "");
   const [at, setAt] = useState(() => (existing ? toLocalInput(new Date(existing.submittedAt)) : seed?.submittedAt || toLocalInput(new Date())));
@@ -118,23 +118,21 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
         updateAttempt({ status: "submitted", submittedAt: new Date(at).toISOString(), submissions: [...attempt.submissions, { id: recorded.submissionId, attemptNo: attempt.attemptNo, carrierReference: ref || null, referenceKind: ref ? kind : null, policyNumber: ref && kind === "policy_no" ? ref : null, submittedAt: new Date(at).toISOString(), submittedVia: via, hasConfirmation: Boolean(file), qaVerdict: verdict }] });
         notify.done("Sample data — nothing was saved");
         onOpenChange(false);
-        goTo("after");
         return;
       }
-      let uploadProblem: string | null = null;
-      if (file) uploadProblem = await uploadConfirmation(attempt.id, recorded.submissionId, file);
-      // Submitting makes the welcome pack (LA-3.20); the server sends it once, if auto-send is on.
-      const pack = await request<{ delivery: { status: string; note: string | null } | null }>(attemptUrl(attempt.id, "/welcome-pack"), { method: "POST", body: { action: "submit" } });
-      await actions.refresh();
+      // Recorded: the dialog closes now and the agent stays on Submit (owner 2026-10-29: it took long to
+      // close, and moving on to After submit by itself was unwanted). The screenshot uploads and the
+      // step reloads behind it. The welcome pack is off for now (owner 2026-10-29), so none is made.
+      onOpenChange(false);
       notify.done(ref ? `Submission recorded · ${ref}` : "Submission recorded", {
-        detail: uploadProblem
-          ? `The screenshot didn't upload (${uploadProblem}) — attach it from the Submit step.`
-          : !ref ? "It stays on the Missing reference list until you add the reference."
-          : pack.ok && pack.data.delivery?.status === "sent" ? "Welcome pack sent." : pack.ok ? pack.data.delivery?.note ?? undefined : "The welcome pack wasn't made — open After submit to retry.",
+        detail: !ref ? "It stays on the Missing reference list until you add the reference." : undefined,
       });
       if (recorded.duplicate) notify.warn("That reference is already on another application", { detail: "Check you copied the right one." });
-      onOpenChange(false);
-      goTo("after");
+      void (async () => {
+        const uploadProblem = file ? await uploadConfirmation(attempt.id, recorded.submissionId, file) : null;
+        await actions.refresh();
+        if (uploadProblem) notify.warn("The screenshot didn't upload", { detail: `${uploadProblem} — attach it from the Submit step.` });
+      })();
     } finally {
       setSaving(false);
     }

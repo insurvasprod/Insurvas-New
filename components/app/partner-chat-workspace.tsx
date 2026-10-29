@@ -17,9 +17,10 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { ComposerFiles, FileTypeTile, kb, MessageAttachments } from "@/components/app/partner-chat/attachments";
 import { GroupMembers, PeoplePicker, PersonFace, type DirectoryUser } from "@/components/app/partner-chat/group-members";
 import { LeadUpdate } from "@/components/app/partner-chat/lead-update";
+import { Highlighted, MessageHits, MIN_SEARCH, ThreadSearchBar } from "@/components/app/partner-chat/search";
 import { useDictation } from "@/components/app/dialer/use-dictation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { cardTitle, type PartnerMessage } from "@/lib/partnerChat/cards";
+import { cardTitle, type ChatSearchHit, type PartnerMessage } from "@/lib/partnerChat/cards";
 import { canManage, canPost, ROLE_HINT, ROLE_LABEL, type ChannelMember, type ChannelRole } from "@/lib/partnerChat/groupRules";
 import { cn } from "@/lib/utils";
 import { MONTHS } from "@/lib/format/dates";
@@ -47,6 +48,14 @@ function normalize(data: ChatResponse): { channels: Channel[]; directory: Direct
   const partnerUsers = data.directory.partnerUsers.map((item) => ({ id: item.users.id, name: item.users.name, email: item.users.email, label: `${item.users.name} · ${item.partners.name}`, scope: "partner" as const, partnerId: item.partner_id, partnerName: item.partners.name, role: item.role }));
   const facts = Object.fromEntries((data.partnerFacts ?? []).map((item) => [item.partnerId, item]));
   return { channels, facts, directory: [...tenantUsers, ...partnerUsers].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index) };
+}
+
+/** The server's message search: every conversation this person can open, or the one given. */
+async function searchChat(query: string, channelId: string | null, signal: AbortSignal) {
+  const response = await fetch(`/api/app/partner-chat?search=${encodeURIComponent(query)}${channelId ? `&channel_id=${channelId}` : ""}`, { cache: "no-store", signal });
+  const body = await response.json().catch(() => null) as { hits?: ChatSearchHit[]; truncated?: boolean; error?: string } | null;
+  if (!response.ok || !body?.hits) throw new Error(body?.error ?? "Could not search");
+  return { hits: body.hits, truncated: Boolean(body.truncated) };
 }
 
 function channelType(channel: Channel) { return channel.channel_type === "partner" ? "Partner" : channel.channel_type === "direct" ? "Direct message" : "Group"; }
@@ -84,10 +93,10 @@ function dayLabel(value: string) {
   return `${at.toLocaleDateString([], { weekday: "short" })} ${at.getDate()} ${MONTHS[at.getMonth()]}`;
 }
 
-/** Links in a message are links: http(s) addresses open in a new tab. */
-function MessageText({ text }: { text: string }) {
+/** Links in a message are links: http(s) addresses open in a new tab. A search's words are marked. */
+function MessageText({ text, query }: { text: string; query?: string }) {
   const parts = text.split(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g);
-  return <>{parts.map((part, index) => (index % 2 === 1 ? <a key={index} href={part} target="_blank" rel="noreferrer noopener" className="break-all text-[var(--accent-ink)] underline underline-offset-2">{part}</a> : <Fragment key={index}>{part}</Fragment>))}</>;
+  return <>{parts.map((part, index) => (index % 2 === 1 ? <a key={index} href={part} target="_blank" rel="noreferrer noopener" className="break-all text-[var(--accent-ink)] underline underline-offset-2"><Highlighted text={part} query={query} /></a> : <Highlighted key={index} text={part} query={query} />))}</>;
 }
 
 /** A round face: initials, or an icon for a group. Partners get the brand tint. */
@@ -233,12 +242,99 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
   const stopDictation = dictation.stop;
   useEffect(() => () => stopDictation(), [selectedId, stopDictation]);
   const messageCount = selected?.messages.length ?? 0;
+  // A search match being shown keeps the thread where it is.
+  const jumpRef = useRef<string | null>(null);
   // A thread opens at its newest message, and follows new ones as they arrive.
-  useEffect(() => { const node = threadRef.current; if (node) node.scrollTop = node.scrollHeight; }, [selectedId, messageCount, newConversationOpen, threadView]);
+  useEffect(() => { const node = threadRef.current; if (node && !jumpRef.current) node.scrollTop = node.scrollHeight; }, [selectedId, messageCount, newConversationOpen, threadView]);
+
+  // Search in the open conversation (owner, 2026-10-29): the header's search icon opens a row under
+  // it. It belongs to the conversation it was opened in, so choosing another one closes it.
+  const [threadSearch, setThreadSearch] = useState<{ channelId: string; query: string } | null>(null);
+  const searchOpen = Boolean(selected && threadSearch?.channelId === selected.id);
+  const threadQuery = searchOpen ? threadSearch?.query ?? "" : "";
+  const threadKey = searchOpen && threadQuery.trim().length >= MIN_SEARCH ? `${selectedId}\n${threadQuery.trim().toLowerCase()}` : "";
+  // Matches oldest first, so "3 of 12" counts up towards the newest; `index` is the one shown.
+  const [found, setFound] = useState<{ key: string; hits: ChatSearchHit[]; truncated: boolean; index: number } | null>(null);
+  const [threadSearchError, setThreadSearchError] = useState<{ key: string; message: string } | null>(null);
+  const threadFound = found && found.key === threadKey ? found : null;
+  const threadError = threadSearchError?.key === threadKey ? threadSearchError.message : null;
+  const currentHitId = threadFound?.hits[threadFound.index]?.messageId ?? null;
+  // A match from the list's search: the thread search lands on it instead of the newest match.
+  const pendingHit = useRef<string | null>(null);
+  /** A match the thread's All / Messages / Updates choice hides switches it to All. */
+  const showHit = useCallback((hit: ChatSearchHit | undefined) => {
+    if (!hit) return;
+    setThreadView((view) => (view === "all" || (view === "updates") === (hit.messageKind === "system_card") ? view : "all"));
+  }, []);
+  useEffect(() => {
+    if (!threadKey || !selectedId) return;
+    const key = threadKey;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void searchChat(key.split("\n")[1], selectedId, controller.signal).then((body) => {
+        const hits = [...body.hits].reverse();
+        const at = pendingHit.current ? hits.findIndex((hit) => hit.messageId === pendingHit.current) : -1;
+        pendingHit.current = null;
+        const index = at >= 0 ? at : hits.length - 1;
+        setFound({ key, hits, truncated: body.truncated, index }); setThreadSearchError(null); showHit(hits[index]);
+      }).catch((reason: unknown) => { if (!controller.signal.aborted) setThreadSearchError({ key, message: reason instanceof Error ? reason.message : "Could not search" }); });
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [threadKey, selectedId, showHit]);
+  function stepHit(delta: number) {
+    if (!threadFound) return;
+    const index = Math.min(threadFound.hits.length - 1, Math.max(0, threadFound.index + delta));
+    setFound({ ...threadFound, index }); showHit(threadFound.hits[index]);
+  }
+  function closeThreadSearch() { setThreadSearch(null); jumpRef.current = null; }
+
+  // Earlier pages of a conversation, read when a match is older than the newest 200 the list loads.
+  const [older, setOlder] = useState<Record<string, { messages: PartnerMessage[]; more: boolean }>>({});
+  const threadMessages = useMemo(() => {
+    const earlier = selected ? older[selected.id]?.messages ?? [] : [];
+    if (!selected || !earlier.length) return selected?.messages ?? [];
+    const loadedIds = new Set(selected.messages.map((item) => item.id));
+    return [...earlier.filter((item) => !loadedIds.has(item.id)), ...selected.messages];
+  }, [older, selected]);
+  const historyBusy = useRef(false);
+  // Show the current match: page back until it is in the thread, then bring it to the middle.
+  useEffect(() => {
+    jumpRef.current = currentHitId;
+    if (!currentHitId || !selected) return;
+    if (!threadMessages.some((item) => item.id === currentHitId)) {
+      if (historyBusy.current || older[selected.id]?.more === false) return;
+      historyBusy.current = true;
+      const channelId = selected.id;
+      const before = threadMessages[0]?.createdAt ?? new Date().toISOString();
+      void fetch(`/api/app/partner-chat?history=${channelId}&before=${encodeURIComponent(before)}`, { cache: "no-store" })
+        .then(async (response) => { const body = await response.json().catch(() => null) as { messages?: PartnerMessage[]; more?: boolean; error?: string } | null; if (!response.ok || !body?.messages) throw new Error(body?.error ?? "Could not load earlier messages"); return body as { messages: PartnerMessage[]; more: boolean }; })
+        .then((page) => setOlder((current) => ({ ...current, [channelId]: { messages: [...page.messages, ...(current[channelId]?.messages ?? [])], more: page.more } })))
+        .catch((reason: unknown) => { setOlder((current) => ({ ...current, [channelId]: { messages: current[channelId]?.messages ?? [], more: false } })); notify.block(reason instanceof Error ? reason.message : "Could not load earlier messages"); })
+        .finally(() => { historyBusy.current = false; });
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => document.getElementById(`chat-msg-${currentHitId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentHitId, selected, threadMessages, older, threadView]);
   // The composer grows with what is written, up to about six lines.
   useEffect(() => { const node = composerRef.current; if (!node) return; node.style.height = "auto"; node.style.height = `${Math.min(node.scrollHeight, 160)}px`; }, [draft, selectedId]);
   const [listFilter, setListFilter] = useState<ListFilter>("all");
   const filteredChannels = useMemo(() => { const query = conversationSearch.trim().toLowerCase(); return byActivity(data.channels).filter((channel) => matchesFilter(channel, listFilter) && (!query || `${channel.name} ${channelPreview(channel)}`.toLowerCase().includes(query))); }, [conversationSearch, data.channels, listFilter]);
+  // The list's search box also finds messages, in every conversation this person can open (owner, 2026-10-29).
+  const listKey = conversationSearch.trim().length >= MIN_SEARCH ? conversationSearch.trim().toLowerCase() : "";
+  const [listFound, setListFound] = useState<{ key: string; hits: ChatSearchHit[]; truncated: boolean } | null>(null);
+  const [listSearchError, setListSearchError] = useState<{ key: string; message: string } | null>(null);
+  const listHits = listFound?.key === listKey ? listFound : null;
+  const listError = listSearchError?.key === listKey ? listSearchError.message : null;
+  useEffect(() => {
+    if (!listKey) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void searchChat(listKey, null, controller.signal).then((body) => { setListFound({ key: listKey, ...body }); setListSearchError(null); })
+        .catch((reason: unknown) => { if (!controller.signal.aborted) setListSearchError({ key: listKey, message: reason instanceof Error ? reason.message : "Could not search" }); });
+    }, 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [listKey]);
   const [visibleCount, setVisibleCount] = useState(CONVERSATION_STEP);
   const visibleChannels = filteredChannels.slice(0, visibleCount);
   const moreToShow = filteredChannels.length > visibleCount;
@@ -253,8 +349,8 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
   useEffect(() => { if (listNode) loadMoreNearEnd(listNode); }, [listNode, loadMoreNearEnd, visibleCount]);
   useEffect(() => () => window.clearTimeout(loadTimer.current), []);
   const resetList = () => { setVisibleCount(CONVERSATION_STEP); listNode?.scrollTo({ top: 0 }); };
-  const updateCount = selected?.messages.filter((item) => item.messageKind === "system_card").length ?? 0;
-  const shownMessages = (selected?.messages ?? []).filter((item) => threadView === "all" || (threadView === "updates") === (item.messageKind === "system_card"));
+  const updateCount = threadMessages.filter((item) => item.messageKind === "system_card").length;
+  const shownMessages = threadMessages.filter((item) => threadView === "all" || (threadView === "updates") === (item.messageKind === "system_card"));
   // The details pane is closed until asked for: the thread gets the room. Esc closes it (DetailPanel).
   const [detailsOpen, setDetailsOpen] = useState(false);
   // The list folds to a rail and its width can be dragged (owner, 2026-10-27). Kept per browser; a
@@ -353,6 +449,22 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
     </>
   );
 
+  /** A match from the list's search: open its conversation with the same words searched, on that message. */
+  function openHit(hit: ChatSearchHit) {
+    const query = conversationSearch.trim();
+    setSelectedId(hit.channelId); setNewConversationOpen(false);
+    const at = found?.key === `${hit.channelId}\n${query.toLowerCase()}` ? found.hits.findIndex((item) => item.messageId === hit.messageId) : -1;
+    if (found && at >= 0) { setFound({ ...found, index: at }); showHit(found.hits[at]); }
+    else pendingHit.current = hit.messageId;
+    setThreadSearch({ channelId: hit.channelId, query });
+  }
+  const hitChannel = (channelId: string) => data.channels.find((channel) => channel.id === channelId);
+  /** Who wrote a matched message, as the list shows it; nobody for an automatic update. */
+  const hitAuthor = (hit: ChatSearchHit) => (hit.messageKind === "system_card" || !hit.createdBy ? null : hit.createdBy === viewerId ? "You" : author(hit.createdBy)?.name ?? null);
+  // The search row's words mark the thread once there are matches; the current match is outlined.
+  const markQuery = threadFound?.hits.length ? threadQuery.trim() : "";
+  const hitOutline = (id: string) => (id === currentHitId ? "rounded-xl outline-2 outline-offset-4 outline-[var(--primary)]" : undefined);
+
   const filterCount = (filter: ListFilter) => data.channels.filter((channel) => matchesFilter(channel, filter)).length;
   const pinnedCount = visibleChannels.filter((channel) => channel.state.pinnedAt).length;
 
@@ -366,7 +478,6 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
       <PageHeader
         visible
         title="Partner Chat"
-        description="Messages with your lead sources and your team."
         breadcrumbs={[{ label: "Partners" }, { label: "Partner Chat" }]}
       />
       {error && <p role="alert" className="m-0 rounded-md border border-[var(--error)]/40 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
@@ -385,8 +496,8 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
             </div>
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <span className="sr-only">Search conversations</span>
-              <input type="search" value={conversationSearch} onChange={(event) => { setConversationSearch(event.target.value); resetList(); }} placeholder="Search conversations" className={cn(toolbarControl, "w-full pl-9")} />
+              <span className="sr-only">Search conversations and messages</span>
+              <input type="search" value={conversationSearch} onChange={(event) => { setConversationSearch(event.target.value); resetList(); }} placeholder="Search conversations and messages" className={cn(toolbarControl, "w-full pl-9")} />
             </label>
             <div className="-mx-0.5 flex flex-wrap gap-1" role="group" aria-label="Show conversations">
               {LIST_FILTERS.map(([value, label]) => {
@@ -405,7 +516,7 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
             {!loaded ? <SectionLoading rows={6} columns={2} label="Loading conversations" /> : filteredChannels.length === 0 ? (listFilter === "archived" && !conversationSearch
               ? <p className="m-0 px-3 py-8 text-center text-sm text-muted-foreground">Nothing archived. Archive a conversation from its menu to tidy your list.</p>
               : data.channels.length
-              ? <NoMatches noun="conversations" onClear={() => { setConversationSearch(""); setListFilter("all"); resetList(); }} />
+              ? listKey ? null : <NoMatches noun="conversations" onClear={() => { setConversationSearch(""); setListFilter("all"); resetList(); }} />
               : <EmptyState title="No conversations yet" hint="Message a partner or your team." action={<Button type="button" variant="outline" onClick={() => setNewConversationOpen(true)}><Plus aria-hidden="true" />New conversation</Button>} />) : visibleChannels.map((channel, index) => {
               const active = channel.id === selectedId;
               const last = channel.messages.at(-1);
@@ -413,6 +524,7 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
               const pinned = Boolean(channel.state.pinnedAt);
               return (
                 <Fragment key={channel.id}>
+                  {listKey && pinnedCount === 0 && index === 0 && <p className="m-0 px-2 pt-1 pb-1 text-xs font-semibold text-muted-foreground">Conversations</p>}
                   {pinnedCount > 0 && index === 0 && <p className="m-0 px-2 pt-1 pb-1 text-xs font-semibold text-muted-foreground">Pinned</p>}
                   {pinnedCount > 0 && index === pinnedCount && <p className="m-0 mt-1 border-t border-border px-2 pt-2.5 pb-1 text-xs font-semibold text-muted-foreground">All conversations</p>}
                   <div className={cn("group/row relative flex items-center rounded-lg transition-colors", active ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]")}>
@@ -452,12 +564,27 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
             {loaded && !moreToShow && filteredChannels.length > CONVERSATION_STEP && (
               <p className="m-0 py-3 text-center text-xs text-muted-foreground">All {filteredChannels.length} conversations shown</p>
             )}
+            {loaded && listKey && (
+              <MessageHits
+                hits={listHits?.hits ?? []}
+                query={conversationSearch}
+                busy={!listHits && !listError}
+                truncated={Boolean(listHits?.truncated)}
+                error={listError}
+                channelName={(channelId) => hitChannel(channelId)?.name ?? null}
+                face={(channelId) => { const channel = hitChannel(channelId); return channel ? <Face channel={channel} scale="sm" /> : null; }}
+                author={hitAuthor}
+                time={listTime}
+                onOpen={openHit}
+              />
+            )}
           </div>
         </section>
         )}
 
         {/* Thread: the messages scroll, the composer stays at the bottom of the pane. */}
-        <section className="m-glass flex h-[70dvh] min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border md:h-auto" aria-label="Selected conversation">
+        {/* Ctrl/Cmd + F inside the conversation opens its search instead of the browser's. */}
+        <section className="m-glass flex h-[70dvh] min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border md:h-auto" aria-label="Selected conversation" onKeyDown={(event) => { if (selected && !newConversationOpen && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") { event.preventDefault(); setThreadSearch((current) => (current?.channelId === selected.id ? { ...current } : { channelId: selected.id, query: "" })); } }}>
           {newConversationOpen ? (
             <>
               <div className="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-3">
@@ -522,12 +649,15 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                   </button>
                 )}
                 <div className={cn("hidden shrink-0 items-center gap-0.5 rounded-md bg-[var(--surface-alt)] p-0.5 sm:flex", detailsOpen && "sm:hidden 2xl:flex")} role="group" aria-label="Show in this conversation">
-                  {([["all", "All", selected.messages.length], ["messages", "Messages", selected.messages.length - updateCount], ["updates", "Updates", updateCount]] as const).map(([value, label, count]) => (
+                  {([["all", "All", threadMessages.length], ["messages", "Messages", threadMessages.length - updateCount], ["updates", "Updates", updateCount]] as const).map(([value, label, count]) => (
                     <button key={value} type="button" aria-pressed={threadView === value} onClick={() => setThreadView(value)} title={value === "updates" ? "Automatic lead and call updates" : value === "messages" ? "Messages people wrote" : "Everything"} className={cn("inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-semibold transition-colors", threadView === value ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "text-muted-foreground hover:text-foreground")}>
                       {label}<span className="tabular-nums opacity-60">{count}</span>
                     </button>
                   ))}
                 </div>
+                <Button type="button" variant={searchOpen ? "secondary" : "ghost"} size="icon" aria-pressed={searchOpen} aria-label={searchOpen ? "Close the search" : "Search this conversation"} title="Search this conversation (Ctrl + F)" onClick={() => (searchOpen ? closeThreadSearch() : setThreadSearch({ channelId: selected.id, query: "" }))}>
+                  <Search aria-hidden="true" />
+                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="ghost" size="icon" aria-label="Conversation options" title="More"><MoreHorizontal aria-hidden="true" /></Button>
@@ -547,6 +677,20 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                   <Info aria-hidden="true" />
                 </Button>
               </div>
+              {searchOpen && (
+                <ThreadSearchBar
+                  query={threadQuery}
+                  onQuery={(query) => setThreadSearch({ channelId: selected.id, query })}
+                  index={threadFound?.index ?? -1}
+                  total={threadFound?.hits.length ?? 0}
+                  truncated={Boolean(threadFound?.truncated)}
+                  busy={Boolean(threadKey) && !threadFound && !threadError}
+                  error={threadError}
+                  onOlder={() => stepHit(-1)}
+                  onNewer={() => stepHit(1)}
+                  onClose={closeThreadSearch}
+                />
+              )}
               <div ref={threadRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-4 sm:px-4" aria-live="polite">
                 <div className="flex w-full flex-1 flex-col">
                 {shownMessages.length === 0 ? (
@@ -559,9 +703,9 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                       <span className="rounded-full border border-border bg-card px-3 text-xs font-semibold leading-6 text-muted-foreground shadow-[var(--shadow-rest)]">{dayLabel(item.createdAt)}</span>
                     </div>
                   );
-                  if (item.messageKind === "system_card") return <div key={item.id}>{divider}<LeadUpdate message={item} thread={selected.messages} /></div>;
+                  if (item.messageKind === "system_card") return <div key={item.id} id={`chat-msg-${item.id}`}>{divider}<div className={hitOutline(item.id)}><LeadUpdate message={item} thread={threadMessages} /></div></div>;
                   // "Ana added Ben": a line about the group itself, set apart in the middle.
-                  if (item.cardPayload.membership === true) return <div key={item.id}>{divider}<p className="m-0 my-2 text-center text-xs text-muted-foreground">{item.message} · {clock(item.createdAt)}</p></div>;
+                  if (item.cardPayload.membership === true) return <div key={item.id} id={`chat-msg-${item.id}`}>{divider}<p className={cn("m-0 my-2 text-center text-xs text-muted-foreground", hitOutline(item.id))}><MessageText text={item.message} query={markQuery} /> · {clock(item.createdAt)}</p></div>;
                   // Consecutive messages from one person a few minutes apart share one name line.
                   const continued = !newDay && previous?.messageKind !== "system_card" && previous?.cardPayload.membership !== true && previous?.createdBy === item.createdBy
                     && new Date(item.createdAt).getTime() - new Date(previous.createdAt).getTime() < GROUP_MINUTES * 60_000;
@@ -577,14 +721,14 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                     const lastOfRun = !next || next.createdBy !== viewerId || next.messageKind === "system_card";
                     const read = Boolean(selected.othersReadAt && new Date(selected.othersReadAt).getTime() >= new Date(item.createdAt).getTime());
                     return (
-                      <div key={item.id}>
+                      <div key={item.id} id={`chat-msg-${item.id}`}>
                         {divider}
-                        <div className={cn("group flex flex-col items-end pl-10", continued ? "mt-1" : "mt-4")}>
+                        <div className={cn("group flex flex-col items-end pl-10", continued ? "mt-1" : "mt-4", hitOutline(item.id))}>
                           {!continued && <span className="mb-1 text-xs tabular-nums text-muted-foreground">You · {clock(item.createdAt)}</span>}
                           {!attachmentOnly && (
                             <div className="flex max-w-full items-end gap-2">
                               {continued && <span className="shrink-0 pb-1.5 text-xs tabular-nums text-muted-foreground opacity-0 group-hover:opacity-100">{clock(item.createdAt)}</span>}
-                              <p className="m-0 max-w-[min(100%,820px)] rounded-2xl rounded-br-md bg-[var(--primary-soft)] px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground"><MessageText text={item.message} /></p>
+                              <p className="m-0 max-w-[min(100%,820px)] rounded-2xl rounded-br-md bg-[var(--primary-soft)] px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground"><MessageText text={item.message} query={markQuery} /></p>
                             </div>
                           )}
                           <MessageAttachments attachments={item.attachments} mine />
@@ -598,9 +742,9 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                     );
                   }
                   return (
-                    <div key={item.id}>
+                    <div key={item.id} id={`chat-msg-${item.id}`}>
                       {divider}
-                      <div className={cn("group flex gap-3 pr-10", continued ? "mt-1" : "mt-4")}>
+                      <div className={cn("group flex gap-3 pr-10", continued ? "mt-1" : "mt-4", hitOutline(item.id))}>
                         {continued
                           ? <span className="w-8 shrink-0 pt-2 text-right text-xs tabular-nums text-muted-foreground opacity-0 group-hover:opacity-100">{clock(item.createdAt)}</span>
                           : <span className="pt-5"><PersonFace name={name} partner={person?.scope === "partner"} /></span>}
@@ -612,7 +756,7 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                               <span className="text-xs tabular-nums text-muted-foreground">{clock(item.createdAt)}</span>
                             </div>
                           )}
-                          {!attachmentOnly && <p className="m-0 max-w-[min(100%,820px)] rounded-2xl rounded-tl-md border border-border bg-card px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground"><MessageText text={item.message} /></p>}
+                          {!attachmentOnly && <p className="m-0 max-w-[min(100%,820px)] rounded-2xl rounded-tl-md border border-border bg-card px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground"><MessageText text={item.message} query={markQuery} /></p>}
                           <MessageAttachments attachments={item.attachments} mine={false} />
                         </div>
                       </div>

@@ -68,10 +68,13 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
     : reasonParts.length > 0 ? `Last chosen: ${reasonParts.join(" · ")}` : undefined;
 
   return (
-    <article aria-label="Lead" className="flex flex-col gap-4 p-5">
-      {/* The lead's facts on the left; the Call button on the right, centred on them (owner 2026-10-27). */}
-      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
+    <article aria-label="Lead" className="@container flex flex-col gap-4 p-5">
+      {/* The lead's facts on the left; the Call button on the right, centred on them (owner 2026-10-27).
+          In a card narrower than that needs (the middle column above the queue table, 2026-10-29) the
+          button sits right under the name and number at full width, ahead of the chips, so it stays in
+          view when the card gives its height to the queue. */}
+      <div className="flex min-w-0 flex-col gap-4 @2xl:flex-row @2xl:items-center">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 @max-2xl:contents">
       {/* Who: the name, the number, and their place, clock, age and attempt as icons. */}
       <div className="flex items-start gap-4">
         <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">
@@ -93,17 +96,17 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
       </div>
 
       {/* Where the lead came from: four chips. */}
-      <div className="flex flex-wrap items-center gap-1.5" aria-label="Where this lead came from">
+      <div className="flex flex-wrap items-center gap-1.5 @max-2xl:order-2" aria-label="Where this lead came from">
         <Fact icon={Megaphone} title="Campaign">{panel.campaign?.name ?? "No campaign"}</Fact>
         <Fact icon={Store} title="Vendor">{panel.campaign?.vendorName ?? "No vendor"}</Fact>
         <Fact icon={Tag} title="Source">{panel.campaign ? sourceLabel(panel.campaign.leadType) : "—"}</Fact>
         <Fact icon={Package} title="Product">{productLineLabel(panel.lead.productCode)}</Fact>
       </div>
       {/* The setter's notes for this booking stay: they are what the agent says next. */}
-      {servedHere && served?.appointmentNotes && <p className={cn(body14, "m-0")}><span className="font-semibold text-[var(--ink)]">Setter notes: </span>{served.appointmentNotes}</p>}
+      {servedHere && served?.appointmentNotes && <p className={cn(body14, "m-0 @max-2xl:order-2")}><span className="font-semibold text-[var(--ink)]">Setter notes: </span>{served.appointmentNotes}</p>}
 
       {/* May they be called: one tick per rule; Details opens every check and the suppression stack. */}
-      <section aria-label="Eligibility and compliance" className="flex flex-col gap-2">
+      <section aria-label="Eligibility and compliance" className="flex flex-col gap-2 @max-2xl:order-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <Fact icon={panel.consent.hasCertificate ? ShieldCheck : ShieldAlert} tone={panel.consent.hasCertificate ? "good" : "warn"} title={`Consent on file: ${consentLabel(panel.consent)}`}>Consent</Fact>
           <Fact icon={dncBad ? ShieldAlert : ShieldCheck} tone={dncBad ? "bad" : "good"} title={eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}>DNC</Fact>
@@ -194,7 +197,7 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
               one click away, never removed: the Call click still records it on the attempt, and a
               placeholder text is still flagged by the Disclosure tick. */}
           {panel.disclosure.configured && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 @max-2xl:order-2">
               <button type="button" onClick={() => setDisclosureOpen((open) => !open)} aria-expanded={disclosureOpen} aria-controls="dialer-disclosure" className="inline-flex h-7 w-fit items-center gap-1 rounded-full border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)]">
                 {`${stateName ?? panel.disclosure.state} disclosure`}<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", disclosureOpen && "rotate-180")} />
               </button>
@@ -202,7 +205,7 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
             </div>
           )}
       </div>
-      {call && <div className="flex shrink-0 flex-col items-stretch gap-2">{call}</div>}
+      {call && <div className="flex shrink-0 flex-col items-stretch gap-2 @max-2xl:order-1">{call}</div>}
       </div>
 
       {!panel.disclosure.configured && (

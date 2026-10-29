@@ -16,8 +16,8 @@ const querySchema = z.object({ priority: z.enum(["all", "high", "medium", "low"]
  * GET /api/app/dialer/queue — the Priority queue list.
  *
  * Read-only: dialer_queue_preview claims nothing and writes nothing, so a GET is right here (the
- * serve and the pick are POSTs because they lock). Bounded: the next 25 servable leads in tier
- * order and a count capped at 1,000. The High / Medium / Low filter narrows this list only; Serve
+ * serve and the pick are POSTs because they lock). Bounded: the next 100 servable leads in tier
+ * order (the function's own ceiling), each with its campaign and phone, and a count capped at 1,000. The High / Medium / Low filter narrows this list only; Serve
  * next is unaffected by it. Read-only accounts may look, since looking changes nothing.
  */
 export async function GET(request: NextRequest) {

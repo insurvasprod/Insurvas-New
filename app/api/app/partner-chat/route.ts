@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { audit } from "@/lib/audit/log";
 import { getPartnerChannelFacts } from "@/lib/partnerChat/partnerFacts";
-import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, addChannelMembers, createAgentChannel, getAgentChatChannels, getAgentChatDirectory, markChannelRead, markPartnerChatRead, postChannelText, postPartnerText, removeChannelMember, renameChannel, setAgentChannelArchived, setChannelMember, setConversationState, type ChatAttachmentInput } from "@/lib/partnerChat/service";
+import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, addChannelMembers, createAgentChannel, getAgentChannelHistory, getAgentChatChannels, getAgentChatDirectory, markChannelRead, searchAgentChat, markPartnerChatRead, postChannelText, postPartnerText, removeChannelMember, renameChannel, setAgentChannelArchived, setChannelMember, setConversationState, type ChatAttachmentInput } from "@/lib/partnerChat/service";
 import { GroupsNotLiveError } from "@/lib/partnerChat/groups";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -47,9 +47,32 @@ async function readInput(request: NextRequest) {
   return { ...(body && typeof body === "object" ? body as Record<string, unknown> : {}), attachments: [] as ChatAttachmentInput[] };
 }
 
-export async function GET() {
+const searchSchema = z.object({ q: z.string().trim().min(2, "Type at least two letters").max(100), channel_id: z.string().uuid().optional() });
+const historySchema = z.object({ channel_id: z.string().uuid(), before: z.string().datetime({ offset: true }) });
+
+export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("inbound_transfers", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
+  const params = request.nextUrl.searchParams;
+  // ?search=words[&channel_id=]: messages holding those words, in every conversation the person can
+  // open or in one of them (owner, 2026-10-29).
+  if (params.has("search")) {
+    const parsed = searchSchema.safeParse({ q: params.get("search") ?? "", channel_id: params.get("channel_id") || undefined });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Search for something" }, { status: 400 });
+    try {
+      const result = await searchAgentChat({ tenantId: auth.context.tenantId, userId: auth.context.userId, query: parsed.data.q, channelId: parsed.data.channel_id, scope: await scopeFor(auth.context), limit: parsed.data.channel_id ? 200 : 50 });
+      return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not search the chat" }, { status: 400 }); }
+  }
+  // ?history=<channel>&before=<time>: the page of a conversation before the messages already shown.
+  if (params.has("history")) {
+    const parsed = historySchema.safeParse({ channel_id: params.get("history"), before: params.get("before") });
+    if (!parsed.success) return NextResponse.json({ error: "Choose a valid conversation" }, { status: 400 });
+    try {
+      const result = await getAgentChannelHistory({ tenantId: auth.context.tenantId, userId: auth.context.userId, channelId: parsed.data.channel_id, before: parsed.data.before, scope: await scopeFor(auth.context) });
+      return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load earlier messages" }, { status: 400 }); }
+  }
   try {
     // AG-0.5: in an agency a producer keeps the chat itself (messages people wrote, and the transfer
     // cards about waiting transfers and his own), but not cards about another producer's transfers, and

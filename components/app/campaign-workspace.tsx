@@ -52,7 +52,7 @@ import { costTone, toneText, type FigureTone } from "@/components/app/campaigns/
 import { LeadsInSlot, useInLeadsFrame } from "@/components/app/lead-sources/leads-in-slot";
 import { Callout } from "@/components/app/settings/primitives";
 import { STATE_NAMES } from "@/lib/callbacks/windowFacts";
-import { vendorCampaignWarning, vendorTakesCampaigns } from "@/lib/vendors/types";
+import { vendorTakesCampaigns } from "@/lib/vendors/types";
 import { cn } from "@/lib/utils";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
@@ -732,11 +732,6 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
           <Field label="Mixing weight" htmlFor="campaign-weight">
             <NumberStepper id="campaign-weight" value={newCampaign.mixing_weight} onChange={(next) => setNewCampaign({ ...newCampaign, mixing_weight: next })} min={1} max={100} label="mixing weight" after={newShare === null ? null : `${newShare}% of serving once live`} />
           </Field>
-          {(() => {
-            const picked = pickedForNew;
-            const warning = picked ? vendorCampaignWarning(picked.status, picked.name) : null;
-            return warning ? <Callout tone="warning" title={warning} /> : null;
-          })()}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setNewCampaign(null)}>Cancel</Button>
             <Button type="button" disabled={!newCampaign.vendor_id || !newCampaign.name.trim() || nameTaken || creating} onClick={() => void createCampaign()}><Plus aria-hidden="true" />{creating ? "Creating…" : "Create campaign"}</Button>

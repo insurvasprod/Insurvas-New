@@ -164,9 +164,9 @@ export function useDraftDate({ initial, dob, buffer, from, onCommit }: {
     const nextRecommendation = nextInput ? recommendDraftDay(nextInput) : null;
     const nextRec = recDay(nextRecommendation);
     if (!("draftDay" in patch) && nextRec !== null && !next.overrideReason) {
-      // No day yet: take the recommendation. Following the tool: when the inputs move it, the day moves
-      // with it — unless the agent picked the day themselves.
-      if (next.draftDay === null || next.draftDay === prevRec || !next.picked) next = { ...next, draftDay: nextRec };
+      // Nothing is chosen for the agent (owner 2026-10-29): the suggested day is marked, not taken. A
+      // day the agent took because it was the suggestion moves with it when the inputs move it.
+      if (next.draftDay !== null && next.draftDay === prevRec && !next.picked) next = { ...next, draftDay: nextRec };
     }
     // A reason explains one day; picking another day asks again. Taking the recommendation is not a pick.
     if ("draftDay" in patch && patch.draftDay !== state.draftDay) next = { ...next, overrideReason: patch.overrideReason ?? null };
@@ -444,7 +444,7 @@ export function DraftDatePanel({ initial, dob, buffer, onCommit, readOnly = fals
 }) {
   const m = useDraftDate({ initial, dob, buffer, onCommit });
   const [choosing, setChoosing] = useState(false);
-  const { rec, state, recommended, options, shown } = m;
+  const { rec, state, recommended, options } = m;
   // The recommended day and its alternates in day order, plus a day typed in by hand.
   const dayChips = [...new Set([...options.map((o) => o.day), ...(state.draftDay === null ? [] : [state.draftDay])])].sort((a, b) => a - b);
 
@@ -472,7 +472,8 @@ export function DraftDatePanel({ initial, dob, buffer, onCommit, readOnly = fals
             {/* The day buttons are the answer (owner 2026-10-28): the set day lit, the recommended one marked. */}
             <div id={choosing ? undefined : draftDayId} tabIndex={-1} role="radiogroup" aria-label="Draft day" className="flex flex-wrap gap-2 outline-none">
               {dayChips.map((day) => {
-                const on = (state.draftDay ?? shown) === day;
+                // Lit only when chosen: the suggestion is marked, never pre-selected (owner 2026-10-29).
+                const on = state.draftDay === day;
                 return (
                   <button
                     key={day}

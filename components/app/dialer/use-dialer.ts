@@ -36,6 +36,12 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [loading, setLoading] = useState(!readOnly);
   const [working, setWorking] = useState(false);
+  // DNC / TCPA check before each call (owner 2026-10-29): starts unchecked for every lead; the Call
+  // button only appears once it says the number is clear.
+  const [dncCleared, setDncCleared] = useState(false);
+  const [checkingDnc, setCheckingDnc] = useState(false);
+  // A logged inbound return call is not an outbound dial: no check before it.
+  const needsDnc = !searchMode && !dncCleared;
   const [confirmed, setConfirmed] = useState(false);
   const [dialled, setDialled] = useState(false);
   const [rebuttal, setRebuttal] = useState<string | null>(null);
@@ -251,7 +257,10 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
       const key = event.key.toLowerCase();
       if (key === "n") { event.preventDefault(); void serveNext(); return; }
       // Each guarded as its button is: no second attempt while one is being prepared.
-      if (key === "c") { if (!attempt && !working && callReady) { event.preventDefault(); void prepareAttempt(searchMode); } return; }
+      if (key === "c") {
+        if (!attempt && !working && callReady) { event.preventDefault(); if (needsDnc) void checkDnc(); else void prepareAttempt(searchMode); }
+        return;
+      }
       if (key === "r") { if (attempt && !confirmed && !working && !panel?.disclosure.blocking) { event.preventDefault(); void confirmRead(); } return; }
       if (key === "d") { event.preventDefault(); void dial(); return; }
       const index = outcomeIndexForKey(event.key);
@@ -284,7 +293,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   }, [selectedId, panelReload]);
 
   const resetCall = useCallback(() => {
-    setAttempt(null); setConfirmed(false); setDialled(false); setRebuttal(null); setEditingScript(false); setPendingCallback(false); setCallbackAt(""); setCallbackNote(""); setPendingDnc(false); setPendingReturn(null); setDispositionError(null);
+    setAttempt(null); setConfirmed(false); setDialled(false); setDncCleared(false); setRebuttal(null); setEditingScript(false); setPendingCallback(false); setCallbackAt(""); setCallbackNote(""); setPendingDnc(false); setPendingReturn(null); setDispositionError(null);
   }, []);
 
   function selectLead(id: string) {
@@ -423,6 +432,21 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
     finally { setWorking(false); }
   }
 
+  /**
+   * DNC / TCPA check (owner 2026-10-29). PLACEHOLDER: no screening provider is wired to it yet, so it
+   * always answers "clear" after a short pause, and says so. Replace the body with the real lookup
+   * once a provider is connected. The server's own compliance checks still run when the call is
+   * placed (POST /api/app/dialer/attempt/[id]/click), so this button never lets a blocked number through.
+   */
+  async function checkDnc() {
+    if (!panel || checkingDnc) return;
+    setCheckingDnc(true);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setCheckingDnc(false);
+    setDncCleared(true);
+    notify.done("Clear to call", { detail: `${panel.lead.fullName || panel.lead.firstName || "This number"} is not on the DNC or TCPA litigator list. Placeholder result — no screening provider is connected yet.` });
+  }
+
   /** `attemptId`: the one-click call, straight after the attempt and its disclosure were recorded. */
   async function dial(attemptId?: string) {
     const id = attemptId ?? attempt?.id;
@@ -548,6 +572,9 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   const nextStep: "call" | "read" | "dial" | "outcome" | null = !panel || readOnly ? null : !attempt ? "call" : !confirmed ? "read" : !dialled ? "dial" : "outcome";
 
   return {
+    needsDnc,
+    checkingDnc,
+    checkDnc,
     isSetter,
     canAuthor,
     leads,
