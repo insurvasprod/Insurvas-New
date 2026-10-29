@@ -60,11 +60,15 @@ export function ProductsSettings() {
   }, []);
 
   async function save(row: Row, sold: boolean, undoable = true) {
+    // The switch moves at once (2026-10-29: every switch waited a second for the server); a save that
+    // fails puts it back and says so.
+    const before = rows;
+    setRows((current) => current?.map((item) => (item.code === row.code ? { ...item, enabled: sold, sold } : item)) ?? current);
     setBusy(row.code);
     const response = await fetch("/api/app/settings/products", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_code: row.code, sold }) }).catch(() => null);
     const body = (await response?.json().catch(() => null)) as { products?: Row[]; error?: string } | null;
     setBusy(null);
-    if (!response?.ok || !body?.products) { notify.block(body?.error ?? "That change could not be saved. Try again."); return; }
+    if (!response?.ok || !body?.products) { setRows(before); notify.block(body?.error ?? "That change could not be saved. Try again."); return; }
     setRows(body.products);
     notify.done(sold ? `You sell ${row.name}` : `You no longer sell ${row.name}`, {
       detail: sold ? "Leads, partners, forms and quotes now offer it." : "Nothing new can use it; what already exists keeps working.",
@@ -109,9 +113,8 @@ export function ProductsSettings() {
                   {row.inPlan ? (
                     <Switch
                       checked={row.enabled}
-                      disabled={busy === row.code}
                       label={`Sell ${row.name}`}
-                      onChange={(next) => (next ? void save(row, true) : setConfirmOff(row))}
+                      onChange={(next) => { if (busy === row.code) return; if (next) void save(row, true); else setConfirmOff(row); }}
                     />
                   ) : (
                     <Link href="/app/settings#billing" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)]">

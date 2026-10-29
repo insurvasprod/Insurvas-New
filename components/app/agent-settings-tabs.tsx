@@ -369,7 +369,7 @@ export function AgentSettingsTabs({
         {grouped.map(({ group, items }, index) => {
           const groupId = `settings-group-${index}`;
           return (
-            <section key={`${group}-${index}`} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
+            <section key={`${group ?? "ungrouped"}-${index}`} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
               <h2 id={`${groupId}-label`} className="portal-settings-group-label">{group}</h2>
               <div id={groupId} className="portal-settings-nav-subsections">
                 {items.map((tab) => {
