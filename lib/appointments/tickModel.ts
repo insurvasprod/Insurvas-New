@@ -55,6 +55,23 @@ export function appointmentChange(rows: AppointmentRow[], carrierId: string, sta
   return [{ id: open.id, carrier_id: carrierId, state, status: "terminated", effective_from: open.effective_from, terminated_at: end }];
 }
 
+/**
+ * The rows as they will be once these changes save, for a screen that answers before the server does
+ * (Contracting set-up). A change with an id updates that row; one without starts a new row with a
+ * local id until the next read replaces it.
+ */
+export function applyAppointmentChanges(rows: AppointmentRow[], changes: AppointmentChange[], today: string): AppointmentRow[] {
+  let next = [...rows];
+  for (const change of changes) {
+    if (change.id) {
+      next = next.map((row) => (row.id === change.id ? { ...row, status: change.status, effective_from: change.effective_from, terminated_at: change.terminated_at ?? null } : row));
+    } else {
+      next.push({ id: `local-${change.carrier_id}-${change.state}-${next.length}`, tenant_id: "", carrier_id: change.carrier_id, state: change.state, status: change.status, effective_from: change.effective_from, terminated_at: null, created_at: today, updated_at: today, expires_at: null });
+    }
+  }
+  return next;
+}
+
 /** For several selected states at once: is the carrier on in all, some or none of them? */
 export function coverage(rows: AppointmentRow[], carrierId: string, states: string[], today: string): "all" | "some" | "none" {
   const on = states.filter((state) => currentAppointment(rows, carrierId, state, today)).length;

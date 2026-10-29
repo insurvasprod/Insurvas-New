@@ -83,6 +83,8 @@ export const CARRIER_HANDLERS: Record<string, (state: State, body: unknown) => A
     ? { status: 500, body: { error: "Could not load your carriers. (Sample error.)" } }
     : ok(state === "empty" ? { ...vault(), tenantCarriers: [], appointments: [], licenses: [], carrierRequirements: [] } : vault())),
   "GET /api/app/settings/sales/carriers": (state) => ok({ ...salesCarriers(), canEdit: state !== "readonly" }),
+  "POST /api/app/settings/sales/carriers": () => ok({ ok: true }),
+  "POST /api/app/carrier-library/tenant-carriers": () => ok({ ok: true }),
   "GET /api/app/field-maps": () => ok({ maps: [], carriers: SALES_CARRIERS.map((c) => ({ id: c.id, name: c.name, portalOrigin: c.portalOrigin, products: c.products.map((p) => ({ id: p.id, name: p.name })) })) }),
   "POST /api/app/appointment-vault/appointments": (_state, body) => {
     for (const change of (body as { appointments?: { carrier_id: string; state: string; status?: AppointmentRow["status"] }[] } | null)?.appointments ?? []) {
