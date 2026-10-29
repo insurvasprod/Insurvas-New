@@ -22,7 +22,6 @@ import { control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { StatusChip } from "@/components/ui/status-chip";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { US_STATES } from "@/lib/appointments/constants";
 import type { AppointmentRow } from "@/lib/appointments/service-types";
 import { applyAppointmentChanges, appointmentChange, bpToLevel, carriersIn, forServer, levelToBp, statesFor, todayIso } from "@/lib/appointments/tickModel";
@@ -47,14 +46,6 @@ export type SetupVault = {
 };
 
 type Send = (url: string, method: string, body?: unknown) => Promise<{ ok: true; data: unknown } | { ok: false; error: string }>;
-
-/** US Census regions: the shortcuts for picking many states at once. */
-const REGIONS: { label: string; states: string[] }[] = [
-  { label: "Northeast", states: ["CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA"] },
-  { label: "Midwest", states: ["IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD"] },
-  { label: "South", states: ["DE", "DC", "FL", "GA", "MD", "NC", "SC", "VA", "WV", "AL", "KY", "MS", "TN", "AR", "LA", "OK", "TX"] },
-  { label: "West", states: ["AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA"] },
-];
 
 /** Step 1's columns: the carrier, then its three optional contract fields. */
 const ROW = "grid-cols-[minmax(0,1fr)_96px_150px_170px] items-center gap-3";
@@ -184,7 +175,6 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   }
 
   const allIds = mine.map((carrier) => carrier.id);
-  const pickMany = (codes: string[]) => setAppointments(codes.filter((code) => carriersHere(code).length === 0), allIds, true);
   const chosenStates = US_STATES.filter(([code]) => carriersHere(code).length > 0).length;
   const missing = mine.filter((carrier) => statesFor(vault.appointments, carrier.id, today).length === 0);
 
@@ -268,14 +258,15 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           {/* Owner, 29 Oct: no scrolling. All 51 states fit as tiles; the state in focus shows its
               carriers on the right, one tick each (manager review 29 Oct, 08:05: "a card … showing
               me all the carriers, tick by tick"). A tile only opens its state: nothing is ticked until the
-              person ticks a carrier in the card (owner, 29 Oct). A region chip is the one bulk add. */}
+              person ticks a carrier in the card (owner, 29 Oct). No region shortcuts (owner, 29 Oct). */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 id="contracting-step-2" className="m-0 flex items-center gap-1 text-card-title text-[var(--ink)]">
               Which states do you sell in?
-              <InfoTip label="About this step">Pick a state to see your carriers in it, then tick the ones you are appointed with there. A region adds its states with every carrier.</InfoTip>
+              <InfoTip label="About this step">Pick a state to see your carriers in it, then tick the ones you are appointed with there.</InfoTip>
             </h3>
             {mine.length > 0 && (
               <span className="flex flex-wrap items-center gap-3">
+                {missing.length > 0 && <StatusChip tone="warning">{missing.map((carrier) => carrier.name).join(", ")} {missing.length === 1 ? "has" : "have"} no state yet</StatusChip>}
                 <span className="text-sm text-[var(--muted)] tabular-nums">{chosenStates} state{chosenStates === 1 ? "" : "s"} chosen</span>
                 <input className={cn(control, "mt-0 w-56 max-w-full")} aria-label="Search states" placeholder="Search states" value={stateQuery} onChange={(event) => setStateQuery(event.target.value)} />
               </span>
@@ -285,12 +276,6 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
             <p className="m-0 text-sm text-[var(--body)]">Choose your carriers first. <button type="button" className="font-medium text-[var(--accent-ink)] hover:underline" onClick={() => setStep(1)}>Go to step 1</button></p>
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-[var(--muted)]">Add a region:</span>
-                {REGIONS.map((region) => <ToggleChip key={region.label} onClick={() => pickMany(region.states)}>{region.label}</ToggleChip>)}
-                <ToggleChip onClick={() => pickMany(US_STATES.map(([code]) => code as string))}>All states</ToggleChip>
-                {missing.length > 0 && <StatusChip tone="warning" className="ml-auto">{missing.map((carrier) => carrier.name).join(", ")} {missing.length === 1 ? "has" : "have"} no state yet</StatusChip>}
-              </div>
               <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_240px] @6xl:grid-cols-[minmax(0,1fr)_300px]">
                 <ul aria-label="States" className="m-0 grid list-none content-start gap-1.5 p-0 grid-cols-[repeat(auto-fill,minmax(62px,1fr))] @6xl:grid-cols-[repeat(auto-fill,minmax(96px,1fr))]">
                   {states.length === 0 && <li className="col-span-full py-3 text-sm text-[var(--muted)]">No state matches.</li>}
