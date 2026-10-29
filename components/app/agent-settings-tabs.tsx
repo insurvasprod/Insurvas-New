@@ -7,7 +7,7 @@ import {
   Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, Sparkles, UserRound, Users, Workflow,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
 import { PageHeader } from "@/components/ui/page-header";
@@ -154,11 +154,14 @@ export function AgentSettingsTabs({
 
   // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
   const grouped = useMemo(() => groupSections(visible), [visible]);
-  // One group open at a time (owner, 29 Oct: the menu scrolled, "think of everything"): the open
-  // page's group, or the one last clicked. Seven group rows and the largest group's pages fit a laptop
-  // screen, where all 27 pages at once never did. A closed group shows how many pages it holds.
-  const groupOf = useCallback((id: string | undefined) => grouped.find((entry) => entry.items.some((item) => item.id === id))?.group ?? null, [grouped]);
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  // Every group open by default (owner, 29 Oct); each one closes with its arrow, and a closed group
+  // shows how many pages it holds. A group stays as the person left it.
+  const [closedGroups, setClosedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleGroup = (group: string) => setClosedGroups((current) => {
+    const next = new Set(current);
+    if (next.has(group)) next.delete(group); else next.add(group);
+    return next;
+  });
   // Folded, each group is one icon; its pages open beside it.
   const [flyout, setFlyout] = useState<string | null>(null);
 
@@ -269,10 +272,6 @@ export function AgentSettingsTabs({
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [active?.id, hashRead]);
 
-  // The open page's group is the open one whenever the page changes (a link, search or the hash).
-  const activeGroup = groupOf(routeSection ?? active?.id);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- follows the page that is open
-  useEffect(() => { if (activeGroup) setOpenGroup(activeGroup); }, [activeGroup]);
 
   // After the tab has rendered (its panel may still be loading), reveal the setting search named.
   useEffect(() => (anchor ? revealAnchor(anchor) : undefined), [anchor, activeId]);
@@ -514,7 +513,7 @@ export function AgentSettingsTabs({
               </Popover>
             );
           }
-          const open = openGroup === group;
+          const open = !closedGroups.has(group);
           return (
             <section key={`${group ?? "ungrouped"}-${index}`} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
               <h2 className="m-0">
@@ -523,7 +522,7 @@ export function AgentSettingsTabs({
                   id={`${groupId}-label`}
                   aria-expanded={open}
                   aria-controls={groupId}
-                  onClick={() => setOpenGroup(open ? null : group)}
+                  onClick={() => toggleGroup(group)}
                   className="portal-settings-group-label flex w-full items-center gap-2 rounded-[8px] border-0 bg-transparent text-left transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                 >
                   <span className="min-w-0 flex-1 truncate">{name}</span>

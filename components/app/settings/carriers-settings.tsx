@@ -42,7 +42,11 @@ import { CarrierFieldMaps } from "@/components/app/settings/carrier-field-maps";
 import { ContractingDetail, type DetailTarget } from "@/components/app/settings/contracting-detail";
 import { ContractingSetup, setupProgress } from "@/components/app/settings/contracting-setup";
 import { Pager } from "@/components/ui/pager";
+import { ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { NoMatches } from "@/components/ui/page-states";
+import { parseLookup, statesStartingWith } from "@/lib/appointments/contractingLookup";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { CheckCircle2, CircleDashed, Clock } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { parseSettingsHash } from "@/lib/settings/registry";
 import { cn } from "@/lib/utils";
@@ -101,6 +105,15 @@ export function CarriersSettings() {
   const [editingId, setEditingId] = useState<string | null>(null);
   // The side panel a Carriers or States card opens; the last entry is on screen, the ones before are Back.
   const [trail, setTrail] = useState<DetailTarget[]>([]);
+  // One search for both tabs (owner, 29 Oct: "a search bar … to check if they have something or not"):
+  // a carrier, a state, or both ("aetna tx"). Each tab has its own quick filter.
+  const [query, setQuery] = useState("");
+  const [carrierFilter, setCarrierFilter] = useState<"all" | "ready" | "setup" | "off">("all");
+  // States opens on all 51 (owner, 29 Oct: "it should show all the states … to check if I have any
+  // carrier or not there"); a state with none says so on its card.
+  const [stateFilter, setStateFilter] = useState<"with" | "none" | "all">("all");
+  // The States filter's second question: which carrier ("where am I missing Aetna?").
+  const [stateCarrier, setStateCarrier] = useState<string>("any");
   const openDetail = (next: DetailTarget) => setTrail((current) => [...current, next]);
   const detail = trail.at(-1) ?? null;
   const today = todayIso();
@@ -238,6 +251,59 @@ export function CarriersSettings() {
   const setup = setupProgress(vault, today);
   const setupDone = setup.complete;
 
+  /* ── find: the search and the quick filters ──────────────────────────────────────────────── */
+  const lookup = parseLookup(query, yours);
+  const isOff = (id: string) => Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === id && row.contracted === false));
+  const statusOf = (id: string): "ready" | "setup" | "off" => (isOff(id) ? "off" : progressOf(id).ready ? "ready" : "setup");
+  const inState = (code: string) => carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id));
+  const carrierCounts = { all: yours.length, ready: 0, setup: 0, off: 0 };
+  for (const carrier of yours) carrierCounts[statusOf(carrier.id)] += 1;
+  const carriersShown = lookup.nothing ? [] : yours
+    .filter((carrier) => carrierFilter === "all" || statusOf(carrier.id) === carrierFilter)
+    .filter((carrier) => !lookup.carrierIds || lookup.carrierIds.includes(carrier.id))
+    .filter((carrier) => !lookup.state || inState(lookup.state.code).includes(carrier.id));
+  const allStates = US_STATES.map(([code, name]) => ({ code: code as string, name, ids: inState(code) }));
+  // "With" and "No" read against the chosen carrier when there is one, else against any carrier.
+  const covered = (row: { ids: string[] }) => (stateCarrier === "any" ? row.ids.length > 0 : row.ids.includes(stateCarrier));
+  // A searched state or carrier shows whatever matches, whichever quick filter is on: a search for
+  // Texas shows Texas even when it has no carrier yet.
+  const partialStates = lookup.nothing ? statesStartingWith(query) : [];
+  const statesShown = lookup.state ? allStates.filter((row) => row.code === lookup.state?.code)
+    : lookup.nothing ? allStates.filter((row) => partialStates.includes(row.code))
+    : lookup.carrierIds ? allStates.filter((row) => row.ids.some((id) => lookup.carrierIds?.includes(id)))
+    : allStates.filter((row) => (stateFilter === "all" ? true : stateFilter === "with" ? covered(row) : !covered(row)));
+  const searched = query.trim().length > 0;
+  const clearFind = () => { setQuery(""); setCarrierFilter("all"); setStateFilter("all"); setStateCarrier("any"); };
+  const carrierFiltered = carrierFilter !== "all";
+  const stateFiltered = stateFilter !== "all" || stateCarrier !== "any";
+  // "aetna tx": one carrier and one state is a question, answered in one line above the cards.
+  const asked = lookup.state && lookup.carrierIds?.length === 1 ? { state: lookup.state, carrier: yours.find((carrier) => carrier.id === lookup.carrierIds?.[0]) ?? null } : null;
+  const answer = asked?.carrier ? (() => {
+    const { state, carrier } = asked;
+    if (!carrier) return null;
+    const granted = appointedStatesFor(vault.appointments, carrier.id, today).includes(state.code);
+    const pending = !granted && pendingStatesFor(vault.appointments, carrier.id, today).includes(state.code);
+    const tone = granted ? "border-[var(--success)] bg-[var(--success-surface)] text-[var(--success-ink)]" : pending ? "border-[var(--info)] bg-[var(--info-surface)] text-[var(--info-ink)]" : "border-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]";
+    const Icon = granted ? CheckCircle2 : pending ? Clock : CircleDashed;
+    return (
+      <div role="status" className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-l-[3px] px-4 py-2.5", tone)}>
+        <Icon aria-hidden="true" className="size-4 shrink-0" />
+        <p className="m-0 min-w-0 flex-1 text-sm font-semibold">
+          {granted ? `Yes, ${carrier.name} is appointed in ${state.name}.` : pending ? `${carrier.name} is applied for in ${state.name}, not granted yet.` : `No, ${carrier.name} is not appointed in ${state.name}.`}
+        </p>
+        <span className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setTrail([{ kind: "state", id: state.code }])}>Open {state.name}</Button>
+          {!granted && !pending && <Button type="button" size="sm" onClick={() => pickStep("setup")}>Add in Set Up</Button>}
+        </span>
+      </div>
+    );
+  })() : null;
+  const noMatch = (noun: string) => (
+    <div className={cn(PANE, "flex flex-col items-center")}>
+      <NoMatches noun={noun} by={carrierFiltered || stateFiltered ? "filters" : "search"} onClear={clearFind} />
+    </div>
+  );
+
   const listCard = (children: ReactNode) => <div className={cn(PANE, "flex min-h-0 flex-col gap-2.5 p-3.5")}>{children}</div>;
   const listBody = (children: ReactNode) => <div className={cn(SCROLL, "-mx-1.5 max-h-[420px] min-h-0 flex-1 px-1.5 lg:max-h-none")}>{children}</div>;
 
@@ -273,7 +339,53 @@ export function CarriersSettings() {
           { key: "states" as const, label: "States", count: nAppointed },
           ...(step === "maps" ? [{ key: "maps" as const, label: "Field maps" }] : []),
         ]}
+        actions={step === "carriers" || step === "states" ? (
+          // On the tabs' own line: search first, then the quick filter (UI-CONSISTENCY §6).
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ToolbarSearch value={query} onChange={setQuery} placeholder={step === "carriers" ? "Search carriers" : "Search states"} label="Search carriers and states, or both (like “aetna tx”)" className="sm:w-52" />
+            {/* One dropdown per tab (owner, 29 Oct: "filters as a drop down"), the native select of the
+                kit (UI-CONSISTENCY §5), so the toolbar fits beside the tabs even with the menu open. */}
+            {step === "carriers" ? (
+              <select
+                aria-label="Show carriers"
+                value={carrierFilter}
+                onChange={(event) => setCarrierFilter(event.target.value as typeof carrierFilter)}
+                className={cn(toolbarControl, "w-44", carrierFiltered && "border-[var(--primary)]")}
+              >
+                <option value="all">All Carriers ({carrierCounts.all})</option>
+                <option value="ready">Ready to Sell ({carrierCounts.ready})</option>
+                <option value="setup">Needs Setup ({carrierCounts.setup})</option>
+                {carrierCounts.off > 0 && <option value="off">Switched Off ({carrierCounts.off})</option>}
+              </select>
+            ) : (
+              <select
+                aria-label="Show states"
+                value={stateCarrier === "any" ? stateFilter : `${stateFilter === "none" ? "without" : "with"}:${stateCarrier}`}
+                onChange={(event) => {
+                  const [kind, id] = event.target.value.split(":");
+                  if (id) { setStateCarrier(id); setStateFilter(kind === "without" ? "none" : "with"); }
+                  else { setStateCarrier("any"); setStateFilter(kind as typeof stateFilter); }
+                }}
+                className={cn(toolbarControl, "w-48", stateFiltered && "border-[var(--primary)]")}
+              >
+                <option value="all">All States ({US_STATES.length})</option>
+                <option value="with">With Carriers ({allStates.filter((row) => row.ids.length > 0).length})</option>
+                <option value="none">No Carriers Yet ({allStates.filter((row) => row.ids.length === 0).length})</option>
+                {yours.map((carrier) => {
+                  const count = allStates.filter((row) => row.ids.includes(carrier.id)).length;
+                  return (
+                    <optgroup key={carrier.id} label={carrier.name}>
+                      <option value={`with:${carrier.id}`}>With {carrier.name} ({count})</option>
+                      <option value={`without:${carrier.id}`}>Without {carrier.name} ({US_STATES.length - count})</option>
+                    </optgroup>
+                  );
+                })}
+              </select>
+            )}
+          </div>
+        ) : undefined}
       />
+      {(step === "carriers" || step === "states") && answer}
 
       {step === "setup" && (
         // The Get set up guide outlines the set-up itself (it outlined the old "Change" button).
@@ -301,8 +413,10 @@ export function CarriersSettings() {
             <Button type="button" onClick={() => pickStep("setup")}>Start set-up</Button>
           </div>
         ) : (
+          carriersShown.length === 0 ? noMatch("carriers") : (
           <FittedGrid
-            items={yours}
+            key={`${query}|${carrierFilter}`}
+            items={carriersShown}
             noun="carriers"
             rowHeight={144}
             className="grid-cols-1 @2xl:grid-cols-2 @5xl:grid-cols-3"
@@ -328,13 +442,18 @@ export function CarriersSettings() {
                   </dl>
                   {/* Any number of states fits one line: the first few, then "+N" (all of them on hover). */}
                   <div className="mt-auto flex items-center justify-between gap-3">
-                    <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>{appointed.length ? firstFew(appointed, 6, " · ") : "No states yet"}</p>
+                    {/* A searched state leads the line, so "is it there?" is read at once. */}
+                    <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>
+                      {lookup.state && <span className="mr-2 font-sans font-semibold text-[var(--accent-ink)]">{appointed.includes(lookup.state.code) ? `✓ ${lookup.state.code}` : `${lookup.state.code} applied for`}</span>}
+                      {appointed.length ? firstFew(appointed, 6, " · ") : "No states yet"}
+                    </p>
                     <Button type="button" variant="outline" size="sm" className="relative z-10 shrink-0" onClick={() => setEditingId(carrier.id)}>Edit</Button>
                   </div>
                 </div>
               );
             }}
           />
+          )
         )
       )}
       {editing && (
@@ -383,31 +502,35 @@ export function CarriersSettings() {
       )}
 
       {step === "states" && (() => {
-        const held = US_STATES.map(([code, name]) => ({ code: code as string, name, ids: carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id)) })).filter((row) => row.ids.length > 0);
-        return held.length === 0 ? (
+        const held = statesShown;
+        return allStates.every((row) => row.ids.length === 0) && !searched && !stateFiltered ? (
           <div className={cn(PANE, "flex flex-col items-center gap-3 p-8 text-center")}>
             <p className="m-0 text-sm font-semibold text-[var(--ink)]">No states yet</p>
             <p className="m-0 text-sm text-[var(--muted)]">Pick the states you sell in, in the set-up.</p>
             <Button type="button" onClick={() => pickStep("setup")}>Open set-up</Button>
           </div>
-        ) : (
+        ) : held.length === 0 ? noMatch("states") : (
           <FittedGrid
+            key={`${query}|${stateFilter}|${stateCarrier}`}
             items={held}
             noun="states"
             rowHeight={80}
             className="grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 @6xl:grid-cols-4"
             keyOf={(row) => row.code}
             render={(row) => {
-              const names = row.ids.map((id) => yours.find((carrier) => carrier.id === id)?.name ?? "");
+              // A searched carrier comes first in its states' cards.
+              const ids = lookup.carrierIds ? [...row.ids].sort((a, b) => Number(lookup.carrierIds?.includes(b)) - Number(lookup.carrierIds?.includes(a))) : row.ids;
+              const names = ids.map((id) => yours.find((carrier) => carrier.id === id)?.name ?? "");
               return (
-                <button type="button" onClick={() => setTrail([{ kind: "state", id: row.code }])} aria-label={`${row.name}: see its carriers`} className={cn(PANE, CLICKABLE, "flex h-full w-full flex-col justify-center gap-2 overflow-hidden px-4 text-left focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:outline-none", detail?.kind === "state" && detail.id === row.code && OPEN)}>
+                <button type="button" onClick={() => setTrail([{ kind: "state", id: row.code }])} aria-label={`${row.name}: see its carriers`} className={cn(PANE, CLICKABLE, "flex h-full w-full flex-col justify-center gap-2 overflow-hidden px-4 text-left focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:outline-none", row.ids.length === 0 && "border-dashed bg-transparent", detail?.kind === "state" && detail.id === row.code && OPEN)}>
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]"><span className="mr-2 font-mono text-xs text-[var(--muted)]">{row.code}</span>{row.name}</span>
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-[var(--accent-ink)]">{row.ids.length === yours.length ? "All carriers" : `${row.ids.length} of ${yours.length}`}</span>
+                    <span className={cn("shrink-0 text-xs font-semibold tabular-nums", row.ids.length ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>{row.ids.length === yours.length ? "All carriers" : `${row.ids.length} of ${yours.length}`}</span>
                   </span>
                   {/* Any number of carriers fits one line: the first two, then "+N more" (all on hover). */}
                   <span className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap" title={names.join(", ")}>
-                    {row.ids.slice(0, 2).map((id, index) => (
+                    {ids.length === 0 && <span className="text-xs text-[var(--muted)]">No carriers yet</span>}
+                    {ids.slice(0, 2).map((id, index) => (
                       <span key={id} className="inline-flex min-w-0 items-center gap-1.5 text-xs text-[var(--body)]"><span className={cn("size-2 shrink-0 rounded-full", dotOf(id))} aria-hidden="true" /><span className="truncate">{names[index]}</span></span>
                     ))}
                     {row.ids.length > 2 && <span className="shrink-0 text-xs font-semibold text-[var(--muted)]">+{row.ids.length - 2} more</span>}
@@ -467,6 +590,9 @@ function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
   // The rows share whatever height is left over, so the pager sits on the window's bottom margin, in
   // line with the settings menu, instead of leaving a strip of empty page under it (owner, 2026-10-29).
   const [height, setHeight] = useState(rowHeight);
+  // Rows on a full page and the gap between them: a short last page keeps a full page's height, so the
+  // pager stays on the bottom margin on every page (owner, 29 Oct: "shown down always").
+  const [frame, setFrame] = useState<{ rows: number; gap: number } | null>(null);
   // Measured again once the pager appears, so its real height is used.
   const paged = items.length > perPage;
   const [page, setPage] = useState(1);
@@ -483,6 +609,7 @@ function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
       const room = desktop ? window.innerHeight - element.getBoundingClientRect().top - 32 - below : (rowHeight + gap) * 6;
       const rows = Math.max(1, Math.floor((room + gap) / (rowHeight + gap)));
       setPerPage(columns * rows);
+      setFrame(desktop ? { rows, gap } : null);
       // Only when there is more than one page: a short list keeps its cards at their own height.
       const filled = desktop && items.length > columns * rows ? Math.floor((room + gap) / rows - gap) : rowHeight;
       setHeight(Math.max(rowHeight, filled));
@@ -491,6 +618,9 @@ function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     if (pager.current) observer.observe(pager.current);
+    // And every box above it: the settings frame scrolls inside itself, so when the toolbar or the
+    // header grows, the grid moves down without changing size (it ran 20px past the window).
+    for (let node = element.parentElement; node; node = node.parentElement) observer.observe(node);
     window.addEventListener("resize", measure);
     return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
   }, [rowHeight, items.length, paged]);
@@ -498,7 +628,7 @@ function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
   const shown = Math.min(page, pages);
   return (
     <div className="flex flex-col gap-3">
-      <ul ref={grid} className={cn("m-0 grid list-none gap-3 p-0", className)} style={{ gridAutoRows: `${height}px` }}>
+      <ul ref={grid} className={cn("m-0 grid list-none content-start gap-3 p-0", className)} style={{ gridAutoRows: `${height}px`, minHeight: paged && frame ? frame.rows * height + (frame.rows - 1) * frame.gap : undefined }}>
         {items.slice((shown - 1) * perPage, shown * perPage).map((item) => <li key={keyOf(item)} className="min-w-0">{render(item)}</li>)}
       </ul>
       {paged && (
