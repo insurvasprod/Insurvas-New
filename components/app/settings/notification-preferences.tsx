@@ -75,6 +75,17 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
     }
   }
 
+  // One alert's switch or email choice: it moves at once and the table stays live (2026-10-29: every
+  // click greyed the whole table until the server answered, and each one raised a toast). A save
+  // that fails puts the row back and says so.
+  async function saveEvent(key: string, delivery: Partial<EventView["delivery"]>, body: Record<string, unknown>) {
+    const before = view;
+    setView((current) => current && { ...current, events: current.events.map((e) => (e.key === key ? { ...e, delivery: { ...e.delivery, ...delivery } } : e)) });
+    const res = await fetch("/api/app/notification-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_key: key, ...body }) }).catch(() => null);
+    const result = await res?.json().catch(() => null);
+    if (!res?.ok) { setView(before); notify.fail(result?.error ?? "That could not be saved"); }
+  }
+
   const header = embedded ? null : <SettingsSectionHeader />;
   if (error) return <SettingsStack>{header}<Callout tone="error" title={error} /></SettingsStack>;
   if (!view || !quiet) return <SettingsStack>{header}<SettingsCard><SectionLoading rows={6} columns={4} label="Loading your notification preferences" /></SettingsCard></SettingsStack>;
@@ -106,8 +117,8 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
         {CHANNELS.map((c) => (
           <td key={c.key} className={cn(st.td, "text-center")} title={e.protected ? "This alert cannot be switched off" : undefined}>
             <span className="inline-flex justify-center">
-              <Switch checked={e.delivery[c.key]} disabled={busy || e.protected || !view.available} label={`${e.label}: ${c.label}`}
-                onChange={(next) => void save({ event_key: e.key, [c.key]: next }, `${e.label}: ${c.label.toLowerCase()} ${next ? "on" : "off"}`)} />
+              <Switch checked={e.delivery[c.key]} disabled={e.protected || !view.available} label={`${e.label}: ${c.label}`}
+                onChange={(next) => void saveEvent(e.key, { [c.key]: next }, { [c.key]: next })} />
             </span>
           </td>
         ))}
@@ -117,8 +128,8 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
               {(Object.keys(DIGEST_LABELS) as DigestCadence[]).map((d) => {
                 const current = e.delivery.email ? e.delivery.digest : "off";
                 return (
-                  <button key={d} type="button" aria-pressed={current === d} disabled={busy || !view.available} className={CHIP(current === d)}
-                    onClick={() => current !== d && void save({ event_key: e.key, digest: d, email: d !== "off" }, `${e.label}: ${DIGEST_LABELS[d].toLowerCase()}`)}>
+                  <button key={d} type="button" aria-pressed={current === d} disabled={!view.available} className={CHIP(current === d)}
+                    onClick={() => current !== d && void saveEvent(e.key, { digest: d === "off" ? e.delivery.digest : d, email: d !== "off" }, { digest: d, email: d !== "off" })}>
                     {DIGEST_LABELS[d]}
                   </button>
                 );
