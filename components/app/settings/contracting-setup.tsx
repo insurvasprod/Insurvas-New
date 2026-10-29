@@ -193,6 +193,34 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
 
   const [stateQuery, setStateQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  // How the 51 tiles are laid out on a desktop: the fewest columns whose rows fit above the footer (so
+  // each tile is as wide as it can be and its name shows), each row between 36 and 52px tall. A phone
+  // scrolls and keeps the CSS grid.
+  const statesRef = useRef<HTMLUListElement | null>(null);
+  const [stateGrid, setStateGrid] = useState<{ cols: number; row: number } | null>(null);
+  useEffect(() => {
+    if (step !== 2) return;
+    const measure = () => {
+      const list = statesRef.current;
+      const card = stepCard.current;
+      if (!list || !card || window.innerWidth < 1024) { setStateGrid(null); return; }
+      const gap = 4;
+      const count = US_STATES.length;
+      // 32px: the shell's bottom padding; then the footer and the 16px gap above it.
+      const room = window.innerHeight - 32 - (card.querySelector("footer")?.offsetHeight ?? 61) - 16 - list.getBoundingClientRect().top;
+      let cols = 1;
+      while (cols < 13 && Math.ceil(count / cols) * (36 + gap) - gap > room) cols += 1;
+      // Never wider than 180px a tile: past that a name only gains empty space.
+      cols = Math.max(cols, Math.ceil((list.clientWidth + gap) / (180 + gap)));
+      const rows = Math.ceil(count / cols);
+      setStateGrid({ cols, row: Math.max(36, Math.min(52, Math.floor((room + gap) / rows) - gap)) });
+    };
+    const timer = window.setTimeout(measure, 0);
+    const observer = new ResizeObserver(measure);
+    observeUp(observer, statesRef.current);
+    window.addEventListener("resize", measure);
+    return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
+  }, [step]);
   const stateNeedle = stateQuery.trim().toLowerCase();
   const states = US_STATES.filter(([code, name]) => !stateNeedle || code.toLowerCase() === stateNeedle || name.toLowerCase().includes(stateNeedle));
   const carriersHere = (code: string) => carriersIn(vault.appointments, code, today).filter((id) => mineIds.has(id));
@@ -318,14 +346,22 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           ) : (
             <>
               <div className="grid flex-1 gap-4 @3xl:grid-cols-[minmax(0,1fr)_240px] @6xl:grid-cols-[minmax(0,1fr)_300px]">
-                <ul aria-label="States" className="m-0 grid list-none auto-rows-[minmax(36px,1fr)] gap-1.5 p-0 grid-cols-[repeat(auto-fill,minmax(62px,1fr))] @6xl:grid-cols-[repeat(auto-fill,minmax(96px,1fr))]">
+                {/* The fewest columns that still fit all 51 above the footer, so each tile is as wide
+                    as the room allows and its name shows; rows only as tall as needed, 36 to 52px
+                    (owner, 29 Oct: shorter and wider with the menu open, same design). */}
+                <ul
+                  ref={statesRef}
+                  aria-label="States"
+                  style={stateGrid ? { gridTemplateColumns: `repeat(${stateGrid.cols}, minmax(0, 1fr))`, gridAutoRows: `${stateGrid.row}px` } : undefined}
+                  className="m-0 grid list-none content-start auto-rows-[44px] gap-1 p-0 grid-cols-[repeat(auto-fill,minmax(96px,1fr))]"
+                >
                   {states.length === 0 && <li className="col-span-full py-3 text-sm text-[var(--muted)]">No state matches.</li>}
                   {states.map(([code, name]) => {
                     const here = carriersHere(code);
                     const on = here.length > 0;
                     const focused = open === code;
                     return (
-                      <li key={code}>
+                      <li key={code} className="min-w-0">
                         <button
                           type="button"
                           aria-pressed={focused}
@@ -333,7 +369,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                           title={name}
                           onClick={() => setOpen(code)}
                           className={cn(
-                            "flex h-full min-h-9 w-full flex-col items-start justify-center rounded-[8px] border px-2 text-left transition-colors",
+                            "flex h-full w-full flex-col items-start justify-center rounded-[8px] border px-2 text-left transition-colors",
                             on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-alt)]",
                             focused && "ring-2 ring-[var(--primary)] ring-offset-1 ring-offset-[var(--surface)]",
                           )}
@@ -348,8 +384,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                     );
                   })}
                 </ul>
-                {/* The card is exactly the tiles' length, which now fills the step to the window's bottom, so
-                    the list has room; only a very long carrier list scrolls, inside the card. */}
+                {/* The card is exactly the tiles' length; only a very long carrier list scrolls, inside it. */}
                 <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 @3xl:h-0 @3xl:min-h-full">
                   {(() => {
                     const focus = open ? US_STATES.find(([code]) => code === open) : null;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowUpRight, PanelLeftClose, PanelLeftOpen, Search, X,
+  ArrowUpRight, ChevronDown, PanelLeftClose, PanelLeftOpen, Search, Settings2, X,
   Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, Sparkles, UserRound, Users, Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
 import { PageHeader } from "@/components/ui/page-header";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LoadingRows } from "@/components/ui/page-states";
 import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
@@ -63,8 +64,16 @@ const SECTION_ICON: Record<string, LucideIcon> = {
 
 /** The fold, unfold and search buttons at the menu's top. */
 const RAIL_ICON_BUTTON = "inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-[var(--muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]";
-/** A menu item folded to its icon: a centred square. */
-const ICON_ITEM = "mx-auto size-9 min-h-0 justify-center px-0 py-0";
+/** One icon per group: the folded menu's strip. */
+const GROUP_ICON: Record<string, LucideIcon> = {
+  "Your account": UserRound,
+  "Agency": Building2,
+  "Carriers": FileSignature,
+  "Sales process": ClipboardList,
+  "Leads & dialing": PhoneIncoming,
+  "Money & compliance": Landmark,
+  "Platform": KeyRound,
+};
 
 /** The menu folded to its icons is remembered for this browser (a convenience, so storage may fail). */
 const FOLD_KEY = "insurvas.settings.menuFolded";
@@ -145,20 +154,13 @@ export function AgentSettingsTabs({
 
   // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
   const grouped = useMemo(() => groupSections(visible), [visible]);
-  // Groups never collapse (settings shell plan, 2026-10-29): six short groups are the map of Settings,
-  // and a chevron on each was noise. The setter stays so older reveal calls keep working.
-  const [, setCollapsedGroups] = useState<Set<string>>(() => new Set());
-
-  const revealGroupForSection = useCallback((id: string) => {
-    const parent = grouped.find((entry) => entry.items.some((item) => item.id === id));
-    if (!parent) return;
-    setCollapsedGroups((current) => {
-      if (!current.has(parent.group)) return current;
-      const next = new Set(current);
-      next.delete(parent.group);
-      return next;
-    });
-  }, [grouped]);
+  // One group open at a time (owner, 29 Oct: the menu scrolled, "think of everything"): the open
+  // page's group, or the one last clicked. Seven group rows and the largest group's pages fit a laptop
+  // screen, where all 27 pages at once never did. A closed group shows how many pages it holds.
+  const groupOf = useCallback((id: string | undefined) => grouped.find((entry) => entry.items.some((item) => item.id === id))?.group ?? null, [grouped]);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  // Folded, each group is one icon; its pages open beside it.
+  const [flyout, setFlyout] = useState<string | null>(null);
 
   // The menu folds to an icon strip on a desktop (owner, 29 Oct: "collapsible to close on the left"),
   // giving the page its width. Below lg the menu stacks above the page, so it never folds there.
@@ -235,7 +237,6 @@ export function AgentSettingsTabs({
         // Hash deep-links are external browser state that should select the matching tab.
         setActiveId(tab);
         setAnchor(target);
-        revealGroupForSection(tab);
         // "#carriers" is also the menu item's id, so the browser jumps to it and the page header
         // (title, breadcrumb) leaves the screen. A section opens at the top; "#tab/anchor" still
         // scrolls to its setting (revealAnchor below).
@@ -246,7 +247,7 @@ export function AgentSettingsTabs({
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
     return () => window.removeEventListener("hashchange", syncFromHash);
-  }, [inPage, revealGroupForSection]);
+  }, [inPage]);
 
   // The open section's menu item in view inside the menu (not the page), so a section low in the
   // list, like Accounting on its own route, is visibly the current one.
@@ -268,6 +269,11 @@ export function AgentSettingsTabs({
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [active?.id, hashRead]);
 
+  // The open page's group is the open one whenever the page changes (a link, search or the hash).
+  const activeGroup = groupOf(routeSection ?? active?.id);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- follows the page that is open
+  useEffect(() => { if (activeGroup) setOpenGroup(activeGroup); }, [activeGroup]);
+
   // After the tab has rendered (its panel may still be loading), reveal the setting search named.
   useEffect(() => (anchor ? revealAnchor(anchor) : undefined), [anchor, activeId]);
 
@@ -277,7 +283,6 @@ export function AgentSettingsTabs({
     if (routeSection) { router.push(`/app/settings#${id}`); return; }
     setActiveId(id);
     setAnchor(null);
-    revealGroupForSection(id);
     window.history.replaceState(null, "", `#${id}`);
     // The rail scrolls on its own (2026-10-15); a section picked low in it opens at the top of the page.
     if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: "smooth" });
@@ -296,6 +301,73 @@ export function AgentSettingsTabs({
       return { text: `${team.seats.used} / ${team.seats.max}`, warn: team.seats.used >= team.seats.max };
     }
     return null;
+  }
+
+  /** One page in the menu, or in a folded group's flyout. */
+  function renderItem(tab: AgentSettingsTab): ReactNode {
+  if (tab.route) {
+    // A section with its own route: a link to it, drawn in the same frame there
+    // (components/app/settings/settings-route-frame.tsx), so it is one more menu item.
+    const here = routeSection === tab.id;
+    return (
+      <Link
+        key={tab.id}
+        id={`settings-nav-${tab.id}`}
+        href={sectionHref(tab)}
+        aria-current={here ? "page" : undefined}
+        onClick={() => setFlyout(null)}
+        className={cn(
+          "portal-settings-subsection flex min-h-[30px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1 text-left text-label font-normal no-underline transition-colors",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+          here ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]" : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
+        )}
+      >
+        <SectionIcon id={tab.id} />
+        <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
+      </Link>
+    );
+  }
+  const isActive = hashRead && active?.id === tab.id;
+  const badge = badgeFor(tab.id);
+  return (
+    <button
+      key={tab.id}
+      id={`settings-nav-${tab.id}`}
+      type="button"
+      aria-current={isActive ? "page" : undefined}
+      aria-controls={`settings-panel-${tab.id}`}
+      disabled={Boolean(tab.disabled)}
+      onClick={() => { selectTab(tab.id); setFlyout(null); }}
+      className={cn(
+        "portal-settings-subsection flex min-h-[30px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1 text-left text-label font-normal transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
+        isActive
+          ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]"
+          : tab.managed
+            ? "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-alt)]"
+            : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
+      )}
+    >
+      <SectionIcon id={tab.id} />
+      <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
+      {badge && (
+        <span
+          className={cn(
+            "ml-auto shrink-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] tabular-nums",
+            badge.warn ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"
+          )}
+        >
+          {badge.text}
+        </span>
+      )}
+      {tab.managed && (
+        <span className="ml-auto inline-flex shrink-0 text-[var(--muted)]" aria-label="Managed elsewhere">
+          <LockIcon />
+        </span>
+      )}
+    </button>
+  );
+
   }
 
   // UX-4: the component for each section comes from the registry, keyed by the section's id.
@@ -358,6 +430,8 @@ export function AgentSettingsTabs({
             <button type="button" onClick={() => { fold(false); requestAnimationFrame(() => searchRef.current?.focus()); }} aria-label="Search settings" title="Search settings" className={RAIL_ICON_BUTTON}>
               <Search aria-hidden="true" className="size-4" />
             </button>
+            {/* The controls above, the groups below. */}
+            <span aria-hidden="true" className="mt-1 h-px w-6 bg-[var(--border)]" />
           </div>
         ) : (
         <div className="flex shrink-0 items-center gap-1.5 pb-2">
@@ -409,97 +483,60 @@ export function AgentSettingsTabs({
         ) : (
       <nav
         aria-label="Settings navigation"
-        className="portal-settings-nav relative box-border flex min-h-0 w-full flex-col gap-0 overflow-y-auto overscroll-contain pb-2.5"
+        className="portal-settings-nav relative box-border flex min-h-0 w-full flex-col gap-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-1"
       >
-        {/* Keyed by position, not by the group's name. A run is defined by where it sits in the
-            caller's order, and the same name can legitimately open a second run — so the name is not
-            an identity. Keying on it made React see duplicates, warn that children "may be duplicated
-            and/or omitted", and then throw NotFoundError from insertBefore, which aborted hydration
-            for the whole page: the settings rail stopped responding to clicks entirely. */}
+        {/* Keyed by position, not by the group's name (a duplicate key once aborted hydration). */}
         {grouped.map(({ group, items }, index) => {
           const groupId = `settings-group-${index}`;
+          const here = items.some((item) => item.id === (routeSection ?? active?.id));
+          const warn = items.some((item) => badgeFor(item.id)?.warn);
+          const Icon = GROUP_ICON[group] ?? Settings2;
+          const name = titleCase(group);
+          if (iconsOnly) {
+            // Folded: the group's icon; its pages open in a list beside the strip.
+            return (
+              <Popover key={`${group ?? "ungrouped"}-${index}`} open={flyout === group} onOpenChange={(open) => setFlyout(open ? group : null)}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`${name}${warn ? ", needs attention" : ""}`}
+                    title={name}
+                    className={cn(RAIL_ICON_BUTTON, "relative mx-auto mb-1", (here || flyout === group) && "bg-[var(--primary-soft)] text-[var(--accent-ink)] hover:bg-[var(--primary-soft)] hover:text-[var(--accent-ink)]")}
+                  >
+                    <Icon aria-hidden="true" className="size-4" />
+                    {warn && <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-[var(--warning)]" />}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="start" sideOffset={10} className="w-64 p-1.5">
+                  <p className="m-0 px-2.5 pt-1.5 pb-1 text-sm font-semibold text-[var(--ink)]">{name}</p>
+                  {items.map(renderItem)}
+                </PopoverContent>
+              </Popover>
+            );
+          }
+          const open = openGroup === group;
           return (
             <section key={`${group ?? "ungrouped"}-${index}`} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
-              {/* Folded, a hairline stands between groups; the name stays for screen readers. */}
-              <h2 id={`${groupId}-label`} className={cn("portal-settings-group-label", iconsOnly && "sr-only")}>{group ? titleCase(group) : group}</h2>
-              {iconsOnly && index > 0 && <div aria-hidden="true" className="mx-2 mb-1.5 h-px bg-[var(--border)]" />}
-              <div id={groupId} className="portal-settings-nav-subsections">
-                {items.map((tab) => {
-                  if (tab.route) {
-                    // A section with its own route: a link to it, drawn in the same frame there
-                    // (components/app/settings/settings-route-frame.tsx), so it is one more menu item.
-                    const here = routeSection === tab.id;
-                    return (
-                      <Link
-                        key={tab.id}
-                        id={`settings-nav-${tab.id}`}
-                        href={sectionHref(tab)}
-                        aria-current={here ? "page" : undefined}
-                        title={iconsOnly ? titleCase(tab.label) : undefined}
-                        onClick={() => revealGroupForSection(tab.id)}
-                        className={cn(
-                          "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-label font-normal no-underline transition-colors",
-                          iconsOnly && ICON_ITEM,
-                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-                          here ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]" : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
-                        )}
-                      >
-                        <SectionIcon id={tab.id} />
-                        <span className={iconsOnly ? "sr-only" : "min-w-0 flex-grow"}>{titleCaseNode(tab.label)}</span>
-                      </Link>
-                    );
-                  }
-                  const isActive = hashRead && active?.id === tab.id;
-                  const badge = badgeFor(tab.id);
-                  return (
-                    <button
-                      key={tab.id}
-                      id={`settings-nav-${tab.id}`}
-                      type="button"
-                      aria-current={isActive ? "page" : undefined}
-                      aria-controls={`settings-panel-${tab.id}`}
-                      title={iconsOnly ? `${titleCase(tab.label)}${badge ? ` · ${badge.text}` : ""}` : undefined}
-                      disabled={Boolean(tab.disabled)}
-                      onClick={() => selectTab(tab.id)}
-                      className={cn(
-                        "portal-settings-subsection mb-0.5 flex min-h-[34px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1.5 text-left text-label font-normal transition-colors",
-                        iconsOnly && ICON_ITEM,
-                        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
-                        isActive
-                          ? "bg-[var(--primary-soft)] font-semibold text-[var(--ink)]"
-                          : tab.managed
-                            ? "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-alt)]"
-                            : "bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]"
-                      )}
-                    >
-                      <SectionIcon id={tab.id} />
-                      <span className={iconsOnly ? "sr-only" : "min-w-0 flex-grow"}>{titleCaseNode(tab.label)}</span>
-                      {/* Folded, a badge is a dot on the icon; its words stay in the item's name. */}
-                      {badge && iconsOnly && (
-                        <>
-                          <span aria-hidden="true" className={cn("absolute top-1.5 right-1.5 size-1.5 rounded-full", badge.warn ? "bg-[var(--warning)]" : "bg-[var(--muted)]")} />
-                          <span className="sr-only">, {badge.text}</span>
-                        </>
-                      )}
-                      {badge && !iconsOnly && (
-                        <span
-                          className={cn(
-                            "ml-auto shrink-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] tabular-nums",
-                            badge.warn ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"
-                          )}
-                        >
-                          {badge.text}
-                        </span>
-                      )}
-                      {tab.managed && !iconsOnly && (
-                        <span className="ml-auto inline-flex shrink-0 text-[var(--muted)]" aria-label="Managed elsewhere">
-                          <LockIcon />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              <h2 className="m-0">
+                <button
+                  type="button"
+                  id={`${groupId}-label`}
+                  aria-expanded={open}
+                  aria-controls={groupId}
+                  onClick={() => setOpenGroup(open ? null : group)}
+                  className="portal-settings-group-label flex w-full items-center gap-2 rounded-[8px] border-0 bg-transparent text-left transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                >
+                  <span className="min-w-0 flex-1 truncate">{name}</span>
+                  {!open && warn && <span aria-label="needs attention" className="size-1.5 shrink-0 rounded-full bg-[var(--warning)]" />}
+                  {!open && <span className="shrink-0 text-xs font-medium tabular-nums text-[var(--muted)]">{items.length}</span>}
+                  <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", open && "rotate-180")} />
+                </button>
+              </h2>
+              {open && (
+                <div id={groupId} className="portal-settings-nav-subsections">
+                  {items.map(renderItem)}
+                </div>
+              )}
             </section>
           );
         })}
@@ -515,7 +552,7 @@ export function AgentSettingsTabs({
             // screen's (lg: was 1024px of screen, which squeezed columns to 18-110px).
             className="portal-settings-panel @container min-w-0"
             role="region"
-            aria-labelledby={`settings-nav-${active.id}`}
+            aria-label={titleCase(active.label)}
             tabIndex={-1}
             key={active.id}
           >

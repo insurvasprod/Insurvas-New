@@ -91,9 +91,9 @@ export function CarriersSettings() {
   const [vault, setVault] = useState<Vault | null>(null);
   const [sales, setSales] = useState<Sales>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Set up first until it is complete; decided once, when the data first arrives.
-  const [step, setStep] = useState<Step>("carriers");
-  const decided = useRef(false);
+  // Set Up opens first, every time (owner, 29 Oct: people had to press a button for it each time);
+  // a link to Carriers, States or Field maps opens that tab instead (the hash effect below).
+  const [step, setStep] = useState<Step>("setup");
   // The states Set up ticked since the last sync of licences.
   const touched = useRef(new Set<string>());
   const [carrierId, setCarrierId] = useState<string | null>(null);
@@ -139,13 +139,6 @@ export function CarriersSettings() {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the section's external data, loaded once
   useEffect(() => { void loadVault(); void loadSales(); }, [loadVault, loadSales]);
   const loaded = vault !== null;
-  useEffect(() => {
-    if (!vault || decided.current) return;
-    decided.current = true;
-    const { anchor } = parseSettingsHash(window.location.hash);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the opening view, chosen once from the first data
-    if (!anchor && !setupProgress(vault, today).complete) setStep("setup");
-  }, [vault, today]);
   useEffect(() => {
     if (!loaded) return;
     // Whatever sits above the panes (the header, the rail's badges) settles after this mounts, so
@@ -267,24 +260,24 @@ export function CarriersSettings() {
         <button key={target} id={`carriers-${target}`} type="button" tabIndex={-1} aria-hidden="true" className="sr-only" onClick={() => openStep(target)} onFocus={() => openStep(target)} />
       ))}
       {/* Manager review 29 Oct (10:02–11:10): once set up, the wizard goes and Carriers and States are
-          read-only overviews; one button reopens the set-up to change them. No Add Carriers, no ⋯:
+          read-only overviews, changed on the Set Up tab, which is always there (owner, 29 Oct). No Add Carriers, no ⋯:
           a person only ticks the carriers that are there, and Field maps (postponed) has its link. */}
       <ViewTabs
         label="Contracting"
         value={step}
         onChange={pickStep}
         tabs={[
-          ...(!setupDone || step === "setup" ? [{ key: "setup" as const, label: setupDone ? "Set Up" : `Set Up · ${setup.percent}%` }] : []),
+          // Always a tab, never hidden behind a button once set-up is done.
+          { key: "setup" as const, label: setupDone ? "Set Up" : `Set Up · ${setup.percent}%` },
           { key: "carriers" as const, label: "Carriers", count: yours.length },
           { key: "states" as const, label: "States", count: nAppointed },
           ...(step === "maps" ? [{ key: "maps" as const, label: "Field maps" }] : []),
         ]}
-        actions={setupDone && step !== "setup" ? (
-          <Button type="button" variant="outline" data-guide="carrier-library-add" onClick={() => pickStep("setup")}>Change Carriers or States</Button>
-        ) : undefined}
       />
 
       {step === "setup" && (
+        // The Get set up guide outlines the set-up itself (it outlined the old "Change" button).
+        <div data-guide="carrier-library-add" className="min-w-0">
         <ContractingSetup
           vault={vault}
           setVault={(update) => setVault((current) => (current ? { ...current, ...update(current) } : current))}
@@ -297,6 +290,7 @@ export function CarriersSettings() {
             pickStep("carriers");
           }}
         />
+        </div>
       )}
 
       {step === "carriers" && (
