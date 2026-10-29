@@ -126,7 +126,7 @@ function ProfilePicture({ name, version, onChange }: { name: string; version: st
         </div>
         {problem
           ? <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{problem}</p>
-          : <p className="m-0 text-xs text-[var(--muted)]">JPG, PNG or WebP, up to 2 MB. Saved as soon as you choose it.</p>}
+          : <p className="m-0 text-xs text-[var(--muted)]">JPG, PNG or WebP, up to 2 MB. Saves as soon as you choose it.</p>}
       </div>
     </div>
   );
@@ -254,7 +254,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
     <form id="profile" onSubmit={(event) => { event.preventDefault(); if (dirty) void save(); }} className="flex min-w-0 flex-col gap-6">
       <LeaveGuard dirty={dirty} what="your profile" onDiscard={discard} />
       <FormSections>
-        <FormSection id="profile-about" title="Your details" help="Your team sees your name and photo. Customers never see your phone.">
+        <FormSection id="profile-about" title="Your details" info="Your team sees your name and photo. Customers never see your phone.">
           <ProfilePicture
             name={profile.name}
             version={profile.avatarVersion}
@@ -264,7 +264,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
             <Field label="Name" htmlFor="profile-name">
               <input id="profile-name" className={control} value={name} maxLength={OWN_NAME_MAX} required autoComplete="name" onChange={(event) => setName(event.target.value)} />
             </Field>
-            <Field label="Phone" htmlFor="profile-phone" hint="Your team uses it to reach you.">
+            <Field label="Phone" htmlFor="profile-phone">
               <input id="profile-phone" className={control} type="tel" value={phone} maxLength={OWN_PHONE_MAX} autoComplete="tel" placeholder="(312) 555-0100" onChange={(event) => setPhone(event.target.value)} />
             </Field>
           </FieldRow>
@@ -285,7 +285,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
           </Advanced>
         </FormSection>
 
-        <FormSection id="profile-licences" title="Licence" help="Your own producer numbers. Your owner records the states you are licensed in, on Team & access.">
+        <FormSection id="profile-licences" title="Licence" info="Your own producer numbers. Your owner records the states you are licensed in, on Team & access.">
           {!profile.licenceNumbersReady ? (
             <Callout tone="warning" title="Licence numbers need a database update that has not been applied yet.">Your name and phone still save.</Callout>
           ) : (
@@ -318,7 +318,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
           )}
         </FormSection>
 
-        <FormSection id="profile-languages" title="Languages you speak" help="Callers who speak one of these are offered to you first. Your manager sees the same list in Lead routing.">
+        <FormSection id="profile-languages" title="Languages you speak" info="Callers who speak one of these are offered to you first. Your manager sees the same list in Lead routing.">
           {languages === null ? (
             <p className="m-0 text-sm text-[var(--muted)]">Loading your languages…</p>
           ) : "error" in languages ? (

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 export function TableCard({
   title,
   description,
+  info,
   action,
   toolbar,
   filters,
@@ -28,6 +30,8 @@ export function TableCard({
 }: {
   title?: string;
   description?: string;
+  /** Why the list exists, behind an (i) beside the title (2026-10-29). */
+  info?: string;
   action?: ReactNode;
   toolbar?: ReactNode;
   /** Under the toolbar, above the table: `<FilterPanel>` then `<ActiveFilters>` (UI-CONSISTENCY §6a). */
@@ -51,7 +55,12 @@ export function TableCard({
       {hasHeading && (
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div className="min-w-0">
-            {title && <h2 className="text-card-title text-[var(--ink)]">{title}</h2>}
+            {title && (
+              <div className="flex min-w-0 items-center gap-1">
+                <h2 className="text-card-title text-[var(--ink)]">{title}</h2>
+                {info && <InfoTip label={`About ${title.toLowerCase()}`}>{info}</InfoTip>}
+              </div>
+            )}
             {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
           </div>
           {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}

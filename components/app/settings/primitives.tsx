@@ -15,6 +15,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
 
@@ -187,6 +188,7 @@ export function Callout({ tone, title, children, className }: { tone: Tone; titl
 export function SettingsCard({
   title,
   sub,
+  info,
   children,
   className,
   bodyClassName,
@@ -195,6 +197,9 @@ export function SettingsCard({
 }: {
   title?: ReactNode;
   sub?: ReactNode;
+  /** Why the card exists, behind an (i) beside the title (owner, 2026-10-29). `sub` is for one line
+   *  that must be read to use the card. */
+  info?: ReactNode;
   children?: ReactNode;
   className?: string;
   bodyClassName?: string;
@@ -208,7 +213,12 @@ export function SettingsCard({
       {(title || sub || action) && (
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            {title && <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>}
+            {title && (
+              <div className="flex min-w-0 items-center gap-1">
+                <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>
+                {info && <InfoTip label={typeof title === "string" ? `About ${title.toLowerCase()}` : "About this card"}>{info}</InfoTip>}
+              </div>
+            )}
             {sub && <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
           </div>
           {action}

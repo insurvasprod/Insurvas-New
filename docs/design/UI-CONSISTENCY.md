@@ -425,14 +425,16 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 
 - **One frame:** breadcrumb, the section's title top-left and one line on what it is for; the
   "Last changed · History" line under it. The settings menu starts level with the first card.
-- **Form sections:** a group's title and help on the left, its fields on the glass card on the right
-  (`FormSection`); stacked on a phone. Short fields share a row (`FieldRow`).
+- **Form sections:** a group's title, with its (i), above its fields on a full-width glass card
+  (`FormSection`, stacked: the owner's choice on 2026-10-29). A status or link sits at the end of the
+  title row. Short fields share a row (`FieldRow`).
 - **Help behind the (i)** (owner, 2026-10-29: text across the page is overwhelming). Why a section
   exists goes in `FormSection`'s `info`, an `InfoTip` beside the title that opens on hover and on
-  click, in one or two plain sentences. What a field needs while it is typed in, what an action will
-  do, live status and legal wording stay on screen. Business identity is the pilot, in the proposed
-  `layout="stacked"` (title above a full-width card); the `section-help` ratchet counts the
-  paragraphs still to move.
+  click, in one or two plain sentences; `SettingsCard` and `TableCard` take the same `info`. What a
+  field needs while it is typed in, what an action will do, live status and legal wording stay on
+  screen. The `section-help` ratchet keeps help paragraphs from coming back.
+- **Menus as a tree:** the agent sidebar and the settings menu draw one rounded elbow per page under
+  its group, each starting a little under the one above; the current page's elbow is the accent.
 - **One save model per section.** A section edited as a draft has the save bar at the bottom
   (`SettingsSaveBar` + `DraftActions`, solid, with the change count) and a `LeaveGuard`. Switches and
   single choices that stand alone save at once with a quiet "Saved" (`useAutosave` / `AutosaveNote`).

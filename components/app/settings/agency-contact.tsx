@@ -64,7 +64,6 @@ export function PartnerSupportCard() {
   return (
     // Not the agency's own phone (that is Address & contact): the help line partners see (owner, 2026-10-27).
     <FormSection
-      layout="stacked"
       title="Support contact for partners"
       info="Publishers and call centres see this in their portal's Messages when they need help. It is not your business phone, which is on Contact & address. Leave a field blank to hide it."
     >
@@ -105,7 +104,7 @@ export function PartnerSupportCard() {
 export function OwnershipCard({ team, workspace }: { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null }) {
   const owners = (team?.members ?? []).filter((member) => member.role === "owner" && member.status === "active");
   return (
-    <FormSection layout="stacked" title="Ownership">
+    <FormSection title="Ownership">
       <div id="identity-ownership">
         <KeyValues
           items={[

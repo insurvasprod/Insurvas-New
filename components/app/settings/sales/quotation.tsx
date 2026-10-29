@@ -138,7 +138,7 @@ export function SalesQuotationTemplates() {
             total={rowsShown.length}
             noun="templates"
             title="What each carrier and product needs"
-            description="One row per pair. A pair with no template falls back to the platform one."
+            info="One row per pair. A pair with no template falls back to the platform one."
             toolbar={
               <DataToolbar
                 actions={
@@ -204,7 +204,7 @@ export function SalesQuotationTemplates() {
           {selected && (
             <SettingsCard
               title={`${carrierLabel(selected)} · ${productLabel(selected)} · v${selected.version}`}
-              sub="Switch an input on and the Quote step asks for it. Switch it off and it is not asked, not stored."
+              info="Switch an input on and the Quote step asks for it. Switch it off and it is not asked, not stored."
             >
               <div className="flex flex-col gap-5">
                 <div className="grid gap-[18px] sm:grid-cols-2">

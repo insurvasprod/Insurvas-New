@@ -360,7 +360,7 @@ export function SalesDisclosures() {
             total={docs.length}
             noun="documents"
             title="The library"
-            description="One row per document. A version is superseded, never overwritten."
+            info="One row per document. A version is superseded, never overwritten."
             toolbar={
               <DataToolbar
                 actions={
@@ -414,7 +414,7 @@ export function SalesDisclosures() {
             )}
           </PagedTableCard>
 
-          <PagedTableCard total={liveRules.length} noun="rules" title="What triggers them" description="Read top to bottom against the case. A document named twice is attached once.">
+          <PagedTableCard total={liveRules.length} noun="rules" title="What triggers them" info="Read top to bottom against the case. A document named twice is attached once.">
             {liveRules.length === 0 ? (
               <EmptyState title="No rules yet" hint="No published document has a rule, so none is required on its own. Open a document to add one." />
             ) : (

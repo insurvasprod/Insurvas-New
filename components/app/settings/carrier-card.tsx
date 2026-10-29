@@ -19,6 +19,7 @@ import { ChevronDown } from "lucide-react";
 
 import { Callout, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip } from "@/components/ui/status-chip";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -276,7 +277,7 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
   return (
     <section aria-label="Contract" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <span className={KICKER}>Contract{!contract && <span className="font-medium normal-case tracking-normal">· optional</span>}</span>
+        <span className={cn(KICKER, "flex items-center gap-1")}>Contract{!contract && <span className="font-medium normal-case tracking-normal">· optional</span>}<InfoTip label="About the contract level">The level every commission figure is worked out from. A new level from a later date keeps the earlier one for older policies.</InfoTip></span>
         {state === "saving" ? <span className="text-xs text-[var(--muted)]">Saving…</span> : state === "saved" ? <StatusChip tone="good">Saved</StatusChip> : null}
       </div>
       {/* The three fields share the card's width (one row when it fits, the level narrower) and stack
@@ -302,11 +303,11 @@ function ContractSection({ carrierId, carrierName, contract, canEdit, levelId, p
       </div>
       {levelBad && <p className="m-0 text-xs text-[var(--error-ink)]">Write the level as a number, like 110.</p>}
       {error && <Callout tone="error" title={error} />}
-      <p className="m-0 text-xs text-[var(--muted)]">
-        {missing
-          ? `You can sell ${carrierName} without these. Add them for commission figures: 110 means 110%, and the writing number is on your contracting letter. Saves once both are in.`
-          : "The level every commission figure is worked out from. A new level from a later date keeps the earlier one for older policies."}
-      </p>
+      {missing && (
+        <p className="m-0 text-xs text-[var(--muted)]">
+          {`You can sell ${carrierName} without these. Add them for commission figures: 110 means 110%, and the writing number is on your contracting letter. Saves once both are in.`}
+        </p>
+      )}
     </section>
   );
 }

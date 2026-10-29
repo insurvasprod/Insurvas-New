@@ -82,7 +82,7 @@ function Editor({ saved, canEdit, strip, save }: { saved: SalesSettings; canEdit
       {saveError && <Callout tone="error" title={saveError} />}
       {ro && <ReadOnlyNotice what="the quote and QA rules" />}
 
-      <SettingsCard title="Premium plausibility" sub="A premium divided by face amount, in thousands. Anything outside the band is flagged on the case." action={<CardFact>{strip}</CardFact>}>
+      <SettingsCard title="Premium plausibility" info="A premium divided by face amount, in thousands. Anything outside the band is flagged on the case." action={<CardFact>{strip}</CardFact>}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Lowest per $1,000" htmlFor="qa-band-min" error={bandError ?? undefined} hint="All products. A product with its own band, below, is checked against that one.">
             <input id="qa-band-min" type="number" min={0} max={100} step="0.01" inputMode="decimal" className={cn(control, "tabular-nums")} value={draft.min} disabled={ro} aria-invalid={Boolean(bandError) || undefined} onChange={(e) => set({ min: e.target.value })} />
@@ -93,7 +93,7 @@ function Editor({ saved, canEdit, strip, save }: { saved: SalesSettings; canEdit
         </div>
       </SettingsCard>
 
-      <SettingsCard title="What each check does when it fires" sub="Only the appointment check can be set to block. The rest are always warnings.">
+      <SettingsCard title="What each check does when it fires" info="Only the appointment check can be set to block. The rest are always warnings.">
         <div className="grid gap-[18px] sm:grid-cols-2">
           {/* Two to five choices are a segmented control (settings patterns, R3); the anchors stay for search. */}
           <Field label="A carrier we are not appointed with" hint="Warn lets an agent quote it and sort the appointment out after. Block stops the case at the Quote step.">

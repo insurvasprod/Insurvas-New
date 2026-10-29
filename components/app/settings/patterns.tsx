@@ -31,11 +31,11 @@ import { cn } from "@/lib/utils";
  * beside the title (`info`, owner 2026-10-29: text across the page is overwhelming). `help` is for
  * one short line that must be read to fill the group in, and `aside` for a status or a link.
  *
- * Two layouts. "stacked" (proposed in the 2026-10-29 pass, opt-in until the owner picks): the title
- * row above a full-width card, with `aside` at the row's end. "split" (R3): the title on the left,
- * the card on the right.
+ * Two layouts. "stacked" (the default; owner's choice, 2026-10-29): the title row above a full-width
+ * card, with `aside` at the row's end. "split" (R3, kept for comparison): the title on the left, the
+ * card on the right.
  */
-export function FormSection({ id, title, info, infoLabel, help, aside, layout = "split", children, className }: {
+export function FormSection({ id, title, info, infoLabel, help, aside, layout = "stacked", children, className }: {
   id?: string;
   title: ReactNode;
   /** Why the group exists, behind the (i): one or two plain sentences. */

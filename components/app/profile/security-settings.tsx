@@ -247,7 +247,7 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
   return (
     <div id="security" className="flex min-w-0 scroll-mt-24 flex-col gap-6">
       <FormSections>
-        <FormSection id="security-heading" title="Sign-in" help="How you get into your account. Each change asks for your password first.">
+        <FormSection id="security-heading" title="Sign-in" info="How you get into your account. Each change asks for your password first.">
           <SignInRow
             id="security-email"
             label="Email"
@@ -268,7 +268,7 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
           <FormSection
             id="security-two-factor"
             title="Two-step verification"
-            help="A code from an authenticator app each time you sign in. Text messages are not offered."
+            info="A code from an authenticator app each time you sign in. Text messages are not offered."
             aside={twoFactor ? (twoFactor.enabled
               ? <StatusChip tone="good">On since {when(twoFactor.enabledAt ?? "")}</StatusChip>
               : <StatusChip tone={twoFactor.required ? "warning" : "neutral"}>{twoFactor.required ? "Off · required for your role" : "Off"}</StatusChip>) : null}
@@ -331,7 +331,7 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
             )}
           </FormSection>
 
-        <FormSection id="security-sessions" title="Where you're signed in" help="Ending a session signs that device out on its next click.">
+        <FormSection id="security-sessions" title="Where you're signed in" info="Ending a session signs that device out on its next click.">
           {sessions === undefined ? <SectionLoading rows={3} columns={3} label="Loading your sessions" /> : loadFailed.sessions ? (
             <LoadFailed what="your sessions" onRetry={retry} />
           ) : sessions === null ? (

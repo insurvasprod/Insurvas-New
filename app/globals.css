@@ -1832,15 +1832,20 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 .portal-settings-group-chevron { width: 14px; height: 14px; flex: 0 0 auto; transition: transform 140ms ease; }
 .portal-settings-group-chevron.is-open { transform: rotate(180deg); }
 .portal-settings-nav-subsections {
-  display: flex; min-width: 0; flex-direction: column; gap: 0; margin: .125rem 0 .375rem .5rem; padding-left: .5rem;
-  border-left: 1px solid var(--settings-nav-guide, var(--border));
+  display: flex; min-width: 0; flex-direction: column; gap: 0; margin: .125rem 0 .375rem .5rem; padding-left: .75rem;
 }
 .portal-settings-nav-subsections[hidden] { display: none; }
 .portal-settings-subsection { position: relative; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+/* One rounded elbow per page, each starting a little under the one above (owner's reference,
+   2026-10-29): a tree you read parent → child, not a ruler down the side. */
 .portal-settings-subsection::before {
-  position: absolute; top: 50%; left: -9px; width: 9px; height: 1px; background: var(--settings-nav-guide, var(--border));
-  content: ""; pointer-events: none; transform: translateY(-.5px);
+  position: absolute; top: -.375rem; bottom: 50%; left: -.75rem; width: .625rem;
+  border-left: 1.5px solid var(--settings-nav-guide, var(--border-strong));
+  border-bottom: 1.5px solid var(--settings-nav-guide, var(--border-strong));
+  border-bottom-left-radius: .5rem;
+  content: ""; pointer-events: none;
 }
+.portal-settings-subsection[aria-current="page"]::before { border-color: var(--accent-ink); }
 .dark .portal-settings-nav-subsections { --settings-nav-guide: var(--border-strong); }
 @media (min-width: 1024px) {
   .portal-settings-nav { max-height: none; }
@@ -3708,35 +3713,30 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 
 /* ── Sidebar sub-navigation as a tree (manager review 28 Oct §3.1, settings redesign 2026-10-29) ──
-   The group is the heading (icon, bold); its pages hang off one continuous 1px line drawn under the
-   group's icon, with a short elbow to each page, so the eye reads parent → children at a glance.
-   Children are text only (the reference he showed); the active page's elbow takes the accent.
+   The group is the heading (icon, bold); each of its pages hangs off a rounded elbow drawn under the
+   group's icon, each starting a little under the one above (owner's reference, 2026-10-29), so the
+   eye reads parent → children at a glance. Children are text only; the active page's elbow takes
+   the accent.
    Only for groups in the open rail: the collapsed icon rail hides sublists already. */
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) {
   position: relative;
   margin-left: 2.5rem !important; /* under the group's icon */
   padding-left: .7rem !important;
 }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested)::before {
-  content: "";
-  position: absolute;
-  top: .1rem;
-  bottom: 1.07rem;
-  left: 0;
-  width: 1px;
-  background: color-mix(in srgb, var(--muted) 60%, transparent);
-}
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li { position: relative; }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li::before {
   content: "";
   position: absolute;
-  top: 50%;
+  top: -.3rem;
+  bottom: 50%;
   left: -.7rem;
-  width: .5rem;
-  height: 1px;
-  background: color-mix(in srgb, var(--muted) 60%, transparent);
+  width: .55rem;
+  border-left: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-bottom-left-radius: .45rem;
+  pointer-events: none;
 }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li:has(.is-active)::before { background: var(--accent-ink); }
+.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li:has(.is-active)::before { border-color: var(--accent-ink); }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested .portal-agent-nav-icon { display: none; }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested { padding-left: .5rem; font-weight: 400; }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested.is-active { font-weight: 600; }

@@ -12,6 +12,7 @@
  * every request.
  */
 
+import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useState } from "react";
 import { notify } from "@/lib/notify";
@@ -155,7 +156,7 @@ export function SalesExtension() {
       <SalesPanelTop sample={sample} />
       {error && !sample && <SalesLoadError message={error} onRetry={load} />}
 
-      <SettingsCard title="Install" sub="Per device and per person. Nothing is installed for an agent on their behalf.">
+      <SettingsCard title="Install" info="Per device and per person. Nothing is installed for an agent on their behalf.">
         <div className="flex flex-wrap items-center gap-[14px]">
           {detected ? <StatusChip tone="good" dot>Installed on this device</StatusChip> : <StatusChip tone="warning" dot>Not installed on this device</StatusChip>}
           <span className="text-sm leading-[1.5] text-[var(--body)]">{installedVersion ? `Version ${installedVersion}${installedVersion !== latest ? ` · latest is ${latest}` : ""}` : `Latest is ${latest}`}</span>
@@ -168,7 +169,7 @@ export function SalesExtension() {
 
       <TableCard
         title="Where it is allowed to run"
-        description="It has no access to any site that is not on this list."
+        info="It has no access to any site that is not on this list."
         toolbar={
           <DataToolbar
             actions={
@@ -218,7 +219,7 @@ export function SalesExtension() {
 
       <TableCard
         title="Grant history"
-        description="Every grant and every revocation, newest first."
+        info="Every grant and every revocation, newest first."
         footer={history.length > 0 ? <Pager page={shownHistory.current} total={history.length} noun="events" pageSize={HISTORY_PAGE} onPage={setHistoryPage} /> : undefined}
       >
         {pending ? loadingRows : history.length === 0 ? (
@@ -243,17 +244,17 @@ export function SalesExtension() {
         )}
       </TableCard>
 
-      <SettingsCard title="Tokens" sub="What a granted session can do. These are not settings.">
+      <SettingsCard title="What a grant can do" info="Fixed limits on every grant the extension opens. They are not settings.">
         <dl className="m-0 flex flex-col">
           {[
-            { label: "Token lifetime", help: "Scoped to one application and one carrier domain.", value: `${GRANT_LIFETIME_MINUTES} minutes` },
-            { label: "What a token can read", help: "It cannot list cases, or see a second application on the same household.", value: "One application" },
+            { label: "Lasts", help: "Scoped to one application and one carrier domain.", value: `${GRANT_LIFETIME_MINUTES} minutes` },
+            { label: "Can read", help: "It cannot list cases, or see a second application on the same household.", value: "One application" },
             { label: "Sensitive fields", help: "Social Security, bank and card numbers are revealed one at a time and audited.", value: "One at a time" },
           ].map((f) => (
             <div key={f.label} className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] py-[11px] first:border-t-0 first:pt-0">
-              <dt className="min-w-0">
-                <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{f.label}</span>
-                <span className="block text-xs leading-[1.5] text-[var(--muted)]">{f.help}</span>
+              <dt className="flex min-w-0 items-center gap-1">
+                <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{f.label}</span>
+                <InfoTip label={`About ${f.label.toLowerCase()}`}>{f.help}</InfoTip>
               </dt>
               <dd className="m-0 text-sm leading-[1.5] font-semibold text-[var(--ink)]">{f.value}</dd>
             </div>

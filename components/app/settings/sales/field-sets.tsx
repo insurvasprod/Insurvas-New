@@ -163,7 +163,7 @@ export function SalesFieldSets() {
             total={rowsShown.length}
             noun="field sets"
             title="Field sets"
-            description="One per carrier and product, with the platform set behind them."
+            info="One per carrier and product, with the platform set behind them."
             toolbar={
               <DataToolbar
                 actions={

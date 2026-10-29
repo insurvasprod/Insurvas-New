@@ -214,10 +214,10 @@ export function CallingWindowSettingsPanel() {
   const holidays = loaded.federalHolidays;
   const holidayHelp =
     holidays === null
-      ? "Reads the platform’s federal holiday calendar. It could not be read here; the dialer still checks it."
+      ? "The holiday calendar could not be read here; the dialer still checks it."
       : holidays.length === 0
-        ? "Reads the platform’s federal holiday calendar, which has no upcoming dates — so today this blocks nothing."
-        : `Reads the platform’s federal holiday calendar: next ${holidays[0].name}, ${dayMonthYear(holidays[0].date)}. It currently runs to ${dayMonthYear(holidays[holidays.length - 1].date)}.`;
+        ? "No upcoming federal holidays are listed, so today this blocks nothing."
+        : `Next: ${holidays[0].name}, ${dayMonthYear(holidays[0].date)}.`;
 
   return (
     <SettingsStack>

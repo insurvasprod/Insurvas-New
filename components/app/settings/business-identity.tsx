@@ -224,7 +224,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
       <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex flex-col gap-6">
         {tab === "business" && (
           <FormSections>
-            <FormSection layout="stacked" title="Names and licence" info="Clients see the trading name on the welcome pack, statements and letters. Tax forms and regulators use the legal name.">
+            <FormSection title="Names and licence" info="Clients see the trading name on the welcome pack, statements and letters. Tax forms and regulators use the legal name.">
               <FieldRow>
                 <Field label="Trading name" htmlFor="identity-trading-name">
                   <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
@@ -248,7 +248,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
               </FieldRow>
             </FormSection>
 
-            <FormSection layout="stacked" title="Tax ID" info="Stored encrypted and shown masked; each reveal is recorded. A sole proprietor without an EIN uses their Social Security number." aside={p.hasTaxId ? <StatusChip tone="good">On file</StatusChip> : <StatusChip tone="warning">Not added</StatusChip>}>
+            <FormSection title="Tax ID" info="Stored encrypted and shown masked; each reveal is recorded. A sole proprietor without an EIN uses their Social Security number." aside={p.hasTaxId ? <StatusChip tone="good">On file</StatusChip> : <StatusChip tone="warning">Not added</StatusChip>}>
               <div className="flex flex-col gap-1.5">
                 <span className="text-label text-[var(--body)]">Type</span>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tax ID type">
@@ -274,7 +274,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
               </Field>
             </FormSection>
 
-            <FormSection layout="stacked" title="Time zone" info="How times show for your team, and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state.">
+            <FormSection title="Time zone" info="How times show for your team, and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state.">
               <Field label="Business time zone" htmlFor="identity-timezone">
                 <select id="identity-timezone" className={cn(control, "block max-w-sm")} value={draft.timezone} onChange={set("timezone")}>
                   <option value="">Not set</option>
@@ -287,7 +287,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "address" && (
           <FormSections>
-            <FormSection layout="stacked" title="Address" info="Your agency’s own address, as clients and carriers see it. Letters and statements print it.">
+            <FormSection title="Address" info="Your agency’s own address, as clients and carriers see it. Letters and statements print it.">
               <FieldRow>
                 <Field label="Address" htmlFor="identity-address-line1">
                   <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
@@ -311,7 +311,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                 </Field>
               </FieldRow>
             </FormSection>
-            <FormSection layout="stacked" title="Contact" info="How clients and carriers reach the agency. Your own phone is on My profile.">
+            <FormSection title="Contact" info="How clients and carriers reach the agency. Your own phone is on My profile.">
               <FieldRow>
                 <Field label="Business phone" htmlFor="identity-phone">
                   <input id="identity-phone" type="tel" className={control} value={draft.phone} onChange={set("phone")} autoComplete="tel" placeholder="(312) 555-0100" />
@@ -329,7 +329,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "documents" && (
           <FormSections>
-            <FormSection layout="stacked" title="Logo" info="Without a logo, documents print your trading name as text.">
+            <FormSection title="Logo" info="Without a logo, documents print your trading name as text.">
               <div className="flex flex-wrap items-center gap-4">
                 <div id="identity-logo" className="flex h-16 min-w-40 items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] m-glass-inset px-4">
                   {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL from private storage */}
@@ -345,7 +345,6 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
             </FormSection>
 
             <FormSection
-              layout="stacked"
               title="Documents that use it"
               info="Each document checks these details before it is made, and says which one is missing."
               aside={<StatusChip tone={notReady ? "warning" : "good"}>{ready} of {docs.length} ready</StatusChip>}
@@ -363,7 +362,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
             </FormSection>
 
             {/* How a letter prints with what is on screen now (owner, 2026-10-27: keep the letterhead from B). */}
-            <FormSection layout="stacked" title="How it prints" info="A letter’s head and foot, from what is on screen now. It changes as you type.">
+            <FormSection title="How it prints" info="A letter’s head and foot, from what is on screen now. It changes as you type.">
               <div className="rounded-[8px] bg-white p-5 text-[rgb(16,32,27)] shadow-[0_10px_30px_rgba(0,0,0,.25)]">
                 <div className="flex items-start justify-between gap-4 border-b-2 border-[rgb(11,94,72)] pb-3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- the same signed logo URL as above */}

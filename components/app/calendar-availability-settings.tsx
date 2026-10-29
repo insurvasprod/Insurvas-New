@@ -481,7 +481,7 @@ export function CalendarAvailabilitySettings() {
         {view === "appointments" && (
           <SettingsCard title="Appointments" className={glass}>
             <div className="flex flex-col gap-5">
-              <ChipField label="Length" hint="How long one appointment takes.">
+              <ChipField label="Length">
                 {withCurrent(LENGTHS, length).map((minutes) => (
                   <ToggleChip key={minutes} selected={minutes === length} disabled={busy} onClick={() => setPolicy({ appointmentMinutes: minutes })}>{minutes} min</ToggleChip>
                 ))}
@@ -625,7 +625,7 @@ export function CalendarAvailabilitySettings() {
                 hint={
                   !bookingReady
                     ? "All agents together. Can be set once a pending database update is applied."
-                    : "All agents together. Leave empty for no agency limit."
+                    : "All agents together."
                 }
               >
                 <input
@@ -646,12 +646,12 @@ export function CalendarAvailabilitySettings() {
                 />
               </Field>
               <Field
-                label="Callback reminder"
+                label="Callback reminder, minutes before"
                 htmlFor="callback-reminder-lead"
                 hint={
                   !reminderReady
-                    ? "Minutes before a callback that its reminder goes out. Can be set once a pending database update is applied."
-                    : "Minutes before a callback that its reminder goes out. Leave empty for the platform default."
+                    ? "Can be set once a pending database update is applied."
+                    : "Empty uses the platform default."
                 }
               >
                 <input

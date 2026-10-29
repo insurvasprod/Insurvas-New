@@ -84,7 +84,7 @@ function DraftExample() {
   return (
     <>
       <FormSections>
-        <FormSection title="Your details" help="How clients, partners and your team see you. Your email is also how you sign in.">
+        <FormSection title="Your details" info="How clients, partners and your team see you. Your email is also how you sign in.">
           <FieldRow>
             <Field label="Full name" htmlFor="p-name"><input id="p-name" className={control} value={draft.name} onChange={set("name")} /></Field>
             <Field label="Phone" htmlFor="p-phone" hint="Shown on quotes and the welcome pack."><input id="p-phone" className={control} value={draft.phone} onChange={set("phone")} /></Field>
@@ -92,7 +92,7 @@ function DraftExample() {
           <Field label="Email" htmlFor="p-email" hint="Changing it asks you to confirm the new address."><input id="p-email" className={control} value={draft.email} onChange={set("email")} /></Field>
         </FormSection>
 
-        <FormSection title="Licence" help="Checked before a quote or an application in a state." aside={<StatusChip tone="good">Verified with NIPR</StatusChip>}>
+        <FormSection title="Licence" info="Checked before a quote or an application in a state." aside={<StatusChip tone="good">Verified with NIPR</StatusChip>}>
           <Field label="National producer number (NPN)" htmlFor="p-npn"><input id="p-npn" className={control} value={draft.npn} onChange={set("npn")} inputMode="numeric" /></Field>
           <FieldRow>
             <Field label="Texas licence number" htmlFor="p-tx"><input id="p-tx" className={control} value={draft.tx} onChange={set("tx")} /></Field>
@@ -100,7 +100,7 @@ function DraftExample() {
           </FieldRow>
         </FormSection>
 
-        <FormSection title="How Insurvas talks to you" help="Your own view only; the agency's settings are unchanged.">
+        <FormSection title="How Insurvas talks to you" info="Your own view only; the agency's settings are unchanged.">
           <Field label="Time zone for dates and reminders" htmlFor="p-tz" hint="More than five choices: a dropdown.">
             <select id="p-tz" className={control} value={draft.timezone} onChange={set("timezone")}>
               {["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"].map((zone) => <option key={zone} value={zone}>{zone.replace("America/", "").replace("Pacific/", "").replace("_", " ")}</option>)}
@@ -134,18 +134,18 @@ function AutosaveExample() {
   const timeout = useAutosave();
   return (
     <FormSections>
-      <FormSection title="Sign-in" help="One row per way in. Each change opens its own short dialog.">
+      <FormSection title="Sign-in" info="One row per way in. Each change opens its own short dialog.">
         <SignInRow label="Email" value="umar.m@powerpolicies.com" action="Change email" />
         <SignInRow label="Password" value="Changed 12 days ago" action="Change password" />
         <SignInRow label="Two-step verification" value={<StatusChip tone="good">On · authenticator app</StatusChip>} action="Manage" />
       </FormSection>
 
-      <FormSection title="Security alerts" help="Each switch saves the moment you change it." aside={<AutosaveNote state={alerts.state} onRetry={alerts.retry} />}>
+      <FormSection title="Security alerts" info="Each switch saves the moment you change it." aside={<AutosaveNote state={alerts.state} onRetry={alerts.retry} />}>
         <ToggleRow id="a-device" title="Email me when a new device signs in" checked={newDevice} onChange={(next) => { setNewDevice(next); void alerts.run(() => pause(600)); }} />
         <ToggleRow id="a-weekly" title="Weekly summary of sign-ins" help="Sent Monday morning." checked={weekly} onChange={(next) => { setWeekly(next); void alerts.run(() => pause(600)); }} />
       </FormSection>
 
-      <FormSection title="Stay signed in" help="On a computer you don't use for anything else." aside={<AutosaveNote state={timeout.state} onRetry={timeout.retry} />}>
+      <FormSection title="Stay signed in" info="On a computer you don't use for anything else." aside={<AutosaveNote state={timeout.state} onRetry={timeout.retry} />}>
         <Segmented label="Sign me out after" value={after} onChange={(next) => { setAfter(next); void timeout.run(() => pause(600)); }} options={[{ key: "8h", label: "8 hours" }, { key: "24h", label: "1 day" }, { key: "7d", label: "7 days" }]} />
       </FormSection>
 
@@ -209,8 +209,8 @@ function HelpExample() {
   return (
     <FormSections>
       <p className="m-0 text-sm text-[var(--muted)]">Rest the mouse on the (i), or click it. The same section in each layout:</p>
-      <FormSection layout="stacked" title="Names (stacked)" infoLabel="About names" info={info} aside={<StatusChip tone="good">Complete</StatusChip>}>{fields}</FormSection>
-      <FormSection title="Names (split)" infoLabel="About names" info={info} aside={<StatusChip tone="good">Complete</StatusChip>}>{fields}</FormSection>
+      <FormSection title="Names (stacked)" infoLabel="About names" info={info} aside={<StatusChip tone="good">Complete</StatusChip>}>{fields}</FormSection>
+      <FormSection layout="split" title="Names (split)" infoLabel="About names" info={info} aside={<StatusChip tone="good">Complete</StatusChip>}>{fields}</FormSection>
     </FormSections>
   );
 }

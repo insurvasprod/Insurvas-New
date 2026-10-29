@@ -76,7 +76,7 @@ function Rendered({ text, values }: { text: string; values: Record<string, strin
 function Preview({ subject, body, me }: { subject: string; body: string; me: SalesSettingsView["me"] }) {
   const values = exampleValues(me);
   return (
-    <SettingsCard title="Preview" sub="An example client, signed with your name and phone." action={<StatusChip dot={false} tone="action">Live</StatusChip>} pad={20}>
+    <SettingsCard title="Preview" info="An example client, signed with your name and phone." action={<StatusChip dot={false} tone="action">Live</StatusChip>} pad={20}>
       <dl className="m-0 flex flex-col gap-2">
         <div>
           <dt className="text-xs leading-[1.5] text-[var(--muted)]">To</dt>
@@ -151,7 +151,7 @@ function Editor({ view, save }: { view: SalesSettingsView; save: (next: SalesSet
         <div className="flex min-w-0 flex-col gap-5">
           <SettingsCard
             title="The four that always go"
-            sub="These cannot be removed from the email."
+            info="These cannot be removed from the email."
             action={<CardFact>{changedLine(view.updatedAt, view.updatedBy, "Not changed yet — this is the Insurvas wording.")}</CardFact>}
           >
             <ul className="m-0 flex list-none flex-col p-0">
@@ -171,7 +171,7 @@ function Editor({ view, save }: { view: SalesSettingsView; save: (next: SalesSet
             </ul>
           </SettingsCard>
 
-          <SettingsCard title="Everything else" sub="The wording around the four is yours.">
+          <SettingsCard title="Everything else" info="The wording around the four is yours.">
             <div className="flex flex-col gap-4">
               <Field label="Subject" htmlFor="wp-subject" required>
                 <input id="wp-subject" className={control} value={subject} disabled={ro} onChange={(e) => setSubject(e.target.value)} />

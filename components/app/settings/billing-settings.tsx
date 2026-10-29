@@ -23,6 +23,7 @@ import { ExternalLink } from "lucide-react";
 import { Callout, control, KeyValues, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { HoverHint } from "@/components/ui/hover-hint";
+import { InfoTip } from "@/components/ui/info-tip";
 import { SectionLoading } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { ViewTabs } from "@/components/ui/view-tabs";
@@ -197,8 +198,10 @@ export function BillingSettings() {
     <div className="flex flex-wrap items-center gap-3.5">
       <span className="grid h-9 w-14 shrink-0 place-items-center rounded-[8px] bg-[var(--surface-alt)] text-xs font-bold tracking-[0.06em] text-[var(--ink)]" aria-hidden="true">{view.cardOnFile ? "CARD" : "LINK"}</span>
       <span className="min-w-[160px] flex-1">
-        <strong className="block text-sm font-semibold text-[var(--ink)]">{view.cardOnFile ? "Card on file with Whop" : "Paid by invoice link"}</strong>
-        <span className="text-xs text-[var(--muted)]">{view.cardOnFile ? "Your card is held by our payment provider, Whop — it never passes through Insurvas." : "This workspace pays each invoice by its own link; there is no card on file."}</span>
+        <strong className="flex items-center gap-1 text-sm font-semibold text-[var(--ink)]">
+          {view.cardOnFile ? "Card on file with Whop" : "Paid by invoice link"}
+          <InfoTip label="About how you pay">{view.cardOnFile ? "Your card is held by our payment provider, Whop. It never passes through Insurvas." : "Each invoice is paid by its own link. There is no card on file."}</InfoTip>
+        </strong>
       </span>
       {updateCard}
     </div>
@@ -453,7 +456,7 @@ export function BillingSettings() {
                 <Button type="button" variant="outline" disabled={busy} onClick={() => { setImpact(null); setTarget(""); }}>Keep my plan</Button>
               </div>
             </Card>
-          ) : view.options.length ? <p className="m-0 text-sm text-[var(--muted)]">Pick a plan to see its price, when it starts and what is added to your next invoice, and for a smaller plan, what you would lose.</p> : null}
+          ) : view.options.length ? <p className="m-0 text-sm text-[var(--muted)]">Pick a plan to see its price, when it starts, and what changes.</p> : null}
         </div>
       )}
 

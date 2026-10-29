@@ -135,7 +135,7 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
       {header}
       {!view.available ? <Callout tone="warning" title="Saving notification preferences needs a database update." /> : null}
 
-      <SettingsCard title="Quiet hours" sub={`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts marked Always on still come through.`}>
+      <SettingsCard title="Quiet hours" info={`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts marked Always on still come through.`}>
         <div id="notify-quiet-hours" className="mt-3 flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-sm">
             <Switch checked={quiet.enabled} disabled={busy || !view.available} label="Quiet hours" onChange={(next) => saveQuiet({ ...quiet, enabled: next })} />
