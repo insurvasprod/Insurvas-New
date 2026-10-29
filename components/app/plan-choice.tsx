@@ -9,7 +9,7 @@ import { FunnelHeading } from "@/components/app/funnel-frame";
 import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelActions } from "@/components/portal/funnel-actions";
 import { Button } from "@/components/ui/button";
-import { BILLING_CYCLES, BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
+import { BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import {
   agencyPlanForSeats,
   choiceTotalCents,
@@ -25,6 +25,10 @@ type Audience = PlanChoiceOption["audience"];
 // Manager review, 2026-10-28: "Independent agent", and a capital A on "Agency".
 const AUDIENCE_LABEL: Record<Audience, string> = { individual: "Independent Agent", agency: "For an Agency" };
 const PER: Record<BillingCycle, string> = { monthly: "month", quarterly: "quarter", yearly: "year" };
+
+/** Sign-up offers two cycles (owner, 2026-10-29): with Quarterly the "Independent Agent" toggle had no room. */
+const SIGNUP_CYCLES: readonly BillingCycle[] = ["monthly", "yearly"];
+const signupCyclesFor = (plan: PlanChoiceOption) => cyclesFor(plan).filter((item) => SIGNUP_CYCLES.includes(item));
 
 export type PlanChoiceInitial = { planCode: string; billingCycle: BillingCycle; seats: number | null; addonCodes: string[] };
 
@@ -62,7 +66,7 @@ const seatsFor = (plan: PlanChoiceOption, wanted: number | null) => {
 };
 
 /**
- * Step 3 of 5, Your plan (owner pick B, 2026-10-26). One state shared by the form on the left and the
+ * the plan screen (step 2 of 3), Your plan (owner pick B, 2026-10-26). One state shared by the form on the left and the
  * summary that replaces the brand story on the right, so the total moves as the owner chooses.
  */
 export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, children }: {
@@ -77,7 +81,8 @@ export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, ch
   const router = useRouter();
   const start = plans.find((plan) => plan.code === initial?.planCode) ?? plans[0];
   const [planCode, setPlanCode] = useState(start.code);
-  const [cycle, setCycleState] = useState<BillingCycle>(initial && start.cents[initial.billingCycle] != null ? initial.billingCycle : cyclesFor(start)[0] ?? "monthly");
+  // A cycle picked on the pricing page is kept, quarterly included (it is still offered there).
+  const [cycle, setCycleState] = useState<BillingCycle>(initial && start.cents[initial.billingCycle] != null ? initial.billingCycle : signupCyclesFor(start)[0] ?? "monthly");
   const [seats, setSeatsState] = useState(seatsFor(start, initial?.seats ?? null));
   // The one-agent plan last chosen, so switching to agency and back does not lose it.
   const [lastSolo, setLastSolo] = useState(start.audience === "individual" ? start.code : null);
@@ -92,7 +97,7 @@ export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, ch
     setSeatsState(nextSeats);
     if (next.audience === "individual") setLastSolo(next.code);
     // A cycle the new plan is not sold on falls back to its first one.
-    if (next.cents[cycle] == null) setCycleState(cyclesFor(next)[0] ?? cycle);
+    if (next.cents[cycle] == null) setCycleState(signupCyclesFor(next)[0] ?? cycle);
   }
 
   const value: ChoiceState = {
@@ -155,7 +160,7 @@ export function PlanChoiceProvider({ plans, modules, initial, now, noPayment, ch
  */
 const segmentTrack = "flex gap-0.5 rounded-lg border border-border bg-[var(--surface-alt)] p-0.5";
 const segment = (active: boolean) => cn(
-  "h-8 flex-1 rounded-md px-3 text-sm font-semibold tracking-[-0.02em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40",
+  "h-8 flex-1 whitespace-nowrap rounded-md px-3 text-sm font-semibold tracking-[-0.02em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40",
   active ? "bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,.08),0_0_0_1px_var(--border)]" : "text-muted-foreground hover:text-foreground",
   "aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:text-muted-foreground",
 );
@@ -195,7 +200,8 @@ export function PlanChoiceForm() {
   const shown = plans.filter((candidate) => candidate.audience === plan.audience);
   // Every cycle any plan is sold on, so the billing control has the same options for both audiences
   // (owner, 2026-10-27); one this audience is not sold on is shown, disabled, with the reason.
-  const cycles = BILLING_CYCLES.filter((item) => plans.some((candidate) => candidate.cents[item] != null));
+  // Monthly and Yearly; Quarterly only when it is the cycle already picked on the pricing page.
+  const cycles = (cycle === "quarterly" ? (["monthly", "quarterly", "yearly"] as BillingCycle[]) : SIGNUP_CYCLES).filter((item) => plans.some((candidate) => candidate.cents[item] != null));
   const soldHere = cycles.filter((item) => shown.some((candidate) => candidate.cents[item] != null));
   const whyNot = (item: BillingCycle) =>
     soldHere.length === 1 && !soldHere.includes(item)
@@ -213,7 +219,8 @@ export function PlanChoiceForm() {
       {/* Who and billing side by side, so the step fits a laptop window (owner, 2026-10-27). Billing
           shows even with one cycle, so the row does not change shape between one agent and agency. */}
       <form onSubmit={(event) => { event.preventDefault(); choice.save(); }} data-auth-fields="" className="flex flex-col gap-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* "Who it is for" gets the wider share: "Independent Agent" stays on one line (owner, 2026-10-29). */}
+        <div className={cn("grid grid-cols-1 gap-4", audiences.length > 1 ? "sm:grid-cols-[3fr_2fr]" : "sm:grid-cols-2")}>
           {audiences.length > 1 && (
             <Section n={1} title="Who it is for">
               <div role="radiogroup" aria-label="Who it is for" className={segmentTrack}>

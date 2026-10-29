@@ -174,7 +174,7 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     .select("id, checkout_url, provider_config_id")
     .eq("tenant_id", tenantId)
     .eq("status", "open")
-    // Only a session for the plan and cycle chosen now: "Change plan" on Payment (Step 4 of 5) must
+    // Only a session for the plan and cycle chosen now: "Change plan" on Payment (the payment screen (step 2 of 3)) must
     // not send the buyer back to a page for the plan they moved away from.
     .eq("plan_id", plan.id)
     .eq("billing_cycle", selection.billing_cycle)

@@ -10,13 +10,25 @@ import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
  */
 // Manager review, 2026-10-28: payment before the business questions, so "About you" is last; it reads
 // right for one agent and for an agency. The showcase opens on feature N at step N.
-export const FUNNEL_STEPS = ["Your account", "Your email", "Your plan", "Payment", "About you"] as const;
-/** 6 is the welcome screen after the plan starts: every step done. */
+//
+// Manager review, 2026-10-28 (§1.9): three steps, not five. The screens keep their own numbers (1 account,
+// 2 email, 3 plan, 4 payment, 5 About you, 6 welcome), which the showcase reads to pick its feature; the
+// progress line groups them: the email check belongs to the account, the plan to its payment.
+export const FUNNEL_STEPS = ["Your account", "Plan & payment", "About you"] as const;
+/** A sign-up screen. 6 is the welcome screen after the plan starts: every step done. */
 export type FunnelStep = 1 | 2 | 3 | 4 | 5 | 6;
 
-/** "Step 2 of 5 · Your email" over five bars: the one AuthSteps, with the sign-up step names. */
+const STEP_OF_SCREEN: Record<FunnelStep, number> = { 1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 4 };
+
+/** The step a screen belongs to, 1–3; 4 means every step is done. */
+export function funnelStepOf(screen: FunnelStep): number {
+  return STEP_OF_SCREEN[screen];
+}
+
+/** "Step 1 of 3 · Your account" over three bars: the one AuthSteps, with the sign-up step names. */
 export function FunnelStepper({ step }: { step: FunnelStep }) {
-  return <AuthSteps current={step} total={FUNNEL_STEPS.length} label={FUNNEL_STEPS[step - 1]} labels={FUNNEL_STEPS} ariaLabel="Sign-up progress" />;
+  const current = funnelStepOf(step);
+  return <AuthSteps current={current} total={FUNNEL_STEPS.length} label={FUNNEL_STEPS[current - 1]} labels={FUNNEL_STEPS} ariaLabel="Sign-up progress" />;
 }
 
 /**
@@ -44,7 +56,7 @@ export function FunnelFrame({ step, children, wide = false, aside, back, stepsAs
       plane="agent"
       mode="sign-up"
       width={wide ? "wide" : "default"}
-      steps={{ current: step, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[step - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: stepsAside }}
+      steps={{ current: funnelStepOf(step), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(step) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: stepsAside }}
       back={back}
       legal={legal}
       story={aside ?? <StoryPanel mode={step === 6 ? "sign-in" : "sign-up"} step={step} noPayment={checkoutPaymentMode() === "none"} />}

@@ -77,7 +77,7 @@ export async function completeCheckout(
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
 
-  // The add-ons ticked on Step 3 of 5, attached the way an admin attaches one, before the entitlement
+  // The add-ons ticked on the plan screen (step 2 of 3), attached the way an admin attaches one, before the entitlement
   // is rebuilt so their features are there on the first screen. Only by the caller that created the
   // subscription. A refused add-on (retired, or no longer offered) is logged and skipped: the plan
   // the owner paid for must start either way.

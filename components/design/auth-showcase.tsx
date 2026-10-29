@@ -6,7 +6,7 @@ import { AuthHeading, AuthLayout, AuthStory, type AuthPlane } from "@/components
 import { AuthAlert, AuthField, AuthInput, AuthSubmit } from "@/components/portal/auth-controls";
 import { BusinessProfileForm } from "@/components/app/business-profile-form";
 import { PlanChoiceForm, PlanChoiceProvider, PlanChoiceSummary, PlanChosenPanel } from "@/components/app/plan-choice";
-import { FUNNEL_STEPS } from "@/components/app/funnel-frame";
+import { FUNNEL_STEPS, funnelStepOf } from "@/components/app/funnel-frame";
 import { FunnelReview } from "@/components/app/funnel-review";
 import { VerifyEmailPanel } from "@/components/app/verify-email-panel";
 import { StoryPanel, TenantAuthWorkspace } from "@/components/app/tenant-auth-workspace";
@@ -77,7 +77,7 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
     "step-1": {
       plane: "agent",
       story: <StoryPanel mode="sign-up" step={1} />,
-      steps: { current: 1, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[0], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(1), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(1) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <><AuthHeading title="Create your account">Already have an account? Sign in</AuthHeading>{fields}</>,
     },
     // The real step 3 form (it only sends on Continue with every answer given), so the page's height
@@ -86,14 +86,14 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
       plane: "agent",
       width: "wide",
       story: <StoryPanel mode="sign-up" step={5} noPayment />,
-      steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(5), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(5) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <BusinessProfileForm key="agent" person={{ firstName: "", lastName: "", phone: "" }} audience="individual" skipHref="#skip" />,
     },
     "step-3-agency": {
       plane: "agent",
       width: "wide",
       story: <StoryPanel mode="sign-up" step={5} noPayment />,
-      steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(5), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(5) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <BusinessProfileForm key="agency" person={{ firstName: "Avery", lastName: "Collins", phone: "+12015550123" }} audience="agency" skipHref="#skip" />,
     },
     // The first-login gate (?finish=1): a skipped profile, asked before the app opens.
@@ -101,7 +101,7 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
       plane: "agent",
       width: "wide",
       story: <StoryPanel mode="sign-up" step={5} />,
-      steps: { current: 5, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[4], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Not now? <a href="#" className="font-semibold text-[var(--accent-ink)]">Sign out</a></> },
+      steps: { current: funnelStepOf(5), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(5) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Not now? <a href="#" className="font-semibold text-[var(--accent-ink)]">Sign out</a></> },
       node: <BusinessProfileForm key="gate" person={{ firstName: "Avery", lastName: "Collins", phone: "" }} audience="agency" gate />,
     },
     // The real screens with Google switched on, before it is on in Supabase (2026-10-27).
@@ -109,32 +109,32 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
     "step-1-google": {
       plane: "agent",
       story: <StoryPanel mode="sign-up" step={1} />,
-      steps: { current: 1, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[0], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Have an account? <a href="#" className="font-semibold text-[var(--accent-ink)]">Sign in</a></> },
+      steps: { current: funnelStepOf(1), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(1) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Have an account? <a href="#" className="font-semibold text-[var(--accent-ink)]">Sign in</a></> },
       node: <SignupForm googleEnabled />,
     },
     "google-finish": {
       plane: "agent",
       story: <StoryPanel mode="sign-up" step={1} />,
-      steps: { current: 1, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[0], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Not you? <a href="#" className="font-semibold text-[var(--accent-ink)]">Use another email</a></> },
+      steps: { current: funnelStepOf(1), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(1) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: <>Not you? <a href="#" className="font-semibold text-[var(--accent-ink)]">Use another email</a></> },
       node: <GoogleFinishForm email="avery@gmail.com" name="Avery Collins" />,
     },
     // The real waiting panel: with no pending account here its status call fails, which shows the error line too.
     "step-2": {
       plane: "agent",
       story: <StoryPanel mode="sign-up" step={2} />,
-      steps: { current: 2, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(2), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(2) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <VerifyEmailPanel ttlHours={24} back="#back" />,
     },
     "step-2-review": {
       plane: "agent",
       story: <StoryPanel mode="sign-up" step={2} />,
-      steps: { current: 2, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(2), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(2) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <FunnelReview title="Your email is confirmed" subtitle="Nothing more to do here." rows={[{ label: "Email", value: "avery@agency.com", done: true }]} continueHref="#continue" back="#back" />,
     },
     "step-4": {
       plane: "agent",
       width: "wide",
-      steps: { current: 3, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[2], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(3), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(3) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       story: planChoices?.plans.length ? <PlanChoiceSummary /> : <StoryPanel mode="sign-up" step={3} />,
       node: planChoices?.plans.length ? <PlanChoiceForm /> : <AuthHeading title="Choose your plan">No published plans could be loaded here.</AuthHeading>,
     },
@@ -142,14 +142,14 @@ export function AuthShowcase({ planChoices = null }: { planChoices?: { plans: Pl
     "step-4-chosen": {
       plane: "agent",
       width: "wide",
-      steps: { current: 3, total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[2], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(3), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(3) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       story: <StoryPanel mode="sign-up" step={3} />,
       node: planChoices?.plans.length ? <PlanChosenPanel /> : <AuthHeading title="Your plan">No published plans could be loaded here.</AuthHeading>,
     },
     done: {
       plane: "agent",
       story: <StoryPanel mode="sign-in" />,
-      steps: { current: 6, total: FUNNEL_STEPS.length, labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
+      steps: { current: funnelStepOf(6), total: FUNNEL_STEPS.length, labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress" },
       node: <AuthHeading title="Here is your first number.">Every line of your statement was matched to a policy.</AuthHeading>,
     },
     partner: {

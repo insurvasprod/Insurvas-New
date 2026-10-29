@@ -11,7 +11,7 @@ import { fetchPlanChoices, readPlanChoice } from "@/lib/signup/planChoiceQueries
 const CHOOSABLE = new Set<string>(PLAN_CHOOSABLE_STATES);
 
 /**
- * Step 3 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, and seats. No
+ * the plan screen (step 2 of 3), Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, and seats. No
  * add-on modules at sign-up (owner, 2026-10-27). The brand story makes way for a live summary of the choice.
  */
 export default async function PlanStepPage({ searchParams }: { searchParams: Promise<{ change?: string }> }) {

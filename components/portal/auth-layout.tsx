@@ -128,7 +128,7 @@ export type AuthStepsProps = {
   aside?: ReactNode;
 };
 
-/** "Step 2 of 5 · Your email" over one bar per step. One stepper, so no screen counts differently. */
+/** "Step 1 of 3 · Your account" over one bar per step. One stepper, so no screen counts differently. */
 export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside }: AuthStepsProps) {
   const done = current > total;
   return (

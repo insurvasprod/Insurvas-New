@@ -6,7 +6,7 @@ import { checkPlanChoice } from "@/lib/signup/planChoice";
 import { fetchPlanChoices, savePlanChoice } from "@/lib/signup/planChoiceQueries";
 import { planChoiceSchema } from "@/lib/signup/schemas";
 
-/** Step 3 of 5: saves the plan, billing cycle, seats and add-ons, then sends the owner to Payment. */
+/** the plan screen (step 2 of 3): saves the plan, billing cycle, seats and add-ons, then sends the owner to Payment. */
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

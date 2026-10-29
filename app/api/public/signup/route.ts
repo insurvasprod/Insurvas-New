@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   const acceptance = verifySignupAcceptance(input.acceptedDocumentIds, required.documents);
   if (!acceptance.ok) return NextResponse.json({ error: acceptance.error }, { status: 400 });
 
-  // The plan is chosen on Step 3 of 5 (owner, 2026-10-26). Until then the workspace holds the plan
+  // The plan is chosen on the plan screen (step 2 of 3) (owner, 2026-10-26). Until then the workspace holds the plan
   // picked on the pricing page, or the default one, so signup_selections is never empty.
   const publicPlans = (await fetchPlans({ includeArchived: false })).filter((candidate) => candidate.is_public);
   const plan = input.planCode
