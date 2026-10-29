@@ -12,7 +12,8 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Copy } from "lucide-react";
+import { Copy, MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { notify } from "@/lib/notify";
 
 import { SampleDataNotice } from "@/components/app/applications/parts";
@@ -96,6 +97,38 @@ export function RowAction({ onClick, children, label, disabled, reason }: { onCl
         {children}
       </Button>
     </WithReason>
+  );
+}
+
+export type RowMenuItem = { label: string; onSelect: () => void; disabled?: boolean; reason?: string | null; danger?: boolean };
+
+/**
+ * A row's other actions behind one "⋯" (2026-10-29): a table row shows one button for its main
+ * action, never four. A disabled item keeps its reason as the item's title.
+ */
+export function RowMenu({ label, items }: { label: string; items: Array<RowMenuItem | false | null | undefined> }) {
+  const shown = items.filter(Boolean) as RowMenuItem[];
+  if (!shown.length) return null;
+  const safe = shown.filter((item) => !item.danger);
+  const danger = shown.filter((item) => item.danger);
+  const row = (item: RowMenuItem) => (
+    <DropdownMenuItem key={item.label} disabled={item.disabled} title={item.disabled && item.reason ? item.reason : undefined} variant={item.danger ? "destructive" : "default"} onSelect={item.onSelect}>
+      {item.label}
+    </DropdownMenuItem>
+  );
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={`More actions for ${label}`}>
+          <MoreHorizontal aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-44">
+        {safe.map(row)}
+        {safe.length > 0 && danger.length > 0 && <DropdownMenuSeparator />}
+        {danger.map(row)}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

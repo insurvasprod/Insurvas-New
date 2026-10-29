@@ -17,6 +17,7 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  ChevronRight,
   Download,
   Edit3,
   MapPin,
@@ -880,7 +881,16 @@ export function PartnersWorkspace({
                       ? `${partner.transfers_this_month.toLocaleString()} ${partner.transfers_this_month === 1 ? "call" : "calls"}`
                       : `${partner.lead_volume_this_month.toLocaleString()} ${partner.lead_volume_this_month === 1 ? "lead" : "leads"}`;
                     return (
-                      <tr key={partner.id} className={cn("m-row", selectedPartner?.id === partner.id && "bg-[var(--primary-soft)]")}>
+                      // The whole row opens the partner, as in any list people use daily (2026-10-29); the
+                      // name stays a button so the keyboard reaches it.
+                      <tr
+                        key={partner.id}
+                        className={cn("m-row group", !selectedPartner && "cursor-pointer", selectedPartner?.id === partner.id && "bg-[var(--primary-soft)]")}
+                        onClick={(event) => {
+                          if (selectedPartner || (event.target as HTMLElement).closest("button, a")) return;
+                          router.push(`/app/publishers/${partner.id}`);
+                        }}
+                      >
                         <td className="max-w-[280px]">
                           <button
                             type="button"
@@ -924,11 +934,13 @@ export function PartnersWorkspace({
                               Close
                             </Button>
                           ) : (
-                            <Button asChild type="button" variant="outline" size="sm">
-                              <Link href={`/app/publishers/${partner.id}`} aria-label={`Open ${partner.name}`}>
-                                Open
-                              </Link>
-                            </Button>
+                            <Link
+                              href={`/app/publishers/${partner.id}`}
+                              aria-label={`Open ${partner.name}`}
+                              className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--muted)] transition-colors group-hover:bg-[var(--surface-alt)] group-hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
+                            >
+                              <ChevronRight className="size-4" aria-hidden="true" />
+                            </Link>
                           )}
                         </td>
                       </tr>

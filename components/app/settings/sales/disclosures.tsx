@@ -20,7 +20,6 @@ import { notify } from "@/lib/notify";
 
 import { Callout, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
@@ -32,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { DisclosureEditor, fieldKind, fieldLabel, toDraft, toInput, type DisclosureDraft } from "./disclosures-editor";
 import {
   BackButton, DialogActions, DiscardSave, LifecyclePill, NOT_SAVED, ReadOnlyNotice, RowAction, SalesDialog, SalesLoadError, SalesLoading, SalesPanelTop,
-  SalesSetupPending, WithReason, notRefreshed, useSalesSample, warnUnsaved, type Lifecycle,
+  SalesSetupPending, WithReason, useSalesSample, warnUnsaved, type Lifecycle,
 } from "./shared";
 
 const API = "/api/app/settings/sales/disclosures";
@@ -361,17 +360,10 @@ export function SalesDisclosures() {
             noun="documents"
             title="The library"
             info="One row per document. A version is superseded, never overwritten."
-            toolbar={
-              <DataToolbar
-                actions={
-                  <>
+            action={
                     <WithReason reason={addReason}>
                       <Button type="button" disabled={!canEdit} onClick={() => openItem(null)}><Plus aria-hidden="true" />Add a document</Button>
                     </WithReason>
-                    <RefreshButton onClick={sample ? notRefreshed : load} refreshing={loading && !sample} />
-                  </>
-                }
-              />
             }
           >
             {docs.length === 0 ? (
