@@ -337,7 +337,7 @@ export function CallingWindowSettingsPanel() {
                               {closed ? (
                                 <StatusChip dot={false} tone="danger">Closed</StatusChip>
                               ) : (
-                                <StatusChip dot={false} tone="good">{minuteLabel(used.start, true)} &ndash; {minuteLabel(used.end, true)}</StatusChip>
+                                <StatusChip dot={false} tone="good">{minuteLabel(used.start)} &ndash; {minuteLabel(used.end)}</StatusChip>
                               )}
                             </td>
                           </tr>

@@ -11,6 +11,7 @@
  * Carrier details, 2026-10-27) save one row at a time.
  */
 
+import { Segmented } from "@/components/ui/view-tabs";
 import { useState } from "react";
 import { notify } from "@/lib/notify";
 
@@ -94,27 +95,24 @@ function Editor({ saved, canEdit, strip, save }: { saved: SalesSettings; canEdit
 
       <SettingsCard title="What each check does when it fires" sub="Only the appointment check can be set to block. The rest are always warnings.">
         <div className="grid gap-[18px] sm:grid-cols-2">
-          <Field label="A carrier we are not appointed with" htmlFor="qa-appointment" hint="Warn lets an agent quote it and sort the appointment out after. Block stops the case at the Quote step.">
-            <select id="qa-appointment" className={control} value={draft.appointmentBlocks ? "block" : "warn"} disabled={ro} onChange={(e) => set({ appointmentBlocks: e.target.value === "block" })}>
-              <option value="warn">Warn</option>
-              <option value="block">Block</option>
-            </select>
+          {/* Two to five choices are a segmented control (settings patterns, R3); the anchors stay for search. */}
+          <Field label="A carrier we are not appointed with" hint="Warn lets an agent quote it and sort the appointment out after. Block stops the case at the Quote step.">
+            <div id="qa-appointment" className="mt-1.5">
+              <Choice label="A carrier we are not appointed with" disabled={ro} value={draft.appointmentBlocks ? "block" : "warn"} onChange={(value) => set({ appointmentBlocks: value === "block" })} options={[{ key: "warn", label: "Warn" }, { key: "block", label: "Block" }]} />
+            </div>
           </Field>
-          <Field label="Draft-date buffer" htmlFor="qa-buffer" hint="Days after the deposit arrives. Two is the earliest safe day; four suits a bank that holds a deposit overnight.">
-            <select id="qa-buffer" className={control} value={draft.buffer} disabled={ro} onChange={(e) => set({ buffer: Number(e.target.value) as Draft["buffer"] })}>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-            </select>
+          <Field label="Draft-date buffer" hint="Days after the deposit arrives. Two is the earliest safe day; four suits a bank that holds a deposit overnight.">
+            <div id="qa-buffer" className="mt-1.5">
+              <Choice label="Draft-date buffer" disabled={ro} value={String(draft.buffer)} onChange={(value) => set({ buffer: Number(value) as Draft["buffer"] })} options={[{ key: "2", label: "2 days" }, { key: "3", label: "3 days" }, { key: "4", label: "4 days" }]} />
+            </div>
           </Field>
-          <Field label="Requirement ageing, N" htmlFor="qa-ageing" error={ageingError ?? undefined} hint={`Amber at ${ageing} days, red at ${ageing * 2}.`}>
+          <Field label="Flag open requirements after (days)" htmlFor="qa-ageing" error={ageingError ?? undefined} hint={`Amber at ${ageing} days, red at ${ageing * 2}.`}>
             <input id="qa-ageing" type="number" min={1} max={60} step={1} className={cn(control, "tabular-nums")} value={draft.ageing} disabled={ro} aria-invalid={Boolean(ageingError) || undefined} onChange={(e) => set({ ageing: e.target.value })} />
           </Field>
-          <Field label="Welcome pack" htmlFor="qa-welcome" hint={draft.autoSend ? "Sent to the client as soon as the attempt is submitted, once per attempt." : "On hold, the pack waits in the agent's queue and nothing goes out until someone opens it."}>
-            <select id="qa-welcome" className={control} value={draft.autoSend ? "auto" : "hold"} disabled={ro} onChange={(e) => set({ autoSend: e.target.value === "auto" })}>
-              <option value="auto">Send automatically</option>
-              <option value="hold">Hold for review</option>
-            </select>
+          <Field label="Welcome pack" hint={draft.autoSend ? "Sent to the client as soon as the attempt is submitted, once per attempt." : "On hold, the pack waits in the agent's queue and nothing goes out until someone opens it."}>
+            <div id="qa-welcome" className="mt-1.5">
+              <Choice label="Welcome pack" disabled={ro} value={draft.autoSend ? "auto" : "hold"} onChange={(value) => set({ autoSend: value === "auto" })} options={[{ key: "auto", label: "Send automatically" }, { key: "hold", label: "Hold for review" }]} />
+            </div>
           </Field>
         </div>
       </SettingsCard>
@@ -140,4 +138,10 @@ export function SalesQaPreferences() {
       {!sample && view && <ProductBands />}
     </SettingsStack>
   );
+}
+
+/** A segmented choice, or the chosen label alone when the page is read-only. */
+function Choice<K extends string>({ label, value, options, onChange, disabled }: { label: string; value: K; options: ReadonlyArray<{ key: K; label: string }>; onChange: (key: K) => void; disabled?: boolean }) {
+  if (disabled) return <span className="text-sm text-[var(--body)]">{options.find((option) => option.key === value)?.label ?? value}</span>;
+  return <Segmented label={label} value={value} onChange={onChange} options={options} />;
 }

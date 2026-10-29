@@ -27,13 +27,16 @@ import { EXTENSION_GRANTS, EXTENSION_STATE, GRANT_MINUTES, SALES_CARRIERS } from
 import { EXTENSION_LATEST_VERSION, GRANT_LIFETIME_MINUTES, type GrantStatus } from "@/lib/extension/constants";
 import type { CarrierSiteView, GrantView } from "@/lib/extension/types";
 import { cn } from "@/lib/utils";
+import { dateTime, dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
+import { DangerZone } from "@/components/app/settings/patterns";
 
 import { DialogActions, SalesDialog, SalesLoadError, SalesPanelTop, WithReason, notRefreshed, notSaved, plural, useSalesSample } from "./shared";
 
 const HISTORY_PAGE = 10;
 const host = (origin: string) => origin.replace(/^https:\/\//, "");
-const when = (iso: string) => new Date(iso).toLocaleString("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+// One date form across Settings ("28 Oct, 12:12" / "28 Oct 2026"; settings audit P9).
+const when = (iso: string) => dateTime(iso, viewerTimeZone());
+const day = (iso: string) => dayMonthYear(iso, viewerTimeZone());
 
 type Row = { id: string; clientName: string; reference: string | null; carrierName: string; origin: string; issuedAt: string; revokedAt: string | null; fieldsRead: number; status: GrantStatus; mine: boolean };
 type Site = { id: string; name: string; origin: string };
@@ -170,9 +173,6 @@ export function SalesExtension() {
           <DataToolbar
             actions={
               <>
-                <WithReason reason={revokeAllReason}>
-                  <Button type="button" variant="outline" className="border-[var(--error)] text-[var(--error-ink)] hover:bg-[var(--error-surface)]" disabled={Boolean(revokeAllReason) || busy} onClick={() => setConfirming(true)}>Revoke every grant</Button>
-                </WithReason>
                 <RefreshButton onClick={refresh} refreshing={pending} />
               </>
             }
@@ -260,6 +260,21 @@ export function SalesExtension() {
           ))}
         </dl>
       </SettingsCard>
+
+      {/* Settings redesign R7: the one step that cuts every agent off, apart and last (it sat beside Refresh). */}
+      {canRevokeAll && (
+        <DangerZone>
+          <div className="flex flex-wrap items-center justify-between gap-4 p-4">
+            <div className="min-w-0 flex-1">
+              <p className="m-0 text-label text-[var(--ink)]">Revoke every grant</p>
+              <p className="mt-1 text-sm leading-[1.5] text-[var(--muted)]">Every active grant, for every person in the agency, ends on the extension&rsquo;s next request. Agents grant again from the Submit step.</p>
+            </div>
+            <WithReason reason={revokeAllReason}>
+              <Button type="button" variant="outline" className="border-[color-mix(in_srgb,var(--error)_55%,var(--border))] text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={Boolean(revokeAllReason) || busy} onClick={() => setConfirming(true)}>Revoke every grant</Button>
+            </WithReason>
+          </div>
+        </DangerZone>
+      )}
 
       <SalesDialog
         open={confirming}
