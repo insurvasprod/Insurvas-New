@@ -329,65 +329,69 @@ export function CarriersSettings() {
       {/* Manager review 29 Oct (10:02–11:10): once set up, the wizard goes and Carriers and States are
           read-only overviews, changed on the Set Up tab, which is always there (owner, 29 Oct). No Add Carriers, no ⋯:
           a person only ticks the carriers that are there, and Field maps (postponed) has its link. */}
-      <ViewTabs
-        label="Contracting"
-        value={step}
-        onChange={pickStep}
-        tabs={[
-          // Always a tab, never hidden behind a button once set-up is done.
-          { key: "setup" as const, label: setupDone ? "Set Up" : `Set Up · ${setup.percent}%` },
-          { key: "carriers" as const, label: "Carriers", count: yours.length },
-          { key: "states" as const, label: "States", count: nAppointed },
-          ...(step === "maps" ? [{ key: "maps" as const, label: "Field maps" }] : []),
-        ]}
-        actions={step === "carriers" || step === "states" ? (
-          // On the tabs' own line: search first, then the quick filter (UI-CONSISTENCY §6).
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <ToolbarSearch value={query} onChange={setQuery} placeholder={step === "carriers" ? "Search carriers" : "Search states"} label="Search carriers and states, or both (like “aetna tx”)" className="sm:w-52" />
-            {/* One dropdown per tab (owner, 29 Oct: "filters as a drop down", with a search at the top):
-                the kit's SelectMenu, so the toolbar fits beside the tabs even with the menu open. */}
-            {step === "carriers" ? (
-              <SelectMenu
-                label="Show carriers"
-                value={carrierFilter}
-                defaultValue="all"
-                onChange={setCarrierFilter}
-                icon={<SlidersHorizontal className="size-4" />}
-                searchPlaceholder="Search filters"
-                className="w-48"
-                options={[
-                  { value: "all", label: "All Carriers", count: carrierCounts.all, group: "Status" },
-                  { value: "ready", label: "Ready to Sell", count: carrierCounts.ready, dot: "bg-[var(--success)]", group: "Status", disabled: carrierCounts.ready === 0 },
-                  { value: "setup", label: "Needs Setup", count: carrierCounts.setup, dot: "bg-[var(--warning)]", group: "Status", disabled: carrierCounts.setup === 0 },
-                  { value: "off", label: "Switched Off", count: carrierCounts.off, dot: "bg-[var(--muted)]", group: "Status", disabled: carrierCounts.off === 0 },
-                ]}
-              />
-            ) : (
-              <SelectMenu
-                label="Show states"
-                value={stateCarrier === "any" ? stateFilter : `${stateFilter === "none" ? "without" : "with"}:${stateCarrier}`}
-                defaultValue="all"
-                onChange={(next: string) => {
-                  const [kind, id] = next.split(":");
-                  if (id) { setStateCarrier(id); setStateFilter(kind === "without" ? "none" : "with"); }
-                  else { setStateCarrier("any"); setStateFilter(kind as typeof stateFilter); }
-                }}
-                icon={<SlidersHorizontal className="size-4" />}
-                searchPlaceholder="Search filters or carriers"
-                className="w-52"
-                options={[
-                  { value: "all", label: "All States", count: US_STATES.length, group: "States" },
-                  { value: "with", label: "With Carriers", count: allStates.filter((row) => row.ids.length > 0).length, group: "States" },
-                  { value: "none", label: "No Carriers Yet", count: allStates.filter((row) => row.ids.length === 0).length, group: "States" },
-                  // Where a carrier is, and where it is missing ("where am I missing Aetna?").
-                  ...yours.map((carrier) => ({ value: `with:${carrier.id}`, label: carrier.name, triggerLabel: `With ${carrier.name}`, dot: dotOf(carrier.id), group: "Has This Carrier", count: allStates.filter((row) => row.ids.includes(carrier.id)).length })),
-                  ...yours.map((carrier) => ({ value: `without:${carrier.id}`, label: carrier.name, triggerLabel: `Without ${carrier.name}`, dot: dotOf(carrier.id), group: "Missing This Carrier", count: allStates.filter((row) => !row.ids.includes(carrier.id)).length })),
-                ]}
-              />
-            )}
-          </div>
-        ) : undefined}
-      />
+      {/* The tabs, the search and the filter in one bar, the same card as the pager at the foot of
+          the list (owner, 29 Oct), so the list sits between two matching bars. */}
+      <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5">
+        <ViewTabs
+          label="Contracting"
+          value={step}
+          onChange={pickStep}
+          tabs={[
+            // Always a tab, never hidden behind a button once set-up is done.
+            { key: "setup" as const, label: setupDone ? "Set Up" : `Set Up · ${setup.percent}%` },
+            { key: "carriers" as const, label: "Carriers", count: yours.length },
+            { key: "states" as const, label: "States", count: nAppointed },
+            ...(step === "maps" ? [{ key: "maps" as const, label: "Field maps" }] : []),
+          ]}
+          actions={step === "carriers" || step === "states" ? (
+            // On the tabs' own line: search first, then the quick filter (UI-CONSISTENCY §6).
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ToolbarSearch value={query} onChange={setQuery} placeholder={step === "carriers" ? "Search carriers" : "Search states"} label="Search carriers and states, or both (like “aetna tx”)" className="sm:w-52" />
+              {/* One dropdown per tab (owner, 29 Oct: "filters as a drop down", with a search at the top):
+                  the kit's SelectMenu, so the toolbar fits beside the tabs even with the menu open. */}
+              {step === "carriers" ? (
+                <SelectMenu
+                  label="Show carriers"
+                  value={carrierFilter}
+                  defaultValue="all"
+                  onChange={setCarrierFilter}
+                  icon={<SlidersHorizontal className="size-4" />}
+                  searchPlaceholder="Search filters"
+                  className="w-48"
+                  options={[
+                    { value: "all", label: "All Carriers", count: carrierCounts.all, group: "Status" },
+                    { value: "ready", label: "Ready to Sell", count: carrierCounts.ready, dot: "bg-[var(--success)]", group: "Status", disabled: carrierCounts.ready === 0 },
+                    { value: "setup", label: "Needs Setup", count: carrierCounts.setup, dot: "bg-[var(--warning)]", group: "Status", disabled: carrierCounts.setup === 0 },
+                    { value: "off", label: "Switched Off", count: carrierCounts.off, dot: "bg-[var(--muted)]", group: "Status", disabled: carrierCounts.off === 0 },
+                  ]}
+                />
+              ) : (
+                <SelectMenu
+                  label="Show states"
+                  value={stateCarrier === "any" ? stateFilter : `${stateFilter === "none" ? "without" : "with"}:${stateCarrier}`}
+                  defaultValue="all"
+                  onChange={(next: string) => {
+                    const [kind, id] = next.split(":");
+                    if (id) { setStateCarrier(id); setStateFilter(kind === "without" ? "none" : "with"); }
+                    else { setStateCarrier("any"); setStateFilter(kind as typeof stateFilter); }
+                  }}
+                  icon={<SlidersHorizontal className="size-4" />}
+                  searchPlaceholder="Search filters or carriers"
+                  className="w-52"
+                  options={[
+                    { value: "all", label: "All States", count: US_STATES.length, group: "States" },
+                    { value: "with", label: "With Carriers", count: allStates.filter((row) => row.ids.length > 0).length, group: "States" },
+                    { value: "none", label: "No Carriers Yet", count: allStates.filter((row) => row.ids.length === 0).length, group: "States" },
+                    // Where a carrier is, and where it is missing ("where am I missing Aetna?").
+                    ...yours.map((carrier) => ({ value: `with:${carrier.id}`, label: carrier.name, triggerLabel: `With ${carrier.name}`, dot: dotOf(carrier.id), group: "Has This Carrier", count: allStates.filter((row) => row.ids.includes(carrier.id)).length })),
+                    ...yours.map((carrier) => ({ value: `without:${carrier.id}`, label: carrier.name, triggerLabel: `Without ${carrier.name}`, dot: dotOf(carrier.id), group: "Missing This Carrier", count: allStates.filter((row) => !row.ids.includes(carrier.id)).length })),
+                  ]}
+                />
+              )}
+            </div>
+          ) : undefined}
+        />
+      </div>
       {(step === "carriers" || step === "states") && answer}
 
       {step === "setup" && (
