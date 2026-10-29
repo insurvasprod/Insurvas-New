@@ -19,7 +19,7 @@ const INBOXES = [
 ] as const;
 
 /**
- * Step 2 of 5: the only screen a pending account can reach. It watches for the verification to
+ * Step 1 of 3 (the email check): the only screen a pending account can reach. It watches for the verification to
  * land — the link can be opened on a phone — and moves on by itself, which is the promise the first
  * line of "What to expect" makes.
  */

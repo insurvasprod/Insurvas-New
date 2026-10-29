@@ -62,7 +62,7 @@ export default async function BusinessProfilePage({ searchParams }: { searchPara
   const [firstName = "", ...rest] = realName ? realName.split(/\s+/) : [];
   const person: AboutYouInitial = { firstName, lastName: rest.join(" "), phone: user?.phone ?? "" };
 
-  // Step 5 of 5, after payment (manager review, 2026-10-28). Back is a button beside Continue; once the
+  // Step 3 of 3, after payment (manager review, 2026-10-28). Back is a button beside Continue; once the
   // plan is paid there is no step to go back to, so it is left out. Before payment (someone who opened
   // this page directly) it goes to the plan.
   return (

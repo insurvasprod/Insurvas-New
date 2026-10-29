@@ -1,7 +1,7 @@
 import { BILLING_CYCLES, type BillingCycle } from "../money.ts";
 
 /**
- * Step 3 of 5, Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, seats, and
+ * the plan screen (step 2 of 3), Your plan (owner pick B, 2026-10-26): who it is for, plan and billing, seats, and
  * any add-on modules the plan offers, with the total worked out as you go.
  *
  * Pure, so the page, the route that saves the choice and the tests agree on one set of rules.

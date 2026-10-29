@@ -29,11 +29,11 @@ type Props = {
 const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
 
 /**
- * Step 1 of 5: the account. Email, password and the legal box, nothing else (manager review,
+ * Step 1 of 3: the account. Email, password and the legal box, nothing else (manager review,
  * 2026-10-28: "the first one should only have email and password", with Google above). Name and phone
  * moved to step 3, About you (components/app/business-profile-form.tsx).
  *
- * The plan has its own step, Step 3 of 5; a plan picked on the pricing page is still carried through
+ * The plan has its own step, the plan screen (step 2 of 3); a plan picked on the pricing page is still carried through
  * and preselected there.
  */
 export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = false, notice = null }: Props) {
@@ -78,7 +78,7 @@ export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = fals
         body: JSON.stringify({
           email: form.get("email"),
           password,
-          // A plan picked on the pricing page; Step 3 of 5 is where it is chosen or changed.
+          // A plan picked on the pricing page; the plan screen (step 2 of 3) is where it is chosen or changed.
           planCode: initialPlanCode || undefined,
           billingCycle: BILLING_CYCLES.includes(initialCycle as BillingCycle) ? initialCycle : undefined,
           // The exact versions shown next to the box that was ticked.

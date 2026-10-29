@@ -37,7 +37,7 @@ export const publicSignupSchema = z.object({
   email: workEmail,
   password: z.string().min(12, "Password must be at least 12 characters").max(200),
   phone: phoneField.optional(),
-  // Optional since the plan has its own step (owner, 2026-10-26: Step 3 of 5). A plan picked on the
+  // Optional since the plan has its own step (owner, 2026-10-26: the plan screen (step 2 of 3)). A plan picked on the
   // pricing page still arrives here; without one the server starts from the default plan.
   planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a valid plan").optional(),
   billingCycle: z.enum(BILLING_CYCLES).optional(),
@@ -47,7 +47,7 @@ export const publicSignupSchema = z.object({
   acceptedDocumentIds: z.array(z.string().uuid()).max(5).default([]),
 });
 
-/** Step 3 of 5, Your plan. The rules (seat bands, add-ons on the plan) are checked in lib/signup/planChoice.ts. */
+/** the plan screen (step 2 of 3), Your plan. The rules (seat bands, add-ons on the plan) are checked in lib/signup/planChoice.ts. */
 export const planChoiceSchema = z.object({
   planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a plan"),
   billingCycle: z.enum(BILLING_CYCLES),

@@ -30,7 +30,7 @@ export type CheckoutViewProps = {
   failed?: boolean;
   /** CHECKOUT_PAYMENT_MODE=none: the button starts the plan at once; no card, no provider. */
   noPayment?: boolean;
-  /** Add-ons ticked on Step 3 of 5. They are attached when the plan starts and billed on the Insurvas invoice. */
+  /** Add-ons ticked on the plan screen (step 2 of 3). They are attached when the plan starts and billed on the Insurvas invoice. */
   addons?: { name: string; price: string; cycle: BillingCycle }[];
   /** Prefills (and locks) the email in Whop's form: the verified account address. */
   email?: string;
@@ -85,8 +85,9 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
     <section
       aria-label="Your plan"
       className={cn(
-        "flex w-full flex-col gap-5",
-        dark ? "mx-auto max-w-[460px] rounded-xl border border-[var(--nav-line)] bg-black/20 p-6 text-[var(--nav-ink)]" : "rounded-xl border border-border bg-card p-4",
+        // Short screens (1366×657): tighter, so Payment never scrolls (manager review, 2026-10-28).
+        "flex w-full flex-col gap-5 [@media(max-height:720px)]:gap-3",
+        dark ? "mx-auto max-w-[460px] rounded-xl border border-[var(--nav-line)] bg-black/20 p-6 text-[var(--nav-ink)] [@media(max-height:720px)]:p-5" : "rounded-xl border border-border bg-card p-4",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -95,18 +96,18 @@ function Receipt({ props, dark }: { props: CheckoutViewProps; dark: boolean }) {
           <h2 className={cn("mt-1 text-2xl font-semibold leading-tight tracking-[-0.02em]", strong)}>{planName ?? "Your plan"}</h2>
           {planLine && <p className={cn("text-sm", muted)}>{planLine}</p>}
         </div>
-        {/* Back to Step 3 of 5: a buyer who picked the wrong plan must not be stuck paying for it. */}
+        {/* Back to the plan screen (step 2 of 3): a buyer who picked the wrong plan must not be stuck paying for it. */}
         <Link href="/app/onboarding/plan?change=1" className={cn("shrink-0 whitespace-nowrap text-sm font-semibold hover:underline", dark ? "text-[var(--nav-ink)]" : "text-[var(--accent-ink)]")}>Change plan</Link>
       </div>
 
       <dl className="text-sm">
         {rows.map((row) => (
-          <div key={row.label} className={cn("flex justify-between gap-4 border-t py-2.5", line)}>
+          <div key={row.label} className={cn("flex justify-between gap-4 border-t py-2.5 [@media(max-height:720px)]:py-1.5", line)}>
             <dt className={muted}>{row.label}</dt>
             <dd className={cn("text-right font-semibold tabular-nums", strong)}>{row.value}</dd>
           </div>
         ))}
-        <div className={cn("flex items-baseline justify-between gap-4 border-t pt-3.5", line)}>
+        <div className={cn("flex items-baseline justify-between gap-4 border-t pt-3.5 [@media(max-height:720px)]:pt-2", line)}>
           <dt className={cn("font-semibold", strong)}>Due today</dt>
           <dd className={cn("text-title-lg font-semibold tabular-nums tracking-[-0.02em]", strong)}>{noPayment || trialDays > 0 ? "$0.00" : price ?? "—"}</dd>
         </div>

@@ -8,7 +8,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import type { PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
 import { AuthHeading, AuthLayout } from "@/components/portal/auth-layout";
-import { ProductShowcase } from "@/components/portal/product-showcase";
+import { AuthShowcase } from "@/components/app/auth-showcase";
 import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
 import { GoogleButton } from "@/components/portal/google-button";
 import { OtpInput } from "@/components/app/otp-input";
@@ -19,23 +19,17 @@ import type { MaintenanceStatus } from "@/lib/system/constants";
 const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
 
 /**
- * The brand panel beside the agent forms: the product, moving (components/portal/product-showcase.tsx).
- * Manager review, 2026-10-28: the old panels (the five-step checklist, the floor lines) "did pretty
- * much nothing"; the left column already shows where you are in sign-up. Sign-up step N opens on
- * feature N, so each step moves the story on; sign-in starts at the first. The payment line stays, as
- * a footnote; it never names a trial length, because that depends on the plan (owner, 2026-10-27).
- * AppAuthFrame (set password, confirm email) shows the sign-in one.
+ * The brand panel beside the agent forms: the product, moving (components/app/auth-showcase.tsx).
+ * Manager review, 2026-10-28: show what the software looks like, one feature at a time, animated.
+ * Sign-up screen N opens on feature N, so each step moves the story on; sign-in starts at the first.
+ * The payment line stays as a footnote; it never names a trial length, because that depends on the
+ * plan (owner, 2026-10-27). AppAuthFrame (set password, confirm email) shows the sign-in one.
  */
 export function StoryPanel({ mode, step = 1, noPayment = false }: { mode: PortalAuthMode; step?: number; noPayment?: boolean }) {
   if (mode === "sign-up") {
-    return (
-      <ProductShowcase
-        start={Math.max(0, step - 1)}
-        footnote={noPayment ? "No card needed" : "Card on Whop's secure checkout · not charged during your trial"}
-      />
-    );
+    return <AuthShowcase step={step} footnote={noPayment ? "No card needed" : "Card on Whop's secure checkout · not charged during your trial"} />;
   }
-  return <ProductShowcase start={0} />;
+  return <AuthShowcase step={0} />;
 }
 
 /**
