@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { confirmAction, type ConfirmOptions } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /* ── form section ──────────────────────────────────────────────────────────────────────────── */
 
@@ -51,7 +52,7 @@ export function FormSection({ id, title, info, infoLabel, help, aside, layout = 
 }) {
   const heading = (
     <div className="flex min-w-0 items-center gap-1">
-      <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>
+      <h3 className="m-0 text-card-title text-[var(--ink)]">{titleCaseNode(title)}</h3>
       {info && <InfoTip label={infoLabel ?? (typeof title === "string" ? `About ${title.toLowerCase()}` : "About this section")}>{info}</InfoTip>}
     </div>
   );

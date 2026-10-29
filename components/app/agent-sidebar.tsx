@@ -82,6 +82,7 @@ import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/menu/sidebar";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
 export type AgentModuleAccess = ModuleAccess;
@@ -128,7 +129,7 @@ function NavItemLink({
             className: "portal-agent-nav-icon",
             "aria-hidden": true,
           })}
-          <span className="portal-agent-nav-label">{label}</span>
+          <span className="portal-agent-nav-label">{titleCaseNode(label)}</span>
         </span>
         {!item.built && (
           <span
@@ -181,7 +182,7 @@ function DisclosureSection({
       >
         <span className="portal-agent-nav-disclosure-copy">
           <Icon className="portal-agent-nav-icon" aria-hidden="true" />
-          <span>{label}</span>
+          <span>{titleCaseNode(label)}</span>
         </span>
         <ChevronDown
           className={`portal-agent-nav-chevron ${open ? "is-open" : ""}`}

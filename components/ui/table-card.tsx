@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/utils";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /**
  * A list page's one object: a card whose table runs edge to edge.
@@ -57,7 +58,7 @@ export function TableCard({
           <div className="min-w-0">
             {title && (
               <div className="flex min-w-0 items-center gap-1">
-                <h2 className="text-card-title text-[var(--ink)]">{title}</h2>
+                <h2 className="text-card-title text-[var(--ink)]">{titleCaseNode(title)}</h2>
                 {info && <InfoTip label={`About ${title.toLowerCase()}`}>{info}</InfoTip>}
               </div>
             )}

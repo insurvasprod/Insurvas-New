@@ -21,6 +21,7 @@ import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
 
 import { cn } from "@/lib/utils";
 import { SectionLastChanged } from "@/components/app/settings/last-changed";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /* ── section header ─────────────────────────────────────────────────────── */
 
@@ -215,7 +216,7 @@ export function SettingsCard({
           <div className="min-w-0">
             {title && (
               <div className="flex min-w-0 items-center gap-1">
-                <h3 className="m-0 text-card-title text-[var(--ink)]">{title}</h3>
+                <h3 className="m-0 text-card-title text-[var(--ink)]">{titleCaseNode(title)}</h3>
                 {info && <InfoTip label={typeof title === "string" ? `About ${title.toLowerCase()}` : "About this card"}>{info}</InfoTip>}
               </div>
             )}

@@ -737,13 +737,13 @@ export function PartnersWorkspace({
       )}
       <PageHeader
         visible
-        title={detailOnly ? (selectedPartner?.name ?? "Lead source") : "Lead sources"}
+        title={detailOnly ? (selectedPartner?.name ?? "Lead Source") : "Lead Sources"}
         description={detailOnly
           ? (selectedPartner ? `${SOURCE_TYPE_SHORT[selectedPartner.partner_type]}${selectedPartner.contact_name ? ` · ${selectedPartner.contact_name}` : ""}` : undefined)
           : "Everyone who sends you leads or live calls: what you pay them, and how they are doing this month."}
         breadcrumbs={detailOnly
-          ? [{ label: "Partners" }, { label: "Lead sources", href: "/app/publishers" }, { label: selectedPartner?.name ?? "Lead source" }]
-          : [{ label: "Partners" }, { label: "Lead sources" }]}
+          ? [{ label: "Partners" }, { label: "Lead Sources", href: "/app/publishers" }, { label: selectedPartner?.name ?? "Lead Source" }]
+          : [{ label: "Partners" }, { label: "Lead Sources" }]}
         meta={detailOnly && selectedPartner ? (
           <span className="mt-2 flex flex-wrap items-center gap-2">
             <StatusChip tone={statusTone(selectedPartner.status)}>{PARTNER_STATUS_LABELS[selectedPartner.status]}</StatusChip>
@@ -864,12 +864,12 @@ export function PartnersWorkspace({
               <table className="portal-lead-table w-full text-left text-sm">
                 <thead>
                   <tr>
-                    <th>Lead source</th>
+                    <th>Lead Source</th>
                     {!selectedPartner && <th>Status</th>}
-                    {!selectedPartner && <th className="text-right" title="Live transfers or leads received this month">This month</th>}
+                    {!selectedPartner && <th className="text-right" title="Live transfers or leads received this month">This Month</th>}
                     {!selectedPartner && <th className="text-right" title="Sales this month">Sales</th>}
-                    {!selectedPartner && <th>Last lead</th>}
-                    {!selectedPartner && <th>You pay</th>}
+                    {!selectedPartner && <th>Last Lead</th>}
+                    {!selectedPartner && <th>You Pay</th>}
                     <th className="text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>

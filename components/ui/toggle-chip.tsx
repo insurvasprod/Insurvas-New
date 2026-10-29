@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Check, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /**
  * The chip a person presses (foundation v3, 2026-10-27): pick one of a few choices, switch a choice
@@ -56,7 +57,7 @@ export function ToggleChip({
       )}
     >
       {selected && !removable && <Check className="size-3.5" aria-hidden="true" />}
-      {children}
+      {titleCaseNode(children)}
       {removable && <X className="size-3.5 opacity-70" aria-hidden="true" />}
     </button>
   );

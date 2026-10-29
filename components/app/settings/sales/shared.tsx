@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 export const NOT_SAVED = "Sample data — not saved";
 
@@ -113,7 +114,7 @@ export function RowMenu({ label, items }: { label: string; items: Array<RowMenuI
   const danger = shown.filter((item) => item.danger);
   const row = (item: RowMenuItem) => (
     <DropdownMenuItem key={item.label} disabled={item.disabled} title={item.disabled && item.reason ? item.reason : undefined} variant={item.danger ? "destructive" : "default"} onSelect={item.onSelect}>
-      {item.label}
+      {titleCaseNode(item.label)}
     </DropdownMenuItem>
   );
   return (

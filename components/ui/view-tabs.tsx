@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 import { TabTrack } from "./tab-track";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 /**
  * A page's views, as segmented tabs on the row under its header: one view at a time instead of
@@ -74,7 +75,7 @@ export function ViewTabs<K extends string>({
     <TabTrack role="tablist" aria-label={label} className={TRACK} data-page-lead={actions ? undefined : ""}>
       {tabs.map((tab) => {
         const selected = tab.key === value;
-        const body = <>{tab.label}<Count value={tab.count} tone={tab.tone} /></>;
+        const body = <>{titleCaseNode(tab.label)}<Count value={tab.count} tone={tab.tone} /></>;
         const panel = typeof controls === "function" ? controls(tab.key) : controls;
         const id = idPrefix ? `${idPrefix}-${tab.key}` : panel ? `${panel}-tab-${tab.key}` : undefined;
         return tab.href ? (
@@ -155,7 +156,7 @@ export function UnderlineTabs<K extends string>({
             )}
           >
             {tab.marker}
-            {tab.label}
+            {titleCaseNode(tab.label)}
             {tab.srSuffix && <span className="sr-only"> {tab.srSuffix}</span>}
             <Count value={tab.count} tone={tab.tone} />
           </button>
@@ -181,7 +182,7 @@ export function Segmented<K extends string>({
     <TabTrack role="group" aria-label={label} className={cn(TRACK, "w-auto")}>
       {options.map((option) => (
         <button key={option.key} type="button" aria-pressed={value === option.key} onClick={() => onChange(option.key)} className={item(value === option.key, "px-2.5")}>
-          {option.label}
+          {titleCaseNode(option.label)}
           <Count value={option.count} tone={option.tone} />
         </button>
       ))}

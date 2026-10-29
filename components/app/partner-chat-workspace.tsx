@@ -396,9 +396,9 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
     <div className="m-stagger flex min-w-0 flex-col gap-4 md:h-[calc(100dvh-var(--top-bar-h)-48px)] lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
       <PageHeader
         visible
-        title="Partner chat"
+        title="Partner Chat"
         description="Messages with your lead sources, next to the leads they are about."
-        breadcrumbs={[{ label: "Partners" }, { label: "Partner chat" }]}
+        breadcrumbs={[{ label: "Partners" }, { label: "Partner Chat" }]}
         actions={<Button type="button" onClick={() => setNewConversationOpen(true)}><Plus aria-hidden="true" />New conversation</Button>}
       />
       {error && <p role="alert" className="m-0 rounded-md border border-[var(--error)]/40 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}

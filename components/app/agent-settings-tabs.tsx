@@ -17,6 +17,8 @@ import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { cn } from "@/lib/utils";
+import { titleCaseNode } from "@/components/ui/title-case";
+import { titleCase } from "@/lib/format/titleCase";
 
 /**
  * The settings shell (LA-8.1). It draws whatever lib/settings/sections.ts registers, gated and
@@ -284,9 +286,9 @@ export function AgentSettingsTabs({
       {active && !guiding && (
         <PageHeader
           visible
-          title={active.label}
+          title={titleCase(active.label)}
           description={active.short ?? active.description}
-          breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: active.label }]}
+          breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: titleCase(active.label) }]}
           // Who last changed something here (LA-8.8), under the purpose line; owners only, like the log.
           meta={role === "owner" ? <SectionLastChanged key={active.id} sectionKey={active.id} /> : undefined}
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
@@ -374,7 +376,7 @@ export function AgentSettingsTabs({
                         )}
                       >
                         <SectionIcon id={tab.id} />
-                        <span className="min-w-0 flex-grow">{tab.label}</span>
+                        <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
                       </Link>
                     );
                   }
@@ -400,7 +402,7 @@ export function AgentSettingsTabs({
                       )}
                     >
                       <SectionIcon id={tab.id} />
-                      <span className="min-w-0 flex-grow">{tab.label}</span>
+                      <span className="min-w-0 flex-grow">{titleCaseNode(tab.label)}</span>
                       {badge && (
                         <span
                           className={cn(

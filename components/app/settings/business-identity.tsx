@@ -234,7 +234,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                 </Field>
               </FieldRow>
               <div className="flex flex-col gap-1.5">
-                <span className="text-label text-[var(--body)]">Entity type</span>
+                <span className="text-label text-[var(--body)]">Entity Type</span>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Entity type">
                   {(Object.keys(ENTITY_TYPE_LABELS) as EntityType[]).map((key) => (
                     <ToggleChip key={key} role="radio" selected={draft.entityType === key} onClick={() => pick("entityType", draft.entityType === key ? "" : key)}>{ENTITY_TYPE_LABELS[key]}</ToggleChip>

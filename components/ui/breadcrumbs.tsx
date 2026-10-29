@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 
 import { buildTrail, parentOf, type Crumb } from "@/lib/navigation/breadcrumbs";
 import { cn } from "@/lib/utils";
+import { titleCaseNode } from "@/components/ui/title-case";
 
 export type { Crumb };
 
@@ -24,7 +25,7 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
       {parent?.href && (
         <Link href={parent.href} className={cn(link, "inline-flex min-h-6 items-center gap-1 sm:hidden")}>
           <ArrowLeft className="size-3.5" aria-hidden="true" />
-          {parent.label}
+          {titleCaseNode(parent.label)}
         </Link>
       )}
       <ol className="m-0 hidden list-none flex-wrap items-center gap-x-1.5 gap-y-1 p-0 sm:flex">
@@ -39,8 +40,8 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
                   {entry.hidden.map((crumb) => (
                     <li key={crumb.label}>
                       {crumb.href
-                        ? <Link href={crumb.href} className="block rounded-md px-2.5 py-1.5 text-sm text-foreground no-underline hover:bg-[var(--surface-alt)]">{crumb.label}</Link>
-                        : <span className="block px-2.5 py-1.5 text-sm text-muted-foreground">{crumb.label}</span>}
+                        ? <Link href={crumb.href} className="block rounded-md px-2.5 py-1.5 text-sm text-foreground no-underline hover:bg-[var(--surface-alt)]">{titleCaseNode(crumb.label)}</Link>
+                        : <span className="block px-2.5 py-1.5 text-sm text-muted-foreground">{titleCaseNode(crumb.label)}</span>}
                     </li>
                   ))}
                 </ul>
@@ -48,9 +49,9 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
             ) : entry.current ? (
               <span aria-current="page" className="text-foreground">{entry.label}</span>
             ) : entry.href ? (
-              <Link href={entry.href} className={link}>{entry.label}</Link>
+              <Link href={entry.href} className={link}>{titleCaseNode(entry.label)}</Link>
             ) : (
-              <span className="text-muted-foreground">{entry.label}</span>
+              <span className="text-muted-foreground">{titleCaseNode(entry.label)}</span>
             )}
           </li>
         ))}
