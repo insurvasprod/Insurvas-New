@@ -15,7 +15,6 @@
 import { useEffect, useState } from "react";
 
 import { Callout, control, LockIcon, SettingsCard, SettingsSectionHeader, SettingsStack, st, Switch } from "@/components/app/settings/primitives";
-import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
@@ -83,7 +82,13 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
   const locked = view.events.filter((e) => e.protected);
   const groups = NOTIFICATION_GROUPS.filter((group) => view.events.some((e) => e.group === group));
   const shown = filter === "all" ? view.events : filter === "locked" ? locked : view.events.filter((e) => e.group === filter);
-  const quietDirty = quiet.enabled !== view.quiet.enabled || quiet.start !== view.quiet.start || quiet.end !== view.quiet.end;
+  // Quiet hours save as they change, like every alert below (settings redesign R4: one save model per
+  // tab). The switch saves on click; a time saves when you leave its field, once it differs.
+  const saveQuiet = (next: View["quiet"]) => {
+    setQuiet(next);
+    const changed = next.enabled !== view.quiet.enabled || next.start !== view.quiet.start || next.end !== view.quiet.end;
+    if (changed && view.available) void save({ quiet: next }, "Quiet hours saved");
+  };
   const switchedOff = view.events.filter((e) => !e.protected && !e.delivery.in_app && !e.delivery.email && !e.delivery.push).length;
 
   const row = (e: EventView) => {
@@ -133,16 +138,16 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
       <SettingsCard title="Quiet hours" sub={`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts marked Always on still come through.`}>
         <div id="notify-quiet-hours" className="mt-3 flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={quiet.enabled} disabled={busy || !view.available} label="Quiet hours" onChange={(next) => setQuiet({ ...quiet, enabled: next })} />
+            <Switch checked={quiet.enabled} disabled={busy || !view.available} label="Quiet hours" onChange={(next) => saveQuiet({ ...quiet, enabled: next })} />
             Quiet hours
           </label>
           <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">From
-            <input type="time" className={`${control} mt-0 w-auto`} value={quiet.start} disabled={busy || !quiet.enabled} onChange={(e) => setQuiet({ ...quiet, start: e.target.value })} />
+            <input type="time" className={`${control} mt-0 w-auto`} value={quiet.start} disabled={busy || !quiet.enabled} onChange={(e) => setQuiet({ ...quiet, start: e.target.value })} onBlur={() => saveQuiet(quiet)} />
           </label>
           <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">Until
-            <input type="time" className={`${control} mt-0 w-auto`} value={quiet.end} disabled={busy || !quiet.enabled} onChange={(e) => setQuiet({ ...quiet, end: e.target.value })} />
+            <input type="time" className={`${control} mt-0 w-auto`} value={quiet.end} disabled={busy || !quiet.enabled} onChange={(e) => setQuiet({ ...quiet, end: e.target.value })} onBlur={() => saveQuiet(quiet)} />
           </label>
-          <Button type="button" disabled={busy || !quietDirty || !view.available} onClick={() => void save({ quiet }, "Quiet hours saved")}>Save</Button>
+          <span className="pb-2 text-xs text-[var(--muted)]">Saved as you change it.</span>
         </div>
       </SettingsCard>
 

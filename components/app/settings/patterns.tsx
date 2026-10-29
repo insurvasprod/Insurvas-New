@@ -115,13 +115,17 @@ export function DangerAction({ title, consequence, label, confirm, onConfirm, di
   title: ReactNode;
   consequence: ReactNode;
   label: string;
-  confirm: Omit<ConfirmOptions, "destructive">;
+  /**
+   * The question asked first. Leave it out only when `onConfirm` opens its own destructive dialog
+   * (one that needs input, such as a code), so a question is always asked.
+   */
+  confirm?: Omit<ConfirmOptions, "destructive">;
   onConfirm: () => void | Promise<void>;
   disabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   async function run() {
-    if (!(await confirmAction({ ...confirm, destructive: true }))) return;
+    if (confirm && !(await confirmAction({ ...confirm, destructive: true }))) return;
     setBusy(true);
     try { await onConfirm(); } finally { setBusy(false); }
   }
