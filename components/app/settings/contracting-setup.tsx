@@ -111,18 +111,20 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   const [failed, setFailed] = useState<string | null>(null);
   // Every tick counts; a read that started before the latest tick is dropped so it never undoes it.
   const edits = useRef(0);
+  // The count lives in a ref too: the read-back must start once, outside a state updater, which
+  // React may call twice (it did in development, so every licence was saved twice).
+  const left = useRef(0);
   const enqueue = useCallback((work: () => Promise<boolean>) => {
     edits.current += 1;
-    setPending((n) => n + 1);
+    left.current += 1;
+    setPending(left.current);
     queue.current = queue.current.then(async () => {
       const ok = await work().catch(() => false);
       if (!ok) setFailed("Something didn't save. The list has been read again, so it shows what is saved.");
     }).finally(() => {
-      setPending((n) => {
-        const left = n - 1;
-        if (left === 0) { const at = edits.current; void reload(() => edits.current !== at); }
-        return left;
-      });
+      left.current -= 1;
+      setPending(left.current);
+      if (left.current === 0) { const at = edits.current; void reload(() => edits.current !== at); }
     });
   }, [reload]);
 
