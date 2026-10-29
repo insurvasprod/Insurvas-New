@@ -96,8 +96,12 @@ export function SettingsSectionHeader({ actions, trail }: {
     // long the purpose line runs, so the text takes what is left rather than pushing them under it.
     <div className="flex flex-wrap items-end justify-between gap-6 lg:flex-nowrap">
       <div className="min-w-0 flex-1">
-        <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{meta.title}</h2>
-        <p className="mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{meta.description}</p>
+        {/* The purpose line sits behind an (i), as in the framed header (owner, 29 Oct: remove it from
+            the page opened from Get set up too). */}
+        <h2 className="m-0 flex items-center gap-1.5 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
+          {meta.title}
+          {meta.description ? <InfoTip label={`About ${meta.title}`} side="bottom">{meta.description}</InfoTip> : null}
+        </h2>
         {meta.history && meta.id && <SectionLastChanged sectionKey={meta.id} />}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}

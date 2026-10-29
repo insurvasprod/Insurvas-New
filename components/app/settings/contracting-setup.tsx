@@ -36,7 +36,7 @@ const CARRIERS_PER_PAGE = 10;
 /** One carrier row's height in step 1 (the row's inputs plus its padding). */
 const CARRIER_ROW_HEIGHT = 53;
 /** A step's footer stays at the bottom of the view while the list scrolls, so Next is always there. */
-const STEP_FOOTER = "sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center justify-between gap-3 rounded-b-[12px] border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3";
+const STEP_FOOTER = "sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto flex flex-wrap items-center justify-between gap-3 rounded-b-[12px] border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3";
 
 export type SetupVault = {
   carriers: { id: string; name: string }[];
