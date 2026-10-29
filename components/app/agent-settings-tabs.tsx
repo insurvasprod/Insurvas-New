@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { SETTINGS_PANELS, type SettingsPanelContext } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
 import { PageHeader } from "@/components/ui/page-header";
+import { LoadingRows } from "@/components/ui/page-states";
 import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
@@ -118,6 +119,12 @@ export function AgentSettingsTabs({
   const router = useRouter();
   const [activeId, setActiveId] = useState(firstAvailable);
   const [anchor, setAnchor] = useState<string | null>(null);
+  // Menu items are `settings-nav-<id>`, not the section's own name: with "#products" the browser
+  // would otherwise scroll the menu to the item and hide its group heading.
+  // The server cannot see "#products", so it would draw the default section and then jump to the
+  // linked one. Until the address has been read, the frame shows its loading look instead
+  // (2026-10-29: Business Identity flashed before Products). A routed section needs no hash.
+  const [hashRead, setHashRead] = useState(Boolean(routeSection));
   // The page header's action slot: a section's Save / Add buttons are drawn there, on the title's line.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const active = useMemo(
@@ -205,6 +212,7 @@ export function AgentSettingsTabs({
         // scrolls to its setting (revealAnchor below).
         if (!target) requestAnimationFrame(() => window.scrollTo({ top: 0 }));
       }
+      setHashRead(true);
     };
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
@@ -227,9 +235,9 @@ export function AgentSettingsTabs({
       if (!fits) nav.scrollTop = itemBottom - groupTop <= nav.clientHeight ? Math.max(0, groupTop - 4) : itemBottom - nav.clientHeight / 2;
     };
     place();
-    const timer = window.setTimeout(place, 120);
-    return () => window.clearTimeout(timer);
-  }, [active?.id]);
+    const timers = [120, 450].map((ms) => window.setTimeout(place, ms));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [active?.id, hashRead]);
 
   // After the tab has rendered (its panel may still be loading), reveal the setting search named.
   useEffect(() => (anchor ? revealAnchor(anchor) : undefined), [anchor, activeId]);
@@ -283,7 +291,14 @@ export function AgentSettingsTabs({
    */
   return (
     <div className="flex min-w-0 flex-col gap-6" data-settings-frame="">
-      {active && !guiding && (
+      {active && !guiding && !hashRead && (
+        <div aria-hidden="true" className="flex flex-col gap-2">
+          <div className="h-3.5 w-36 m-skel rounded-full" />
+          <div className="h-7 w-52 m-skel rounded-md" />
+          <div className="h-3.5 w-96 max-w-full m-skel rounded-full" />
+        </div>
+      )}
+      {active && !guiding && hashRead && (
         <PageHeader
           visible
           title={titleCase(active.label)}
@@ -365,7 +380,7 @@ export function AgentSettingsTabs({
                     return (
                       <Link
                         key={tab.id}
-                        id={tab.id}
+                        id={`settings-nav-${tab.id}`}
                         href={sectionHref(tab)}
                         aria-current={here ? "page" : undefined}
                         onClick={() => revealGroupForSection(tab.id)}
@@ -380,12 +395,12 @@ export function AgentSettingsTabs({
                       </Link>
                     );
                   }
-                  const isActive = active?.id === tab.id;
+                  const isActive = hashRead && active?.id === tab.id;
                   const badge = badgeFor(tab.id);
                   return (
                     <button
                       key={tab.id}
-                      id={tab.id}
+                      id={`settings-nav-${tab.id}`}
                       type="button"
                       aria-current={isActive ? "page" : undefined}
                       aria-controls={`settings-panel-${tab.id}`}
@@ -434,7 +449,7 @@ export function AgentSettingsTabs({
             id={`settings-panel-${active.id}`}
             className="portal-settings-panel min-w-0"
             role="region"
-            aria-labelledby={active.id}
+            aria-labelledby={`settings-nav-${active.id}`}
             tabIndex={-1}
             key={active.id}
           >
@@ -447,7 +462,12 @@ export function AgentSettingsTabs({
                   </p>
                   <fieldset disabled aria-disabled="true" className="m-0 min-w-0 border-0 p-0">{renderActiveContent()}</fieldset>
                 </>
-              ) : renderActiveContent()}
+              ) : hashRead ? renderActiveContent() : (
+                <div role="status" aria-live="polite" className="overflow-hidden rounded-[12px] border border-[var(--border)]">
+                  <span className="sr-only">Loading</span>
+                  <LoadingRows rows={6} columns={3} />
+                </div>
+              )}
             </SettingsSectionProvider>
           </section>
         )}
