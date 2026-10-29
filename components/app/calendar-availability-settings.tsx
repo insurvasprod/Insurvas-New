@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { SectionLoading } from "@/components/ui/page-states";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
@@ -313,7 +314,7 @@ export function CalendarAvailabilitySettings() {
     return (
       <SettingsStack>
         {header}
-        <p role="status" className="text-sm text-[var(--muted)]">Loading calendar settings…</p>
+        <SettingsCard><SectionLoading rows={6} columns={2} label="Loading calendar settings" /></SettingsCard>
       </SettingsStack>
     );
   if (error)
