@@ -30,7 +30,8 @@ const appointment = (carrier_id: string, state: string, status: AppointmentRow["
 });
 
 let appointments: AppointmentRow[] = [
-  ...["TX", "GA", "AL", "FL", "TN"].map((s) => appointment("car-mutual", s)),
+  // 23 states, as a real agency has: enough that the States tab pages (owner's screen, 2026-10-29).
+  ...["TX", "GA", "AL", "FL", "TN", "AK", "AZ", "CA", "CO", "CT", "DC", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "MI", "OH", "PA", "VA"].map((s) => appointment("car-mutual", s)),
   ...["TX", "GA", "FL"].map((s) => appointment("car-aetna", s)),
   appointment("car-americo", "TX", "pending"),
   ...["TX", "GA"].map((s) => appointment("car-foresters", s)),

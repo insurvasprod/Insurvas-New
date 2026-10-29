@@ -39,6 +39,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SectionLoading } from "@/components/ui/page-states";
 import { CarrierCard, ProgressLine, carrierProgress } from "@/components/app/settings/carrier-card";
 import { CarrierFieldMaps } from "@/components/app/settings/carrier-field-maps";
+import { ContractingDetail, type DetailTarget } from "@/components/app/settings/contracting-detail";
 import { ContractingSetup, setupProgress } from "@/components/app/settings/contracting-setup";
 import { Pager } from "@/components/ui/pager";
 import { ViewTabs } from "@/components/ui/view-tabs";
@@ -76,6 +77,9 @@ const SCROLL =
 const PANES = "grid items-start gap-4 @3xl:h-[calc(100dvh-var(--top-bar-h)-250px)] @3xl:grid-cols-[300px_minmax(0,1fr)] @5xl:grid-cols-[360px_minmax(0,1fr)] [&>*]:max-h-[26rem] @3xl:[&>*]:max-h-full";
 /** The kit's glass card (UI-CONSISTENCY §5b), not a local copy of it. */
 const PANE = cardSurface;
+/** A card that opens the side panel: it lifts its border on hover; the open one keeps a ring. */
+const CLICKABLE = "cursor-pointer transition-colors hover:border-[color-mix(in_srgb,var(--primary)_45%,var(--border))]";
+const OPEN = "border-[var(--primary)] ring-1 ring-[var(--primary)]";
 async function send(url: string, method: string, body?: unknown): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await response.json().catch(() => null);
@@ -95,6 +99,10 @@ export function CarriersSettings() {
   const [carrierId, setCarrierId] = useState<string | null>(null);
   // The carrier open in the Edit dialog (Carriers is a read-only grid; editing opens on demand).
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The side panel a Carriers or States card opens; the last entry is on screen, the ones before are Back.
+  const [trail, setTrail] = useState<DetailTarget[]>([]);
+  const openDetail = (next: DetailTarget) => setTrail((current) => [...current, next]);
+  const detail = trail.at(-1) ?? null;
   const today = todayIso();
 
   // The two panes fill exactly what is left of the screen, so the page itself does not scroll
@@ -244,6 +252,7 @@ export function CarriersSettings() {
   // A tab the person picks is written to the address too, so the Get set up bar (which reads the
   // hash) knows the States half is open (owner, 2026-10-28). Same anchors as the deep links above.
   const pickStep = (next: Step) => {
+    setTrail([]);
     openStep(next);
     const hash = next === "states" ? "#carriers/carriers-states" : next === "maps" ? "#carriers/carriers-maps" : next === "setup" ? "#carriers/carriers-setup" : "#carriers";
     if (window.location.hash !== hash) window.location.hash = hash;
@@ -309,12 +318,13 @@ export function CarriersSettings() {
               const off = Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === carrier.id && row.contracted === false));
               const appointed = appointedStatesFor(vault.appointments, carrier.id, today);
               return (
-                <div className={cn(PANE, "flex h-full flex-col gap-3 overflow-hidden p-4", off && "opacity-70")}>
+                <div className={cn(PANE, CLICKABLE, "relative flex h-full flex-col gap-3 overflow-hidden p-4", off && "opacity-70", detail?.kind === "carrier" && detail.id === carrier.id && OPEN)}>
                   <div className="flex items-start justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-2">
+                    {/* The whole card opens the carrier's states: this button stretches over it (Edit sits above). */}
+                    <button type="button" onClick={() => setTrail([{ kind: "carrier", id: carrier.id }])} aria-label={`${carrier.name}: see its states`} className="flex min-w-0 items-center gap-2 text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-[var(--primary)]">
                       <span className={cn("size-2.5 shrink-0 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
                       <span className="truncate text-sm font-semibold text-[var(--ink)]" title={carrier.name}>{carrier.name}</span>
-                    </span>
+                    </button>
                     <ProgressLine progress={progressOf(carrier.id)} switchedOff={off} />
                   </div>
                   <dl className="m-0 grid grid-cols-3 gap-2 text-xs">
@@ -325,7 +335,7 @@ export function CarriersSettings() {
                   {/* Any number of states fits one line: the first few, then "+N" (all of them on hover). */}
                   <div className="mt-auto flex items-center justify-between gap-3">
                     <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>{appointed.length ? firstFew(appointed, 6, " · ") : "No states yet"}</p>
-                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setEditingId(carrier.id)}>Edit</Button>
+                    <Button type="button" variant="outline" size="sm" className="relative z-10 shrink-0" onClick={() => setEditingId(carrier.id)}>Edit</Button>
                   </div>
                 </div>
               );
@@ -396,7 +406,7 @@ export function CarriersSettings() {
             render={(row) => {
               const names = row.ids.map((id) => yours.find((carrier) => carrier.id === id)?.name ?? "");
               return (
-                <div className={cn(PANE, "flex h-full flex-col justify-center gap-2 overflow-hidden px-4")}>
+                <button type="button" onClick={() => setTrail([{ kind: "state", id: row.code }])} aria-label={`${row.name}: see its carriers`} className={cn(PANE, CLICKABLE, "flex h-full w-full flex-col justify-center gap-2 overflow-hidden px-4 text-left focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:outline-none", detail?.kind === "state" && detail.id === row.code && OPEN)}>
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]"><span className="mr-2 font-mono text-xs text-[var(--muted)]">{row.code}</span>{row.name}</span>
                     <span className="shrink-0 text-xs font-semibold tabular-nums text-[var(--accent-ink)]">{row.ids.length === yours.length ? "All carriers" : `${row.ids.length} of ${yours.length}`}</span>
@@ -408,12 +418,33 @@ export function CarriersSettings() {
                     ))}
                     {row.ids.length > 2 && <span className="shrink-0 text-xs font-semibold text-[var(--muted)]">+{row.ids.length - 2} more</span>}
                   </span>
-                </div>
+                </button>
               );
             }}
           />
         );
       })()}
+
+      {detail && (step === "carriers" || step === "states") && (
+        <ContractingDetail
+          target={detail}
+          canGoBack={trail.length > 1}
+          onBack={() => setTrail((current) => current.slice(0, -1))}
+          onOpen={openDetail}
+          onClose={() => setTrail([])}
+          carriers={yours}
+          dotOf={dotOf}
+          levelOf={(id) => { const contract = vault.tenantCarriers.find((row) => row.carrier_id === id && row.is_active); return contract ? String(bpToLevel(contract.contract_level_bp)) : null; }}
+          writingNumberOf={(id) => vault.tenantCarriers.find((row) => row.carrier_id === id && row.is_active)?.writing_number || null}
+          progressOf={progressOf}
+          isOff={(id) => Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === id && row.contracted === false))}
+          appointedStatesOf={(id) => appointedStatesFor(vault.appointments, id, today)}
+          pendingStatesOf={(id) => pendingStatesFor(vault.appointments, id, today)}
+          carriersInState={(code) => carriersIn(vault.appointments, code, today).filter((id) => yours.some((carrier) => carrier.id === id))}
+          onEditCarrier={setEditingId}
+          onChange={() => pickStep("setup")}
+        />
+      )}
     </SettingsStack>
   );
 }
@@ -437,7 +468,13 @@ function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
   render: (item: T) => ReactNode;
 }) {
   const grid = useRef<HTMLUListElement | null>(null);
+  const pager = useRef<HTMLDivElement | null>(null);
   const [perPage, setPerPage] = useState(12);
+  // The rows share whatever height is left over, so the pager sits on the window's bottom margin, in
+  // line with the settings menu, instead of leaving a strip of empty page under it (owner, 2026-10-29).
+  const [height, setHeight] = useState(rowHeight);
+  // Measured again once the pager appears, so its real height is used.
+  const paged = items.length > perPage;
   const [page, setPage] = useState(1);
   useEffect(() => {
     const element = grid.current;
@@ -446,25 +483,32 @@ function FittedGrid<T>({ items, noun, rowHeight, className, keyOf, render }: {
       const style = getComputedStyle(element);
       const columns = Math.max(1, style.gridTemplateColumns.split(" ").filter(Boolean).length);
       const gap = parseFloat(style.rowGap) || 0;
-      // 32px: the shell's bottom padding; 52px: the pager and the gap above it.
-      const room = window.innerWidth >= 1024 ? window.innerHeight - element.getBoundingClientRect().top - 32 - 52 : (rowHeight + gap) * 6;
-      setPerPage(columns * Math.max(1, Math.floor((room + gap) / (rowHeight + gap))));
+      // 32px: the shell's bottom padding; then the pager bar (its own height once drawn) and the gap above it.
+      const desktop = window.innerWidth >= 1024;
+      const below = (pager.current?.offsetHeight ?? 50) + gap;
+      const room = desktop ? window.innerHeight - element.getBoundingClientRect().top - 32 - below : (rowHeight + gap) * 6;
+      const rows = Math.max(1, Math.floor((room + gap) / (rowHeight + gap)));
+      setPerPage(columns * rows);
+      // Only when there is more than one page: a short list keeps its cards at their own height.
+      const filled = desktop && items.length > columns * rows ? Math.floor((room + gap) / rows - gap) : rowHeight;
+      setHeight(Math.max(rowHeight, filled));
     };
     const timer = window.setTimeout(measure, 0);
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    if (pager.current) observer.observe(pager.current);
     window.addEventListener("resize", measure);
     return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
-  }, [rowHeight]);
+  }, [rowHeight, items.length, paged]);
   const pages = Math.max(1, Math.ceil(items.length / perPage));
   const shown = Math.min(page, pages);
   return (
     <div className="flex flex-col gap-3">
-      <ul ref={grid} className={cn("m-0 grid list-none gap-3 p-0", className)} style={{ gridAutoRows: `${rowHeight}px` }}>
+      <ul ref={grid} className={cn("m-0 grid list-none gap-3 p-0", className)} style={{ gridAutoRows: `${height}px` }}>
         {items.slice((shown - 1) * perPage, shown * perPage).map((item) => <li key={keyOf(item)} className="min-w-0">{render(item)}</li>)}
       </ul>
-      {items.length > perPage && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--muted)]">
+      {paged && (
+        <div ref={pager} className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--muted)]">
           <Pager page={shown} total={items.length} noun={noun} pageSize={perPage} onPage={setPage} />
         </div>
       )}

@@ -31,10 +31,18 @@ import { cn } from "@/lib/utils";
 import { InfoTip } from "@/components/ui/info-tip";
 import { Pager } from "@/components/ui/pager";
 
-/** Carriers on one page of step 1 (manager review 29 Oct, 06:09: pages, not one long scroll). */
+/** Carriers on one page of step 1 on a phone (manager review 29 Oct, 06:09: pages, not one long scroll). */
 const CARRIERS_PER_PAGE = 10;
-/** One carrier row's height in step 1 (the row's inputs plus its padding). */
-const CARRIER_ROW_HEIGHT = 53;
+/** One carrier row's least height in step 1: a ticked row's 44px inputs, its padding and its rule. */
+const CARRIER_ROW_HEIGHT = 57;
+
+/**
+ * Watch every box from the element up to the page. The settings frame scrolls inside itself, so the
+ * body never changes size; a line arriving above (the header's "Last changed") grows an ancestor.
+ */
+function observeUp(observer: ResizeObserver, element: Element | null) {
+  for (let node = element?.parentElement ?? null; node; node = node.parentElement) observer.observe(node);
+}
 /** A step's footer stays at the bottom of the view while the list scrolls, so Next is always there. */
 const STEP_FOOTER = "sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto flex flex-wrap items-center justify-between gap-3 rounded-b-[12px] border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3";
 
@@ -122,6 +130,9 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   // (owner, 29 Oct); never more than ten. A phone scrolls anyway and keeps ten.
   const listRef = useRef<HTMLUListElement | null>(null);
   const [perPage, setPerPage] = useState(CARRIERS_PER_PAGE);
+  // The rows share the room down to the footer evenly, so no empty band sits above it (owner, 29 Oct).
+  const [rowHeight, setRowHeight] = useState<number | null>(null);
+  const footerRef = useRef<HTMLElement | null>(null);
   // On a desktop the step's card reaches the bottom of the window (owner, 29 Oct: no empty band under
   // it); the state tiles and the carriers card grow into the room.
   const stepCard = useRef<HTMLElement | null>(null);
@@ -134,20 +145,29 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
       setStepMinHeight(Math.max(0, Math.floor(window.innerHeight - card.getBoundingClientRect().top - 32)));
     };
     const timer = window.setTimeout(measure, 0);
+    // Again whenever the page above moves: the header's "Last changed" line arrives after this mounts
+    // and pushed the card 22px past the window, so the frame scrolled.
+    const observer = new ResizeObserver(measure);
+    observeUp(observer, stepCard.current);
     window.addEventListener("resize", measure);
-    return () => { window.clearTimeout(timer); window.removeEventListener("resize", measure); };
+    return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
   }, [step]);
   useEffect(() => {
     const measure = () => {
       const list = listRef.current;
-      if (!list || window.innerWidth < 1024) { setPerPage(CARRIERS_PER_PAGE); return; }
-      // 32px: the shell's bottom padding; 72px: the footer and the gap above it.
-      const room = window.innerHeight - list.getBoundingClientRect().top - 32 - 72;
-      setPerPage(Math.min(CARRIERS_PER_PAGE, Math.max(4, Math.floor(room / CARRIER_ROW_HEIGHT))));
+      if (!list || window.innerWidth < 1024) { setPerPage(CARRIERS_PER_PAGE); setRowHeight(null); return; }
+      // 32px: the shell's bottom padding; then the footer (its own height once drawn) and the 16px gap above it.
+      const room = window.innerHeight - list.getBoundingClientRect().top - 32 - (footerRef.current?.offsetHeight ?? 64) - 16;
+      const rows = Math.max(1, Math.floor(room / CARRIER_ROW_HEIGHT));
+      setPerPage(rows);
+      setRowHeight(Math.max(CARRIER_ROW_HEIGHT, Math.floor(room / rows)));
     };
     const timer = window.setTimeout(measure, 0);
+    const observer = new ResizeObserver(measure);
+    if (footerRef.current) observer.observe(footerRef.current);
+    observeUp(observer, listRef.current?.parentElement ?? null);
     window.addEventListener("resize", measure);
-    return () => { window.clearTimeout(timer); window.removeEventListener("resize", measure); };
+    return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", measure); };
   }, [step]);
   const needle = query.trim().toLowerCase();
   const library = vault.carriers.filter((carrier) => !needle || carrier.name.toLowerCase().includes(needle));
@@ -196,15 +216,17 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   /* ── layout ────────────────────────────────────────────────────────────────────────────────── */
 
   const saving = pending > 0;
+  // Said only while it is true (owner, 29 Oct: no standing "Saved as you go" line).
   const status = failed
     ? <span role="alert" className="text-xs text-[var(--error-ink)]">{failed}</span>
-    : <span role="status" aria-live="polite" className="text-xs text-[var(--muted)]">{saving ? "Saving…" : "Saved as you go. You can leave and come back."}</span>;
+    : <span role="status" aria-live="polite" className="text-xs text-[var(--muted)] empty:hidden">{saving ? "Saving…" : ""}</span>;
 
   return (
     <div id="contracting-setup" className="flex min-w-0 scroll-mt-24 flex-col gap-4">
       {/* Where you are: two steps, each with its own bar, no card and no connector line (manager review
-          29 Oct, 08:32: "these lines don't look good"). Green when done, the brand colour for the step
-          you are on. Either step can be opened from here. */}
+          29 Oct, 08:32: "these lines don't look good"). One brand green for the step you are on and
+          a done one (owner, 29 Oct: two greens looked wrong); grey for one not started. The current step
+          reads by its ink label. Either step can be opened from here. */}
       <ol aria-label="Set-up steps" className="m-0 grid list-none grid-cols-2 gap-3 p-0">
         {([[1, "Your carriers", mine.length > 0], [2, "Your states", progress.complete]] as const).map(([n, label, done]) => (
           <li key={n}>
@@ -214,11 +236,11 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
               aria-current={step === n ? "step" : undefined}
               className="group flex w-full flex-col gap-2 rounded-md pt-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
             >
-              <span aria-hidden="true" className={cn("h-1 w-full rounded-full transition-colors", step === n ? "bg-[var(--primary)]" : done ? "bg-[var(--success)]" : "bg-[var(--border)] group-hover:bg-[var(--border-strong)]")} />
+              <span aria-hidden="true" className={cn("h-1 w-full rounded-full transition-colors", step === n || done ? "bg-[var(--primary)]" : "bg-[var(--border)] group-hover:bg-[var(--border-strong)]")} />
               <span className={cn("flex items-center gap-2 text-sm font-medium", step === n ? "text-[var(--ink)]" : "text-[var(--muted)] group-hover:text-[var(--ink)]")}>
                 <span className="text-xs tabular-nums text-[var(--muted)]">Step {n}</span>
                 {label}
-                {done && <Check aria-label="done" className="size-3.5 text-[var(--success)]" />}
+                {done && <Check aria-label="done" className="size-3.5 text-[var(--accent-ink)]" />}
               </span>
             </button>
           </li>
@@ -248,6 +270,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                 carrier={carrier}
                 on={mineIds.has(carrier.id)}
                 contract={vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active) ?? null}
+                height={rowHeight}
                 onToggle={() => toggleCarrier(carrier)}
                 send={send}
                 enqueue={enqueue}
@@ -256,15 +279,14 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           </ul>
           {/* Always in view while the step is done (manager review 29 Oct, 05:39). The pages sit here
               with Next, one bar of controls, rather than loose under the list. */}
-          <footer className={STEP_FOOTER}>
-            {status}
-            <span className="flex flex-wrap items-center gap-4">
-              {library.length > perPage && (
-                <span className="flex items-center gap-3 text-xs text-[var(--muted)]">
-                  <Pager page={shownPage} total={library.length} noun="carriers" pageSize={perPage} onPage={setLibraryPage} />
-                </span>
-              )}
-              <Button type="button" disabled={mine.length === 0} onClick={() => setStep(2)}>Next: set up states →</Button>
+          {/* One bar, as under the States cards: the count on the left, the pages and Next on the right. */}
+          <footer ref={footerRef} className={STEP_FOOTER}>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted)]">
+              <Pager page={shownPage} total={library.length} noun="carriers" pageSize={perPage} onPage={setLibraryPage} />
+            </div>
+            <span className="flex items-center gap-3">
+              {status}
+              <Button type="button" disabled={mine.length === 0} onClick={() => setStep(2)}>Next: Set Up States →</Button>
             </span>
           </footer>
         </section>
@@ -378,9 +400,11 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
 }
 
 /** One library carrier: its tick, and once ticked its three optional contract fields on the same row. */
-function CarrierRow({ carrier, on, contract, onToggle, send, enqueue }: {
+function CarrierRow({ carrier, on, contract, height, onToggle, send, enqueue }: {
   carrier: { id: string; name: string };
   on: boolean;
+  /** The row's height on a desktop, shared out so the page of rows reaches the footer. */
+  height: number | null;
   contract: TenantCarrierRow | null;
   onToggle: () => void;
   send: Send;
@@ -401,7 +425,7 @@ function CarrierRow({ carrier, on, contract, onToggle, send, enqueue }: {
 
   const id = `contracting-${carrier.id}`;
   return (
-    <li className={cn("-mx-4 border-b border-[var(--border)] px-4 py-2 last:border-b-0", on && "bg-[color-mix(in_srgb,var(--primary-soft)_45%,transparent)]")}>
+    <li style={height ? { height } : undefined} className={cn("-mx-4 flex flex-col justify-center border-b border-[var(--border)] px-4 py-1.5 last:border-b-0", on && "bg-[color-mix(in_srgb,var(--primary-soft)_45%,transparent)]")}>
       <div className={cn("flex flex-col gap-2 sm:grid", ROW)}>
         <button type="button" role="checkbox" aria-checked={on} onClick={onToggle} className="flex min-w-0 items-center gap-3 rounded-md py-1.5 text-left">
           <span aria-hidden="true" className={cn("inline-grid size-[18px] shrink-0 place-items-center rounded-[5px] border", on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)]")}>{on && <Check className="size-3" />}</span>
