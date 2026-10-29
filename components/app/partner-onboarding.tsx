@@ -73,6 +73,12 @@ export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, last
   ];
   const done = steps.filter((step) => step.state === "Done").length;
 
+  // Once every step is done the checklist is scaffolding: four green ticks and a full bar, kept at the
+  // top of Overview for the rest of the partner's life (owner, 2026-10-29: simplify). It goes, and the
+  // page starts with the figures that keep mattering. It comes back on its own if a step stops holding
+  // — terms expiring, the last product unapproved — because each row is read from the record, not ticked.
+  if (done === steps.length) return null;
+
   const pct = Math.round((done / steps.length) * 100);
   // A checklist with a progress bar, not a data table (2026-10-29): each step says whether it is done,
   // what is missing, and links to where it is done.

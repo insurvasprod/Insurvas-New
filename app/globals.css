@@ -931,7 +931,9 @@ a.portal-top-foot-action { text-decoration: none; }
 /* title size now comes from PageHeader — one 32px title everywhere inside the shell */
 }
 
-.portal-lead-table { width: 100%; min-width: 700px; border-collapse: collapse; font-size: .78rem; }
+/* The min width lives on the element's own `min-w-[…]` class, not here: this rule is unlayered, so a
+   value set here would beat the utility and the column budget would be read from two places. */
+.portal-lead-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
 .portal-lead-table th { background: var(--portal-group); color: var(--portal-muted); font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
 /* In the base layer so a header cell's own `text-right` / `text-center` utility wins over it. */
 @layer base { .portal-lead-table th { text-align: left; } }
@@ -3723,34 +3725,22 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   :has(> .portal-agent-rail) .portal-top-bar .portal-top-actions { flex: 1 1 0; justify-content: flex-end; }
 }
 
-/* ── Sidebar sub-navigation as a tree (manager review 28 Oct §3.1, settings redesign 2026-10-29) ──
-   The group is the heading (icon, bold); each of its pages hangs off a rounded elbow drawn under the
-   group's icon, each starting a little under the one above (owner's reference, 2026-10-29), so the
-   eye reads parent → children at a glance. Children are text only; the active page's elbow takes
-   the accent.
+/* ── Sidebar sub-navigation: indent, no connector (owner, 29 Oct: "get rid of these lines") ──
+   The elbow drawn here until 29 Oct restated what the indent already said: one group is open at a
+   time and its pages sit directly under their heading, so the connector carried no information —
+   and, drawn per item from the row above to its own middle, it ended in mid-air under the last
+   page, which is what read as broken. The settings menu dropped the same lines on 29 Oct
+   (969faf67); the rail now agrees with it.
+   `border-left: 0` here also clears the older straight guides set further up this file, which the
+   elbows had been overriding — removing only the elbows would have brought those back.
    Only for groups in the open rail: the collapsed icon rail hides sublists already. */
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) {
-  position: relative;
-  margin-left: 2.5rem !important; /* under the group's icon */
+  margin-left: 2.5rem !important; /* the pages start under the group's label */
   padding-left: .7rem !important;
-  border-left: 0 !important; /* the older straight guide; the elbows replace it */
+  border-left: 0 !important;
 }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li { position: relative; }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li::before {
-  content: "";
-  position: absolute;
-  top: -.3rem;
-  bottom: 50%;
-  left: -.7rem;
-  width: .55rem;
-  border-left: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
-  border-bottom: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
-  border-bottom-left-radius: .45rem;
-  pointer-events: none;
-}
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li:has(.is-active)::before { border-color: var(--accent-ink); }
-/* Children keep their own icon on the elbow, as in the reference (manager review §3.1: "connected
-   with icons"), one step smaller and quieter than the group's. */
+.portal-agent-nav-business-group .portal-agent-nav-sublist-nested { border-left: 0 !important; }
+/* Children keep their own icon, one step smaller and quieter than the group's. */
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested .portal-agent-nav-icon { width: 1rem; height: 1rem; opacity: .8; }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested.is-active .portal-agent-nav-icon { opacity: 1; }
 .portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested { padding-left: .375rem; gap: .5rem; font-weight: 400; }

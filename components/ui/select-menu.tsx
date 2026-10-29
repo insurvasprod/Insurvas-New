@@ -119,7 +119,9 @@ export function SelectMenu<K extends string>({
           <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", open && "rotate-180")} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className={cn("flex w-72 flex-col overflow-hidden p-0", panelClassName)}>
+      {/* Never taller than the room below the trigger, so the menu does not flip up over the form it
+          belongs to (owner, 2026-10-29); the list inside shrinks to fit rather than fixing its height. */}
+      <PopoverContent align="end" className={cn("flex w-72 max-h-[min(18rem,var(--radix-popover-content-available-height))] flex-col overflow-hidden p-0", panelClassName)}>
         <label className="relative flex shrink-0 items-center border-b border-[var(--border)]">
           <span className="sr-only">{searchPlaceholder}</span>
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 size-4 text-[var(--muted)]" />
@@ -138,7 +140,7 @@ export function SelectMenu<K extends string>({
             className="h-10 w-full bg-transparent pr-3 pl-9 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--muted)] [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
-        <div ref={listRef} id={listId} role="listbox" aria-label={label} className="max-h-80 overflow-y-auto overscroll-contain p-1">
+        <div ref={listRef} id={listId} role="listbox" aria-label={label} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
           {shown.length === 0 && <p className="m-0 px-3 py-6 text-center text-sm text-[var(--muted)]">Nothing matches “{query.trim()}”.</p>}
           {shown.map((option, at) => {
             // A heading where a group starts.
