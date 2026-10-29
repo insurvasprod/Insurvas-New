@@ -309,7 +309,7 @@ export function AgentSettingsTabs({
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
         />
       )}
-      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[256px_minmax(0,1fr)]">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-[224px_minmax(0,1fr)] 2xl:grid-cols-[256px_minmax(0,1fr)]">
       {/* The menu is a list, not a card (no surface, border or blur). Sticky under the top bar and
           only as tall as its list, capped at the window less the top bar, this header and the page's
           padding (10.5rem), so on its own it never makes the page scroll; past that the list scrolls. */}
@@ -447,7 +447,10 @@ export function AgentSettingsTabs({
         {active && (
           <section
             id={`settings-panel-${active.id}`}
-            className="portal-settings-panel min-w-0"
+            // A size container (2026-10-29): beside the app sidebar and this menu, a 1280px screen
+            // leaves the content ~650px, so its grids go side by side on its own width, not the
+            // screen's (lg: was 1024px of screen, which squeezed columns to 18-110px).
+            className="portal-settings-panel @container min-w-0"
             role="region"
             aria-labelledby={`settings-nav-${active.id}`}
             tabIndex={-1}

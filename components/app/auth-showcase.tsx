@@ -80,15 +80,18 @@ export function AuthShowcase({ step = 0, footnote }: { step?: number; footnote?:
     // Long enough for a scene's own animation to finish and be read.
     const timer = window.setInterval(() => setIndex((current) => (current + 1) % SCENES.length), 7000);
     return () => window.clearInterval(timer);
-  }, [paused, reducedMotion, pointerInside, focusInside]);
+    // `index`: a scene picked by hand gets its full seven seconds before the next one.
+  }, [paused, reducedMotion, pointerInside, focusInside, index]);
 
   return (
     <section
       className="mx-auto w-full max-w-[40rem]"
       aria-label="Insurvas product preview"
-      onPointerEnter={() => setPointerInside(true)}
+      // Rests only while a mouse is over it or the keyboard is in it (2026-10-29: a tap or a click left
+      // focus on a scene button, or sent no pointer-leave on touch, and the rotation never came back).
+      onPointerEnter={(event) => { if (event.pointerType === "mouse") setPointerInside(true); }}
       onPointerLeave={() => setPointerInside(false)}
-      onFocusCapture={() => setFocusInside(true)}
+      onFocusCapture={(event) => { if ((event.target as HTMLElement).matches?.(":focus-visible")) setFocusInside(true); }}
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusInside(false); }}
     >
       <div key={`copy-${scene.key}`} className={styles.copy}>

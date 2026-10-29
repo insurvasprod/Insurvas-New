@@ -428,7 +428,7 @@ export function PipelinesOutcomesSettings() {
       {saveError && <Callout tone="error" title={saveError} />}
 
       <div className={cn(cardSurface, "px-4 pt-3 pb-3.5")}>
-        <div className="mb-2.5 grid grid-cols-[minmax(0,300px)_1fr_minmax(0,300px)] items-center border-b border-[var(--border)] pb-2">
+        <div className="mb-2.5 grid grid-cols-[minmax(0,280px)_minmax(96px,1fr)_minmax(0,280px)] items-center border-b border-[var(--border)] pb-2">
           <span data-guide="pipeline-outcomes" className={KICKER}>Outcomes · {draft.outcomes.filter((o) => o.active).length}<Hint id="hint-outcomes" label="About outcomes" text="What an agent can pick after a call." /></span>
           {/* The map's title sits in the middle, between the two columns it joins (owner, 2026-10-27). */}
           <span className="flex min-w-0 flex-wrap items-center justify-center gap-x-4 gap-y-1 px-3">
@@ -445,7 +445,7 @@ export function PipelinesOutcomesSettings() {
           <span className={KICKER}>Stages · {stages.length}<Hint id="hint-stages" label="About stages" text="Where a lead sits in this pipeline, in order. Drag ⋮⋮ to reorder." /></span>
         </div>
         <div ref={scrollRef} className={cn(SCROLL, "pr-1.5", mapHeight === null && "max-h-[420px]")} style={mapHeight === null ? undefined : { height: mapHeight }}>
-          <div className="grid grid-cols-[minmax(0,300px)_1fr_minmax(0,300px)] items-start">
+          <div className="grid grid-cols-[minmax(0,280px)_minmax(96px,1fr)_minmax(0,280px)] items-start">
             <div className="flex flex-col gap-1.5">
               {outcomes.map((outcome) => {
                 const Icon = OUTCOME_ICON[iconFor(outcome.label, outcome.key)];

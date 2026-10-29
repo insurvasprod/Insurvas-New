@@ -78,7 +78,7 @@ const SCROLL =
 /** The two panes fill the screen on desktop; on a phone they stack and the list scrolls in place. */
 // Each pane is only as tall as what is in it, up to the screen's height, where it scrolls
 // (owner, 2026-10-29: no empty card when a list is short).
-const PANES = "grid items-start gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-250px)] lg:grid-cols-[360px_minmax(0,1fr)] lg:[&>*]:max-h-full";
+const PANES = "grid items-start gap-4 @3xl:h-[calc(100dvh-var(--top-bar-h)-250px)] @3xl:grid-cols-[300px_minmax(0,1fr)] @5xl:grid-cols-[360px_minmax(0,1fr)] [&>*]:max-h-[26rem] @3xl:[&>*]:max-h-full";
 /** The kit's glass card (UI-CONSISTENCY §5b), not a local copy of it. */
 const PANE = cardSurface;
 const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
@@ -130,7 +130,8 @@ export function CarriersSettings() {
   const [paneHeight, setPaneHeight] = useState<number | null>(null);
   const fit = useCallback(() => {
     const element = panes.current;
-    if (!element || window.innerWidth < 1024) { setPaneHeight(null); return; }
+    // Only while the two panes sit side by side (48rem of content); stacked, each is as tall as it is.
+    if (!element || (element.parentElement?.clientWidth ?? 0) < 768) { setPaneHeight(null); return; }
     // From the panes' own top to the bottom of the window, less the page's 32px bottom padding (lg:p-8).
     // Not from the document height, which other columns (the settings rail) can stretch.
     const top = element.getBoundingClientRect().top + window.scrollY;
@@ -309,7 +310,7 @@ export function CarriersSettings() {
     </div>
   );
   const search = (placeholder: string) => (
-    <input className={cn(control, "mt-0")} aria-label={placeholder} placeholder={placeholder} value={query} onChange={(event) => setQuery(event.target.value)} />
+    <input className={cn(control, "mt-0 shrink-0")} aria-label={placeholder} placeholder={placeholder} value={query} onChange={(event) => setQuery(event.target.value)} />
   );
   const listCard = (children: ReactNode) => <div className={cn(PANE, "flex min-h-0 flex-col gap-2.5 p-3.5")}>{children}</div>;
   const listBody = (children: ReactNode) => <div className={cn(SCROLL, "-mx-1.5 max-h-[420px] min-h-0 flex-1 px-1.5 lg:max-h-none")}>{children}</div>;
@@ -378,7 +379,7 @@ export function CarriersSettings() {
         <div ref={panes} className={PANES} style={paneHeight ? { height: paneHeight } : undefined}>
           {listCard(<>
             <span className="flex items-center justify-between gap-2"><Kicker id="hint-your-carriers" text="Your carriers" hint="The carriers you hold a contract with. Click one to finish its setup or change it." />{yours.length > 1 && <span className="text-xs text-[var(--muted)]">{readyCount} ready · {yours.length - readyCount} to finish</span>}</span>
-            <input className={cn(control, "mt-0")} aria-label="Find a carrier" placeholder="Find a carrier" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input className={cn(control, "mt-0 shrink-0")} aria-label="Find a carrier" placeholder="Find a carrier" value={query} onChange={(event) => setQuery(event.target.value)} />
             {listBody(yours.length === 0
               ? <p className="m-0 px-2 py-3 text-sm text-[var(--muted)]">No carriers yet. Add the first one you write with.</p>
               : yours.filter((carrier) => !needle || carrier.name.toLowerCase().includes(needle)).map((carrier) => {

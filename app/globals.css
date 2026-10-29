@@ -1852,13 +1852,15 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
   content: ""; pointer-events: none;
 }
 .portal-settings-subsection[aria-current="page"]::before { border-color: var(--accent-ink); }
-.portal-settings-item-icon { color: var(--muted); }
+/* Icons only with the 256px menu (1536px screens and up); the 224px menu keeps every label on one line. */
+.portal-settings-item-icon { color: var(--muted); display: none; }
+@media (min-width: 1536px) { .portal-settings-item-icon { display: block; } }
 .portal-settings-subsection[aria-current="page"] .portal-settings-item-icon { color: var(--accent-ink); }
 .dark .portal-settings-nav-subsections { --settings-nav-guide: var(--border-strong); }
 @media (min-width: 1024px) {
   .portal-settings-nav { max-height: none; }
   /* A column of navigation, not a floating card (manager review §4): a hairline on its right. */
-  [data-settings-rail] { border-right: 1px solid var(--border); padding-right: 1rem; }
+  [data-settings-rail] { border-right: 1px solid var(--border); padding-right: .75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .portal-settings-group-toggle, .portal-settings-group-chevron { transition: none; }
