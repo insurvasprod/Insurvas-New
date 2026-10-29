@@ -10,11 +10,13 @@ import { WORKSPACE_ACTIONS } from "@/lib/search/actions";
 import { areaOfSection } from "@/lib/menu/sidebar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useNavStatus } from "@/components/app/nav/use-nav-status";
+import { phaseLabel, phaseOf } from "@/lib/inbound/callPhase";
+import { leadsInStepLabel, leadsInStepOf } from "@/lib/leadSources/steps";
 
 /**
- * The agent top bar's own pieces (Navigation A, owner's pick 2026-10-28): where you are, your Inbound
- * status, and the things you start most. Each reads the same server-filtered menu as the sidebar, so
+ * The agent top bar's own pieces (Navigation A, owner's pick 2026-10-28): where you are and the things
+ * you start most. (The Inbound status pill was removed 2026-10-29, owner: "remove this one"; status is
+ * shown and changed on Inbound.) Each reads the same server-filtered menu as the sidebar, so
  * nothing here offers a page the person cannot open.
  */
 
@@ -44,7 +46,8 @@ function useSubPage(pathname: string, itemPath: string | null) {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         if (pathname.startsWith("/app/inbound/call/")) {
-          setLabel(new URLSearchParams(window.location.search).get("step") === "finish" ? "Finish the call" : "Verification");
+          const q = new URLSearchParams(window.location.search);
+          setLabel(phaseLabel(phaseOf({ phase: q.get("phase"), step: q.get("step") })));
           return;
         }
         setLabel(document.querySelector("main [data-page-title]")?.textContent?.trim() || null);
@@ -92,7 +95,21 @@ export function TopBarCrumb({ menu }: { menu: MenuSection[] }) {
   const pathname = usePathname();
   const item = currentItem(menu, pathname);
   const sub = useSubPage(pathname, item?.path ?? null);
+  // The one Leads page (2026-10-28): each step keeps its own address, so the bar names the page and
+  // the step — "Lead sources › Recycle" — rather than the page that address used to be. No area name:
+  // three parts do not fit beside the search, and the step is the part that matters.
+  // A page that draws its own header names itself; the bar then stays empty (main, 2026-10-29).
   const pageHasHeader = usePageHasHeader(pathname);
+  const leadsStep = leadsInStepOf(pathname);
+  if (leadsStep && !pageHasHeader) {
+    return (
+      <nav aria-label="Breadcrumb" className="portal-top-crumb">
+        <span className="portal-top-crumb-group">Lead sources</span>
+        <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
+        <span className="portal-top-crumb-page" aria-current="page">{leadsInStepLabel(leadsStep)}</span>
+      </nav>
+    );
+  }
   if (!item || pageHasHeader) return <nav aria-label="Breadcrumb" className="portal-top-crumb" />;
   const page = item.navLabel ?? item.label;
   // The rail's area name (Work, Leads, Book, Money, Team, Compliance), so the bar and the rail agree.
@@ -117,25 +134,6 @@ export function TopBarCrumb({ menu }: { menu: MenuSection[] }) {
         <span className="portal-top-crumb-page" aria-current="page">{page}</span>
       )}
     </nav>
-  );
-}
-
-const PRESENCE: Record<"ready" | "on_break" | "on_call" | "off", string> = {
-  ready: "Taking calls",
-  on_call: "On a call",
-  on_break: "On a break",
-  off: "Not taking calls",
-};
-
-/** Your saved Inbound status, read-only here; it is changed on Inbound, where the pill leads. */
-export function TopBarPresence() {
-  const { presence } = useNavStatus();
-  if (!presence) return null;
-  return (
-    <Link href="/app/inbound" className="portal-top-presence" data-status={presence} title="Your Inbound status. Change it on Inbound.">
-      <span className="portal-top-presence-dot" aria-hidden="true" />
-      {PRESENCE[presence]}
-    </Link>
   );
 }
 

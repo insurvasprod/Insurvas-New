@@ -1,19 +1,18 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { scopeFor } from "@/lib/agency/visibility";
+import { isAgencyTenant } from "@/lib/agency/audience";
 import { invoiceSources, InvoiceError, listInvoices, listTemplates } from "@/lib/accounting/invoiceStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { CampaignWorkspace } from "@/components/app/campaign-workspace";
 import { LeadListWorkspace } from "@/components/app/lead-list-workspace";
-import { LeadImportWorkspace } from "@/components/app/lead-import-workspace";
 import { InvoicesBoard } from "@/components/app/accounting/invoices-board";
 import { VendorReturnsWorkspace } from "@/components/app/vendor-returns-workspace";
 import { NeedsYou } from "@/components/app/lead-sources/needs-you";
-import { ImportSheet, SourceTabs, type SourceTab } from "@/components/app/lead-sources/source-tabs";
-import { Button } from "@/components/ui/button";
+import { SourceTabs, type SourceTab } from "@/components/app/lead-sources/source-tabs";
+import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
 import { Callout } from "@/components/app/settings/primitives";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
@@ -32,56 +31,54 @@ import { TableCard } from "@/components/ui/table-card";
 
 const READ_ONLY_COPY = "Your plan is read-only. You can look at everything here; adding, importing, scrubbing and claiming are paused until it is active again.";
 
-export type LeadSourcesTab = "lists" | "campaigns";
-
 type Guard = Awaited<ReturnType<typeof guardPage>>;
 
-export async function LeadSourcesPage({ tab, importOpen = false, guards }: {
-  tab: LeadSourcesTab;
-  importOpen?: boolean;
+/**
+ * Lead sources › Lists, step 4 of the one Leads page (owner pick B, 2026-10-28; see leads-in.tsx).
+ * Vendors & campaigns and List import are steps of their own now, at their own addresses.
+ */
+export async function LeadSourcesPage({ guards }: {
   /** Already read by the route; read here otherwise (memoised for the request either way). */
   guards?: { lists: Guard; outbound: Guard; returns: Guard };
-}) {
+} = {}) {
   const [lists, outbound, returns] = guards ? [guards.lists, guards.outbound, guards.returns] : await Promise.all([guardPage("lead_import"), guardPage("outbound_dialing"), guardPage("true_cpa")]);
   const context = lists.entitled ? lists.context : outbound.entitled ? outbound.context : null;
   // AG-0.5: inside an agency every one of these is the agency's business; their APIs refuse a narrow session.
   const agencyNarrow = context ? (await scopeFor(context)) !== null : false;
   const canLists = lists.entitled && actAsPage(lists, ["owner", "producer", "assistant"]) && !agencyNarrow;
   const canCampaigns = outbound.entitled && (outbound.role === "owner" || outbound.role === "producer") && !agencyNarrow;
-  const canImport = lists.entitled && (lists.role === "owner" || lists.role === "producer" || lists.role === "assistant") && !agencyNarrow;
   const canClaim = canLists && returns.entitled && holdsAnyRole(lists.roles, ["owner", "producer"]);
+  // Deleting an empty list is deleting its campaign: the campaign route's gate, and never in a read-only plan.
+  const canDeleteLists = canCampaigns && outbound.entitled && outbound.entitlement.access !== "read_only";
+  // Auto-assign is the bulk list commit (POST /api/app/assignments assign_list): owner / producer,
+  // never read-only, never a narrowed agency session, and in an agency the owner only (refuseRoutingInAgency).
+  const canAutoAssign = canDeleteLists && outbound.entitled && (outbound.role === "owner" || !(await isAgencyTenant(outbound.context.tenantId)));
+  // "Fix in Clean" points at the Clean step only for the people its own route lets in (leads-in.tsx).
+  const dupes = await guardPage("duplicate_detection");
+  const cleanHref = dupes.entitled && actAsPage(dupes, ["owner", "producer", "assistant"]) && !agencyNarrow ? "/app/duplicates" : null;
 
-  if (!canLists && !canCampaigns) {
-    const guard = tab === "campaigns" ? outbound : lists;
-    if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Lead sources" description="Your lead vendors, what each list cost, and what is still untouched." />;
+  if (!canLists) {
+    // Somebody who may see vendors but not lists starts on the step they can open.
+    if (canCampaigns) redirect("/app/campaigns");
+    if (!lists.entitled) return <FeatureGateNotice guard={lists} featureLabel="Lead sources" description="Your lead vendors, what each list cost, and what is still untouched." />;
     if (agencyNarrow) return <RoleGateNotice reason="agency" featureLabel="Lead sources" detail="In an agency, the owner and admins handle vendors, lists and lead spend." />;
     return <RoleGateNotice featureLabel="Lead sources" detail="Only owners, producers and assistants can see lead lists; only owners and producers see vendors and spend." />;
   }
 
-  const readOnly = (canLists ? lists : outbound).entitlement.access === "read_only";
-  const tabs: SourceTab[] = [];
-  if (canLists) tabs.push({ key: "lists", label: "Lists", panel: <LeadListWorkspace /> });
-  if (canCampaigns) tabs.push({ key: "campaigns", label: "Vendors & campaigns", panel: <CampaignWorkspace embedded /> });
-
+  const readOnly = lists.entitlement.access === "read_only";
   return (
-    <>
-      <div className="m-stagger flex flex-col gap-6">
-        <PageHeader
-          title="Lead sources"
-          actions={<>
-            {/* Offered only to the people Vendor bills â€º Returns opens for, so it never leads to a locked tab. */}
-            {canClaim && <Button asChild variant="outline"><Link href="/app/vendor-bills?tab=returns">Claim credits</Link></Button>}
-            {canImport && !readOnly && <ImportSheet initialOpen={importOpen}><LeadImportWorkspace embedded /></ImportSheet>}
-          </>}
-        />
-        {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}
-        <NeedsYou
-          access={{ lists: canLists, claims: canClaim, invoices: false, invoicesHref: "/app/vendor-bills?tab=invoices", campaignsHref: canCampaigns ? "/app/lead-sources?tab=campaigns" : null }}
-          only={["lists"]}
-        />
-        <SourceTabs label="Lead sources" tabs={tabs} initialTab={tab} />
-      </div>
-    </>
+    <LeadsInPage
+      step="lists"
+      // "Claim $N" lands here from the index (lead-list-index.tsx), and only while something is owed
+      // back (/ui-taste 2026-10-29: no Claim button beside $0.00). The slot exists only for the people
+      // Vendor bills › Returns opens for, so the button never leads to a locked tab.
+      actions={canClaim ? <span id="leads-in-claim" className="contents" /> : undefined}
+    >
+      {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}
+      {/* No "Next step" line here (owner 2026-10-28): the table starts at the top, and the row that
+          needs doing first is marked by a green icon on its action (lead-list-index.tsx). */}
+      <LeadListWorkspace canClaim={canClaim} scrubHref={canCampaigns ? "/app/campaigns" : null} canDelete={canDeleteLists} cleanHref={cleanHref} canAutoAssign={canAutoAssign} />
+    </LeadsInPage>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   startScrubRun,
   stepScrubRun,
 } from "@/lib/campaigns/scrubRun";
+import { getScreeningServiceStatus } from "@/lib/compliance/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -30,6 +31,21 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start"), token: z.string().uuid() }).strict(),
   z.object({ action: z.literal("step"), token: z.string().uuid(), runId: z.string().uuid() }).strict(),
 ]);
+
+/**
+ * GET: "Check again" on a scrub an outage stopped — is the screening service answering now? Read
+ * only: no vendor is called, nothing is billed, the run is not touched (lib/compliance/service.ts).
+ */
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeatureRole("outbound_dialing", roles);
+  if (auth instanceof NextResponse) return auth;
+  if (!z.string().uuid().safeParse((await params).id).success) return NextResponse.json({ error: "Choose a valid campaign" }, { status: 400 });
+  try {
+    return NextResponse.json({ screening: await getScreeningServiceStatus() }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not check the screening service" }, { status: 500 });
+  }
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("outbound_dialing", roles, { write: true });

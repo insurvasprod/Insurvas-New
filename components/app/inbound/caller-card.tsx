@@ -1,19 +1,51 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Clock3, Handshake, Package, UserRoundCheck, type LucideIcon } from "lucide-react";
+import { Cake, Check, Clock3, Copy, Handshake, Languages, Mail, MapPin, Package, Phone, type LucideIcon } from "lucide-react";
 
-import { ScreeningCard } from "@/components/app/inbound/call-cockpit-parts";
+import { Button } from "@/components/ui/button";
+import { languageFromLeadValues, phoneFromLeadValues } from "@/lib/agentFloor/leadFacts";
 import { productLineLabel } from "@/lib/format/productLine";
 import { cn } from "@/lib/utils";
 
 /**
- * The caller on the left of both call steps, Verification and Finish the call (owner 2026-10-27:
- * the same card on both): who is on the line, the product, where the call came from, who took it,
- * how long it has run, and the screening checked before it reached the agent.
+ * The caller on the left of the call steps (owner 2026-10-27: the same card on each): who is on the
+ * line, their phone, email, date of birth and address (owner 2026-10-28, in place of the screening),
+ * the product, where the call came from and how long it has run.
  */
 
-export type CallerFacts = { name: string; product: string; from: string; takenBy: string; callStartedAt: string | null };
+export type CallerFacts = {
+  name: string; product: string; from: string; takenBy: string; callStartedAt: string | null;
+  /** From the lead (owner 2026-10-28: the phone first, then what verification reads back). */
+  phone: string | null; email: string | null; dob: string | null; livesIn: string | null; language: string | null;
+};
+
+const text = (value: unknown) => (typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "");
+
+/** "Mar 14, 1953 · 72" from a stored date of birth; the stored text when it is not a date. */
+function dobLine(raw: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (!m) return raw;
+  const date = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  const today = new Date();
+  let age = today.getUTCFullYear() - date.getUTCFullYear();
+  if (today.getUTCMonth() < date.getUTCMonth() || (today.getUTCMonth() === date.getUTCMonth() && today.getUTCDate() < date.getUTCDate())) age -= 1;
+  return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · ${age}`;
+}
+
+/** The lead's contact facts, from its stored values (any of the keys partners send). */
+export function contactFacts(values: Record<string, unknown>) {
+  const dob = text(values.date_of_birth) || text(values.dob) || text(values.birth_date);
+  const place = [text(values.city), text(values.state)].filter(Boolean).join(", ");
+  const street = text(values.address) || text(values.street_address) || text(values.address_line1);
+  return {
+    phone: phoneFromLeadValues(values),
+    email: text(values.email) || text(values.email_address) || null,
+    dob: dob ? dobLine(dob) : null,
+    livesIn: [street, place, text(values.zip) || text(values.zip_code) || text(values.postal_code)].filter(Boolean).join(", ") || null,
+    language: languageFromLeadValues(values),
+  };
+}
 
 type PanelLike = {
   workItem: { productLine: string };
@@ -44,6 +76,7 @@ export function callerFacts(panel: PanelLike): CallerFacts {
     from: context?.partnerName ?? String(values.source ?? values.lead_source ?? "Partner transfer"),
     takenBy: context?.claim.byName ? `${context.claim.isYou ? "You" : context.claim.byName}, ${clock(context.claim.at)}` : "—",
     callStartedAt: context?.callStartedAt ?? null,
+    ...contactFacts(values),
   };
 }
 
@@ -64,16 +97,39 @@ function Fact({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
     <div className="flex min-w-0 items-center gap-3">
       <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-[10px] border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[var(--primary-soft)] text-[var(--accent-ink)]"><Icon className="size-4" /></span>
       <span className="min-w-0">
-        <span className="block text-xs leading-[1.33] text-[var(--muted)]">{label}</span>
-        <span className="block truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{value}</span>
+        <span className="block text-xs leading-[1.33] text-[var(--body)]">{label}</span>
+        <span className="block truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]" title={typeof value === "string" ? value : undefined}>{value}</span>
       </span>
     </div>
   );
 }
 
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--body)]";
 
-export function CallerCard({ workItemId, facts, now }: { workItemId: string; facts: CallerFacts | null; now: number }) {
+/** The phone, large, with Copy (owner 2026-10-28: "their phone number, that's really important"). */
+function PhoneLine({ phone }: { phone: string | null }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-center gap-3 rounded-[12px] border border-[color-mix(in_srgb,var(--primary)_40%,var(--border))] bg-[var(--primary-soft)] px-3 py-2.5">
+      <Phone className="size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs leading-[1.33] font-semibold text-[var(--accent-ink)]">Phone</span>
+        {phone
+          // Plain text, not a dial link: a call goes through the dialer's gates (calling window, do-not-call).
+          ? <span className="block truncate text-lg leading-[1.3] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums select-all">{phone}</span>
+          : <span className="block text-sm font-semibold text-[var(--ink)]">Not on the lead</span>}
+      </span>
+      {phone && (
+        <Button type="button" size="icon" variant="ghost" aria-label={copied ? "Copied" : "Copy the phone number"} title={copied ? "Copied" : "Copy"} onClick={() => { void navigator.clipboard?.writeText(phone).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }); }}>
+          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// `workItemId` stays in the signature for the callers; the screening block it fed is gone (owner 2026-10-28).
+export function CallerCard({ facts, now }: { workItemId: string; facts: CallerFacts | null; now: number }) {
   const onTheCall = facts?.callStartedAt ? elapsed(facts.callStartedAt, now) : null;
   const name = facts?.name ?? "";
   return (
@@ -85,15 +141,18 @@ export function CallerCard({ workItemId, facts, now }: { workItemId: string; fac
           <strong className="block truncate text-title-sm leading-[1.3] font-semibold tracking-[-0.015em] text-[var(--ink)]">{name || <span aria-hidden="true" className="block h-5 w-40 animate-pulse rounded bg-[var(--surface-alt)]" />}</strong>
         </span>
       </div>
+      {/* Owner 2026-10-28: the screening block gave way to the caller's own details, phone first. */}
+      <div className="flex flex-col gap-3 border-t border-[var(--border)] p-4">
+        <PhoneLine phone={facts?.phone ?? null} />
+        <Fact icon={Mail} label="Email" value={facts?.email ?? "Not on the lead"} />
+        <Fact icon={Cake} label="Date of birth" value={facts?.dob ?? "Not on the lead"} />
+        <Fact icon={MapPin} label="Lives in" value={facts?.livesIn ?? "Not on the lead"} />
+        {facts?.language && <Fact icon={Languages} label="Speaks" value={facts.language} />}
+      </div>
       <div className="flex flex-col gap-3 border-t border-[var(--border)] p-4">
         <Fact icon={Package} label="Product" value={facts?.product ?? "—"} />
         <Fact icon={Handshake} label="From" value={facts?.from ?? "—"} />
-        <Fact icon={UserRoundCheck} label="Taken by" value={facts?.takenBy ?? "—"} />
         <Fact icon={Clock3} label="On the call" value={onTheCall ?? "No open call record"} />
-      </div>
-      {/* What was checked before the call (DNC, consent, the partner's screening). */}
-      <div className="border-t border-[var(--border)] p-4">
-        <ScreeningCard workItemId={workItemId} embedded />
       </div>
     </section>
   );

@@ -16,6 +16,7 @@ import { greeting, longDate } from "@/lib/dashboard/todayMath";
 import { attentionItems, homeRole, kpiCards, type AttentionLinks, type HomeRole } from "@/lib/dashboard/homeView";
 import { scopeFor } from "@/lib/agency/visibility";
 import { scopeWithSelf } from "@/lib/dashboard/scope";
+import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { getDashboardToday, readFirstName, type DashboardToday } from "@/lib/dashboard/today";
 import { getDashboardMoney, type DashboardMoney } from "@/lib/dashboard/money";
@@ -59,7 +60,7 @@ export default async function AgentDashboardPage() {
 
   // One round trip for everything the frame needs: the plan, setup state, kill switches, the
   // agency's zone, the reader's first name and the producer scope.
-  const [entitlement, onboardingState, switches, setupProgress, setupProfile, setupGuide, workspaceZone, firstName, scope] = await Promise.all([
+  const [entitlement, onboardingState, switches, setupProgress, setupProfile, setupGuide, workspaceZone, firstName, scope, solo] = await Promise.all([
     getEntitlement(context.tenantId),
     getDashboardOnboardingState(context.tenantId),
     loadFeatureSwitches(),
@@ -69,18 +70,20 @@ export default async function AgentDashboardPage() {
     getWorkspaceTimezone(context.tenantId).catch(() => null),
     readFirstName(context.userId),
     scopeFor(context),
+    // Solo mode: an individual agent with no other caller does not see the team-only tiles, step or action.
+    isSoloWorkspace(context.tenantId),
   ]);
   const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
-  const modules = visibleDashboardTiles(available, context.role);
-  const checklist = setupChecklistForState(onboardingState, setupProgress, { features: available, profile: setupProfile, seats: entitlement.limits.max_seats, marks: setupGuide });
+  const modules = visibleDashboardTiles(available, context.role, { solo });
+  const checklist = setupChecklistForState(onboardingState, setupProgress, { features: available, profile: setupProfile, seats: entitlement.limits.max_seats, marks: setupGuide, solo });
   // LA-0.3: the first render that finds every step done stamps it, after the response.
   if (checklist.complete && !setupProgress.finished) afterResponse(() => recordSetupFinished(context.tenantId));
-  const home = resolveRoleHome(available, context.role, { code: entitlement.plan_code, features: entitlement.features, disabled: entitlement.disabled_features });
+  const home = resolveRoleHome(available, context.role, { code: entitlement.plan_code, features: entitlement.features, disabled: entitlement.disabled_features }, { solo });
   // A profile with too few tiles skips the dashboard for the plan's primary working screen.
   if (home.landing) redirect(home.landing);
 
   const shown = new Set(home.sections);
-  const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role);
+  const open = (keys: readonly string[]) => firstOpenable(keys, available, context.role, solo);
   const role = homeRole(context.role, context.memberRole);
   // A manager leads a team and sees no money (owner, 2026-10-25: "they will not see all the money").
   const noMoney = role === "manager";

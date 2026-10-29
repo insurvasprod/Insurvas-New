@@ -227,7 +227,12 @@ export type SetupChecklistContext = {
   /** Pages the owner hid from this member (custom team access): a step there is left out. */
   hiddenPages?: readonly string[] | null;
   marks?: SetupGuideMarks | null;
+  /** Solo mode (lib/tenantTeam/solo.ts): an individual agent with no other caller has nobody to assign to. */
+  solo?: boolean;
 };
+
+/** The steps that hand work to other callers: left out in solo mode, as their pages are. */
+const TEAM_ONLY_STEPS: ReadonlySet<SetupStepKey> = new Set<SetupStepKey>(["assign"]);
 
 /**
  * Basic Idea, step 8.4: lead sources are "only shown if he ticked the relevant boxes in step 5" — a
@@ -264,6 +269,7 @@ export function applicableSetupSteps(context: SetupChecklistContext = {}): StepD
   const steps: StepDefinition[] = [];
   for (const step of SETUP_STEPS) {
     if (step.key === "lead-sources" && !wantsLeadSources(context.profile)) continue;
+    if (context.solo && TEAM_ONLY_STEPS.has(step.key)) continue;
     if (step.key === "statement" && wantsBookImport(context.profile) && allowed(BOOK_STEP.key)) steps.push(BOOK_STEP);
     if (allowed(step.key)) steps.push(step);
   }

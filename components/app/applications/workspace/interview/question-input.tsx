@@ -8,10 +8,11 @@
  * which template it is rendering.
  */
 
-import { useState, type ReactNode } from "react";
-import { Check, OctagonAlert, StickyNote } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Check, Loader2, Mic, MicOff, OctagonAlert, StickyNote, X } from "lucide-react";
 
 import { control } from "@/components/app/settings/primitives";
+import { useDictation } from "@/components/app/dialer/use-dictation";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { InterviewQuestion, InterviewView, MedicationRow } from "@/lib/applications/types";
@@ -115,7 +116,8 @@ function Control({ q, value, labelId, readOnly, onAnswer, toneFor }: {
     case "text":
       return <input id={id} aria-labelledby={labelId} className={cn(control, "mt-0 w-full md:w-72")} value={typeof value === "string" ? value : ""} disabled={readOnly} onChange={(e) => onAnswer(e.target.value || null)} />;
     case "long_text":
-      return <textarea id={id} aria-labelledby={labelId} className={cn(control, "h-auto min-h-20 py-2")} value={typeof value === "string" ? value : ""} disabled={readOnly} onChange={(e) => onAnswer(e.target.value || null)} />;
+      // Owner 2026-10-28: dictation inside the answer, bottom right, as on a note.
+      return <DictationBox id={id} labelledBy={labelId} value={typeof value === "string" ? value : ""} readOnly={readOnly} onChange={(text) => onAnswer(text || null)} placeholder="Type the answer, or press Dictate and say it" minH="min-h-20" />;
     default:
       return null;
   }
@@ -125,6 +127,96 @@ function Control({ q, value, labelId, readOnly, onAnswer, toneFor }: {
 const INLINE = new Set<InterviewQuestion["type"]>(["boolean", "single_select", "number", "date", "text"]);
 
 const plainTone = (): ChipTone => "good";
+
+/**
+ * A question's note (owner 2026-10-28): the dialer's dictation as a microphone inside the box — speak
+ * and the words are added to what is typed — and an × in its corner to close it, for an agent who
+ * only wanted to answer yes or no. A note with words in it is removed by the ×.
+ */
+function NoteField({ id, label, value, readOnly, onChange, onHide }: { id: string; label: string; value: string; readOnly: boolean; onChange: (notes: string) => void; onHide: () => void }) {
+  return (
+    <DictationBox
+      id={id}
+      ariaLabel={`Note on: ${label}`}
+      value={value}
+      readOnly={readOnly}
+      onChange={onChange}
+      placeholder="Type the note, or press Dictate and say it"
+      minH="min-h-16"
+      left={(stop) => (
+        <Button type="button" size="sm" variant="ghost" onClick={() => { stop(); onHide(); }} aria-label={value ? "Remove the note" : "Close the note"} title={value ? "Remove the note" : "Close the note"}>
+          <X aria-hidden="true" />{value ? "Remove" : "Close"}
+        </Button>
+      )}
+    />
+  );
+}
+
+/**
+ * A text box with the dialer's dictation inside it (owner 2026-10-28): the words on top, and in the
+ * box's own foot an optional action on the left and Dictate on the bottom right. Speaking adds to what
+ * is already typed; nothing is saved by speaking alone.
+ */
+function DictationBox({ id, ariaLabel, labelledBy, value, readOnly, onChange, placeholder, minH, left }: {
+  id: string; ariaLabel?: string; labelledBy?: string; value: string; readOnly: boolean;
+  onChange: (text: string) => void; placeholder: string; minH: string;
+  left?: (stopDictation: () => void) => ReactNode;
+}) {
+  const latest = useRef(value);
+  useEffect(() => { latest.current = value; }, [value]);
+  const dictation = useDictation(useCallback((text: string) => {
+    if (!text) return;
+    const current = latest.current;
+    onChange(current.trim() ? `${current.replace(/\s+$/, "")} ${text}` : text);
+  }, [onChange]));
+  return (
+    <div className="flex flex-col gap-1">
+      <div className={cn("flex flex-col rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] transition-colors focus-within:border-[var(--primary)]", dictation.listening && "border-[var(--error)]")}>
+        <textarea
+          id={id}
+          aria-label={ariaLabel}
+          aria-labelledby={labelledBy}
+          placeholder={dictation.supported && !readOnly ? placeholder : placeholder.replace(/, or press Dictate and say it$/, "")}
+          className={cn(minH, "w-full resize-y border-0 bg-transparent px-3 pt-2 pb-1 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--body)] disabled:opacity-60")}
+          value={value}
+          disabled={readOnly}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {!readOnly && (
+          <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
+            <span>{left?.(dictation.stop)}</span>
+            {dictation.supported ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={dictation.listening ? "default" : "ghost"}
+                onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+                disabled={dictation.transcribing}
+                aria-pressed={dictation.listening}
+                title={dictation.listening ? "Stop dictating" : "Say it instead of typing it"}
+              >
+                {dictation.transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+                {dictation.listening ? "Stop" : dictation.transcribing ? "Writing…" : "Dictate"}
+              </Button>
+            ) : dictation.checked ? <span className="px-1.5 text-xs text-[var(--body)]">No dictation in this browser</span> : null}
+          </div>
+        )}
+      </div>
+      {dictation.listening && (
+        <p role="status" aria-live="polite" className="m-0 flex items-center gap-2 text-xs text-[var(--body)]">
+          <span className="size-2 shrink-0 animate-pulse rounded-full bg-[var(--error)]" aria-hidden="true" />
+          {dictation.engine === "device"
+            ? <span className="tabular-nums">Recording {Math.floor(dictation.seconds / 60)}:{String(dictation.seconds % 60).padStart(2, "0")} · press Stop to write it</span>
+            : dictation.heard ? <span className="italic">{dictation.heard}</span> : "Listening… say it."}
+        </p>
+      )}
+      {dictation.transcribing && dictation.download !== null && dictation.download < 100 && (
+        <p role="status" className="m-0 text-xs text-[var(--body)]">Getting the speech model ready, the first time only · {dictation.download}%</p>
+      )}
+      {dictation.problem && !dictation.listening && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{dictation.problem}</p>}
+    </div>
+  );
+}
 
 export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNotes, toneFor = plainTone, followUp = false, children, medications, onMedications, card }: {
   /** The interview's own look (a rounded row, answers under the question); `isNext` marks "Ask now". */
@@ -156,6 +248,8 @@ export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNo
   const showNote = noteOpen || Boolean(answer?.notes);
   const knocked = isKnockedOut(q, answer);
   const inline = INLINE.has(q.type);
+  // Owner 2026-10-28: a note opened by mistake closes again; one with words in it is removed with them.
+  const hideNote = () => { if (answer?.notes) onNotes(""); setNoteOpen(false); };
 
   const noteButton = !readOnly && !showNote && (
     <Button type="button" variant="ghost" size="icon" aria-controls={noteId} aria-label={`Add a note to: ${q.label}`} title="Add a note" onClick={() => { setNoteOpen(true); requestAnimationFrame(() => document.getElementById(noteId)?.focus()); }}>
@@ -197,17 +291,7 @@ export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNo
           Knockout — {q.knockout.note?.trim() || "this answer rules this carrier out."}
         </p>
       )}
-      {showNote && (
-        <textarea
-          id={noteId}
-          aria-label={`Note on: ${q.label}`}
-          placeholder="Note"
-          className={cn(control, "mt-2 h-auto min-h-16 py-2")}
-          value={answer?.notes ?? ""}
-          disabled={readOnly}
-          onChange={(e) => onNotes(e.target.value)}
-        />
-      )}
+      {showNote && <div className="mt-2"><NoteField id={noteId} label={q.label} value={answer?.notes ?? ""} readOnly={readOnly} onChange={onNotes} onHide={hideNote} /></div>}
       {children}
     </>
   );
@@ -225,14 +309,22 @@ export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNo
       )}>
         <span aria-hidden="true" className="inline-grid size-[30px] shrink-0 place-items-center rounded-full bg-[var(--surface)] text-xs font-bold text-[var(--muted)]">{number ?? "·"}</span>
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="min-w-0">
-            <p id={labelId} className="text-card-title text-[var(--ink)]">
-              {number !== null && <span className="sr-only">Question {number}: </span>}
-              {q.label}
-              {q.required && <span className="text-[var(--error-ink)]"> *</span>}
-              {card.isNext && <span className="ml-2 inline-flex rounded-full bg-[var(--primary)] px-2 py-0.5 align-middle text-xs font-bold text-[var(--ink)]">Ask now</span>}
-            </p>
-            {q.help && <p className="mt-0.5 text-xs leading-[1.5] text-[var(--muted)]">{q.help}</p>}
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p id={labelId} className="text-card-title text-[var(--ink)]">
+                {number !== null && <span className="sr-only">Question {number}: </span>}
+                {q.label}
+                {q.required && <span className="text-[var(--error-ink)]"> *</span>}
+                {card.isNext && <span className="ml-2 inline-flex rounded-full bg-[var(--primary)] px-2 py-0.5 align-middle text-xs font-bold text-[var(--ink)]">Ask now</span>}
+              </p>
+              {q.help && <p className="mt-0.5 text-xs leading-[1.5] text-[var(--muted)]">{q.help}</p>}
+            </div>
+            {/* A typed answer's way to finish sits top right of its card (owner 2026-10-28). */}
+            {!readOnly && TYPED_TYPES.has(q.type) && (isAnswered(q, answer, []) ? (
+              <Button type="button" size="sm" className="shrink-0" onClick={(e) => e.currentTarget.blur()}><Check aria-hidden="true" />Done</Button>
+            ) : !q.required && (
+              <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => onAnswer("Nothing to add")}>Nothing to add</Button>
+            ))}
           </div>
           {q.type !== "medication_list" && (TYPED_TYPES.has(q.type) ? (
             // A typed answer says when it is finished (owner 2026-10-28): "Done" (or Enter; Ctrl+Enter in a
@@ -246,19 +338,8 @@ export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNo
               }}
             >
               {control_}
-              {!readOnly && (
-                <span className="flex flex-wrap items-center gap-2">
-                  {isAnswered(q, answer, []) ? (
-                    <Button type="button" size="sm" onClick={(e) => e.currentTarget.blur()}>
-                      <Check aria-hidden="true" />Done
-                    </Button>
-                  ) : !q.required && (
-                    <Button type="button" size="sm" variant="outline" onClick={() => onAnswer("Nothing to add")}>Nothing to add</Button>
-                  )}
-                  {noteButton}
-                  <span className="text-xs text-[var(--muted)]">{q.type === "long_text" ? "Ctrl+Enter when finished" : "Enter when finished"}</span>
-                </span>
-              )}
+              {/* No separate note on a typed answer (owner 2026-10-28): the answer is the note. */}
+              {!readOnly && <span className="text-xs text-[var(--body)]">{q.type === "long_text" ? "Ctrl+Enter when finished" : "Enter when finished"}</span>}
             </div>
           ) : (
             <span className="flex flex-wrap items-center gap-2">
@@ -272,17 +353,7 @@ export function QuestionRow({ q, number = null, answer, readOnly, onAnswer, onNo
               Knockout · {q.knockout.note?.trim() || "this answer rules this carrier out."}
             </p>
           )}
-          {showNote && (
-            <textarea
-              id={noteId}
-              aria-label={`Note on: ${q.label}`}
-              placeholder="Note"
-              className={cn(control, "h-auto min-h-16 py-2")}
-              value={answer?.notes ?? ""}
-              disabled={readOnly}
-              onChange={(e) => onNotes(e.target.value)}
-            />
-          )}
+          {showNote && <NoteField id={noteId} label={q.label} value={answer?.notes ?? ""} readOnly={readOnly} onChange={onNotes} onHide={hideNote} />}
           {children}
         </div>
       </div>
