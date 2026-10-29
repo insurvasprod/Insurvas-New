@@ -420,7 +420,7 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   codes.
 
 ## 15. Settings pages (v3)
-**Status:** Live (owner approved the patterns on 2026-10-29; parts in
+**Status:** Live. The owner approved the patterns on 2026-10-29; parts in
 `components/app/settings/patterns.tsx`, worked examples on `/design/settings/patterns#patterns`).
 
 - **One frame:** breadcrumb, the section's title top-left and one line on what it is for; the
