@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 
 import { Breadcrumbs, type Crumb } from "./breadcrumbs";
 import { PageHeaderActions } from "./page-header-actions";
+import { InfoTip } from "@/components/ui/info-tip";
 
 /**
  * The top of every page, in one shape.
@@ -34,8 +35,12 @@ export function PageHeader({
   visible = false,
   breadcrumbs,
   meta,
+  infoDescription = false,
   className,
 }: {
+  /** `visible` only: the description sits behind an (i) beside the title instead of a line under it
+   *  (manager review 29 Oct, 05:50: "remove this text, put it into an info icon right here"). */
+  infoDescription?: boolean;
   /** Show the title, description and breadcrumb on the page (see above). */
   visible?: boolean;
   /** The trail above the title when `visible`: real pages only, the last one this page. */
@@ -58,8 +63,11 @@ export function PageHeader({
         {breadcrumbs && <Breadcrumbs crumbs={breadcrumbs} />}
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0 max-w-[44rem]">
-            <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
-            {description && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
+            <div className="flex items-center gap-1.5">
+              <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
+              {description && infoDescription && <InfoTip label={`About ${title}`} side="bottom">{description}</InfoTip>}
+            </div>
+            {description && !infoDescription && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
             {meta}
           </div>
           {(titleInfo || actions) && <div className="flex shrink-0 flex-wrap items-center gap-2">{titleInfo}{actions}</div>}
