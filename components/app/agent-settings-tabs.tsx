@@ -125,6 +125,8 @@ export function AgentSettingsTabs({
   // linked one. Until the address has been read, the frame shows its loading look instead
   // (2026-10-29: Business Identity flashed before Products). A routed section needs no hash.
   const [hashRead, setHashRead] = useState(Boolean(routeSection));
+  // The content's own scroll (the page does not scroll on a desktop): reset when a section opens.
+  const contentRef = useRef<HTMLDivElement>(null);
   // The page header's action slot: a section's Save / Add buttons are drawn there, on the title's line.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const active = useMemo(
@@ -210,7 +212,7 @@ export function AgentSettingsTabs({
         // "#carriers" is also the menu item's id, so the browser jumps to it and the page header
         // (title, breadcrumb) leaves the screen. A section opens at the top; "#tab/anchor" still
         // scrolls to its setting (revealAnchor below).
-        if (!target) requestAnimationFrame(() => window.scrollTo({ top: 0 }));
+        if (!target) requestAnimationFrame(() => { window.scrollTo({ top: 0 }); contentRef.current?.scrollTo({ top: 0 }); });
       }
       setHashRead(true);
     };
@@ -290,7 +292,10 @@ export function AgentSettingsTabs({
    * tall as itself, and the section's cards.
    */
   return (
-    <div className="flex min-w-0 flex-col gap-6" data-settings-frame="">
+    // Manager review 29 Oct (02:48): the title, the menu and the tabs stay put; only the content
+    // scrolls, inside. On a desktop the frame is exactly the window under the top bar (the shell pads
+    // 24px above and 32px below), so the page has no scroll of its own.
+    <div className="flex min-w-0 flex-col gap-6 lg:h-[calc(100dvh-var(--top-bar-h)-3.5rem)] lg:min-h-0" data-settings-frame="">
       {active && !guiding && !hashRead && (
         <div aria-hidden="true" className="flex flex-col gap-2">
           <div className="h-3.5 w-36 m-skel rounded-full" />
@@ -311,11 +316,11 @@ export function AgentSettingsTabs({
       )}
       {/* In a Get set up step the menu is hidden, so the grid must drop its column too: with the
           column kept, the whole page sat in the 224px menu track (owner, 2026-10-29). */}
-      <div className={cn("grid min-w-0 grid-cols-1 items-start gap-6", !guiding && "lg:grid-cols-[224px_minmax(0,1fr)] 2xl:grid-cols-[256px_minmax(0,1fr)]")}>
+      <div className={cn("grid min-w-0 grid-cols-1 items-start gap-6 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)] lg:items-stretch", !guiding && "lg:grid-cols-[224px_minmax(0,1fr)] 2xl:grid-cols-[256px_minmax(0,1fr)]")}>
       {/* The menu is a list, not a card (no surface, border or blur). Sticky under the top bar and
           only as tall as its list, capped at the window less the top bar, this header and the page's
           padding (10.5rem), so on its own it never makes the page scroll; past that the list scrolls. */}
-      <div data-settings-rail="" className={cn("box-border flex w-full min-h-0 shrink-0 flex-col lg:sticky lg:top-[calc(var(--top-bar-h)+1.5rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-10.5rem)]", guiding && "hidden")}>
+      <div data-settings-rail="" className={cn("box-border flex w-full min-h-0 shrink-0 flex-col lg:h-full", guiding && "hidden")}>
         <div className="shrink-0 pb-2">
           <label className="relative block">
             <span className="sr-only">Search settings</span>
@@ -445,7 +450,7 @@ export function AgentSettingsTabs({
       </nav>
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <div ref={contentRef} data-settings-scroll="" className="min-w-0 flex-1 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1.5">
         {active && (
           <section
             id={`settings-panel-${active.id}`}

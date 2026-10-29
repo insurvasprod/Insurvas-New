@@ -1838,20 +1838,11 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 .portal-settings-group-chevron { width: 14px; height: 14px; flex: 0 0 auto; transition: transform 140ms ease; }
 .portal-settings-group-chevron.is-open { transform: rotate(180deg); }
 .portal-settings-nav-subsections {
-  display: flex; min-width: 0; flex-direction: column; gap: 0; margin: .125rem 0 .375rem .5rem; padding-left: .75rem;
+  display: flex; min-width: 0; flex-direction: column; gap: 0; margin: .125rem 0 .375rem;
 }
 .portal-settings-nav-subsections[hidden] { display: none; }
 .portal-settings-subsection { position: relative; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-/* One rounded elbow per page, each starting a little under the one above (owner's reference,
-   2026-10-29): a tree you read parent → child, not a ruler down the side. */
-.portal-settings-subsection::before {
-  position: absolute; top: -.375rem; bottom: 50%; left: -.75rem; width: .625rem;
-  border-left: 1.5px solid var(--settings-nav-guide, var(--border-strong));
-  border-bottom: 1.5px solid var(--settings-nav-guide, var(--border-strong));
-  border-bottom-left-radius: .5rem;
-  content: ""; pointer-events: none;
-}
-.portal-settings-subsection[aria-current="page"]::before { border-color: var(--accent-ink); }
+/* No tree lines in the Settings menu (manager review 29 Oct, 03:48): plain items in a card. */
 /* Icons only with the 256px menu (1536px screens and up); the 224px menu keeps every label on one line. */
 .portal-settings-item-icon { color: var(--muted); display: none; }
 @media (min-width: 1536px) { .portal-settings-item-icon { display: block; } }
@@ -1860,7 +1851,10 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 @media (min-width: 1024px) {
   .portal-settings-nav { max-height: none; }
   /* A column of navigation, not a floating card (manager review §4): a hairline on its right. */
-  [data-settings-rail] { border-right: 1px solid var(--border); padding-right: .75rem; }
+  /* A navigation card (manager review 29 Oct, 03:48: "some outer card … give it some space, remove
+     this line"): its own surface and padding, no divider, no tree lines. */
+  [data-settings-rail] { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: .75rem .5rem .5rem; }
+  [data-settings-rail] .portal-settings-nav { flex: 1 1 auto; min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .portal-settings-group-toggle, .portal-settings-group-chevron { transition: none; }
