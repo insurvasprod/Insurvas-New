@@ -32,7 +32,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
   return (
     <>
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Payout runs" description="What each partner is owed — and the statement they see." />
+      <PageHeader visible title="Payout runs" description="What each partner is owed, and the statement they see." breadcrumbs={[{ label: "Partners" }, { label: "Payout runs" }]} />
       {loaded ? <PayoutsBoard runs={loaded.runs} partners={loaded.partners} readOnly={guard.entitlement.access === "read_only"} openId={open ?? null} recordLinks={records.entitled} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}
     </div>
     </>

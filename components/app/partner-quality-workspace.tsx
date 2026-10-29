@@ -136,7 +136,7 @@ export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false }: 
   const th = (key: SortKey, label: string, hint?: string) => <th className="text-right" title={hint}><SortButton label={label} active={sort.key === key} onClick={() => toggleSort(key)} /></th>;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="Partner quality" description="Lead quality by partner, against the prior period." />
+    <PageHeader visible title="Partner quality" description="How good each lead source's leads are, against the period before." breadcrumbs={[{ label: "Reports" }, { label: "Partner quality" }]} />
 
     {/* Four figures an operator acts on (2026-10-06 redesign). Partners with leads rides on Leads
         sent and the duplicate rate on Screening pass; both stay columns and drill-downs below. */}
