@@ -76,7 +76,9 @@ const DOTS = ["bg-[var(--primary)]", "bg-[var(--info)]", "bg-[var(--warning)]", 
 const SCROLL =
   "overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:color-mix(in_srgb,var(--primary)_45%,transparent)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--primary)_45%,transparent)]";
 /** The two panes fill the screen on desktop; on a phone they stack and the list scrolls in place. */
-const PANES = "grid gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-250px)] lg:grid-cols-[360px_minmax(0,1fr)]";
+// Each pane is only as tall as what is in it, up to the screen's height, where it scrolls
+// (owner, 2026-10-29: no empty card when a list is short).
+const PANES = "grid items-start gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-250px)] lg:grid-cols-[360px_minmax(0,1fr)] lg:[&>*]:max-h-full";
 /** The kit's glass card (UI-CONSISTENCY §5b), not a local copy of it. */
 const PANE = cardSurface;
 const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
