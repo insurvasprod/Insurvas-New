@@ -116,6 +116,40 @@ export async function getDncDialingStatus() {
   return { blocked: vendors.length === 0 || !available, reason: vendors.length === 0 || !available ? DNC_BLOCK_MESSAGE : null };
 }
 
+export type ScreeningServiceStatus = {
+  /** True when every screening the scrub needs (litigator and DNC) has an enabled vendor whose latest real lookup answered, or that has not been asked yet. */
+  answering: boolean;
+  demo: boolean;
+  providers: Array<{ name: string; vendor_type: "dnc_scrub" | "litigator_scrub"; last_call_at: string | null; last_call_ok: boolean | null }>;
+  checkedAt: string;
+};
+
+/**
+ * "Check again" on a campaign whose scrub an outage stopped (2026-10-29): is the screening service
+ * answering now? Read-only — no vendor is called and nothing is billed. It reads the latest real
+ * lookup each enabled vendor answered or failed (any agency's; the vendors are the platform's), the
+ * same provider_calls rows the gate counts, with fallback hand-offs and admin tests left out.
+ */
+export async function getScreeningServiceStatus(): Promise<ScreeningServiceStatus> {
+  const checkedAt = new Date().toISOString();
+  if (demoScreeningEnabled()) return { answering: true, demo: true, providers: [], checkedAt };
+  const db = getSupabaseServiceClient();
+  const { data, error } = await db.from("compliance_vendors")
+    .select("id, name, vendor_type").in("vendor_type", ["dnc_scrub", "litigator_scrub"]).eq("is_enabled", true)
+    .order("vendor_type").order("priority");
+  if (error) throw new Error(`Could not load screening vendors: ${error.message}`);
+  const since = new Date(Date.now() - LAST_CHECK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const providers = await Promise.all(((data ?? []) as Array<{ id: string; name: string; vendor_type: "dnc_scrub" | "litigator_scrub" }>).map(async (row) => {
+    const latest = await db.from("provider_calls").select("ts, status").eq("provider", providerCode(row.id)).gte("ts", since)
+      .neq("method", FALLBACK_METHOD).neq("method", TEST_CONNECTION_METHOD).order("ts", { ascending: false }).limit(1)
+      .maybeSingle<{ ts: string; status: string }>();
+    if (latest.error) throw new Error(`Could not load screening vendor health: ${latest.error.message}`);
+    return { name: row.name, vendor_type: row.vendor_type, last_call_at: latest.data?.ts ?? null, last_call_ok: latest.data ? latest.data.status === "ok" : null };
+  }));
+  const answering = (["litigator_scrub", "dnc_scrub"] as const).every((type) => providers.some((vendor) => vendor.vendor_type === type && vendor.last_call_ok !== false));
+  return { answering, demo: false, providers, checkedAt };
+}
+
 /**
  * The registry screen's data: the vendors, plus the DNC verdict from the real gate (which honours
  * demo mode) rather than one recomputed in the browser.

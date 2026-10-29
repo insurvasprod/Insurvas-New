@@ -507,7 +507,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {data.queue && data.actions.canUnassign && <Button variant="outline" className={outline} disabled={readOnly || saving === "unassign"} onClick={() => void release("unassign")}>{saving === "unassign" && <Loader2 className="size-4 animate-spin" />}Unassign</Button>}
               {data.queue && <Button variant="outline" className={outline} disabled={readOnly || saving === "nudge"} onClick={nudge}>Nudge team</Button>}
               {expired && <Button variant="outline" className={outline} disabled={readOnly || saving === "reopen"} onClick={reopen}>{saving === "reopen" && <Loader2 className="size-4 animate-spin" />}Reopen in queue</Button>}
-              {canVerify && data.queue && <Button asChild variant="outline" className={outline}><Link href={`/app/inbound/call/${data.queue.id}`}>Verification</Link></Button>}
+              {canVerify && data.queue && <Button asChild variant="outline" className={outline}><Link href={`/app/inbound/call/${data.queue.id}?phase=verify`}>Verification</Link></Button>}
               <LeadApplicationEntry leadId={data.lead.id} workItemId={data.queue?.id ?? null} canStart={!readOnly && (data.role === "owner" || data.role === "producer")} className={outline} />
               {data.stage && data.actions.canChangeStage && (
                 <div className="mt-1">

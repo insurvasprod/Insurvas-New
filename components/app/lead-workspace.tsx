@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
 import { DispositionPicker, ListView, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, initials, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
+import { useSolo } from "@/components/app/solo-context";
 import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
 
 type Lead = { id: string; pipeline_id: string; stage_id: string; values: Record<string, unknown>; screening_outcome?: string | null; screening_warning?: string | null; created_at: string; updated_at: string; submitter_name?: string | null; owner_user_id?: string | null; owner_name?: string | null; disposition?: string | null; disposition_at?: string | null; stage_entered_at?: string | null; monthly_premium_cents?: number | null };
@@ -212,6 +213,8 @@ function LeadPreviewPanel({ lead, stages, readOnly, onMove, onClose, onReconcile
 const VIEW_LABEL = { stages: "Stages", board: "Board", table: "Table", list: "List" } as const;
 
 export function LeadWorkspace() {
+  // Solo mode (owner 2026-10-29): every lead is the one agent's, so "Assigned to me" and "Unassigned" say nothing.
+  const solo = useSolo();
   const [data, setData] = useState<PageData | null>(null); const [error, setError] = useState(""); const [search, setSearch] = useState(""); const [query, setQuery] = useState(""); const [view, setView] = useState<"stages" | "board" | "table" | "list">("board"); const [selected, setSelected] = useState<Lead | null>(null); const [moreFilters, setMoreFilters] = useState(false); const [product, setProduct] = useState(""); const [stageFilter, setStageFilter] = useState(""); const [submitter, setSubmitter] = useState(""); const [outcome, setOutcome] = useState(""); const [fromDate, setFromDate] = useState(""); const [toDate, setToDate] = useState("");
   const [pipelineId, setPipelineId] = useState(""); const [adding, setAdding] = useState(false); const [refreshing, setRefreshing] = useState(false);
   // Ages and "today" are measured against the moment the data arrived, read in the browser.
@@ -341,8 +344,10 @@ export function LeadWorkspace() {
   const pipelineKey = activePipeline?.id ?? "";
   const builtInViews: BuiltInView[] = [
     { id: "all", name: "All", state: { pipeline: pipelineKey }, count: scopeCounts.all },
-    { id: "mine", name: "Assigned to me", state: { pipeline: pipelineKey, scope: "mine" }, count: scopeCounts.mine, disabled: !data.currentUserId },
-    { id: "unassigned", name: "Unassigned", state: { pipeline: pipelineKey, scope: "unassigned" }, count: scopeCounts.unassigned },
+    ...(solo ? [] : [
+      { id: "mine", name: "Assigned to me", state: { pipeline: pipelineKey, scope: "mine" }, count: scopeCounts.mine, disabled: !data.currentUserId },
+      { id: "unassigned", name: "Unassigned", state: { pipeline: pipelineKey, scope: "unassigned" }, count: scopeCounts.unassigned },
+    ] satisfies BuiltInView[]),
     { id: "overdue", name: "Overdue in stage", state: { pipeline: pipelineKey, scope: "overdue" }, count: scopeCounts.overdue, disabled: !context?.schemaReady, title: !context?.schemaReady ? "Needs time allowed per stage (database update 20260925100000)" : undefined },
   ];
 

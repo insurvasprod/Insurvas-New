@@ -1,489 +1,703 @@
 "use client";
 
 /**
- * /app/assignments and the agency's /app/lead-routing — one page, "Lead routing" (redesign 2026-10-26,
- * owner pick B "Team first", canvas M2 · Assignment). The two routes were the same workspace under two
- * names; the agency's unassigned pool is a tab here now.
+ * Step 6 · Route of the one Leads page: /app/assignments and the agency's /app/lead-routing.
  *
- * Rules tab: a card per person (room left, rest day, passed over, licence lapsing), the rule chain read
- * as sentences, and the next pool leads as a strip. Team and Settings tabs keep the capacity table and
- * the household rules. Reassigning opens a panel that finds the lead by name or phone.
+ * One screen, no page scroll (owner 2026-10-29: "make it fit the whole height … easier to understand
+ * what the user needs to do"). The frame's top row carries the one thing to do next — unpublished
+ * rules → Publish rules; pool leads that go to nobody → the fix for why (add a licence or an
+ * appointment, raise someone's capacity, open the rule); a rule pointing at nobody active → take them
+ * off it; everyone full → raise capacity; an empty pool → import a list. Below it, two columns that
+ * scroll inside themselves: left "Who gets which leads" (the licence gate on one line, the numbered
+ * rules — drag or arrow keys to reorder — and "Everyone else, in turn by …"); right "Open leads each
+ * person can hold" over the pool card (waiting count, Hand out the next lead, the household facts
+ * behind Edit, and "Next up from the pool"). In an agency the unassigned pool is a second view.
  *
  * Every figure on it is read, not drawn: the licence chips and the Licensed column come from the
- * eligibility gate itself (assignment_insights → assignment_candidate_is_eligible), "N routed" from
+ * eligibility gate itself (assignment_insights → assignment_candidate_is_eligible), "N this week" from
  * lead_assignment_events.rule_id, "skipped X N×" from assignment_skip_events, and the preview from
  * the real router run inside a rolled-back savepoint. Before migration 20260924300000 the page
  * shows what it can and says what it cannot.
  */
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { Check, GripVertical, House, Radio, RotateCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DetailPanel } from "@/components/ui/detail-panel";
-import { PageHeader } from "@/components/ui/page-header";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoading } from "@/components/ui/page-loading";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
-import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { TableCard } from "@/components/ui/table-card";
 import { RefreshButton } from "@/components/ui/data-toolbar";
-import { Field, KeyValues, LockIcon, PlusIcon, SettingsCard, SettingsMeter, control, st, pillTone } from "@/components/app/settings/primitives";
-import { MATCH_LABEL, MATCH_OPERATOR, SCHEMA_PENDING_MESSAGE, WEEKDAYS, WEEKDAY_NAMES, daysUntil, lapseDay, nobodySentence, shortDate, shortName, stateName, type AssignmentMember, type LicenceExpiry } from "@/lib/assignment/constants";
+import { Meter } from "@/components/ui/stat";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { cardInset, cardSurface } from "@/components/ui/card";
+import { Field, KeyValues, LockIcon, PlusIcon, control, pillTone } from "@/components/app/settings/primitives";
+import { MATCH_LABEL, MATCH_OPERATOR, RULE_STRATEGIES, SCHEMA_PENDING_MESSAGE, WEEKDAY_NAMES, daysUntil, lapseDay, nobodySentence, shortDate, shortName, stateName, type AssignmentMember, type LicenceExpiry, type PreviewRow, type RuleStrategy } from "@/lib/assignment/constants";
 import { cn } from "@/lib/utils";
 import { draftFromRule, pinFallbacks, roleLabel, serialise, titleCase, type RuleDraft } from "@/components/app/assignment/model";
 import { PreviewWhy, RuleEditor } from "@/components/app/assignment/rule-editor";
 import { useAssignmentWorkspace } from "@/components/app/assignment/use-assignment-workspace";
-import { ViewTabs, fullHeightCard } from "@/components/app/lead-ops-view-tabs";
-import { NextStepLine } from "@/components/app/next-step-line";
 import { UnassignedPool } from "@/components/app/agency/unassigned-pool";
+import { LeadsInSlot, useInLeadsFrame } from "@/components/app/lead-sources/leads-in-slot";
 
-type Tab = "rules" | "capacity" | "pool" | "settings";
 const STRATEGY_PHRASE = { round_robin: "in turn", least_loaded: "fewest open first", best_placement: "best recent placement first" } as const;
+/** The board's chip words for how everyone else is picked. */
+const STRATEGY_CHIP: Record<RuleStrategy, string> = { round_robin: "Round robin", least_loaded: "Fewest open first", best_placement: "Best recent placement" };
+/** readUnassignedPool reads at most this many leads. */
+const POOL_READ_CAP = 500;
+const cardTitle = "m-0 text-card-title text-[var(--ink)]";
+/** Where a personal licence is added (Team & access) and where an agency appointment is (Carriers › States). */
+const LICENCES_HREF = "/app/settings#team-access";
+const APPOINTMENTS_HREF = "/app/settings#carriers/carriers-states";
+const linkAction = "shrink-0 text-xs font-semibold text-[var(--accent-ink)] hover:underline";
 
-export function AssignmentWorkspace({ canManage, pool = false }: { canManage: boolean; /** The agency's unassigned pool, as a tab (owner and admins). */ pool?: boolean }) {
-  const { workspace, loading, busy, preview, drafts, setDrafts, openKey, setOpenKey, dragKey, setDragKey, publishError, moveNotice, campaignFilter, setCampaignFilter, editingMember, setEditingMember, memberForm, setMemberForm, memberError, setMemberError, editingRest, setEditingRest, restForm, setRestForm, restError, restCardRef, restInputRef, workItemId, setWorkItemId, returnReason, setReturnReason, reassignWorkItemId, setReassignWorkItemId, reassignTargetUserId, setReassignTargetUserId, reassignReason, setReassignReason, adopt, loadPreview, refresh, members, memberById, publishedOrder, dirty, problems, sinceLabel, post, publish, saveMember, saveRest, saveAutoRoute, openRestEditor, updateDraft, moveDraft, dropOn, handleKeys, addCondition, restore, atCeiling, routedFor, topCapacitySkip, ruleSkipLine, personSkipLine, warnable, ceilingChip, valueChip, assigneeSummary } = useAssignmentWorkspace(canManage);
+/** A deactivated or suspended login: its leads go back to the pool and no rule can hand it more. */
+const isInactive = (member: AssignmentMember) => member.status !== "active" && member.status !== "unknown";
 
-  const [tab, setTab] = useState<Tab>("rules");
+/** Why the router placed a preview lead with nobody, as the fix it calls for (PreviewWhy's labels). */
+function nobodyCause(row: PreviewRow): "no_state" | "licence" | "full" | "no_one" | "household" | "other" {
+  const d = row.detail ?? {};
+  const other = (d.capacity ?? 0) + (d.rest ?? 0) + (d.household ?? 0) + (d.day_off ?? 0) + (d.language ?? 0);
+  if (!d.candidates) return "no_one";
+  if (!d.state && (d.licence ?? 0) > 0 && !other) return "no_state";
+  if ((d.licence ?? 0) > 0 && !other) return "licence";
+  if ((d.capacity ?? 0) > 0 && (d.capacity ?? 0) + (d.licence ?? 0) === d.candidates) return "full";
+  if ((d.household ?? 0) > 0 || (d.rest ?? 0) > 0) return "household";
+  return "other";
+}
+
+type NextMove = { tone: "warning" | "info"; text: string; title?: string; actions: ReactNode };
+
+export function AssignmentWorkspace({ canManage, pool = false }: { canManage: boolean; /** The agency's unassigned pool, as a second view (owner and admins). */ pool?: boolean }) {
+  const { workspace, loading, busy, preview, drafts, setDrafts, openKey, setOpenKey, dragKey, setDragKey, publishError, moveNotice, campaignFilter, setCampaignFilter, editingMember, setEditingMember, memberForm, setMemberForm, memberError, setMemberError, editingRest, setEditingRest, restForm, setRestForm, restError, restCardRef, restInputRef, workItemId, setWorkItemId, returnReason, setReturnReason, reassignWorkItemId, setReassignWorkItemId, reassignTargetUserId, setReassignTargetUserId, reassignReason, setReassignReason, adopt, loadPreview, refresh, members, memberById, publishedOrder, dirty, problems, sinceLabel, post, publish, saveMember, saveRest, saveAutoRoute, openRestEditor, updateDraft, moveDraft, dropOn, handleKeys, addCondition, restore, routedFor, topCapacitySkip, ruleSkipLine, personSkipLine, warnable, ceilingChip, valueChip, assigneeSummary } = useAssignmentWorkspace(canManage);
+
   const [reassignOpen, setReassignOpen] = useState(false);
-  const stripRef = useRef<HTMLElement>(null);
-
-  const header = (
-    <PageHeader
-      title="Lead routing"
-      actions={workspace ? (
-        <>
-          <Button type="button" variant="outline" onClick={() => setReassignOpen(true)}>{canManage ? "Reassign a lead" : "Return a lead"}</Button>
-          <Button data-guide="assignments-assign" type="button" disabled={busy === "action"} onClick={() => void post({ action: "assign" }, "Next eligible lead assigned")}>Assign next lead</Button>
-        </>
-      ) : undefined}
-    />
-  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  const [poolCount, setPoolCount] = useState<number | null>(null);
+  // The right column's two tabs. Pool first: "Hand out the next lead" and the next-up preview live there.
+  const [side, setSide] = useState<"pool" | "people">("pool");
+  const [poolKey, setPoolKey] = useState(0);
+  const scopeRef = useRef<HTMLDivElement>(null);
+  const firstNobodyRef = useRef<HTMLLIElement>(null);
+  const newFallback = useRef(0);
+  const inFrame = useInLeadsFrame();
 
   if (loading) return <PageLoading />;
-  if (!workspace) return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">{header}<TableCard><ErrorState detail="The assignment workspace could not be loaded." action={<Button type="button" variant="outline" onClick={() => { void refresh(false).catch(() => undefined); }}>Try again</Button>} /></TableCard></div>;
+  if (!workspace) return <section className={cn(cardSurface, "p-4")}><ErrorState detail="The assignment workspace could not be loaded." action={<Button type="button" variant="outline" onClick={() => { void refresh(false).catch(() => undefined); }}>Try again</Button>} /></section>;
 
   const inactiveRules = workspace.rules.filter((rule) => !drafts.some((draft) => draft.id === rule.id));
   const publishedActive = workspace.rules.filter((rule) => rule.is_active).map(draftFromRule);
   const fallbackMoved = serialise(pinFallbacks(publishedActive)) !== serialise(publishedActive);
-  const realtimeRules = workspace.rules.filter((rule) => rule.is_active && rule.match_type === "realtime").length;
   const previewRows = preview.rows ?? [];
   const routedCount = previewRows.filter((row) => row.outcome === "routed").length;
   const firstNobody = previewRows.find((row) => row.outcome === "nobody") ?? null;
   const nobodyCount = previewRows.filter((row) => row.outcome === "nobody").length;
   const setters = members.filter((member) => member.role === "setter");
   const filteredCampaigns = workspace.campaigns.filter((campaign) => campaign.name.toLowerCase().includes(campaignFilter.trim().toLowerCase()));
+  const conditionCount = drafts.filter((item) => item.matchType !== "fallback").length;
+  const fallbackIndex = drafts.findIndex((draft) => draft.matchType === "fallback");
+  const fallback = fallbackIndex >= 0 ? drafts[fallbackIndex] : null;
+  // With no fallback rule the router hands what is left to the whole roster, in turn.
+  const everyoneElse: RuleStrategy = fallback?.strategy ?? "round_robin";
+  const working = members.filter((member) => !isInactive(member));
+  const fullPeople = working.filter((member) => member.currentOpen >= member.capacity);
+  const inactiveHolding = members.filter((member) => isInactive(member) && member.currentOpen > 0);
+  /** A rule's ticked people who can still take leads; empty ticks mean the whole roster. */
+  const deadAssignees = (draft: RuleDraft) => draft.assigneeIds.filter((id) => { const member = memberById.get(id); return !member || isInactive(member); });
+  const nobodyActive = (draft: RuleDraft) => draft.assigneeIds.length > 0 && deadAssignees(draft).length === draft.assigneeIds.length;
+  const firstProblem = problems.findIndex(Boolean);
+  const deadRuleIndex = drafts.findIndex((draft) => deadAssignees(draft).length > 0);
 
-  /** Open a person's row on the Team tab for editing. */
   function editMember(member: AssignmentMember) {
-    setTab("capacity");
+    setDetailsFor(member.id);
     setEditingMember(member.id);
     setMemberError(null);
     setMemberForm({ capacity: String(member.capacity), languages: member.languages.join(", "), weekdayOff: member.weekdayOff === null ? "" : String(member.weekdayOff) });
   }
 
-  // The one thing to do next: a lead the rules can't place, then unpublished changes, then someone full.
-  let nextStep: { text: ReactNode; action: ReactNode } | null = null;
-  if (canManage && firstNobody) {
-    nextStep = {
-      text: <><strong className="font-semibold text-[var(--ink)]">{nobodyCount === 1 ? "One of the next pool leads goes to nobody" : `${nobodyCount} of the next ${previewRows.length} pool leads go to nobody`}</strong> — {firstNobody.name}, {firstNobody.state ? stateName(firstNobody.state) : "no state"}: {firstNobody.licence_reason ?? nobodySentence(firstNobody.detail)}{firstNobody.detail?.requires_licensed && setters.length > 0 ? " It needs a licensed agent, so no setter can take it either." : ""}</>,
-      action: <Button type="button" size="sm" variant="outline" onClick={() => { setTab("rules"); requestAnimationFrame(() => stripRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>See {nobodyCount === 1 ? "it" : "them"}</Button>,
-    };
-  } else if (canManage && dirty) {
-    nextStep = {
-      text: <><strong className="font-semibold text-[var(--ink)]">Your rule changes aren&rsquo;t live yet.</strong> Publish them and they apply from the next assignment.</>,
-      action: <Button type="button" size="sm" disabled={busy === "publish" || problems.some(Boolean)} onClick={() => void publish()}>{busy === "publish" ? "Publishing…" : "Publish rules"}</Button>,
-    };
-  } else if (canManage && atCeiling.length) {
-    const names = atCeiling.slice(0, 2).map((member) => shortName(member.name)).join(" and ") + (atCeiling.length > 2 ? ` +${atCeiling.length - 2}` : "");
-    nextStep = {
-      text: <><strong className="font-semibold text-[var(--ink)]">{names} {atCeiling.length === 1 ? "is" : "are"} at the ceiling</strong> — skipped until a lead closes or you raise the capacity.</>,
-      action: <Button type="button" size="sm" variant="outline" onClick={() => setTab("capacity")}>Open Team</Button>,
-    };
+  /** Opens a person's capacity editor and puts the cursor in it (the fix for "everyone full"). */
+  function raiseCapacity(member: AssignmentMember) {
+    setSide("people");
+    editMember(member);
+    // Two frames: the People tab mounts first, then its editor.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const input = document.getElementById(`cap-${member.id}`) as HTMLInputElement | null;
+      input?.scrollIntoView({ behavior: "smooth", block: "center" });
+      input?.focus({ preventScroll: true });
+      input?.select();
+    }));
   }
+
+  /** The page's one Refresh: the rules and people, the next-up preview and the agency's pool. */
+  function refreshAll() {
+    void refresh().catch(() => undefined);
+    setPoolKey((key) => key + 1);
+  }
+
+  function openRule(key: string) {
+    setOpenKey(key);
+    requestAnimationFrame(() => document.getElementById(`rule-editor-${key}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  }
+
+  /** Takes the people who can no longer take leads off every rule; Publish rules makes it live. */
+  function dropDeadAssignees() {
+    setDrafts((current) => current.map((draft) => {
+      const dead = deadAssignees(draft);
+      return dead.length ? { ...draft, assigneeIds: draft.assigneeIds.filter((id) => !dead.includes(id)) } : draft;
+    }));
+  }
+
+  /** "Everyone else, in turn by …": the fallback rule's strategy, or a new fallback for the whole roster. */
+  function pickEveryoneElse(strategy: RuleStrategy) {
+    if (fallback) { updateDraft(fallback.key, { strategy }); return; }
+    if (strategy === "round_robin") return;
+    newFallback.current += 1;
+    setDrafts((current) => pinFallbacks([...current, { key: `fallback-${newFallback.current}`, matchType: "fallback", seconds: "60", listText: "", campaignIds: [], licensedOnly: false, assigneeIds: [], strategy, conditions: [] }]));
+  }
+
+  function removeDraft(key: string) {
+    setDrafts((current) => current.filter((item) => item.key !== key));
+    if (openKey === key) setOpenKey(null);
+  }
+
+  function openSettings() {
+    if (canManage) openRestEditor();
+    setSettingsOpen(true);
+  }
+
+  const nobodyWhy = firstNobody
+    ? `${nobodyCount === 1 ? "One of the next pool leads goes to nobody" : `${nobodyCount} of the next ${previewRows.length} pool leads go to nobody`}. ${firstNobody.name}, ${firstNobody.state ? stateName(firstNobody.state) : "no state"}: ${firstNobody.licence_reason ?? nobodySentence(firstNobody.detail)}${firstNobody.detail?.requires_licensed && setters.length > 0 ? " It needs a licensed agent, so no setter can take it either." : ""}`
+    : "";
+
+  /* ── the one thing to do next (owner 2026-10-29), each problem with its fix ── */
+  const seeThem = side === "pool" ? null : <button type="button" className={linkAction} onClick={() => { setSide("pool"); requestAnimationFrame(() => requestAnimationFrame(() => firstNobodyRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }))); }}>See {nobodyCount === 1 ? "it" : "them"}</button>;
+  const fullest = [...fullPeople].sort((a, b) => b.currentOpen - b.capacity - (a.currentOpen - a.capacity))[0] ?? null;
+
+  function nobodyMove(row: PreviewRow): NextMove {
+    const count = nobodyCount === 1 ? "1 next lead goes" : `${nobodyCount} of the next ${previewRows.length} go`;
+    const cause = nobodyCause(row);
+    const where = row.state ? stateName(row.state) : "no state";
+    if (cause === "no_state") return { tone: "warning", title: nobodyWhy, text: `${count} to nobody: ${row.name} has no state, so no licence can match.`, actions: <>{seeThem}<Button asChild size="sm"><Link href={`/app/leads/${row.lead_id}`}>Add the state</Link></Button></> };
+    if (cause === "licence") {
+      // The gate says which half is missing: the agency's carrier appointment, or an agent's licence.
+      const appointment = /appointment/i.test(row.licence_reason ?? "");
+      const st = row.state ? `${row.state} ` : "";
+      return {
+        tone: "warning",
+        title: nobodyWhy,
+        text: `${count} to nobody: no one sells in ${where}.`,
+        actions: <>{seeThem}<Button asChild size="sm"><Link href={appointment ? APPOINTMENTS_HREF : LICENCES_HREF}>{appointment ? `Add ${st}appointment` : `Add ${st}licence`}</Link></Button></>,
+      };
+    }
+    if (cause === "full" && fullest) return { tone: "warning", title: nobodyWhy, text: `${count} to nobody: everyone who could take them is full.`, actions: <>{seeThem}<Button type="button" size="sm" onClick={() => raiseCapacity(fullest)}>Raise {shortName(fullest.name)}’s capacity</Button></> };
+    if (cause === "no_one") {
+      const rule = row.rule_id ? drafts.find((draft) => draft.id === row.rule_id) : null;
+      const target = rule ?? fallback;
+      return { tone: "warning", title: nobodyWhy, text: `${count} to nobody: the rule ${target ? "it matches" : "chain"} has nobody active on it.`, actions: <>{seeThem}{target ? <Button type="button" size="sm" onClick={() => openRule(target.key)}>Edit {target.matchType === "fallback" ? "everyone else" : `rule ${drafts.indexOf(target) + 1}`}</Button> : <Button type="button" size="sm" onClick={addCondition}>Add a rule</Button>}</> };
+    }
+    if (cause === "household") return { tone: "warning", title: nobodyWhy, text: `${count} to nobody: another agent holds the household, or it is resting.`, actions: <>{seeThem}<Button type="button" size="sm" variant="outline" onClick={openSettings}>Household rules</Button></> };
+    return { tone: "warning", title: nobodyWhy, text: `${count} to nobody. ${nobodySentence(row.detail)}`, actions: seeThem };
+  }
+
+  let move: NextMove | null = null;
+  if (!members.length) {
+    move = { tone: "warning", text: "Nobody can take leads yet.", actions: <Button asChild size="sm"><Link href={LICENCES_HREF}>Invite a teammate</Link></Button> };
+  } else if (canManage && dirty) {
+    move = firstProblem >= 0
+      ? { tone: "warning", text: `Rule ${drafts[firstProblem].matchType === "fallback" ? "“everyone else”" : firstProblem + 1} needs a fix before the rules can go live.`, title: problems[firstProblem] ?? undefined, actions: <><Button type="button" size="sm" variant="ghost" disabled={busy === "publish"} onClick={() => { adopt(workspace); setOpenKey(null); }}>Discard</Button><Button type="button" size="sm" onClick={() => openRule(drafts[firstProblem].key)}>Fix it</Button></> }
+      : { tone: "warning", text: "Your rule changes aren’t live yet. Publish them and they apply from the next assignment.", actions: <><Button type="button" size="sm" variant="ghost" disabled={busy === "publish"} onClick={() => { adopt(workspace); setOpenKey(null); }}>Discard</Button><Button type="button" size="sm" disabled={busy === "publish"} onClick={() => void publish()}>{busy === "publish" ? "Publishing…" : "Publish rules"}<span className="sr-only"> (unpublished changes)</span></Button></> };
+  } else if (canManage && deadRuleIndex >= 0) {
+    const draft = drafts[deadRuleIndex];
+    const names = deadAssignees(draft).map((id) => shortName(memberById.get(id)?.name ?? "someone no longer on the team"));
+    move = { tone: "warning", text: `${draft.matchType === "fallback" ? "Everyone else" : `Rule ${deadRuleIndex + 1}`} still names ${names.join(", ")}, who can’t take leads${nobodyActive(draft) ? ", so its leads fall through" : ""}.`, actions: <><button type="button" className={linkAction} onClick={() => openRule(draft.key)}>Open the rule</button><Button type="button" size="sm" onClick={dropDeadAssignees}>Take {names.length === 1 ? "them" : "them all"} off</Button></> };
+  } else if (canManage && firstNobody) {
+    move = nobodyMove(firstNobody);
+  } else if (canManage && working.length > 0 && fullPeople.length === working.length && fullest) {
+    move = { tone: "warning", text: "Everyone is at their ceiling, so nobody gets new leads.", actions: <Button type="button" size="sm" onClick={() => raiseCapacity(fullest)}>Raise {shortName(fullest.name)}’s capacity</Button> };
+  } else if (canManage && inactiveHolding.length > 0) {
+    const member = inactiveHolding[0];
+    move = { tone: "warning", text: `${member.name} is inactive and still holds ${member.currentOpen.toLocaleString()} open lead${member.currentOpen === 1 ? "" : "s"}.`, actions: <Button type="button" size="sm" onClick={() => setReassignOpen(true)}>Reassign a lead</Button> };
+  } else if (canManage && workspace.settings.auto_route_posted && !workspace.rules.some((rule) => rule.is_active && rule.match_type === "realtime")) {
+    move = { tone: "info", text: "Posted leads are routed on arrival, but no real-time rule says who gets them, so they go to the whole roster.", actions: <Button type="button" size="sm" variant="outline" onClick={addCondition}>Add a rule</Button> };
+  } else if (canManage && !preview.loading && !preview.error && !preview.pending && preview.rows !== null && previewRows.length === 0) {
+    move = { tone: "info", text: "Nothing is waiting in the pool.", actions: <Button asChild size="sm"><Link href="/app/import">Import a list</Link></Button> };
+  }
+  // With nothing to fix, the next move is the pool card's own primary: Hand out the next lead.
+  const handOutIsNext = move === null;
+
+  const strip = move ? (
+    <div role="status" className={cn(cardInset, "flex min-h-9 min-w-0 flex-1 items-center gap-3 border-l-[3px] px-3 py-1.5", move.tone === "warning" ? "border-l-[var(--warning)] bg-[var(--warning-surface)]" : "border-l-[var(--info)] bg-[var(--info-surface)]")}>
+      <TriangleAlert className={cn("size-4 shrink-0", move.tone === "warning" ? "text-[var(--warning-ink)]" : "text-[var(--info-ink)]")} aria-hidden="true" />
+      <span className="line-clamp-2 min-w-0 flex-1 text-sm leading-[1.35] text-[var(--ink)]" title={move.title ?? move.text}>{move.text}{move.title && <span className="sr-only"> {move.title}</span>}</span>
+      <span className="flex shrink-0 items-center gap-2">{move.actions}</span>
+    </div>
+  ) : null;
 
   const insightsLine = workspace.insights
     ? [`${workspace.insights.autoRouted.toLocaleString()} routed on arrival since ${sinceLabel}`, (workspace.insights.unlicensedLeads ?? 0) > 0 ? `${(workspace.insights.unlicensedLeads ?? 0).toLocaleString()} pool leads match no licensed agent` : null].filter(Boolean).join(" · ")
-    : undefined;
+    : null;
+
+  const restDays = workspace.settings.rest_days;
+  const facts = [
+    restDays > 0 ? `Rest ${restDays} day${restDays === 1 ? "" : "s"} before a new owner calls a household` : "No rest between owners of a household",
+    "Mid-conversation leads stay with their agent",
+    "Leads of someone inactive go back to the pool",
+    "Reassigning asks for a reason",
+    workspace.settings.attempts_before_rotate ? `Moves on after ${workspace.settings.attempts_before_rotate} unanswered calls` : null,
+    workspace.settings.auto_route_posted ? "Posted leads are routed on arrival" : null,
+  ].filter((fact): fact is string => Boolean(fact));
+  const attempts = workspace.settings.attempts_before_rotate;
+  /** The household and posted-lead settings as one icon row, the facts behind its tip, one Edit (the dialog). */
+  const settingsRow = (
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border)] pt-2 text-xs text-[var(--body)]">
+      <span className="inline-flex items-center gap-1" title="Rest between owners of a household"><House className="size-3.5 text-[var(--muted)]" aria-hidden="true" />{restDays > 0 ? `Rest ${restDays} day${restDays === 1 ? "" : "s"}` : "No household rest"}</span>
+      <span className="inline-flex items-center gap-1" title="Unanswered calls before the lead moves on"><RotateCw className="size-3.5 text-[var(--muted)]" aria-hidden="true" />{attempts ? `Rotate after ${attempts}` : "No rotation"}</span>
+      <span className="inline-flex items-center gap-1" title="Posted leads"><Radio className="size-3.5 text-[var(--muted)]" aria-hidden="true" />{workspace.settings.auto_route_posted ? "Posted: routed on arrival" : "Posted: wait in the pool"}</span>
+      <InfoTip label="Household rules">{facts.join(". ")}.</InfoTip>
+      <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={openSettings}>{canManage ? "Edit" : "Details"}</Button>
+    </div>
+  );
+
+  /** A nobody row's own fix, beside it in Next up. */
+  function rowFix(row: PreviewRow): ReactNode {
+    if (!canManage || row.outcome !== "nobody") return null;
+    const cause = nobodyCause(row);
+    if (cause === "licence") {
+      const appointment = /appointment/i.test(row.licence_reason ?? "");
+      return <Link href={appointment ? APPOINTMENTS_HREF : LICENCES_HREF} className={linkAction}>{appointment ? "Add appointment" : "Add licence"}</Link>;
+    }
+    if (cause === "no_state") return <Link href={`/app/leads/${row.lead_id}`} className={linkAction}>Add state</Link>;
+    if (cause === "full" && fullest) return <button type="button" className={linkAction} onClick={() => raiseCapacity(fullest)}>Raise capacity</button>;
+    if (cause === "no_one" && fallback) return <button type="button" className={linkAction} onClick={() => openRule(fallback.key)}>Edit rule</button>;
+    if (cause === "household") return <button type="button" className={linkAction} onClick={openSettings}>Rules</button>;
+    return null;
+  }
+
+  // With nothing to fix, the top row is a status line: what waits, where the next leads go, whether the rules are live.
+  const waiting = poolCount !== null ? `${poolCount >= POOL_READ_CAP ? `${POOL_READ_CAP}+` : poolCount.toLocaleString()} waiting` : null;
+  const status = (
+    <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-sm text-[var(--body)]">
+      {[waiting, canManage && previewRows.length ? `next ${previewRows.length}: ${routedCount} placed${nobodyCount ? `, ${nobodyCount} to nobody` : ""}` : null].filter(Boolean).join(" · ")}
+      {(waiting || (canManage && previewRows.length > 0)) && <span aria-hidden="true">·</span>}
+      <span className="inline-flex items-center gap-1 font-semibold text-[var(--success-ink)]"><Check className="size-3.5" aria-hidden="true" />Rules live</span>
+    </span>
+  );
+  const topRow = (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      {strip ?? status}
+      <RefreshButton onClick={refreshAll} refreshing={preview.loading} />
+    </div>
+  );
+
+  const editor = (draft: RuleDraft, index: number) => (
+    <RuleEditor
+      draft={draft}
+      index={index}
+      total={conditionCount}
+      members={members}
+      campaigns={filteredCampaigns}
+      allCampaigns={workspace.campaigns}
+      routerSchema={workspace.routerSchema}
+      campaignCount={workspace.campaigns.length}
+      campaignFilter={campaignFilter}
+      onCampaignFilter={setCampaignFilter}
+      problem={problems[index]}
+      canManage={canManage}
+      boardSchema={workspace.boardSchema}
+      onChange={(next) => updateDraft(draft.key, next)}
+      onMove={(delta) => moveDraft(draft.key, delta)}
+      onClose={() => setOpenKey(null)}
+    />
+  );
+
+  const editLink = (draft: RuleDraft, label: string) => {
+    const open = openKey === draft.key;
+    return (
+      <button
+        type="button"
+        className={linkAction}
+        onClick={() => setOpenKey(open ? null : draft.key)}
+        aria-expanded={open}
+        aria-controls={`rule-editor-${draft.key}`}
+        aria-label={`${open ? "Close" : canManage ? "Edit" : "View"} ${label}`}
+      >{open ? "Close" : canManage ? "Edit" : "View"}</button>
+    );
+  };
+
+  /* ── left: who gets which leads ── */
+  const rulesCard = (
+    <section aria-labelledby="route-rules-title" className={cn(cardSurface, "flex min-w-0 flex-col gap-2 p-4 lg:min-h-0")}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="route-rules-title" className={cn(cardTitle, "min-w-0 flex-1 truncate")}>Who gets which leads</h2>
+        <span className="flex shrink-0 items-center gap-2">
+          {dirty
+            ? <StatusChip tone={pillTone("warning")} dot>Not published</StatusChip>
+            : <StatusChip tone="good" dot={false}><Check className="size-3.5" aria-hidden="true" />Live</StatusChip>}
+          {canManage && <Button type="button" variant="outline" size="sm" onClick={addCondition}><PlusIcon />Add a rule</Button>}
+        </span>
+      </div>
+      {/* Above every rule, never removable: the licence gate and the ceiling — one chip, the rest behind the tip. */}
+      <div className="flex min-w-0 items-center gap-1.5 text-xs text-[var(--muted)]">
+        <StatusChip dot={false} tone="info" title={topCapacitySkip ? `The ceiling skipped ${shortName(memberById.get(topCapacitySkip.user_id)?.name ?? "someone")} ${topCapacitySkip.leads}× this week` : "Always enforced; cannot be removed"}>
+          <span className="inline-flex" aria-hidden="true"><LockIcon /></span>Licensed only · max {ceilingChip}
+        </StatusChip>
+        <InfoTip label="About the rules every lead passes">An agent only gets leads in states they may sell in, and never more than their ceiling of open leads. Setters can get any lead that does not need a licence. The rules below run top to bottom; the first that matches wins.</InfoTip>
+        {insightsLine && <span className="min-w-0 truncate" title={insightsLine}>{insightsLine}</span>}
+      </div>
+      {publishError && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{publishError}</p>}
+
+      <p className="sr-only" aria-live="polite">{moveNotice}</p>
+      <div className="flex min-w-0 flex-col gap-2 lg:-mr-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2">
+        <ol aria-label="Rules, first match wins" className="m-0 flex list-none flex-col gap-1.5 p-0">
+          {drafts.map((draft, index) => {
+            if (draft.matchType === "fallback") return null;
+            const open = openKey === draft.key;
+            const routed = routedFor(draft.id);
+            const problem = problems[index];
+            const skipLine = ruleSkipLine(draft.id);
+            const how = draft.strategy === "round_robin" ? "" : ` · ${STRATEGY_PHRASE[draft.strategy]}`;
+            const dead = deadAssignees(draft).length > 0;
+            return (
+              <li
+                key={draft.key}
+                className={cn(cardInset, "min-w-0", dragKey === draft.key && "opacity-60", open && "border-[var(--primary)]")}
+                draggable={canManage && !open}
+                onDragStart={() => setDragKey(draft.key)}
+                onDragOver={(event) => { if (dragKey) event.preventDefault(); }}
+                onDrop={() => dropOn(draft.key)}
+                onDragEnd={() => setDragKey(null)}
+              >
+                <div className="flex items-center gap-3 px-3 py-2">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-md bg-[var(--surface-alt)] text-xs font-bold text-[var(--ink)]">{index + 1}</span>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-sm font-semibold text-[var(--ink)]">{MATCH_LABEL[draft.matchType]} · {valueChip(draft)}</strong>
+                    <span className="block truncate text-xs text-[var(--muted)]" title={skipLine ? `This week: ${skipLine}` : undefined}>→ {assigneeSummary(draft.assigneeIds)}{how}{skipLine ? ` · this week: ${skipLine}` : ""}</span>
+                  </span>
+                  {problem && <StatusChip dot={false} tone={pillTone("warning")}>needs a fix</StatusChip>}
+                  {!problem && dead && <StatusChip dot={false} tone={pillTone("warning")}>{nobodyActive(draft) ? "nobody active" : "names someone inactive"}</StatusChip>}
+                  <span className="shrink-0 text-xs text-[var(--muted)]" title={workspace.insights ? `Since ${sinceLabel}, 00:00 UTC` : undefined}>
+                    {!draft.id ? "not published" : routed === null ? "" : `${routed.toLocaleString()} this week`}
+                  </span>
+                  {editLink(draft, `rule ${index + 1}`)}
+                  {canManage && <button type="button" className="border-0 bg-transparent px-1 text-base leading-none text-[var(--muted)] hover:text-[var(--error-ink)]" aria-label={`Remove rule ${index + 1}`} onClick={() => removeDraft(draft.key)}>&times;</button>}
+                  {canManage && (
+                    <button
+                      id={`rule-handle-${draft.key}`}
+                      type="button"
+                      className="inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-[var(--muted)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
+                      aria-label={`Rule ${index + 1}. Drag, or press the up and down arrow keys, to reorder`}
+                      title="Drag to reorder"
+                      // Pressing the handle takes focus, so the arrow keys reorder straight after a
+                      // click as well as after Tab. The drag itself belongs to the row.
+                      onPointerDown={(event) => event.currentTarget.focus()}
+                      onKeyDown={(event) => handleKeys(event, draft.key)}
+                    ><GripVertical className="size-4" aria-hidden="true" /></button>
+                  )}
+                </div>
+                {open && editor(draft, index)}
+              </li>
+            );
+          })}
+        </ol>
+        {conditionCount === 0 && (
+          <div className={cn(cardInset, "flex items-center justify-between gap-3 px-3 py-2 text-sm text-[var(--body)]")}>
+            <span>No rules yet: every lead goes to everyone, in turn.</span>
+            {canManage && <Button type="button" size="sm" variant="outline" onClick={addCondition}><PlusIcon />Add a rule</Button>}
+          </div>
+        )}
+
+        {/* The fallback, pinned last: everyone else, and how they are picked. */}
+        <div className="flex min-w-0 flex-col gap-1.5 pt-1">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-xs text-[var(--muted)]">Everyone else, in turn by</span>
+            <span role="radiogroup" aria-label="How everyone else is picked" className="flex flex-wrap gap-1.5">
+              {RULE_STRATEGIES.map((strategy) => (
+                <ToggleChip
+                  key={strategy}
+                  role="radio"
+                  selected={everyoneElse === strategy}
+                  disabled={!canManage || (!workspace.routerSchema && strategy !== "round_robin")}
+                  onClick={() => pickEveryoneElse(strategy)}
+                >{STRATEGY_CHIP[strategy]}</ToggleChip>
+              ))}
+            </span>
+          </div>
+          {fallback && (
+            <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
+              <span className="min-w-0 flex-1">→ {assigneeSummary(fallback.assigneeIds)}{problems[fallbackIndex] ? " · needs a fix" : nobodyActive(fallback) ? " · nobody active" : ""}</span>
+              <span title={workspace.insights ? `Since ${sinceLabel}, 00:00 UTC` : undefined}>{!fallback.id ? "not published" : routedFor(fallback.id) === null ? "" : `${(routedFor(fallback.id) ?? 0).toLocaleString()} this week`}</span>
+              {editLink(fallback, "everyone else")}
+              {canManage && <button type="button" className="border-0 bg-transparent px-1 text-base leading-none text-[var(--muted)] hover:text-[var(--error-ink)]" aria-label="Remove the everyone-else rule" onClick={() => removeDraft(fallback.key)}>&times;</button>}
+            </div>
+          )}
+          {fallback && ruleSkipLine(fallback.id) && <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">This week: {ruleSkipLine(fallback.id)}</p>}
+          {fallback && openKey === fallback.key && <div className={cn(cardInset, "overflow-hidden")}>{editor(fallback, fallbackIndex)}</div>}
+        </div>
+
+        {inactiveRules.length > 0 && (
+          <details className="text-sm">
+            <summary className="cursor-pointer text-xs text-[var(--muted)]">{inactiveRules.length} inactive rule{inactiveRules.length === 1 ? "" : "s"}</summary>
+            <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
+              {inactiveRules.map((rule) => (
+                <li key={rule.id} className="flex items-center justify-between gap-3">
+                  <span className="text-[var(--body)]"><strong className="font-semibold text-[var(--ink)]">{MATCH_LABEL[rule.match_type] ?? rule.match_type}</strong> <span className="text-[var(--muted)]">{MATCH_OPERATOR[rule.match_type] ?? ""}</span> {valueChip(draftFromRule(rule))}</span>
+                  {canManage && <Button type="button" variant="outline" size="sm" onClick={() => restore(rule)}>Restore</Button>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {fallbackMoved && canManage && (
+          <p className="m-0 flex items-center gap-0.5 text-xs leading-[1.5] text-[var(--warning-ink)]">
+            Publish to move the fallback rule last.
+            <InfoTip label="About the fallback rule">The published fallback sits above other rules, so they only see the leads it cannot place. It is shown last here.</InfoTip>
+          </p>
+        )}
+      </div>
+      {settingsRow}
+    </section>
+  );
+
+  /* ── right, People tab: room per person ── */
+  const peoplePanel = (
+    <div role="tabpanel" id="route-side-people-panel" aria-labelledby="route-side-people" className={cn("flex min-w-0 flex-col gap-2 lg:min-h-0 lg:flex-1", side !== "people" && "hidden")}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 flex-1 truncate text-xs text-[var(--muted)]">{working.length ? `${fullPeople.length ? `${fullPeople.length} of ${working.length} full` : "Everyone has room"} · open leads each can hold` : ""}</span>
+        <Button type="button" variant="outline" size="sm" onClick={() => setReassignOpen(true)}>{canManage ? "Reassign a lead" : "Return a lead"}</Button>
+      </div>
+      {members.length ? (
+        <ul aria-label="Your team's room" className="m-0 flex list-none flex-col gap-1 p-0 lg:-mr-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2">
+          {members.map((member) => (
+            <PersonRow
+              key={member.id}
+              member={member}
+              canManage={canManage}
+              open={detailsFor === member.id}
+              editing={editingMember === member.id}
+              onToggle={() => {
+                if (detailsFor === member.id) { setDetailsFor(null); setEditingMember(null); }
+                else if (canManage) editMember(member);
+                else setDetailsFor(member.id);
+              }}
+              skipLine={personSkipLine(member.id)}
+              warnings={warnable(member)}
+              boardSchema={workspace.boardSchema}
+            >
+              {canManage && editingMember === member.id && (
+                <div className="flex flex-col gap-3">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="Capacity" htmlFor={`cap-${member.id}`} hint="Most open leads at once.">
+                      <input id={`cap-${member.id}`} className={control} type="number" min={0} max={100000} value={memberForm.capacity} onChange={(event) => setMemberForm({ ...memberForm, capacity: event.target.value })} />
+                    </Field>
+                    <Field label="Languages" htmlFor={`lang-${member.id}`} hint="Comma-separated, e.g. spanish, es.">
+                      <input id={`lang-${member.id}`} className={control} value={memberForm.languages} disabled={!workspace.boardSchema} onChange={(event) => setMemberForm({ ...memberForm, languages: event.target.value })} placeholder="spanish, english" />
+                    </Field>
+                    <Field label="Rest day" htmlFor={`off-${member.id}`} hint="No automatic assignment that day (agency time).">
+                      <select id={`off-${member.id}`} className={control} value={memberForm.weekdayOff} disabled={!workspace.boardSchema} onChange={(event) => setMemberForm({ ...memberForm, weekdayOff: event.target.value })}>
+                        <option value="">Works every day</option>
+                        {WEEKDAY_NAMES.map((day, value) => <option key={day} value={value}>{day}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                  {!workspace.boardSchema && <p className="m-0 text-xs text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE} Capacity can still be changed.</p>}
+                  {memberError && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{memberError}</p>}
+                  <div className="flex justify-end gap-2.5">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setEditingMember(null); setDetailsFor(null); }} disabled={busy === `member:${member.id}`}>Cancel</Button>
+                    <Button type="button" size="sm" onClick={() => void saveMember(member)} disabled={busy === `member:${member.id}`}>{busy === `member:${member.id}` ? "Saving…" : "Save"}</Button>
+                  </div>
+                </div>
+              )}
+            </PersonRow>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState title="Nobody can take leads yet" hint="Agents and setters appear here once they join." action={<Button asChild variant="outline"><Link href={LICENCES_HREF}>Invite a teammate</Link></Button>} />
+      )}
+    </div>
+  );
+
+  /* ── right, Pool tab: what waits, where the next leads go (each nobody with its fix), and the agency's whole pool ── */
+  const poolPanel = (
+    <div role="tabpanel" id="route-side-pool-panel" aria-labelledby="route-side-pool" className={cn("flex min-w-0 flex-col gap-2 lg:min-h-0 lg:flex-1", side !== "pool" && "hidden")}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--ink)]">{poolCount === null ? "Waiting for someone" : `${poolCount >= POOL_READ_CAP ? `${POOL_READ_CAP}+` : poolCount.toLocaleString()} waiting for someone`}</span>
+        <Button data-guide="assignments-assign" type="button" size="sm" variant={handOutIsNext ? "default" : "outline"} disabled={busy === "action"} onClick={() => void post({ action: "assign" }, "Next eligible lead assigned")}>{busy === "action" ? "Handing out…" : "Hand out the next lead"}</Button>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-2 lg:-mr-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 id="route-next-title" className="m-0 text-xs font-semibold text-[var(--body)]">Next up</h3>
+            {canManage && firstNobody && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--warning-ink)]" title={nobodyWhy}>
+                <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+                {nobodyCount} to nobody
+                <span className="sr-only">. {nobodyWhy}</span>
+              </span>
+            )}
+          </span>
+          {previewRows.length > 0 && <StatusChip tone={pillTone(routedCount === previewRows.length ? "success" : "warning")} dot>{routedCount} of {previewRows.length} routed</StatusChip>}
+        </div>
+        <div aria-labelledby="route-next-title" className="min-w-0">
+        {!canManage ? (
+          <p className="m-0 text-sm text-[var(--muted)]">Owners and producers see where the next pool leads would go.</p>
+        ) : preview.loading && !preview.rows ? (
+          <SectionLoading rows={2} columns={3} label="Loading the routing preview" />
+        ) : preview.error ? (
+          <p className="m-0 flex flex-wrap items-center gap-2 text-sm text-[var(--error-ink)]" role="alert">{preview.error}<Button type="button" size="sm" variant="outline" onClick={() => void loadPreview()}>Try again</Button></p>
+        ) : preview.pending ? (
+          <p className="m-0 text-sm text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>
+        ) : !previewRows.length ? (
+          <EmptyState title="Nothing waiting in the pool" hint="Import a list to fill it." action={<Button asChild type="button" variant="outline"><Link href="/app/import">Import a list</Link></Button>} />
+        ) : (
+          <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
+            {previewRows.map((row) => {
+              const owner = row.owner_user_id ? memberById.get(row.owner_user_id) : undefined;
+              const placed = row.outcome === "routed" || row.outcome === "taken";
+              return (
+                <li key={row.work_item_id} ref={row === firstNobody ? firstNobodyRef : undefined} className={cn(cardInset, "grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 px-3 py-1.5 text-sm")}>
+                  <Link href={`/app/leads/${row.lead_id}`} className="truncate text-[var(--body)] hover:underline" title={row.outcome === "nobody" ? (row.licence_reason ?? nobodySentence(row.detail)) : undefined}>{row.name}{row.state ? ` · ${row.state}` : ""}</Link>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <strong className={cn("truncate font-semibold", placed ? "text-[var(--ink)]" : "text-[var(--warning-ink)]")}>→ {placed ? (owner ? shortName(owner.name) : "Someone") : "Nobody"}</strong>
+                    <PreviewWhy row={row} ruleNumber={row.rule_id ? publishedOrder.get(row.rule_id) ?? null : null} memberName={(id) => shortName(memberById.get(id)?.name ?? "someone")} />
+                  </span>
+                  <span className="min-w-0 text-right">{rowFix(row)}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        {canManage && dirty && previewRows.length > 0 && <p className="m-0 mt-1.5 text-xs text-[var(--muted)]">The preview uses the published rules, not your unpublished changes.</p>}
+        </div>
+
+        {/* The agency's whole pool, oldest first, under the next-up preview (was a table below the page). */}
+        {pool && (
+          <div className="flex min-w-0 flex-col gap-2 border-t border-[var(--border)] pt-2">
+            <h3 className="m-0 text-xs font-semibold text-[var(--body)]">Everyone waiting, oldest first</h3>
+            <UnassignedPool onCount={setPoolCount} bare refreshKey={poolKey} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const sideCard = (
+    <section aria-label="Pool and people" className={cn(cardSurface, "flex min-w-0 flex-col gap-2 px-4 pt-1 pb-4 lg:min-h-0")}>
+      <UnderlineTabs
+        label="Pool and people"
+        idPrefix="route-side"
+        controls={(key) => `route-side-${key}-panel`}
+        value={side}
+        onChange={setSide}
+        tabs={[
+          { key: "pool", label: "Pool", count: poolCount },
+          { key: "people", label: "People", count: fullPeople.length || null, tone: "danger", srSuffix: fullPeople.length ? `(${fullPeople.length} full)` : undefined },
+        ]}
+      />
+      {poolPanel}
+      {peoplePanel}
+    </section>
+  );
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {header}
-
-      {nextStep && <NextStepLine action={nextStep.action}>{nextStep.text}</NextStepLine>}
+    <div ref={scopeRef} className="m-stagger flex w-full min-w-0 flex-col gap-3 lg:min-h-0 lg:flex-1">
+      {/* The next move sits in the frame's top row, level with the rail (2026-10-29); on its own page, on top. */}
+      {inFrame ? <LeadsInSlot slot="lead">{topRow}</LeadsInSlot> : topRow}
 
       {!workspace.boardSchema && (
-        <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
+        <p role="status" className="m-0 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2 text-sm text-[var(--warning-ink)]">
           Real-time rules, language pairing, rest days, rotation, routed counts and the preview need migration 20260924300000.
         </p>
       )}
 
-      <ViewTabs
-        label="Lead routing views"
-        controls="assignment-panel"
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { key: "rules", label: "Rules", count: drafts.length },
-          { key: "capacity", label: "Team", count: members.length },
-          ...(pool ? [{ key: "pool" as const, label: "Unassigned pool" }] : []),
-          { key: "settings", label: "Settings" },
-        ]}
-      />
+      {/* Two columns, each scrolling inside itself: the rules, and the pool and people. */}
+      <div className="grid min-w-0 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+        {rulesCard}
+        {sideCard}
+      </div>
 
-      <div key={tab} role="tabpanel" id="assignment-panel" aria-labelledby={`assignment-panel-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
-      {tab === "rules" && (
-        <>
-          {/* Who can take more: one card a person. */}
-          {members.length > 0 ? (
-            <ul aria-label="Your team's room" className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {members.map((member) => <PersonCard key={member.id} member={member} canManage={canManage} onEdit={() => editMember(member)} skipLine={personSkipLine(member.id)} warnings={warnable(member)} />)}
-            </ul>
-          ) : (
-            <TableCard><EmptyState title="Nobody can take leads yet" hint="Agents and setters appear here once they join." /></TableCard>
-          )}
-
-          <TableCard
-            title="The rules, in plain words"
-            description={insightsLine ? `First match wins · ${insightsLine}` : "First match wins"}
-            action={canManage ? (
-              <span className="flex items-center gap-2">
-                <Button type="button" variant="outline" onClick={addCondition}><PlusIcon />Add a rule</Button>
-                {dirty && <Button type="button" variant="ghost" disabled={busy === "publish"} onClick={() => { adopt(workspace); setOpenKey(null); }}>Discard</Button>}
-                <Button type="button" disabled={!dirty || busy === "publish" || problems.some(Boolean)} onClick={() => void publish()}>{busy === "publish" ? "Publishing…" : "Publish rules"}</Button>
-              </span>
-            ) : undefined}
-          >
-            <p className="sr-only" aria-live="polite">{moveNotice}</p>
-            <ol className="m-0 list-none border-t border-[var(--border)] p-0">
-              {/* Capacity: pinned, checked under every rule, never removable. */}
-              <li className="m-row flex items-center gap-3 px-4 py-3" title="Checked under every rule">
-                <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]" role="img" aria-label="Always enforced; cannot be removed"><LockIcon /></span>
-                <span className="min-w-0 flex-1 text-sm text-[var(--body)]">Nobody is given more than their ceiling <StatusChip dot={false}>{ceilingChip}</StatusChip></span>
-                <span className="shrink-0 text-xs text-[var(--muted)]">
-                  {topCapacitySkip ? <>skipped {shortName(memberById.get(topCapacitySkip.user_id)?.name ?? "someone")} {topCapacitySkip.leads}&times; this week</> : workspace.insights ? "always enforced" : ""}
-                </span>
-              </li>
-              {drafts.map((draft, index) => {
-                const open = openKey === draft.key;
-                const routed = routedFor(draft.id);
-                const problem = problems[index];
-                const pinned = draft.matchType === "fallback";
-                const skipLine = ruleSkipLine(draft.id);
-                return (
-                  <li
-                    key={draft.key}
-                    className={cn("border-t border-[var(--border)]", dragKey === draft.key && "opacity-60")}
-                    draggable={canManage && !open && !pinned}
-                    onDragStart={() => setDragKey(draft.key)}
-                    onDragOver={(event) => { if (dragKey) event.preventDefault(); }}
-                    onDrop={() => dropOn(draft.key)}
-                    onDragEnd={() => setDragKey(null)}
-                  >
-                    <div className={cn("m-row flex items-center gap-3 px-4 py-3", open && "bg-[var(--primary-soft)]")}>
-                      {pinned ? (
-                        // Pinned last: a fallback matches every lead, so nothing after it would be reached.
-                        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" role="img" aria-label={`Rule ${index + 1}, the fallback, always runs last`} title="The fallback always runs last">{index + 1}</span>
-                      ) : canManage ? (
-                        <button
-                          id={`rule-handle-${draft.key}`}
-                          type="button"
-                          className="inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
-                          aria-label={`Rule ${index + 1}. Drag, or press the up and down arrow keys, to reorder`}
-                          title="Drag to reorder"
-                          // Pressing the handle takes focus, so the arrow keys reorder straight after a
-                          // click as well as after Tab. The drag itself belongs to the row.
-                          onPointerDown={(event) => event.currentTarget.focus()}
-                          onKeyDown={(event) => handleKeys(event, draft.key)}
-                        >{index + 1}</button>
-                      ) : <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold">{index + 1}</span>}
-                      <span className="min-w-0 flex-1 text-sm leading-[1.5] text-[var(--body)]">
-                        <RuleSentence draft={draft} value={valueChip(draft)} who={assigneeSummary(draft.assigneeIds)} />
-                        {problem && <StatusChip dot={false} tone={pillTone("warning")} className="ml-2">needs a fix</StatusChip>}
-                      </span>
-                      <span className="shrink-0 text-xs text-[var(--muted)]" title={workspace.insights ? `Since ${sinceLabel}, 00:00 UTC` : undefined}>
-                        {!draft.id ? "not published" : routed === null ? "" : `${routed.toLocaleString()} this week`}
-                      </span>
-                      <button
-                        type="button"
-                        className="shrink-0 text-xs font-semibold text-[var(--accent-ink)] hover:underline"
-                        onClick={() => setOpenKey(open ? null : draft.key)}
-                        aria-expanded={open}
-                        aria-controls={`rule-editor-${draft.key}`}
-                      >{open ? "Close" : canManage ? "Edit" : "View"}</button>
-                      {canManage ? (
-                        <button type="button" className="border-0 bg-transparent px-1 text-base leading-none text-[var(--muted)] hover:text-[var(--error-ink)]" aria-label={`Remove rule ${index + 1}`} onClick={() => { setDrafts((current) => current.filter((item) => item.key !== draft.key)); if (open) setOpenKey(null); }}>&times;</button>
-                      ) : null}
-                    </div>
-                    {skipLine && (
-                      <p className="m-0 -mt-1.5 pr-4 pb-2.5 pl-[52px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]" title={`Since ${sinceLabel}, 00:00 UTC. "→" is where the leads it passed over were routed in the end.`}>This week: {skipLine}</p>
-                    )}
-                    {open && (
-                      <RuleEditor
-                        draft={draft}
-                        index={index}
-                        total={drafts.filter((item) => item.matchType !== "fallback").length}
-                        members={members}
-                        campaigns={filteredCampaigns}
-                        allCampaigns={workspace.campaigns}
-                        routerSchema={workspace.routerSchema}
-                        campaignCount={workspace.campaigns.length}
-                        campaignFilter={campaignFilter}
-                        onCampaignFilter={setCampaignFilter}
-                        problem={problem}
-                        canManage={canManage}
-                        boardSchema={workspace.boardSchema}
-                        onChange={(next) => updateDraft(draft.key, next)}
-                        onMove={(delta) => moveDraft(draft.key, delta)}
-                        onClose={() => setOpenKey(null)}
-                      />
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-            {!drafts.length && (
-              <div className="border-t border-[var(--border)]">
-                <EmptyState
-                  title="No rules yet"
-                  hint="Leads go round-robin to agents licensed for them, with room."
-                  action={canManage ? <Button type="button" variant="outline" onClick={addCondition}><PlusIcon />Add a rule</Button> : undefined}
-                />
-              </div>
-            )}
-            {inactiveRules.length > 0 && (
-              <details className="border-t border-[var(--border)] px-4 py-3 text-sm">
-                <summary className="cursor-pointer text-[var(--muted)]">{inactiveRules.length} inactive rule{inactiveRules.length === 1 ? "" : "s"}</summary>
-                <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
-                  {inactiveRules.map((rule) => (
-                    <li key={rule.id} className="flex items-center justify-between gap-3">
-                      <span><strong className="font-semibold text-[var(--ink)]">{MATCH_LABEL[rule.match_type] ?? rule.match_type}</strong> <span className="text-[var(--muted)]">{MATCH_OPERATOR[rule.match_type] ?? ""}</span> {valueChip(draftFromRule(rule))}</span>
-                      {canManage && <Button type="button" variant="outline" size="sm" onClick={() => restore(rule)}>Restore</Button>}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-            {fallbackMoved && canManage && (
-              <p className="m-0 flex items-center gap-0.5 border-t border-[var(--border)] px-4 py-2.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
-                Publish to move the fallback rule last.
-                <InfoTip label="About the fallback rule">The published fallback sits above other rules, so they only see the leads it cannot place. It is shown last here.</InfoTip>
-              </p>
-            )}
-            {publishError && <p role="alert" className="border-t border-[var(--border)] px-4 py-2.5 text-xs leading-[1.5] text-[var(--error-ink)]">{publishError}</p>}
-          </TableCard>
-
-          {/* Where the next pool leads would go: the real router, rolled back. */}
-          <section ref={stripRef} aria-label="Next up from the pool" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-border p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="m-0 text-base font-semibold tracking-[-0.015em] text-[var(--ink)]">Next up from the pool</h2>
-              <span className="flex items-center gap-2">
-                {previewRows.length > 0 && <StatusChip tone={pillTone(routedCount === previewRows.length ? "success" : "warning")} dot>{routedCount} of {previewRows.length} routed</StatusChip>}
-                {canManage && <RefreshButton onClick={() => void loadPreview()} refreshing={preview.loading} />}
-              </span>
-            </div>
-            {!canManage ? (
-              <p className="m-0 text-sm text-[var(--muted)]">Owners and producers can preview where the next leads in the pool would go.</p>
-            ) : preview.loading && !preview.rows ? (
-              <SectionLoading rows={2} columns={5} label="Loading the routing preview" />
-            ) : preview.error ? (
-              <p className="m-0 text-sm text-[var(--error-ink)]" role="alert">{preview.error}</p>
-            ) : preview.pending ? (
-              <p className="m-0 text-sm text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>
-            ) : !previewRows.length ? (
-              <EmptyState title="Nothing waiting in the pool" hint="Import a list to fill it." action={<Button asChild type="button" variant="outline"><Link href="/app/import">Import a list</Link></Button>} />
-            ) : (
-              <ol className="m-0 grid list-none gap-2.5 p-0 sm:grid-cols-2 lg:grid-cols-5">
-                {previewRows.map((row) => {
-                  const owner = row.owner_user_id ? memberById.get(row.owner_user_id) : undefined;
-                  const placed = row.outcome === "routed" || row.outcome === "taken";
-                  return (
-                    <li key={row.work_item_id} className={cn("flex min-w-0 flex-col gap-1.5 rounded-lg border px-3 py-2.5", placed ? "border-[var(--border)] bg-[var(--surface-alt)]/30" : "border-[var(--error)]/40 bg-[var(--error-surface)]")}>
-                      <strong className="truncate text-sm font-semibold text-[var(--ink)]">{row.name}{row.state ? ` · ${row.state}` : ""}</strong>
-                      <span className={cn("text-xs", placed ? "text-[var(--body)]" : "text-[var(--error-ink)]")}>→ {placed ? (owner ? shortName(owner.name) : "Someone") : "Nobody"}</span>
-                      <span><PreviewWhy row={row} ruleNumber={row.rule_id ? publishedOrder.get(row.rule_id) ?? null : null} memberName={(id) => shortName(memberById.get(id)?.name ?? "someone")} /></span>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-            {canManage && dirty && previewRows.length > 0 && <p className="m-0 text-xs text-[var(--muted)]">The preview uses the published rules, not your unpublished changes.</p>}
-          </section>
-        </>
-      )}
-
-      {tab === "capacity" && (
-          <PagedTableCard
-            total={members.length}
-            noun="agents"
-            className={fullHeightCard(340)}
-            action={atCeiling.length ? <StatusChip tone="danger" dot>{atCeiling.length} agent{atCeiling.length === 1 ? "" : "s"} at the ceiling</StatusChip> : <StatusChip tone="good" dot>Nobody at the ceiling</StatusChip>}
-          >
-            <table className={cn(st.table, "border-t border-[var(--border)]")}>
-              <thead>
-                <tr className={st.headRow}>
-                  <th className={st.th}>Agent</th>
-                  <th className={cn(st.th, "w-[100px]")}>Role</th>
-                  <th className={cn(st.th, "w-[80px]")}>Licensed</th>
-                  <th className={cn(st.th, "w-[64px]")}>Open</th>
-                  <th className={cn(st.th, "w-[130px]")}>Capacity</th>
-                  <th className={cn(st.th, "w-[84px]")}>Rest day</th>
-                </tr>
-              </thead>
-              <PagedBody className="m-seq">
-                {members.map((member) => {
-                  const pct = member.capacity > 0 ? member.currentOpen / member.capacity : 1;
-                  const full = member.currentOpen >= member.capacity;
-                  const editing = editingMember === member.id;
-                  return (
-                    <Fragment key={member.id}>
-                      <tr className="m-row">
-                        <td className={st.td}>
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="min-w-0">
-                              <span className="block whitespace-nowrap">{shortName(member.name)}</span>
-                              <span className={st.sub}>{member.languages.length ? member.languages.map(titleCase).join(", ") : workspace.boardSchema ? "No languages recorded" : ""}</span>
-                              {personSkipLine(member.id) && <span className={st.sub}>{personSkipLine(member.id)}</span>}
-                              {warnable(member).map((entry) => {
-                                const lapsed = daysUntil(entry.expiresOn) < 0;
-                                const leadsText = `${entry.openLeads.toLocaleString()} open ${entry.state} lead${entry.openLeads === 1 ? "" : "s"}`;
-                                return (
-                                  <span key={entry.state} className={cn(st.sub, lapsed ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]")}>
-                                    {lapsed
-                                      ? `${entry.state} licence lapsed ${shortDate(entry.expiresOn)} · ${leadsText} go back to the pool (never mid-call or with a booked callback)`
-                                      : `${entry.state} licence valid through ${shortDate(entry.expiresOn)}${entry.openLeads ? ` · ${leadsText} return to the pool on ${lapseDay(entry)}` : ""}`}
-                                  </span>
-                                );
-                              })}
-                            </span>
-                            {canManage && !editing && (
-                              <Button type="button" variant="outline" size="sm" aria-label={`Edit ${member.name}'s capacity, languages and rest day`} onClick={() => { setEditingMember(member.id); setMemberError(null); setMemberForm({ capacity: String(member.capacity), languages: member.languages.join(", "), weekdayOff: member.weekdayOff === null ? "" : String(member.weekdayOff) }); }}>Edit</Button>
-                            )}
-                          </span>
-                        </td>
-                        <td className={st.td}><StatusChip dot={false} tone={pillTone(member.role === "setter" ? "info" : "neutral")}>{roleLabel(member.role)}</StatusChip></td>
-                        <td className={cn(st.td, "tabular-nums")} title={member.eligibleStates?.length ? member.eligibleStates.join(", ") : undefined}>{member.role === "setter" || member.eligibleStates === null ? "—" : member.eligibleStates.length}</td>
-                        <td className={cn(st.td, "tabular-nums")}>{member.currentOpen}</td>
-                        <td className={st.td}>
-                          <SettingsMeter
-                            value={member.currentOpen}
-                            max={Math.max(member.capacity, 1)}
-                            tone={full ? "error" : pct >= 0.7 ? "warning" : "success"}
-                            caption={full ? "at the ceiling" : `${member.currentOpen} of ${member.capacity}`}
-                            ariaLabel={`${member.name}: ${member.currentOpen} of ${member.capacity} open leads`}
-                          />
-                        </td>
-                        <td className={st.td}>{member.weekdayOff === null ? "—" : WEEKDAYS[member.weekdayOff]}</td>
-                      </tr>
-                      {editing && (
-                        <tr>
-                          <td colSpan={6} className={cn(st.td, "bg-[var(--canvas)]")}>
-                            <div className="grid gap-4 py-2 sm:grid-cols-3">
-                              <Field label="Capacity" htmlFor={`cap-${member.id}`} hint="Most open leads at once.">
-                                <input id={`cap-${member.id}`} className={control} type="number" min={0} max={100000} value={memberForm.capacity} onChange={(event) => setMemberForm({ ...memberForm, capacity: event.target.value })} />
-                              </Field>
-                              <Field label="Languages" htmlFor={`lang-${member.id}`} hint="Comma-separated, e.g. spanish, es.">
-                                <input id={`lang-${member.id}`} className={control} value={memberForm.languages} disabled={!workspace.boardSchema} onChange={(event) => setMemberForm({ ...memberForm, languages: event.target.value })} placeholder="spanish, english" />
-                              </Field>
-                              <Field label="Rest day" htmlFor={`off-${member.id}`} hint="No automatic assignment that day (agency time).">
-                                <select id={`off-${member.id}`} className={control} value={memberForm.weekdayOff} disabled={!workspace.boardSchema} onChange={(event) => setMemberForm({ ...memberForm, weekdayOff: event.target.value })}>
-                                  <option value="">Works every day</option>
-                                  {WEEKDAY_NAMES.map((day, value) => <option key={day} value={value}>{day}</option>)}
-                                </select>
-                              </Field>
-                            </div>
-                            {!workspace.boardSchema && <p className="text-xs text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE} Capacity can still be changed.</p>}
-                            {memberError && <p role="alert" className="text-xs text-[var(--error-ink)]">{memberError}</p>}
-                            <div className="mt-2 flex justify-end gap-2.5">
-                              <Button type="button" variant="ghost" size="sm" onClick={() => setEditingMember(null)} disabled={busy === `member:${member.id}`}>Cancel</Button>
-                              <Button type="button" size="sm" onClick={() => void saveMember(member)} disabled={busy === `member:${member.id}`}>{busy === `member:${member.id}` ? "Saving…" : "Save"}</Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </PagedBody>
-              {!members.length && <tbody><tr><td colSpan={6}><EmptyState title="Nobody can take leads yet" hint="Agents and setters appear here once they join." /></td></tr></tbody>}
-            </table>
-          </PagedTableCard>
-      )}
-      {tab === "pool" && pool && <UnassignedPool />}
-      {tab === "settings" && (
-        <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
-          <div ref={restCardRef} tabIndex={-1} className="outline-none">
-            <SettingsCard
-              title="Household rest days"
-              pad={20}
-              action={canManage && !editingRest ? <Button type="button" variant="outline" onClick={openRestEditor}>Edit</Button> : undefined}
-            >
-              {editingRest ? (
-                <div className="flex flex-col gap-4">
-                  <Field
-                    label="Rest between owners"
-                    htmlFor="rest-days"
-                    hint={<span className="inline-flex items-center gap-0.5">Days before another agent may take the household. 0 is off.<InfoTip label="About rest between owners">Counts from the day a household is given to someone, whether by the rules, a rotation or a manager&apos;s reassignment.</InfoTip></span>}
-                  >
-                    <input ref={restInputRef} id="rest-days" className={control} type="number" min={0} max={3650} value={restForm.restDays} onChange={(event) => setRestForm({ ...restForm, restDays: event.target.value })} />
-                  </Field>
-                  <Field
-                    label="Attempts before rotate"
-                    htmlFor="rotate-attempts"
-                    hint={<span className="inline-flex items-center gap-0.5">Unanswered calls before the lead moves on. Empty or 0 is off.<InfoTip label="About attempts before rotate">Counts no answer, voicemail, busy and dropped calls by the same owner since anyone last reached the household; the lead then goes to another eligible agent. Checked every 5 minutes, never during a call or a booked callback.</InfoTip></span>}
-                  >
-                    <input id="rotate-attempts" className={control} type="number" min={0} max={50} value={restForm.attempts} disabled={!workspace.boardSchema} onChange={(event) => setRestForm({ ...restForm, attempts: event.target.value })} placeholder="Off" />
-                  </Field>
-                  {!workspace.boardSchema && <p className="m-0 text-xs text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE} Rest between owners can still be changed.</p>}
-                  {restError && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{restError}</p>}
-                  <div className="flex justify-end gap-2.5">
-                    <Button type="button" variant="ghost" disabled={busy === "settings"} onClick={() => setEditingRest(false)}>Cancel</Button>
-                    <Button type="button" disabled={busy === "settings"} onClick={() => void saveRest()}>{busy === "settings" ? "Saving…" : "Save"}</Button>
-                  </div>
+      <Dialog open={settingsOpen} onOpenChange={(open) => { setSettingsOpen(open); if (!open) setEditingRest(false); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Household and posted leads</DialogTitle></DialogHeader>
+          <ul aria-label="Household rules" className="m-0 grid list-none gap-1.5 p-0 text-xs leading-[1.5] text-[var(--muted)] sm:grid-cols-2">
+            {facts.map((fact) => <li key={fact}>{fact}</li>)}
+          </ul>
+          <div ref={restCardRef} tabIndex={-1} className="flex flex-col gap-4 border-t border-[var(--border)] pt-4 outline-none">
+            <h3 className="m-0 text-sm font-semibold text-[var(--ink)]">Household rest days</h3>
+            {canManage && editingRest ? (
+              <div className="flex flex-col gap-4">
+                <Field
+                  label="Rest between owners"
+                  htmlFor="rest-days"
+                  hint={<span className="inline-flex items-center gap-0.5">Days before another agent may take the household. 0 is off.<InfoTip label="About rest between owners">Counts from the day a household is given to someone, whether by the rules, a rotation or a manager&apos;s reassignment.</InfoTip></span>}
+                >
+                  <input ref={restInputRef} id="rest-days" className={control} type="number" min={0} max={3650} value={restForm.restDays} onChange={(event) => setRestForm({ ...restForm, restDays: event.target.value })} />
+                </Field>
+                <Field
+                  label="Attempts before rotate"
+                  htmlFor="rotate-attempts"
+                  hint={<span className="inline-flex items-center gap-0.5">Unanswered calls before the lead moves on. Empty or 0 is off.<InfoTip label="About attempts before rotate">Counts no answer, voicemail, busy and dropped calls by the same owner since anyone last reached the household; the lead then goes to another eligible agent. Checked every 5 minutes, never during a call or a booked callback.</InfoTip></span>}
+                >
+                  <input id="rotate-attempts" className={control} type="number" min={0} max={50} value={restForm.attempts} disabled={!workspace.boardSchema} onChange={(event) => setRestForm({ ...restForm, attempts: event.target.value })} placeholder="Off" />
+                </Field>
+                {!workspace.boardSchema && <p className="m-0 text-xs text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE} Rest between owners can still be changed.</p>}
+                {restError && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{restError}</p>}
+                <div className="flex justify-end gap-2.5">
+                  <Button type="button" variant="ghost" disabled={busy === "settings"} onClick={() => setSettingsOpen(false)}>Cancel</Button>
+                  <Button type="button" disabled={busy === "settings"} onClick={() => void saveRest()}>{busy === "settings" ? "Saving…" : "Save"}</Button>
                 </div>
-              ) : (
+              </div>
+            ) : (
+              <div className="flex items-start justify-between gap-3">
                 <KeyValues
-                  cols={1}
+                  cols={2}
                   items={[
-                    { label: "Rest between owners", value: workspace.settings.rest_days > 0 ? `${workspace.settings.rest_days} day${workspace.settings.rest_days === 1 ? "" : "s"}` : "Off" },
+                    { label: "Rest between owners", value: restDays > 0 ? `${restDays} day${restDays === 1 ? "" : "s"}` : "Off" },
                     { label: "Attempts before rotate", value: workspace.settings.attempts_before_rotate ? String(workspace.settings.attempts_before_rotate) : "Off" },
                     { label: "Same household", value: workspace.boardSchema ? "one agent at a time" : "not enforced yet" },
                   ]}
                 />
-              )}
-            </SettingsCard>
+                {canManage && <Button type="button" variant="outline" size="sm" onClick={openRestEditor}>Edit</Button>}
+              </div>
+            )}
           </div>
 
           {/* ── routing on arrival (concept board: real-time leads go straight to someone) ── */}
-          <SettingsCard
-            title="Posted leads"
-            pad={20}
-            action={canManage ? (
-              <Button
-                type="button"
-                variant={workspace.settings.auto_route_posted ? "outline" : "default"}
-                disabled={!workspace.routerSchema || busy === "auto-route"}
-                aria-describedby={!workspace.routerSchema ? "auto-route-pending" : undefined}
-                onClick={() => void saveAutoRoute(!workspace.settings.auto_route_posted)}
-              >
-                {busy === "auto-route" ? "Saving…" : workspace.settings.auto_route_posted ? "Turn off" : "Turn on"}
-              </Button>
-            ) : undefined}
-          >
+          <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="m-0 text-sm font-semibold text-[var(--ink)]">Posted leads</h3>
+              {canManage && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={workspace.settings.auto_route_posted ? "outline" : "default"}
+                  disabled={!workspace.routerSchema || busy === "auto-route"}
+                  aria-describedby={!workspace.routerSchema ? "auto-route-pending" : undefined}
+                  onClick={() => void saveAutoRoute(!workspace.settings.auto_route_posted)}
+                >
+                  {busy === "auto-route" ? "Saving…" : workspace.settings.auto_route_posted ? "Turn off" : "Turn on"}
+                </Button>
+              )}
+            </div>
             <KeyValues
-              cols={1}
+              cols={2}
               items={[
                 { label: "Route on arrival", value: workspace.settings.auto_route_posted ? "On" : "Off" },
-                { label: "Real-time rules", value: realtimeRules ? `${realtimeRules} published` : "None published", tone: workspace.settings.auto_route_posted && !realtimeRules ? "warning" : undefined },
+                { label: "Real-time rules", value: realtimeRulesLabel(workspace.rules), tone: workspace.settings.auto_route_posted && !workspace.rules.some((rule) => rule.is_active && rule.match_type === "realtime") ? "warning" : undefined },
                 ...(workspace.insights ? [{ label: "Routed on arrival this week", value: workspace.insights.autoRouted.toLocaleString() }] : []),
               ]}
             />
-            {!workspace.routerSchema && <p id="auto-route-pending" className="mt-2 mb-0 text-xs leading-[1.5] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>}
-          </SettingsCard>
-        </div>
-      )}
-      </div>
+            {!workspace.routerSchema && <p id="auto-route-pending" className="m-0 text-xs leading-[1.5] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {reassignOpen && (
         <ReassignPanel
@@ -497,56 +711,73 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
           onReturn={() => void post({ action: "return_to_pool", workItemId, reason: returnReason }, "Lead returned to assignment pool").then((ok) => { if (ok) setReassignOpen(false); })}
         />
       )}
+
+      {/* Unpublished rule changes stop a move away: publish them, drop them, or stay. */}
+      <LeaveGuard dirty={canManage && dirty} scope={scopeRef} onSave={publish} onDiscard={() => { adopt(workspace); setOpenKey(null); }} what="the routing rules" />
     </div>
   );
 }
 
-/** One person: how much room is left, and anything that keeps leads from them. */
-function PersonCard({ member, canManage, onEdit, skipLine, warnings }: { member: AssignmentMember; canManage: boolean; onEdit: () => void; skipLine: string | null; warnings: LicenceExpiry[] }) {
+function realtimeRulesLabel(rules: { is_active: boolean; match_type: string }[]): string {
+  const n = rules.filter((rule) => rule.is_active && rule.match_type === "realtime").length;
+  return n ? `${n} published` : "None published";
+}
+
+/** One person: open leads against the ceiling, room left, and — opened — what keeps leads from them. */
+function PersonRow({ member, canManage, open, editing, onToggle, skipLine, warnings, boardSchema, children }: { member: AssignmentMember; canManage: boolean; open: boolean; editing: boolean; onToggle: () => void; skipLine: string | null; warnings: LicenceExpiry[]; boardSchema: boolean; children?: ReactNode }) {
+  const inactive = isInactive(member);
   const full = member.currentOpen >= member.capacity;
-  const pct = member.capacity > 0 ? member.currentOpen / member.capacity : 1;
-  const tone = full ? "error" : pct >= 0.7 ? "warning" : "success";
-  const reach = member.role === "setter" ? "any state except term life" : member.eligibleStates === null ? null : `${member.eligibleStates.length} state${member.eligibleStates.length === 1 ? "" : "s"}`;
-  const sub = [roleLabel(member.role), member.languages.length ? member.languages.map((value) => value.slice(0, 2).toUpperCase()).join(", ") : null, reach].filter(Boolean).join(" · ");
-  const initials = member.name.split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join("").toUpperCase();
+  const room = Math.max(member.capacity - member.currentOpen, 0);
+  const reach = member.role === "setter" ? "any state except term life" : member.eligibleStates === null ? "—" : `${member.eligibleStates.length} state${member.eligibleStates.length === 1 ? "" : "s"}`;
   const warning = warnings[0];
+  const detailId = `person-${member.id}`;
+  const noStates = member.role !== "setter" && member.eligibleStates !== null && member.eligibleStates.length === 0;
+  // A full person's way out is more room, so the row says so.
+  const toggleLabel = !canManage ? "Details" : full && !inactive ? "Raise" : "Edit";
   return (
-    <li className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-border p-4">
-      <div className="flex items-start gap-2.5">
-        <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-xs font-bold text-[var(--accent-ink)]">{initials}</span>
-        <span className="min-w-0 flex-1">
-          <strong className="block truncate text-sm font-semibold text-[var(--ink)]">{member.name}</strong>
-          <span className="block text-xs text-[var(--muted)]">{sub}</span>
-        </span>
-        {canManage && <button type="button" className="shrink-0 text-xs font-semibold text-[var(--accent-ink)] hover:underline" aria-label={`Edit ${member.name}'s capacity, languages and rest day`} onClick={onEdit}>Edit</button>}
+    <li className={cn("min-w-0 rounded-lg", open && cardInset)}>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_64px_auto_auto] items-center gap-2.5 px-2 py-1 text-sm">
+        <span className="min-w-0 truncate" title={`${member.name} · ${roleLabel(member.role)}`}><strong className="font-semibold text-[var(--ink)]">{member.name}</strong><span className="text-xs text-[var(--muted)]"> · {roleLabel(member.role)}</span></span>
+        <Meter value={member.currentOpen} max={Math.max(member.capacity, 1)} tone={full ? "warning" : "good"} label={`${member.name}: ${member.currentOpen} of ${member.capacity} open leads`} />
+        <span className={cn("text-right text-xs tabular-nums", inactive || full ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]")} title={`${member.currentOpen} open of ${member.capacity}`}>{inactive ? `Inactive${member.currentOpen ? ` · holds ${member.currentOpen}` : ""}` : full ? "Full · skipped" : `${room} room`}</span>
+        <button type="button" className={linkAction} aria-expanded={open} aria-controls={detailId} aria-label={`${open ? "Close" : toggleLabel === "Details" ? "Details for" : toggleLabel} ${member.name}${canManage ? "'s capacity, languages and rest day" : ""}`} onClick={onToggle}>{open ? "Close" : toggleLabel}</button>
       </div>
-      <SettingsMeter
-        value={member.currentOpen}
-        max={Math.max(member.capacity, 1)}
-        tone={tone}
-        caption={full ? `${member.currentOpen} open of ${member.capacity} · full` : `${member.currentOpen} open of ${member.capacity} · ${member.capacity - member.currentOpen} room`}
-        ariaLabel={`${member.name}: ${member.currentOpen} of ${member.capacity} open leads`}
-      />
-      {warning ? (
-        <span className={cn("text-xs", daysUntil(warning.expiresOn) < 0 ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]")}>
-          {daysUntil(warning.expiresOn) < 0 ? `${warning.state} licence lapsed ${shortDate(warning.expiresOn)}` : `${warning.state} licence lapses ${shortDate(warning.expiresOn)}`}{warning.openLeads ? ` · ${warning.openLeads} open lead${warning.openLeads === 1 ? "" : "s"} return to the pool` : ""}
+      {!open && (warning || noStates) && (
+        <span className={cn("flex flex-wrap items-center gap-x-2 px-2 pb-1 text-xs", warning && daysUntil(warning.expiresOn) < 0 ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]")}>
+          {warning
+            ? `${daysUntil(warning.expiresOn) < 0 ? `${warning.state} licence lapsed ${shortDate(warning.expiresOn)}` : `${warning.state} licence lapses ${shortDate(warning.expiresOn)}`}${warning.openLeads ? ` · ${warning.openLeads} open lead${warning.openLeads === 1 ? "" : "s"} return to the pool` : ""}`
+            : "Can sell in no state yet, so the rules pass them over"}
+          {canManage && <Link href={LICENCES_HREF} className="font-semibold text-[var(--accent-ink)] hover:underline">{warning ? "Renew" : "Check licences"}</Link>}
         </span>
-      ) : skipLine ? (
-        <span className="text-xs text-[var(--error-ink)]">{skipLine}</span>
-      ) : (
-        <span className="text-xs text-[var(--muted)]">{member.weekdayOff === null ? "Works every day" : `Rest day: ${WEEKDAY_NAMES[member.weekdayOff]}`}</span>
+      )}
+      {open && (
+        <div id={detailId} className="flex flex-col gap-3 px-2 pb-3">
+          <KeyValues
+            cols={2}
+            items={[
+              { label: "Open", value: `${member.currentOpen} of ${member.capacity}` },
+              { label: "Licensed", value: reach },
+              { label: "Languages", value: member.languages.length ? member.languages.map(titleCase).join(", ") : boardSchema ? "None recorded" : "—" },
+              { label: "Rest day", value: member.weekdayOff === null ? "Works every day" : WEEKDAY_NAMES[member.weekdayOff] },
+            ]}
+          />
+          {skipLine && <span className="text-xs text-[var(--muted)]">{skipLine}</span>}
+          {warnings.map((entry) => {
+            const lapsed = daysUntil(entry.expiresOn) < 0;
+            const leadsText = `${entry.openLeads.toLocaleString()} open ${entry.state} lead${entry.openLeads === 1 ? "" : "s"}`;
+            return (
+              <span key={entry.state} className={cn("text-xs", lapsed ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]")}>
+                {lapsed
+                  ? `${entry.state} licence lapsed ${shortDate(entry.expiresOn)} · ${leadsText} go back to the pool (never mid-call or with a booked callback)`
+                  : `${entry.state} licence valid through ${shortDate(entry.expiresOn)}${entry.openLeads ? ` · ${leadsText} return to the pool on ${lapseDay(entry)}` : ""}`}
+              </span>
+            );
+          })}
+          {editing && children}
+        </div>
       )}
     </li>
   );
-}
-
-/** A rule as a sentence: "A lead whose state is TX, FL goes to Ana, Maya, in turn." */
-function RuleSentence({ draft, value, who }: { draft: RuleDraft; value: string; who: string }) {
-  const how = STRATEGY_PHRASE[draft.strategy] ?? "in turn";
-  const to = <> goes to <strong className="font-semibold text-[var(--accent-ink)]">{who}</strong>, {how}.</>;
-  if (draft.matchType === "fallback") return <><strong className="font-semibold text-[var(--ink)]">Anything else</strong>{to}</>;
-  if (draft.matchType === "realtime") return <>A lead that arrived within <strong className="font-semibold text-[var(--ink)]">{value}</strong>{to}</>;
-  return <>A lead whose <strong className="font-semibold text-[var(--ink)]">{MATCH_LABEL[draft.matchType].toLowerCase()}</strong> is <strong className="font-semibold text-[var(--ink)]">{value}</strong>{to}</>;
 }
 
 type Candidate = { workItemId: string; leadId: string; name: string; state: string | null; phone: string | null; ownerUserId: string | null; status: string };
@@ -594,7 +825,13 @@ function ReassignPanel({ canManage, members, busy, onClose, reassign, giveBack, 
   }
 
   const giving = mode === "give";
+  // Teammates who can take a lead: inactive logins are not offered, and the current owner is not a move.
+  const targets = members.filter((member) => !isInactive(member) && member.id !== picked?.ownerUserId);
   const ready = giving ? Boolean(reassign.workItemId && reassign.targetUserId && reassign.reason.trim()) : Boolean(giveBack.workItemId && giveBack.reason.trim());
+  // What is still missing, said beside the disabled button instead of leaving it silent.
+  const missing = giving
+    ? [!reassign.workItemId && "a lead", !reassign.targetUserId && "a teammate", !reassign.reason.trim() && "a reason"].filter(Boolean)
+    : [!giveBack.workItemId && (canManage ? "a lead" : "the work item"), !giveBack.reason.trim() && "a reason"].filter(Boolean);
   const panel = (
     <DetailPanel
       mode="overlay"
@@ -602,7 +839,8 @@ function ReassignPanel({ canManage, members, busy, onClose, reassign, giveBack, 
       subtitle="Licence, ceiling and household rules are checked"
       onClose={onClose}
       footer={(
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          {!ready && !busy && <span className="mr-auto text-xs text-[var(--muted)]">Add {missing.join(", ").replace(/, ([^,]*)$/, " and $1")}</span>}
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="button" disabled={!ready || busy} onClick={giving ? onReassign : onReturn}>{busy ? "Saving…" : giving ? "Reassign lead" : "Return to pool"}</Button>
         </div>
@@ -638,7 +876,7 @@ function ReassignPanel({ canManage, members, busy, onClose, reassign, giveBack, 
             <strong className="block text-sm font-semibold text-[var(--ink)]">{picked.name}{picked.state ? ` · ${picked.state}` : ""}</strong>
             <span className="block text-xs text-[var(--muted)]">{picked.ownerUserId ? `Owned by ${memberName(picked.ownerUserId)}` : "In the pool"}</span>
           </span>
-          <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setPicked(null); reassign.setWorkItemId(""); giveBack.setWorkItemId(""); }}>Change</button>
+          <button type="button" className={linkAction} onClick={() => { setPicked(null); reassign.setWorkItemId(""); giveBack.setWorkItemId(""); }}>Change</button>
         </div>
       )}
       {canManage && (
@@ -653,7 +891,7 @@ function ReassignPanel({ canManage, members, busy, onClose, reassign, giveBack, 
           <Field label="Teammate" htmlFor="reassign-target">
             <select id="reassign-target" className={control} value={reassign.targetUserId} onChange={(event) => reassign.setTargetUserId(event.target.value)}>
               <option value="">Select eligible teammate</option>
-              {members.map((member) => <option key={member.id} value={member.id}>{member.name} · {roleLabel(member.role)}</option>)}
+              {targets.map((member) => <option key={member.id} value={member.id}>{member.name} · {roleLabel(member.role)}{member.currentOpen >= member.capacity ? " · full" : ""}</option>)}
             </select>
           </Field>
           <Field label="Reason" htmlFor="reassign-reason" hint="Required. Kept with the lead’s assignment history.">

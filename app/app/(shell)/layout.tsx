@@ -29,6 +29,8 @@ import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
 import { LiveTransferCard } from "@/components/app/inbound/live-transfer-card";
 import { Suspense } from "react";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
+import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
+import { SoloProvider } from "@/components/app/solo-context";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -58,7 +60,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
     return result.value;
   };
 
-  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , , overdueComplaints, setupStamps, profileGateFacts] =
+  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , , overdueComplaints, setupStamps, profileGateFacts, solo] =
     await Promise.all([
       resolveSignupContext(),
       resolveTenantContext(),
@@ -78,6 +80,9 @@ export default async function AgentShellLayout({ children }: { children: React.R
       readSetupStamps(session.tenantId, session.sub),
       // The first-login gate's two facts (never throws; a failure reads as "not gated").
       readProfileGateFacts(session.tenantId),
+      // Solo mode (owner 2026-10-29): an individual agent with no other caller. Never throws (false on a
+      // failed read); request-memoised, so the page below asks the same answer for free.
+      isSoloWorkspace(session.tenantId),
     ]);
 
   // Self-serve users must finish the gated signup states before the normal entitlement shell.
@@ -124,6 +129,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
     agencyNarrow,
     extraRoles: (context.roles ?? []).slice(1),
     hiddenPages: context.hiddenPages,
+    // Solo mode: the team-only pages are left out altogether (lib/menu/definition.ts teamOnly).
+    solo,
   });
   // 2026-10-21 walkthrough: "Get set up" sits under Home until this person's setup is finished.
   if (setupStillOpen(setupStamps, context, available)) {
@@ -187,7 +194,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
         <Suspense fallback={null}><SetupGuideBar /></Suspense>
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><SoloProvider solo={solo}><PortalPageTransition>{children}</PortalPageTransition></SoloProvider></DashboardStage>
       </div>
       </main>
     </div>

@@ -266,7 +266,8 @@ function AfterTheCall() {
 }
 
 /** `stepBar`: on the call page (step 3, Finish the call), the Inbound steps under the title. */
-export function DispositionWizard({ workItemId, readOnly, stepBar }: { workItemId: string; readOnly: boolean; stepBar?: ReactNode }) {
+/** `embedded` (owner 2026-10-28): inside the call page, which draws the step bar — no title or bar here. */
+export function DispositionWizard({ workItemId, readOnly, stepBar, embedded = false }: { workItemId: string; readOnly: boolean; stepBar?: ReactNode; embedded?: boolean }) {
   const walk = useDispositionWalk({ workItemId, readOnly });
   const { wizard, loading, saving, error, editingSequence, view } = walk;
   // A walk whose outcome question was answered before (an earlier visit, or before 2026-10-27 when
@@ -276,9 +277,9 @@ export function DispositionWizard({ workItemId, readOnly, stepBar }: { workItemI
   useEffect(() => {
     if (!dispositionKey && answeredOutcome && editingSequence === null) setDispositionKey(answeredOutcome);
   }, [dispositionKey, answeredOutcome, editingSequence, setDispositionKey]);
-  const backHref = callHref(workItemId);
+  const backHref = callHref(workItemId, "verify");
 
-  const header = (
+  const header = embedded ? null : (
     <div className="flex flex-col gap-4">
       <PageHeader
         title={view?.customerName ? `Call with ${view.customerName}` : "Finish the call"}

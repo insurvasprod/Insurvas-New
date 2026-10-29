@@ -5,7 +5,7 @@ import { scopeFor } from "@/lib/agency/visibility";
 import { LeadSourcesPage } from "@/components/app/lead-sources/pages";
 
 /**
- * Lead lists is a tab of Lead sources (2026-10-26). Rendered here rather than redirected, so the
+ * Lead lists is step 4 · Lists of the one Leads page (2026-10-28). Rendered here rather than redirected, so the
  * per-lead view's `/app/lead-lists#<campaignId>` links (global search, the list page) keep their hash.
  */
 export default async function LeadListsPage() {
@@ -18,5 +18,5 @@ export default async function LeadListsPage() {
     return <RoleGateNotice featureLabel="Lead lists" detail="Only owners, producers and assistants can hand out leads." />;
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Lead lists" detail="In an agency, the owner and admins handle lead lists." />;
-  return <LeadSourcesPage tab="lists" />;
+  return <LeadSourcesPage />;
 }
