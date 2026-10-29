@@ -6,9 +6,12 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { assertOutboundLimit, outboundLimitResponse } from "@/lib/metering/outbound";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { CAMPAIGN_REFERENCES, deleteBlocker, isForeignKeyRefusal, type GuardDb } from "@/lib/campaigns/deleteGuards";
 
 const roles = ["owner", "producer"] as const;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
+type DeleteQuery = { delete(): { eq(column: string, value: unknown): { eq(column: string, value: unknown): { select(columns: string): PromiseLike<Result<unknown>> } } } };
 type Query = PromiseLike<Result<unknown>> & { select(columns: string, options?: unknown): Query; eq(column: string, value: unknown): Query; update(value: unknown): Query; maybeSingle<T = unknown>(): Promise<Result<T | null>>; single<T = unknown>(): Promise<Result<T>> };
 type Db = { from(table: string): Query };
 /**
@@ -93,6 +96,52 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const message = error instanceof Error ? error.message : "Could not change campaign status";
     if (message.includes("max_active_campaigns")) return NextResponse.json(activeCampaignCapResponse(message), { status: 403 });
     return NextResponse.json({ error: "Could not change campaign status" }, { status: 400 });
+  }
+}
+
+/**
+ * Lead sources clean-up (owner 2026-10-29): delete a campaign for good, only while it is empty —
+ * no leads, no imported or waiting file, no claim, invoice line, deal, policy, posting key or
+ * win-back pointing at it (lib/campaigns/deleteGuards.ts lists every referencing table). Anything
+ * with history is refused with a 409 and the way out, which stays "Mark exhausted". Same gate as
+ * PATCH (owner/producer, the money boundary, not a read-only plan), refused for a narrow agency
+ * session like the list route, tenant-scoped, audited.
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireFeatureRole("outbound_dialing", roles, { write: true, prefetchScope: true });
+  if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Campaigns");
+  if (refused) return refused;
+  const id = (await params).id;
+  if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Choose a valid campaign" }, { status: 400 });
+  const tenantId = auth.context.tenantId;
+  const service: unknown = getSupabaseServiceClient();
+  const db = service as Db;
+  try {
+    const current = await db.from("tenant_campaigns").select("id, name, status, vendor_id").eq("id", id).eq("tenant_id", tenantId).maybeSingle<{ id: string; name: string; status: string; vendor_id: string }>();
+    if (current.error) throw new Error(current.error.message);
+    if (!current.data) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+
+    const blocker = await deleteBlocker(service as GuardDb, tenantId, id, CAMPAIGN_REFERENCES);
+    if (blocker) return NextResponse.json({ error: blocker, code: "campaign_in_use" }, { status: 409 });
+
+    const removed = await (service as { from(table: string): DeleteQuery }).from("tenant_campaigns").delete().eq("id", id).eq("tenant_id", tenantId).select("id");
+    if (isForeignKeyRefusal(removed.error)) return NextResponse.json({ error: "Something now points at this campaign — mark it exhausted instead.", code: "campaign_in_use" }, { status: 409 });
+    if (removed.error) throw new Error(removed.error.message);
+    if (!Array.isArray(removed.data) || removed.data.length === 0) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+
+    await audit({
+      actorType: "tenant",
+      actorId: auth.context.userId,
+      action: "tenant.campaign_deleted",
+      targetType: "tenant_campaigns",
+      targetId: id,
+      metadata: { name: current.data.name, status: current.data.status, vendorId: current.data.vendor_id },
+      request,
+    });
+    return NextResponse.json({ deleted: id });
+  } catch {
+    return NextResponse.json({ error: "Could not delete this campaign" }, { status: 500 });
   }
 }
 

@@ -1,11 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { ListPlus } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
 /**
@@ -39,44 +35,5 @@ export function SourceTabs({ tabs, initialTab, label }: { tabs: SourceTab[]; ini
         </div>
       ))}
     </div>
-  );
-}
-
-/**
- * "Import a list" (Lead sources): steps 1–2 open in a side sheet over the page. Continuing goes to
- * the review route (steps 3–4) — it stays a route on purpose, so a big file's review survives a
- * refresh and can be linked to (Module 2 §6).
- */
-export function ImportSheet({ initialOpen, children }: { initialOpen: boolean; children: ReactNode }) {
-  // Opened after mount (/app/import opens it at once): the sheet is portalled to document.body,
-  // which the server render does not have.
-  const [open, setOpen] = useState(false);
-  useEffect(() => { if (initialOpen) setOpen(true); }, [initialOpen]); // eslint-disable-line react-hooks/set-state-in-effect
-  const close = () => {
-    setOpen(false);
-    const url = new URL(window.location.href);
-    if (url.pathname === "/app/import") url.pathname = "/app/lead-sources";
-    url.searchParams.delete("import");
-    window.history.replaceState(window.history.state, "", url.toString());
-  };
-  return (
-    <>
-      <Button type="button" onClick={() => setOpen(true)}><ListPlus aria-hidden="true" />Import a list</Button>
-      {/* Portalled to the body: the page's stage animates with a transform, which would make a
-          position: fixed sheet fixed to the header instead of the window. */}
-      {open && createPortal(
-        <DetailPanel
-          mode="overlay"
-          title="Import a list"
-          subtitle="Steps 1 and 2 · nothing is imported until step 4"
-          onClose={close}
-          className="lg:w-[min(1040px,calc(100vw-120px))]"
-          bodyClassName="flex flex-col gap-6 p-5"
-        >
-          {children}
-        </DetailPanel>,
-        document.body,
-      )}
-    </>
   );
 }

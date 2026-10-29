@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, FileWarning } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowRight, CheckCircle2, FileWarning, FileX, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import { Callout, DashedCard, SettingsCard, SettingsMeter } from "@/components/app/settings/primitives";
-import { ImportStepper } from "@/components/app/import-stepper";
 import { ImportReviewWorkspace, type ReviewPlan } from "@/components/app/import-review-workspace";
+import { LeadsInSlot } from "@/components/app/lead-sources/leads-in-slot";
 import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
+import { discardStagedFile, forgetStagedFile } from "@/components/app/import-discard";
 
 /**
  * Carries the uploaded file across the redirect to the review screen.
@@ -28,6 +28,8 @@ import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
 const subscribe = () => () => {};
 
 export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
+  const router = useRouter();
+  const [discarding, setDiscarding] = useState(false);
   /**
    * `useSyncExternalStore` rather than an effect, because `sessionStorage` IS an external store and
    * this component has to render correctly on the server, where it does not exist. The server
@@ -48,16 +50,25 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
     () => null,
   );
 
+  // The file is not in this tab (another tab, a closed one, or site data blocked). Its way back opens
+  // Import on the same campaign; or it can be dropped from here, so it stops waiting in the rail.
   if (!csv)
     return <><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Import a list" />
-      <ImportStepper current={3} />
       <DashedCard
         icon={<FileWarning className="size-4" aria-hidden />}
         title="Upload the file again to review it"
-        action={<Button asChild variant="outline"><Link href="/app/import">Upload the file again</Link></Button>}
+        action={<span className="flex flex-wrap justify-center gap-2">
+          <Button type="button" variant="outline" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={discarding} onClick={() => {
+            setDiscarding(true);
+            void discardStagedFile(plan.batchId, plan.fileName).then((result) => {
+              if (result === "done") router.push("/app/import");
+              else if (result === "imported") router.refresh();
+            }).finally(() => setDiscarding(false));
+          }}><Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard it"}</Button>
+          <Button asChild><Link href={plan.campaignId ? `/app/import?campaign=${encodeURIComponent(plan.campaignId)}` : "/app/import"}>Upload the file again</Link></Button>
+        </span>}
       >
-        Use the same campaign and cost. Nothing was imported, and the scrub is not charged twice.
+        {plan.campaignName ? `Same campaign (${plan.campaignName}) and cost.` : "Use the same campaign and cost."} Nothing was imported, and the scrub is not charged twice.
       </DashedCard>
     </div></>;
 
@@ -71,9 +82,14 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
  * Here rather than in the page because the primitives are a client module.
  */
 export function ImportAlreadyImported() {
-  return <><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="Import a list" />
-    <ImportStepper current={5} />
+  // An imported file is no longer this tab's to review: forget it, so the rail stops counting it.
+  const { batchId } = useParams<{ batchId?: string }>();
+  useEffect(() => { if (batchId) forgetStagedFile(batchId); }, [batchId]);
+  return <><div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+    {/* The next step in order is Clean (step 4), in the corner where every step continues. */}
+    <LeadsInSlot slot="continue">
+      <Button asChild><Link href="/app/duplicates">Continue to Clean<ArrowRight aria-hidden="true" /></Link></Button>
+    </LeadsInSlot>
     <DashedCard
       icon={<CheckCircle2 className="size-4" aria-hidden />}
       title="This list has already been imported"
@@ -83,6 +99,21 @@ export function ImportAlreadyImported() {
       </span>}
     >
       The leads are in your lead lists.
+    </DashedCard>
+  </div></>;
+}
+
+/** A file that was discarded (or whose check was stopped): closed, nothing imported. Back after Discard lands here. */
+export function ImportNotUnderReview() {
+  const { batchId } = useParams<{ batchId?: string }>();
+  useEffect(() => { if (batchId) forgetStagedFile(batchId); }, [batchId]);
+  return <><div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+    <DashedCard
+      icon={<FileX className="size-4" aria-hidden />}
+      title="This file was discarded"
+      action={<Button asChild><Link href="/app/import">Import a list</Link></Button>}
+    >
+      Nothing from it was imported.
     </DashedCard>
   </div></>;
 }
@@ -128,6 +159,18 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
   const [run, setRun] = useState(0);
   const rate = useRef<{ at: number; screened: number } | null>(null);
   const [perSecond, setPerSecond] = useState<number | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+  /** Clean-up (2026-10-29): stop checking this file and drop it, then back to Import. */
+  async function discard() {
+    setDiscarding(true);
+    try {
+      const result = await discardStagedFile(initial.batchId, progress.fileName);
+      if (result === "done") router.push("/app/import");
+      else if (result === "imported") router.refresh();
+    } finally {
+      setDiscarding(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -186,10 +229,8 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
   const left = progress.total - progress.screened;
   const minutes = perSecond && perSecond > 0 ? Math.ceil(left / perSecond / 60) : null;
 
-  return <><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="Import a list" />
-    <ImportStepper current={3} />
-    <SettingsCard pad={20} title="Screening the file" sub={`${progress.fileName ?? "This file"} · ${progress.totalRows.toLocaleString()} rows`} bodyClassName="flex flex-col gap-3">
+  return <><div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+    <SettingsCard pad={18} title="Screening the file" sub={`${progress.fileName ?? "This file"} · ${progress.totalRows.toLocaleString()} rows`} bodyClassName="flex flex-col gap-3">
       <SettingsMeter
         value={progress.screened}
         max={Math.max(1, progress.total)}
@@ -198,11 +239,16 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
         caption={`${pct}%${minutes !== null && left > 0 ? ` · about ${minutes.toLocaleString()} min left` : ""}`}
         ariaLabel={`Screening: ${pct}% of numbers checked`}
       />
-      <p role="status" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-        {left > 0
-          ? "Saved as it goes — you can leave this page."
-          : "Every number has an answer. Building the review…"}
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p role="status" className="m-0 min-w-0 flex-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+          {left > 0
+            ? "Saved as it goes — you can leave this page."
+            : "Every number has an answer. Building the review…"}
+        </p>
+        <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={discarding} onClick={() => void discard()}>
+          <Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard this file"}
+        </Button>
+      </div>
     </SettingsCard>
     {paused && <Callout tone="warning" title="Screening paused">
       <div className="flex flex-col gap-2">

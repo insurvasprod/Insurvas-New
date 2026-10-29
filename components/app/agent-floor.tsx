@@ -349,7 +349,7 @@ function callRow(call: Call, now: number, ctx: { currentUserId: string; isOwner:
   const mine = call.agentId === ctx.currentUserId;
   const percent = call.verificationPercent;
   const actions: RowAction[] = [];
-  if (mine) actions.push({ key: "verify", primary: true, label: percent != null && percent >= 100 ? "Finish the call" : "Verification", href: percent != null && percent >= 100 ? callHref(call.id, "finish") : callHref(call.id) });
+  if (mine) actions.push({ key: "verify", primary: true, label: percent != null && percent >= 100 ? "Finish the call" : "Verification", href: percent != null && percent >= 100 ? callHref(call.id, "finish") : callHref(call.id, "verify") });
   // Two different acts (LA-1.14-9): the buffer leaving a call the agent keeps, and the agent giving the transfer back.
   if (call.buffer && (ctx.isOwner || call.buffer.userId === ctx.currentUserId || mine)) {
     actions.push({ key: "end_buffer", label: ctx.saving === `end_buffer:${call.id}` ? "Removing…" : "Remove the screener", disabled: ctx.readOnly || ctx.saving === `end_buffer:${call.id}`, onSelect: () => ctx.onRelease(call, "end_buffer") });

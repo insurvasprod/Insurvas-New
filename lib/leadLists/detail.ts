@@ -97,7 +97,11 @@ export type LeadListDetail = {
    * rows a LATER re-scrub found (source_key 'scrub:<run>', 20260925706100): the number went onto a
    * list after it was bought, so it is never the vendor's to credit (20260925707900).
    */
-  removals: Array<{ reason: RemovalReason; rows: number; rescrubRows: number; claimableRows: number; claimableCents: number | null }>;
+  removals: Array<{
+    reason: RemovalReason; rows: number; rescrubRows: number; claimableRows: number; claimableCents: number | null;
+    /** Creditable rows of this reason on no claim and inside the vendor's window: what "Claim credit" drafts for it. */
+    unclaimedRows: number;
+  }>;
   claims: RemovalClaims;
   /** Null when lead_list_pool_blockers is not deployed or could not run. */
   poolBlockers: PoolBlockers | null;
@@ -112,6 +116,8 @@ export type LeadListDetail = {
     /** Leads with any certificate from any provider. */
     supplied: number;
     oldestCapturedAt: string | null;
+    /** Share of the vendor's leads, over every list it sold, with any certificate (tenant_vendor_consent_coverage.any_coverage_pct), 0–100. Null when unknown. */
+    vendorRatePct: number | null;
   };
   /** The pipeline end, from the vendor scorecard. Null when the viewer cannot see money. */
   outcome: { applications: number; issued: number; costPerIssuedCents: number | null } | null;
@@ -245,6 +251,22 @@ export async function leadListDetail(
 ): Promise<LeadListDetail | null> {
   const db = getSupabaseServiceClient() as unknown as Db;
 
+  // Started now, awaited in the second round (2026-10-29 speed pass): these need only the list's id,
+  // so they no longer wait for the first round to finish. Each settles to a value, never a rejection
+  // left unobserved while the first round runs.
+  const sampleEarly = Promise.resolve(db.from("agent_leads").select("values").eq("tenant_id", tenantId).eq("campaign_id", campaignId).order("created_at", { ascending: true }).limit(1))
+    .catch((error: unknown) => ({ data: [] as Row[], error: { message: error instanceof Error ? error.message : "sample" } }));
+  // Which removals are already on a claim, and in what state (20260925703200). Before that
+  // migration the column does not exist and the removals can only be exported.
+  const claimItemsEarly = removalClaimItems(db, tenantId, campaignId).catch(() => null);
+  // Why the pool is not being served (20260925703000). Before it, the card is not shown.
+  const poolEarly = Promise.resolve(db.rpc("lead_list_pool_blockers", { p_tenant_id: tenantId, p_campaign_id: campaignId }))
+    .then(({ data, error }) => {
+      if (error && !isMissingSchema(error)) console.error(`[lead-lists] pool blockers for ${campaignId}: ${error.message}`);
+      return error ? null : parsePoolBlockers(data);
+    })
+    .catch(() => null);
+
   const [campaignResult, costsResult, rejections, leads, firstSource, sourceCount, attempts, consent] = await Promise.all([
     db
       .from("tenant_campaigns")
@@ -353,13 +375,13 @@ export async function leadListDetail(
   const commits = new Set(sourceCount.map((row) => text(row.created_at)));
 
   // Second round: what needs the campaign's vendor, product and dates.
-  const [vendor, mapping, template, sample, scorecard, windows, claimItems, pool] = await Promise.all([
+  const [vendor, mapping, template, sample, scorecard, windows, claimItems, pool, vendorConsent] = await Promise.all([
     vendorId ? db.from("tenant_lead_vendors").select("name, return_window_days").eq("tenant_id", tenantId).eq("id", vendorId).limit(1) : null,
     vendorId && productCode
       ? db.from("tenant_import_mappings").select("mapping").eq("tenant_id", tenantId).eq("vendor_id", vendorId).eq("product_code", productCode).limit(1)
       : null,
     productCode ? getAgentTemplateForProduct(tenantId, userId, productCode).catch(() => null) : null,
-    db.from("agent_leads").select("values").eq("tenant_id", tenantId).eq("campaign_id", campaignId).order("created_at", { ascending: true }).limit(1),
+    sampleEarly,
     access.money
       ? getVendorScorecard(tenantId, { campaignId, from: createdAt.slice(0, 10) || null }, access.readOnly).catch(() => null)
       : null,
@@ -371,16 +393,14 @@ export async function leadListDetail(
         return [state, data === true] as const;
       }),
     ).catch(() => null),
-    // Which removals are already on a claim, and in what state (20260925703200). Before that
-    // migration the column does not exist and the removals can only be exported.
-    removalClaimItems(db, tenantId, campaignId),
-    // Why the pool is not being served (20260925703000). Before it, the card is not shown.
-    Promise.resolve(db.rpc("lead_list_pool_blockers", { p_tenant_id: tenantId, p_campaign_id: campaignId }))
-      .then(({ data, error }) => {
-        if (error && !isMissingSchema(error)) console.error(`[lead-lists] pool blockers for ${campaignId}: ${error.message}`);
-        return error ? null : parsePoolBlockers(data);
-      })
-      .catch(() => null),
+    claimItemsEarly,
+    poolEarly,
+    // The vendor's consent rate across every list it sold (the consent locker's own coverage view).
+    vendorId
+      ? Promise.resolve(db.from("tenant_vendor_consent_coverage").select("any_coverage_pct").eq("tenant_id", tenantId).eq("vendor_id", vendorId).limit(1))
+        .then(({ data, error }) => (error ? null : nullableNum((data ?? [])[0]?.any_coverage_pct)))
+        .catch(() => null)
+      : null,
   ]);
 
   const vendorRow = vendor && !vendor.error ? (vendor.data ?? [])[0] : undefined;
@@ -399,7 +419,7 @@ export async function leadListDetail(
       const rows = reasonCounts.get(reason) ?? 0;
       const rescrubRows = rescrubCounts.get(reason) ?? 0;
       const claimableRows = CREDITABLE.has(reason) ? rows - rescrubRows : 0;
-      return { reason, rows, rescrubRows, claimableRows, claimableCents: CREDITABLE.has(reason) && costPerRecord != null ? Math.round(claimableRows * costPerRecord) : null };
+      return { reason, rows, rescrubRows, claimableRows, claimableCents: CREDITABLE.has(reason) && costPerRecord != null ? Math.round(claimableRows * costPerRecord) : null, unclaimedRows: 0 };
     });
 
   const windowDays = vendorRow ? nullableNum(vendorRow.return_window_days) : null;
@@ -411,18 +431,21 @@ export async function leadListDetail(
   const claimStatus = new Map<string, string>();
   for (const item of claimItems ?? []) claimStatus.set(text(item.scrub_rejection_id), text(item.status));
   let unclaimedRows = 0, onClaimRows = 0, pendingRows = 0;
+  const unclaimedByReason = new Map<RemovalReason, number>();
   for (const row of rejections) {
-    if (!CREDITABLE.has(removalReason(text(row.outcome), text(row.detail)))) continue;
+    const reason = removalReason(text(row.outcome), text(row.detail));
+    if (!CREDITABLE.has(reason)) continue;
     // A later re-scrub's hit is never claimable (20260925707900); it stays counted as unusable.
     if (isRescrubRow(row)) continue;
     const status = claimStatus.get(text(row.id));
     const removedAt = Date.parse(text(row.rejected_at));
     const inWindow = windowDays == null || Number.isNaN(removedAt) || removedAt + windowDays * 86_400_000 > Date.now();
     if (status) onClaimRows += 1;
-    if (!status && inWindow) unclaimedRows += 1;
+    if (!status && inWindow) { unclaimedRows += 1; unclaimedByReason.set(reason, (unclaimedByReason.get(reason) ?? 0) + 1); }
     // Still able to land: on a claim that is not yet resolved, or on none and still claimable.
     if (status ? status === "draft" || status === "submitted" : inWindow) pendingRows += 1;
   }
+  for (const removal of removals) removal.unclaimedRows = unclaimedByReason.get(removal.reason) ?? 0;
   const claims: RemovalClaims = {
     supported: claimItems !== null,
     unclaimedRows,
@@ -499,7 +522,7 @@ export async function leadListDetail(
     poolBlockers: pool,
     returnDaysLeft,
     mapping: { saved: Boolean(savedMapping), rows: mappingRows },
-    consent: { trustedForm: trusted.size, supplied: certified.size, oldestCapturedAt: oldest },
+    consent: { trustedForm: trusted.size, supplied: certified.size, oldestCapturedAt: oldest, vendorRatePct: vendorConsent ?? null },
     outcome: totals
       ? { applications: num(totals.applications), issued: num(totals.issued_policies), costPerIssuedCents: nullableNum(totals.effective_cost_per_issued_policy_cents) }
       : null,
@@ -562,21 +585,82 @@ export async function claimableRowsCsv(tenantId: string, campaignId: string, onl
   const perRecord = nullableNum(found.cost_per_record_cents);
   const cell = (value: string) => csvCellMinimal(value);
   const lines = ["phone,reason,detail,source_row,removed_at,cost"];
+  // One reason the vendor is not answerable for (your own DNC list, a later suppression) is still
+  // exported when asked for by name (Lists panel's "Export rows", 2026-10-29): every row of it, with
+  // no cost, since nothing of it is claimed.
+  const ownReason = only != null && !CREDITABLE.has(only);
   for (const row of rows) {
     const reason = removalReason(text(row.outcome), text(row.detail));
-    if (!CREDITABLE.has(reason) || (only && reason !== only)) continue;
-    // Not the vendor's to credit: a later re-scrub found it (20260925707900).
-    if (isRescrubRow(row)) continue;
+    if (only && reason !== only) continue;
+    if (!ownReason) {
+      if (!CREDITABLE.has(reason)) continue;
+      // Not the vendor's to credit: a later re-scrub found it (20260925707900).
+      if (isRescrubRow(row)) continue;
+    }
     lines.push([
       text(row.phone_digits),
       reason,
       text(row.detail),
       text(row.source_key).replace(/^csv:/, ""),
       text(row.rejected_at),
-      perRecord == null ? "" : (perRecord / 100).toFixed(4),
+      perRecord == null || ownReason ? "" : (perRecord / 100).toFixed(4),
     ].map(cell).join(","));
   }
   return lines.join("\n") + "\n";
+}
+
+/** The most one consent export carries, as the consent locker's own export. */
+export const CONSENT_EXPORT_CAP = 10_000;
+
+/**
+ * This list's leads that arrived with no consent certificate from any provider — the ones to chase
+ * with the vendor before a complaint does (Lists panel › Mapping & consent, 2026-10-29). Null when
+ * the list does not exist. `rows` is how many leads went into the file.
+ */
+export async function consentMissingCsv(tenantId: string, campaignId: string): Promise<{ csv: string; rows: number; capped: boolean } | null> {
+  const db = getSupabaseServiceClient() as unknown as Db;
+  const [campaign, leads, artefacts] = await Promise.all([
+    db.from("tenant_campaigns").select("id").eq("tenant_id", tenantId).eq("id", campaignId).limit(1),
+    allRows(
+      (start) =>
+        db
+          .from("agent_leads")
+          .select("id, created_at, values")
+          .eq("tenant_id", tenantId)
+          .eq("campaign_id", campaignId)
+          // Along agent_leads (tenant_id, campaign_id, created_at desc), as listLeads.
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(start, start + PAGE - 1),
+      "the leads in this list",
+    ),
+    allRows(
+      (start) =>
+        db
+          .from("tenant_consent_artefacts")
+          .select("id, lead_id, agent_leads!inner(campaign_id)")
+          .eq("tenant_id", tenantId)
+          .eq("agent_leads.campaign_id", campaignId)
+          .order("id", { ascending: true })
+          .range(start, start + PAGE - 1),
+      "the consent certificates for this list",
+    ),
+  ]);
+  if (campaign.error) throw new Error(`Could not load this list: ${campaign.error.message}`);
+  if (!(campaign.data ?? [])[0]) return null;
+  const certified = new Set(artefacts.map((row) => text(row.lead_id)));
+  const missing = leads.filter((lead) => !certified.has(text(lead.id)));
+  const value = (values: Record<string, unknown>, ...keys: string[]) => {
+    for (const key of keys) { const found = values[key]; if (found != null && String(found).trim()) return String(found).trim(); }
+    return "";
+  };
+  const lines = ["lead_id,name,phone,state,arrived_at"];
+  for (const lead of missing.slice(0, CONSENT_EXPORT_CAP)) {
+    const values = (lead.values && typeof lead.values === "object" ? lead.values : {}) as Record<string, unknown>;
+    const name = value(values, "full_name", "name") || [value(values, "first_name"), value(values, "last_name")].filter(Boolean).join(" ");
+    lines.push([text(lead.id), name, value(values, "phone", "phone_number"), value(values, "state", "state_code"), text(lead.created_at)].map((entry) => csvCellMinimal(entry)).join(","));
+  }
+  return { csv: lines.join("\n") + "\n", rows: Math.min(missing.length, CONSENT_EXPORT_CAP), capped: missing.length > CONSENT_EXPORT_CAP };
 }
 
 export function isRemovalReason(value: unknown): value is RemovalReason {

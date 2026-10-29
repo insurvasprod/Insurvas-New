@@ -14,7 +14,16 @@ import { notify } from "@/lib/notify";
  * returns, like every other claim; this only starts it, and the page refreshes to show the rows as
  * claimed.
  */
-export function LeadListClaimButton({ campaignId, rows, amount, blocked }: { campaignId: string; rows: number; amount: string; blocked: string | null }) {
+export function LeadListClaimButton({ campaignId, rows, amount, blocked, onDone, reason, label, size }: {
+  campaignId: string; rows: number; amount: string; blocked: string | null;
+  /** After the draft, instead of refreshing the route (the Lists panel reloads its own data). */
+  onDone?: () => void;
+  /** One removal reason only (the Removed & claims row's own "Claim credit"); every creditable reason when absent. */
+  reason?: string;
+  /** The button's words, when the row already says how many: "Claim credit". */
+  label?: string;
+  size?: "sm";
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +35,7 @@ export function LeadListClaimButton({ campaignId, rows, amount, blocked }: { cam
       const response = await fetch("/api/app/vendor-returns/import-removals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaign_id: campaignId }),
+        body: JSON.stringify(reason ? { campaign_id: campaignId, reason } : { campaign_id: campaignId }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
@@ -40,7 +49,7 @@ export function LeadListClaimButton({ campaignId, rows, amount, blocked }: { cam
         `Draft claim for ${drafted.toLocaleString("en-US")} ${drafted === 1 ? "row" : "rows"}${cents == null ? "" : ` · $${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}`,
         { detail: "Submit it to the vendor on Vendor returns." },
       );
-      router.refresh();
+      if (onDone) onDone(); else router.refresh();
     } catch {
       setError("Could not reach the server. Nothing was drafted.");
     } finally {
@@ -54,15 +63,16 @@ export function LeadListClaimButton({ campaignId, rows, amount, blocked }: { cam
       <Button
         type="button"
         variant="outline"
+        size={size}
         disabled={Boolean(disabledBy)}
-        aria-describedby={blocked || error ? `claim-${campaignId}-why` : undefined}
+        aria-describedby={blocked || error ? `claim-${campaignId}${reason ? `-${reason}` : ""}-why` : undefined}
         title={`Drafts one claim for ${amount} on Vendor returns`}
         onClick={() => void claim()}
       >
-        {busy ? "Drafting…" : `Claim ${rows.toLocaleString("en-US")} for credit`}
+        {busy ? "Drafting…" : label ?? `Claim ${rows.toLocaleString("en-US")} for credit`}
       </Button>
       {(blocked || error) && (
-        <span id={`claim-${campaignId}-why`} role={error ? "alert" : undefined} className="max-w-[280px] text-right text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+        <span id={`claim-${campaignId}${reason ? `-${reason}` : ""}-why`} role={error ? "alert" : undefined} className="max-w-[280px] text-right text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
           {error ?? blocked}
           {error && !blocked && <> <Link href="/app/vendor-returns" className="font-semibold text-foreground underline underline-offset-2">Vendor returns</Link></>}
         </span>

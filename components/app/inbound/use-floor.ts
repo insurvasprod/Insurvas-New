@@ -114,8 +114,11 @@ export type FloorData = {
 const SAFETY_RESYNC_LIVE_MS = 30_000;
 const SAFETY_RESYNC_OFFLINE_MS = 10_000;
 
-/** Where a taken caller opens: step 2, Verification (2026-10-27; was /app/inbound/<id>/verification). */
-export const callHref = (workItemId: string, step?: "finish") => `/app/inbound/call/${workItemId}${step ? "?step=finish" : ""}`;
+/**
+ * Where a taken caller opens: step 2, Transfer check (owner 2026-10-28; Verification before). The call
+ * page's later steps are `?phase=verify|underwriting|finish` (the older `?step=finish` still works).
+ */
+export const callHref = (workItemId: string, phase?: "check" | "verify" | "underwriting" | "finish") => `/app/inbound/call/${workItemId}${phase && phase !== "check" ? `?phase=${phase}` : ""}`;
 
 export function secondsSince(value: string, now: number) {
   const timestamp = new Date(value).getTime();
@@ -270,7 +273,7 @@ export function useFloor({ readOnly, heartbeat = true }: { readOnly: boolean; he
     setSaving(null);
     if (!response.ok) { notify.block(body?.error ?? "Could not take over this call."); return; }
     notify.arrive("You have the call. Verification picks up where it was");
-    router.push(callHref(body?.handoff?.work_item_id ?? workItemId));
+    router.push(callHref(body?.handoff?.work_item_id ?? workItemId, "verify"));
   }
 
   async function release(call: Call, action: "unassign" | "end_buffer", acknowledgeLanguage = false) {

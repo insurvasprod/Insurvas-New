@@ -13,6 +13,7 @@
  */
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -71,9 +72,11 @@ export function VerifyStep() {
   const confirmed = items.map((item) => verifyConfirmed(item, attempt, caseView));
   const count = confirmed.filter(Boolean).length;
 
-  const backToInbound = workItemId ? (
+  // Inside the call page (owner 2026-10-28) the call's own step bar goes back; no button here.
+  const inCall = usePathname().startsWith("/app/inbound/call/");
+  const backToInbound = inCall ? null : workItemId ? (
     <Button asChild variant="outline">
-      <Link href={`/app/inbound/${workItemId}/verification`}><ArrowLeft aria-hidden="true" />Back to inbound</Link>
+      <Link href={`/app/inbound/call/${workItemId}?phase=verify`}><ArrowLeft aria-hidden="true" />Back to inbound</Link>
     </Button>
   ) : (
     <Button type="button" variant="outline" disabled title="This case did not come from an inbound call, so there is no verification to go back to."><ArrowLeft aria-hidden="true" />Back to inbound</Button>

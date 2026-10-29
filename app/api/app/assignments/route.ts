@@ -6,6 +6,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { audit } from "@/lib/audit/log";
 import { refuseRoutingInAgency } from "@/lib/agency/routingGuard";
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { refuseRoutingWhenSolo } from "@/lib/tenantTeam/solo";
 
 /**
  * AG-0.10 + AG-0.5 · every view and action here is routing: the rules, the per-member figures, the
@@ -16,6 +17,11 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
  */
 async function refuseRouting(context: { tenantId: string; userId: string; role: string }) {
   return (await refuseRoutingInAgency(context)) ?? (await refuseNarrowInAgency(context, "Lead routing"));
+}
+
+/** The writes add solo mode (owner 2026-10-29): a solo workspace has nobody to route to. Reads are unchanged. */
+async function refuseRoutingWrite(context: { tenantId: string; userId: string; role: string }) {
+  return (await refuseRouting(context)) ?? (await refuseRoutingWhenSolo(context));
 }
 
 const allRoles = ["owner", "producer", "assistant", "setter"] as const;
@@ -86,7 +92,7 @@ async function assignList(body: unknown) {
   const auth = await requireFeatureRole("outbound_dialing", managers, { write: true });
   if (auth instanceof NextResponse) return auth;
   // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
-  const agencyRefusal = await refuseRouting(auth.context);
+  const agencyRefusal = await refuseRoutingWrite(auth.context);
   if (agencyRefusal) return agencyRefusal;
   const parsed = assignListBody.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid list assignment" }, { status: 400 });
@@ -109,10 +115,13 @@ export async function GET(request: NextRequest) {
   const view = request.nextUrl.searchParams.get("view");
   if (view === "list_preview") {
     // The whole list through the real router, rolled back; managers only, like the commit.
-    const auth = await requireFeatureRole("outbound_dialing", managers);
+    // The Lists panel's assign drawer waits on this read (2026-10-29 speed pass): the scope is
+    // fetched alongside the entitlement, and the two agency checks run side by side, not in turn.
+    const auth = await requireFeatureRole("outbound_dialing", managers, { prefetchScope: true });
     if (auth instanceof NextResponse) return auth;
     // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
-    const agencyRefusal = await refuseRouting(auth.context);
+    const [routingRefusal, scopeRefusal] = await Promise.all([refuseRoutingInAgency(auth.context), refuseNarrowInAgency(auth.context, "Lead routing")]);
+    const agencyRefusal = routingRefusal ?? scopeRefusal;
     if (agencyRefusal) return agencyRefusal;
     const params = request.nextUrl.searchParams;
     const parsed = listPreviewQuery.safeParse({ campaign_id: params.get("campaign_id") ?? undefined, mode: params.get("mode") ?? undefined, user_ids: params.get("user_ids") ?? undefined });
@@ -125,6 +134,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ preview }, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       if (error instanceof SchemaPendingError) return pending();
+      // The router runs once per lead (about 10 ms each), so a list of several hundred pool leads
+      // outlasts the 8 s statement limit. Said plainly, with the way that still works.
+      if (error instanceof Error && /statement timeout/i.test(error.message)) {
+        return NextResponse.json({ error: "Too many leads to route in one go. Pick leads one by one instead.", code: "list_too_slow" }, { status: 504 });
+      }
       return NextResponse.json({ error: error instanceof Error ? error.message : "Could not preview the assignment" }, { status: 400 });
     }
   }
@@ -177,7 +191,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", allRoles, { write: true });
   if (auth instanceof NextResponse) return auth;
   // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
-  const agencyRefusal = await refuseRouting(auth.context);
+  const agencyRefusal = await refuseRoutingWrite(auth.context);
   if (agencyRefusal) return agencyRefusal;
   const action = z.object({ action: z.enum(["assign", "return_to_pool"]), workItemId: z.string().uuid().nullable().optional(), targetUserId: z.string().uuid().nullable().optional(), reason: z.string().trim().max(500).nullable().optional() }).strict().safeParse(body);
   if (!action.success) return NextResponse.json({ error: "Enter a valid assignment action" }, { status: 400 });
@@ -198,7 +212,7 @@ export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", managers, { write: true });
   if (auth instanceof NextResponse) return auth;
   // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
-  const agencyRefusal = await refuseRouting(auth.context);
+  const agencyRefusal = await refuseRoutingWrite(auth.context);
   if (agencyRefusal) return agencyRefusal;
   const body = await request.json().catch(() => null);
   if (body && typeof body === "object" && "rules" in body) {
@@ -235,7 +249,7 @@ export async function PATCH(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", managers, { write: true });
   if (auth instanceof NextResponse) return auth;
   // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
-  const agencyRefusal = await refuseRouting(auth.context);
+  const agencyRefusal = await refuseRoutingWrite(auth.context);
   if (agencyRefusal) return agencyRefusal;
   const parsed = z.object({
     restDays: z.number().int().min(0).max(3650).optional(),

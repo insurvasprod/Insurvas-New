@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, Download, ExternalLink, Plus } from "lucide-react";
+import { AlarmClock, CalendarClock, CheckCircle2, CircleAlert, Download, ExternalLink, Phone, Plus, Shuffle, UserRoundPlus, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection, type RowSelection } from "@/components/ui/bulk-bar";
@@ -22,14 +22,27 @@ import { insideWindow, hourLabel, STATE_NAMES, windowSummary, type CallbackWindo
 import type { CallbackView } from "@/lib/callbacks/service";
 import type { CallbackRefusalNotice } from "@/lib/callbacks/refusals";
 import type { NearestLegalTime } from "@/lib/callbacks/nearest";
-import { Chip, DayTimeline, PlanColumn, type ChipTone } from "@/components/app/callbacks/day-plan";
+import { Chip, type ChipTone } from "@/components/app/callbacks/day-plan";
 import { PersonHistory } from "@/components/app/callbacks/person-history";
-import { dayTitle, durationShort, localParts, longTime, shiftDay, shortTime, zoneAbbreviation, zonedToUtc } from "@/components/app/callbacks/time";
+import { AddCallbackDialog, type LeadPick } from "@/components/app/callbacks/add-callback-dialog";
+import { SpreadDialog } from "@/components/app/callbacks/spread-dialog";
+import { GiveToDialog, type Assignee } from "@/components/app/callbacks/give-to-dialog";
+import { useSolo } from "@/components/app/solo-context";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { Segmented } from "@/components/ui/view-tabs";
+import { durationShort, localParts, longTime, shortTime, zoneAbbreviation, zonedToUtc } from "@/components/app/callbacks/time";
 
 /**
  * Callbacks (p-app-callbacks): what is overdue, what is due today, what is coming, and one card to
  * book a callback in the customer's own time — with the calling window checked while the agent
  * picks, and again by the server before anything is stored.
+ *
+ * Callbacks A · One work list (owner pick 2026-10-28, canvas page m2-callbacks): four figures, then
+ * every open callback in the order to call it — Due now, Later today, Overdue (oldest first), Coming
+ * up — with the person on the right. Ticked rows, or the whole overdue pile, can be spread into the
+ * next open times inside each customer's window (SpreadDialog). The other quick filters (Overdue,
+ * Today, Tomorrow, Upcoming, Settled) are the same table, flat and paged.
  *
  * LA-1 §6.3 (concept board): a callback counts when the call comes back. A contact on a dial of the
  * lead from 15 minutes before it is due to the end of the customer's day keeps it; the customer's
@@ -102,45 +115,60 @@ function callbackRow(callback: CallbackView, { now, callWindow, selected, readOn
   const due = callback.isDueToday && !settled ? shortTime(callback.scheduledAtUtc, callback.customerTimezone) : longTime(callback.scheduledAtUtc, callback.customerTimezone);
   // A lead handed to the shared queue has no single agent holding it.
   const agent = callback.releasedAt ? "Shared queue" : callback.assigneeName || "—";
+  const dialer = callback.isDemo ? "/app/dialer" : `/app/dialer?lead=${encodeURIComponent(callback.leadId)}`;
   const actions: RowAction[] = [];
-  if (callable) actions.push({ key: "call", primary: true, label: "Call now", title: "Opens the dialer on this lead", href: callback.isDemo ? "/app/dialer" : `/app/dialer?lead=${encodeURIComponent(callback.leadId)}` });
-  if (!settled) actions.push({ key: "reschedule", label: "Reschedule", disabled: readOnly || callback.isDemo, onSelect: onReschedule, pressed: selected, opensPanel: true });
-  if (!settled) actions.push({ key: "book", label: "Book a callback", icon: <Plus aria-hidden="true" />, disabled: readOnly || callback.isDemo, onSelect: onReschedule, opensPanel: true });
+  // One button a row (Callbacks A): Call now when it is due or late, Call early when it is not yet.
+  if (callable) actions.push({ key: "call", primary: true, label: "Call now", icon: <Phone aria-hidden="true" />, title: "Opens the dialer on this lead", href: dialer });
+  else if (!settled) actions.push({ key: "early", label: "Call early", title: "Opens the dialer on this lead before the callback is due", href: dialer });
+  if (!settled) actions.push({ key: "reschedule", label: "Move", disabled: readOnly || callback.isDemo, onSelect: onReschedule, pressed: selected, opensPanel: true });
   if (settled && !callback.isDemo) actions.push({ key: "open", label: "Open lead", href: `/app/leads/${callback.leadId}` });
   return { status, due, agent, actions };
 }
 
 type CallbackRowProps = {
-  callback: CallbackView; now: number; callWindow: CallbackWindowFacts | undefined; selected: boolean; readOnly: boolean; settled: boolean; selection: RowSelection; onReschedule: () => void;
+  callback: CallbackView; now: number; callWindow: CallbackWindowFacts | undefined; selected: boolean; readOnly: boolean; settled: boolean; selection: RowSelection; onReschedule: () => void; yourZone: string;
 };
 
 /**
- * One callback as a table row. The details an agent reads before dialling sit under the name:
- * phone, attempt, source, who holds it, and the note. "Your time" and "Agent" are dropped while the
- * booking panel is open, so the table still fits beside it.
+ * One callback as a table row (Callbacks A): the customer with what they want and where they are, when
+ * it is due in their time with yours under it, the status (a row inside "Later today" or "Coming up"
+ * shows its source instead of repeating the group), who holds it, and one call button. A click anywhere
+ * but a control opens the person panel, where Move, Mark done and Cancel live.
  */
-function CallbackTableRow({ compact, rowHeight, ...props }: CallbackRowProps & { compact: boolean; rowHeight: number }) {
-  const { callback, selected, selection } = props;
+function CallbackTableRow({ compact, rowHeight, quietStatus = false, ...props }: CallbackRowProps & { compact: boolean; rowHeight?: number; quietStatus?: boolean }) {
+  const { callback, selected, selection, yourZone } = props;
   const { status, due, agent, actions } = callbackRow(callback, props);
+  const sub = [callback.productName, callback.state, `attempt ${callback.attemptNumber}`].filter(Boolean).join(" · ");
+  const callAction = actions.find((action) => action.key === "call" || action.key === "early" || action.key === "open");
   return (
-    // One line per cell and one shared height for every row, so every page reads the same.
-    // A click anywhere but a control opens the person panel (Callbacks C, 2026-10-25).
-    <tr className={cn("m-row cursor-pointer", (selected || selection.isSelected(callback.id)) && "bg-[var(--primary-soft)]")} style={{ height: rowHeight }} onClick={(event) => { if (!(event.target as HTMLElement).closest("a, button, input, label")) props.onReschedule(); }}>
+    <tr className={cn("m-row cursor-pointer", (selected || selection.isSelected(callback.id)) && "bg-[var(--primary-soft)]", selected && "shadow-[inset_3px_0_0_var(--primary)]")} style={rowHeight ? { height: rowHeight } : undefined} onClick={(event) => { if (!(event.target as HTMLElement).closest("a, button, input, label")) props.onReschedule(); }}>
       <td className={st.td}><RowCheckbox selection={selection} id={callback.id} label={`Select ${callback.customerName}`} /></td>
-      <td className={cn(st.td, "whitespace-nowrap")}>
-        {callback.isDemo
-          ? <span className="font-semibold text-[var(--ink)]">{callback.customerName}</span>
-          : <Link href={`/app/leads/${callback.leadId}`} className="font-semibold text-[var(--ink)] hover:underline" title={callback.note ?? undefined}>{callback.customerName}</Link>}
+      <td className={cn(st.td, "min-w-[180px]")}>
+        <span className="block truncate font-semibold text-[var(--ink)]" title={callback.note ?? undefined}>{callback.customerName}</span>
+        <span className="block truncate text-xs text-muted-foreground">{sub}</span>
       </td>
-      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{callback.phone ?? "—"}</td>
-      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{callback.attemptNumber}</td>
-      {!compact && <td className={st.td}><span className="block max-w-[220px] truncate" title={callback.sourceName ?? undefined}>{callback.sourceName ?? "—"}</span></td>}
-      <td className={cn(st.td, "whitespace-nowrap font-semibold text-[var(--ink)]")}>{due}</td>
-      <td className={st.td}><Chip tone={status.tone}>{status.label}</Chip></td>
+      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>
+        <span className="block font-semibold text-[var(--ink)]">{due}</span>
+        <span className="block text-xs text-muted-foreground">{shortTime(callback.scheduledAtUtc, yourZone, false)} your time</span>
+      </td>
+      <td className={st.td}>{quietStatus ? <span className="block max-w-[200px] truncate text-xs text-muted-foreground" title={callback.sourceName ?? undefined}>{callback.sourceName ?? "—"}</span> : <Chip tone={status.tone}>{status.label}</Chip>}</td>
       {!compact && <td className={cn(st.td, "whitespace-nowrap")}>{agent}</td>}
       <td className={cn(st.td, "whitespace-nowrap text-right")}>
-        <span className="inline-flex flex-nowrap justify-end gap-2">
-          {actions.map((action) => <ActionButton key={action.key} action={action} size="sm" />)}
+        {callAction && <ActionButton action={callAction} size="sm" />}
+      </td>
+    </tr>
+  );
+}
+
+/** A group's heading inside the work list: its name, how many, and its one action. */
+function GroupRow({ label, count, tone, action, columns }: { label: string; count: React.ReactNode; tone?: "accent" | "error"; action?: React.ReactNode; columns: number }) {
+  return (
+    <tr className="bg-[var(--surface-alt)]">
+      <td colSpan={columns} className="px-4 py-2">
+        <span className="flex items-center gap-2">
+          <strong className={cn("text-sm font-semibold", tone === "accent" ? "text-[var(--accent-ink)]" : tone === "error" ? "text-[var(--error-ink)]" : "text-[var(--ink)]")}>{label}</strong>
+          <span className="text-xs text-muted-foreground tabular-nums">{count}</span>
+          {action && <span className="ml-auto">{action}</span>}
         </span>
       </td>
     </tr>
@@ -241,6 +269,9 @@ function settledLabel(callback: CallbackView): { label: string; tone: ChipTone }
 }
 
 export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
+  // Solo mode (owner 2026-10-29): an agent working alone has nobody to give a callback to, no shared
+  // queue to put one in and no one else's callbacks to switch to, so those controls are left out.
+  const solo = useSolo();
   const [callbacks, setCallbacks] = useState<CallbackView[]>([]);
   const [windows, setWindows] = useState<Record<string, CallbackWindowFacts>>({});
   const [refusals, setRefusals] = useState<CallbackRefusalNotice[]>([]);
@@ -248,17 +279,30 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const [scope, setScope] = useState<Scope | null>(null);
   const [yourZone, setYourZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The person panel opens beside the list from a row (and on load on a wide screen).
+  const [panelOpen, setPanelOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<{ id: string; date: string; time: string } | null>(null);
   const [nearest, setNearest] = useState<{ id: string; local: string; value: NearestLegalTime | null } | null>(null);
-  // Callbacks C (2026-10-25): the day plan first; the full table is the List view.
-  const [view, setView] = useState<"day" | "list">("day");
-  const [planDay, setPlanDay] = useState("");
+  // Callbacks A (2026-10-28): the move form in the person panel opens from its Move button.
+  const [moveOpen, setMoveOpen] = useState(false);
+  // How many overdue and coming-up rows the work list shows before "Show more".
+  const [overdueShown, setOverdueShown] = useState(8);
+  const [comingShown, setComingShown] = useState(8);
+  // Clear the overdue: the callbacks being spread (null = closed).
+  const [spreadIds, setSpreadIds] = useState<string[] | null>(null);
+  // Hand-over (20261028400000): who callbacks may go to, and the callbacks the Give to… dialog is for.
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [giveIds, setGiveIds] = useState<string[] | null>(null);
+  const [handingOver, setHandingOver] = useState(false);
   const [demoPreview, setDemoPreview] = useState(false);
+  // Add callback (2026-10-28): the dialog, and the person it was opened from (null = pick one).
+  const [adding, setAdding] = useState<{ lead: LeadPick | null } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const selectedIdRef = useRef<string | null>(null);
+  const openedOnce = useRef(false);
 
   useEffect(() => {
     const clock = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -277,6 +321,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       setCallbacks(next);
       setWindows((body.windows ?? {}) as Record<string, CallbackWindowFacts>);
       setRefusals(Array.isArray(body.refusals) ? body.refusals as CallbackRefusalNotice[] : []);
+      setAssignees(Array.isArray(body.assignees) ? body.assignees as Assignee[] : []);
       const who = body.viewer && typeof body.viewer.userId === "string" ? body.viewer as Viewer : null;
       setViewer(who);
       // Owners start on every callback in the workspace; everyone else on their own.
@@ -290,6 +335,9 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       const keep = selectedIdRef.current && next.some((item) => item.id === selectedIdRef.current) ? selectedIdRef.current : (open.find((item) => item.isOverdue) ?? open.find((item) => item.isDueToday) ?? open[0])?.id ?? null;
       selectedIdRef.current = keep;
       setSelectedId(keep);
+      // Callbacks A: on a wide screen the page opens with the first person beside the list.
+      if (!openedOnce.current && keep && window.matchMedia("(min-width: 1280px)").matches) setPanelOpen(true);
+      openedOnce.current = true;
     }
     setLoading(false);
   }, []);
@@ -308,8 +356,6 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   // list scrolls with the page; the fill-height sizing is for the table, from lg.
   const wide = useMediaQuery(WIDE_QUERY);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // The booking panel opens beside the table (70 / 30) from "Book a callback" or a row's Reschedule.
-  const [panelOpen, setPanelOpen] = useState(false);
   const { setNode: setFillNode, height: fillHeight, rows: pageSize, rowHeight } = useFillHeight();
   const needle = search.trim().toLowerCase();
   const visible = useMemo(() => {
@@ -355,23 +401,25 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [selectedLive, inWindow, draftLocal]);
 
-  function choose(callback: CallbackView) {
+  function choose(callback: CallbackView, move = false) {
     selectedIdRef.current = callback.id;
     setSelectedId(callback.id);
     setPanelOpen(true);
+    setMoveOpen(move);
     setDraft(null);
     void loadHistory(callback);
   }
 
   /** "Use that": the suggestion goes into the picker. The agent still books it. */
   function takeSuggestion(callback: CallbackView, value: NearestLegalTime) {
-    choose(callback);
+    choose(callback, true);
     const [date, time] = value.customerLocal.split("T");
     setDraft({ id: callback.id, date, time });
   }
 
   async function act(actionName: "reschedule" | "cancel" | "complete") {
     if (!selected) return;
+    if (actionName === "cancel" && !(await confirmAction({ title: `Cancel ${selected.customerName}'s callback?`, description: "Nobody will be reminded to call them back. The lead and its history stay.", confirmLabel: "Cancel callback", cancelLabel: "Keep it" }))) return;
     setSaving(true); setError("");
     const response = await fetch("/api/app/callbacks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: actionName, callback_id: selected.id, callback_local: actionName === "reschedule" ? draftLocal : undefined }) });
     const body = await response.json().catch(() => null);
@@ -385,7 +433,40 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     }
     notify.done(actionName === "reschedule" ? "Callback booked" : actionName === "complete" ? "Callback marked done" : "Callback cancelled");
     setDraft(null);
+    setMoveOpen(false);
     await load();
+  }
+
+  /**
+   * Give callbacks to another agent, or put their leads in the shared queue. The server takes them one at
+   * a time and says which could not move (a partner's transfer never goes to the pool, say).
+   */
+  async function handOver(ids: string[], to: string) {
+    if (!ids.length) return;
+    setHandingOver(true);
+    const response = await fetch("/api/app/callbacks", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "hand_over", callback_ids: ids, to }) }).catch(() => null);
+    const body = response ? await response.json().catch(() => null) : null;
+    setHandingOver(false);
+    if (!response?.ok && !body?.result) { notify.block(body?.error ?? "The callbacks could not be handed over."); return; }
+    const moved = Number(body?.result?.moved ?? 0);
+    const failed = (body?.result?.failed ?? []) as Array<{ callbackId: string; error: string }>;
+    const where = to === "queue" ? "put in the shared queue" : `given to ${assignees.find((person) => person.id === to)?.name ?? "the agent"}`;
+    if (failed.length) notify.warn(moved ? `${moved} ${moved === 1 ? "callback" : "callbacks"} ${where}` : "Nothing was handed over", { detail: failed.slice(0, 2).map((item) => item.error).join(" ") });
+    else notify.done(`${moved === 1 ? "Callback" : `${moved} callbacks`} ${where}`);
+    setGiveIds(null);
+    selection.clear();
+    await load();
+  }
+  async function toQueue(ids: string[]) {
+    if (!ids.length) return;
+    const ok = await confirmAction({
+      title: ids.length === 1 ? "Put this callback in the shared queue?" : `Put ${ids.length} callbacks in the shared queue?`,
+      description: "Anyone on the team can call them from the queue. They keep their times; a partner's transfer stays with its agent.",
+      confirmLabel: "Put in shared queue",
+      cancelLabel: "Keep them",
+      destructive: false,
+    });
+    if (ok) await handOver(ids, "queue");
   }
 
   /** The callback's own history, for the person panel when the lead record cannot be read. */
@@ -453,9 +534,9 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   // Filters button, opening in the toolbar band (2026-10-09 mobile); saved views stay in the row.
   const searchBox = <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search customer, phone, note" label="Search callbacks by customer, phone, source, note or agent" />;
   const whenFilter = (
-    <span role="group" aria-label="When" className={cn("inline-flex h-9 gap-0.5 rounded-md bg-[var(--canvas)] p-0.5", !wide && "max-w-full overflow-x-auto")}>
+    <span role="group" aria-label="When" className={cn("inline-flex h-9 max-w-full min-w-0 gap-0.5 overflow-x-auto rounded-md bg-[var(--canvas)] p-0.5", (compact || !wide) && "w-full")}>
       {(Object.keys(WHEN_LABEL) as WhenFilter[]).map((key) => (
-        <button key={key} type="button" aria-pressed={when === key} onClick={() => { setWhen(key); setListPage(1); }} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-semibold tracking-[-0.01em] whitespace-nowrap", !wide && "shrink-0", when === key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+        <button key={key} type="button" aria-pressed={when === key} onClick={() => { setWhen(key); setListPage(1); }} className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm font-semibold tracking-[-0.01em] whitespace-nowrap", when === key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
           {WHEN_LABEL[key]}
           <span className={cn("rounded-full px-1.5 text-xs tabular-nums", key === "overdue" && byWhen.overdue.length ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{byWhen[key].length}</span>
         </button>
@@ -494,12 +575,13 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
 
   // 36px below lg, for a thumb.
   const smallSize = wide ? "sm" : "default";
-  const scopeToggle = viewer && (
-    <div role="group" aria-label="Whose callbacks" className="inline-flex gap-1">
-      <Button type="button" size={smallSize} variant={scope === "mine" ? "default" : "outline"} aria-pressed={scope === "mine"} onClick={() => setScope("mine")}>Mine</Button>
-      <Button type="button" size={smallSize} variant={scope === "all" ? "default" : "outline"} aria-pressed={scope === "all"} onClick={() => setScope("all")}>All</Button>
-    </div>
+  const scopeToggle = viewer && !solo && (
+    <Segmented label="Whose callbacks" value={scope ?? "all"} onChange={setScope} options={[{ key: "mine", label: "Mine" }, { key: "all", label: "All" }]} />
   );
+  const canAdd = !readOnly;
+  const openAdd = (lead: LeadPick | null) => setAdding({ lead });
+  // Offered in Add callback before anything is typed: the people waiting longest for their call.
+  const waitingLeads: LeadPick[] = [...new Map(overdue.filter((item) => !item.isDemo).map((item) => [item.leadId, { id: item.leadId, name: item.customerName, meta: [rowStatus(item, now, undefined).label, item.state].filter(Boolean).join(" · ") }])).values()].slice(0, 5);
 
   // The panel's text buttons get a 36px target on a touch screen (below xl the panel is a sheet).
   const moreTarget = wide ? undefined : "min-h-9";
@@ -507,8 +589,9 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const stateOf = (callback: CallbackView) => (isSettled(callback) ? settledLabel(callback) : rowStatus(callback, now, callback.state ? windows[callback.state] : undefined));
   const callHrefOf = (callback: CallbackView) => (!isSettled(callback) && (callback.isOverdue || callback.isDueToday) ? (callback.isDemo ? "/app/dialer" : `/app/dialer?lead=${encodeURIComponent(callback.leadId)}`) : null);
   const selectedCall = selected ? callHrefOf(selected) : null;
-  const fact = (label: string, value: React.ReactNode) => (
-    <div className="min-w-0"><dt className="text-xs font-semibold text-muted-foreground">{label}</dt><dd className="m-0 mt-0.5 text-sm break-words text-[var(--ink)]">{value}</dd></div>
+  // A fact tile (Callbacks A panel): label, value, one muted line under it.
+  const fact = (label: string, value: React.ReactNode, note?: string) => (
+    <div className="min-w-0 rounded-lg bg-[var(--surface-alt)] px-3 py-2"><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="m-0 mt-0.5 text-sm font-semibold break-words text-[var(--ink)]">{value}</dd>{note && <dd className="m-0 truncate text-xs text-muted-foreground">{note}</dd>}</div>
   );
   const sectionTitle = "m-0 text-xs font-semibold text-muted-foreground";
 
@@ -530,18 +613,25 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       // Stays in view while the page scrolls; long content scrolls inside it.
       className="xl:sticky xl:top-[calc(var(--top-bar-h)+16px)] xl:max-h-[calc(100dvh-var(--top-bar-h)-32px)]"
     >
-      <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-3">
-        {fact("Their time", longTime(selected.scheduledAtUtc, selected.customerTimezone))}
-        {fact("Your time", shortTime(selected.scheduledAtUtc, yourZone))}
-        {fact("Phone", selected.phone ?? "—")}
-        {fact("Attempt", selected.attemptNumber)}
-        {fact("Source", selected.sourceName ?? "—")}
-        {fact("Agent", selected.releasedAt ? "Shared queue" : selected.assigneeName || "—")}
+      <dl className="m-0 grid grid-cols-2 gap-2">
+        {fact("Their time", longTime(selected.scheduledAtUtc, selected.customerTimezone), `${shortTime(selected.scheduledAtUtc, yourZone, false)} your time`)}
+        {fact("Calling window", selectedWindow ? `${hourLabel(selectedWindow.effective.start)} – ${hourLabel(selectedWindow.effective.end)}` : "—", stateName ?? "No state on this lead")}
+        {fact("Phone", selected.phone ?? "—", `Attempt ${selected.attemptNumber}`)}
+        {fact("Held by", selected.releasedAt ? "Shared queue" : selected.assigneeName || "—", selected.sourceName ?? undefined)}
       </dl>
-      {selectedCall && <Button asChild className="w-full"><Link href={selectedCall}>Call now</Link></Button>}
-      {selected.note && <div className="flex flex-col gap-1"><h3 className={sectionTitle}>Their note</h3><p className="m-0 text-sm text-[var(--body)]">{selected.note}</p></div>}
+      {selectedCall && <Button asChild className="w-full"><Link href={selectedCall}><Phone aria-hidden="true" />Call now</Link></Button>}
+      {selected.note && <div className="flex flex-col gap-1"><h3 className={sectionTitle}>Their note</h3><p className="m-0 text-sm leading-relaxed text-[var(--body)]">{selected.note}</p></div>}
+      {!terminal && !selected.isDemo && !readOnly && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant={moveOpen ? "secondary" : "outline"} aria-expanded={moveOpen} onClick={() => setMoveOpen((value) => !value)}>Move</Button>
+          <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void act("complete")} title="Records it as kept by hand. Where the lead goes next is the call's outcome, not this button.">Mark done</Button>
+          <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void act("cancel")}>Cancel callback</Button>
+          {!solo && <Button type="button" size="sm" variant="ghost" disabled={handingOver} onClick={() => setGiveIds([selected.id])}><UserRoundPlus aria-hidden="true" />Give to…</Button>}
+          {!solo && !selected.inbound && !selected.releasedAt && <Button type="button" size="sm" variant="ghost" disabled={handingOver} onClick={() => void toQueue([selected.id])}><Users aria-hidden="true" />Shared queue</Button>}
+        </div>
+      )}
 
-      {!terminal && (
+      {!terminal && moveOpen && (
         <section className="portal-callbacks-card m-0 flex flex-col gap-3 border-0 p-0 shadow-none" aria-label="Move the callback">
           <h3 className={sectionTitle}>Move the callback</h3>
           <div className="portal-callbacks-local">
@@ -574,14 +664,15 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" disabled={!canBook} onClick={() => void act("reschedule")}>{saving ? "Booking…" : "Book the new time"}</Button>
-            {!selected.isDemo && !readOnly && (
-              <span className="portal-callbacks-card-more m-0 border-0 p-0">
-                <button type="button" className={moreTarget} disabled={saving} onClick={() => void act("complete")} title="Records it as kept by hand. Where the lead goes next is the call's outcome, not this button.">Mark done</button>
-                <button type="button" className={moreTarget} disabled={saving} onClick={() => void act("cancel")}>Cancel callback</button>
-              </span>
-            )}
+            <Button type="button" size="sm" variant="ghost" className={moreTarget} onClick={() => { setMoveOpen(false); setDraft(null); }}>Close</Button>
           </div>
         </section>
+      )}
+
+      {terminal && canAdd && !selected.isDemo && (
+        <Button type="button" variant="outline" className="w-full" onClick={() => openAdd({ id: selected.leadId, name: selected.customerName, meta: [selected.state, selected.phone].filter(Boolean).join(" · ") })}>
+          <Plus aria-hidden="true" />Book another callback
+        </Button>
       )}
 
       <section className="flex flex-col gap-2" aria-label="Conversation and history">
@@ -591,46 +682,94 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     </DetailPanel>
   );
 
-  const viewToggle = (
-    <div role="group" aria-label="View" className="inline-flex gap-1">
-      <Button type="button" size={smallSize} variant={view === "day" ? "default" : "outline"} aria-pressed={view === "day"} onClick={() => setView("day")}>Day</Button>
-      <Button type="button" size={smallSize} variant={view === "list" ? "default" : "outline"} aria-pressed={view === "list"} onClick={() => setView("list")}>List</Button>
-    </div>
+  // The four figures (Callbacks A). Each opens the rows behind it.
+  const weekAgo = now - 7 * 86_400_000;
+  const settledWeek = visible.filter((item) => (item.status === "completed" || wasMissed(item)) && new Date(item.scheduledAtUtc).getTime() >= weekAgo && new Date(item.scheduledAtUtc).getTime() <= now);
+  const keptWeek = settledWeek.filter((item) => item.status === "completed").length;
+  const comingWeek = upcoming.filter((item) => new Date(item.scheduledAtUtc).getTime() <= now + 7 * 86_400_000).length;
+  const oldestOverdue = overdue[0] ? Math.max(0, Math.floor((now - new Date(overdue[0].scheduledAtUtc).getTime()) / 86_400_000)) : 0;
+  const soon = (item: CallbackView) => new Date(item.scheduledAtUtc).getTime() <= now + 30 * 60_000;
+  const dueNowCount = dueToday.filter(soon).length;
+  const showWhen = (key: WhenFilter) => { setWhen(key); setDay(""); setListPage(1); };
+  const stats = (
+    <StatRow label="Callbacks at a glance">
+      <StatCard icon={AlarmClock} label="Overdue" value={overdue.length} tone={overdue.length ? "warn" : "default"} fact={{ label: overdue.length ? `Oldest ${oldestOverdue === 0 ? "from today" : `${oldestOverdue} ${oldestOverdue === 1 ? "day" : "days"}`}` : "None late" }} action={overdue.length ? <Button type="button" size="sm" variant="ghost" onClick={() => showWhen("overdue")}>View</Button> : undefined} />
+      <StatCard icon={Phone} label="Due today" value={dueToday.length} fact={{ label: dueNowCount ? `${dueNowCount} due now` : "None due right now" }} action={dueToday.length ? <Button type="button" size="sm" variant="ghost" onClick={() => showWhen("today")}>View</Button> : undefined} />
+      <StatCard icon={CalendarClock} label="Coming up" period="7 days" value={comingWeek} fact={{ label: `${upcoming.length} booked in all` }} action={upcoming.length ? <Button type="button" size="sm" variant="ghost" onClick={() => showWhen("upcoming")}>View</Button> : undefined} />
+      <StatCard icon={CheckCircle2} label="Kept" period="7 days" value={settledWeek.length ? Math.round((keptWeek / settledWeek.length) * 100) : 0} unit="%" fact={{ label: `${keptWeek} of ${settledWeek.length} called back` }} action={settledWeek.length ? <Button type="button" size="sm" variant="ghost" onClick={() => showWhen("settled")}>View</Button> : undefined} />
+    </StatRow>
   );
 
-  // The day plan: today in the agent's clock, its callbacks by hour, and three numbered steps.
-  const today = localParts(new Date(now), yourZone).date;
-  const shownDay = planDay || today;
-  const onDay = (item: CallbackView) => localParts(item.scheduledAtUtc, yourZone).date;
-  const dayItems = visible.filter((item) => item.status !== "cancelled" && onDay(item) === shownDay).sort((a, b) => a.scheduledAtUtc.localeCompare(b.scheduledAtUtc));
-  const todayItems = visible.filter((item) => item.status !== "cancelled" && onDay(item) === today);
-  const todayLeft = todayItems.filter((item) => OPEN_STATUSES.has(item.status)).length;
-  const earlier = overdue.filter((item) => onDay(item) < today);
-  const planColumn = (
-    <PlanColumn
-      className={panelOpen && selected ? "xl:hidden 2xl:flex" : undefined}
-      title={`Today, ${dayTitle(today)}`}
-      left={todayLeft}
-      total={todayItems.length}
-      steps={[
-        { label: "Call the late ones", count: overdue.length, tone: "error", onClick: overdue[0] ? () => choose(overdue[0]) : undefined },
-        { label: "Work today in time order", count: dueToday.length, tone: "accent", onClick: dueToday[0] ? () => { setPlanDay(""); choose(dueToday[0]); } : undefined },
-        { label: "Fix a refused booking", count: visibleRefusals.length, tone: "warning", onClick: () => document.getElementById("callback-refusals")?.scrollIntoView({ behavior: "smooth", block: "start" }) },
-      ]}
-      earlier={earlier.slice(0, 3)}
-      moreEarlier={Math.max(0, earlier.length - 3)}
-      onSelect={choose}
-      onMoreEarlier={() => { setView("list"); setWhen("overdue"); setListPage(1); }}
-      callHrefOf={callHrefOf}
-      stateOf={stateOf}
-    />
+  // The work list (when = "open"): every open callback in the order to call it, in four groups.
+  const grouped = when === "open";
+  const groupDueNow = rows.filter((item) => !item.isOverdue && item.isDueToday && soon(item));
+  const groupLater = rows.filter((item) => !item.isOverdue && item.isDueToday && !soon(item));
+  const groupOverdue = rows.filter((item) => item.isOverdue);
+  const groupComing = rows.filter((item) => !item.isOverdue && !item.isDueToday);
+  const spreadable = (items: CallbackView[]) => items.filter((item) => !item.isDemo && OPEN_STATUSES.has(item.status)).map((item) => item.id);
+  const canSpread = !readOnly && !demoPreview;
+  const tableColumns = compact ? 5 : 6;
+  const rowProps = (callback: CallbackView) => ({
+    callback, now, yourZone, callWindow: callback.state ? windows[callback.state] : undefined, selected: panelOpen && callback.id === selectedId,
+    readOnly, settled: settledView, selection, onReschedule: () => choose(callback),
+  });
+  const moreRow = (label: string, onClick: () => void) => (
+    <tr><td colSpan={tableColumns} className="px-4 py-2.5"><button type="button" onClick={onClick} className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">{label}</button></td></tr>
   );
+  const groupedBody = (
+    <tbody>
+      {groupDueNow.length > 0 && <GroupRow label="Due now" count={groupDueNow.length} tone="accent" columns={tableColumns} />}
+      {groupDueNow.map((callback) => <CallbackTableRow key={callback.id} compact={compact} {...rowProps(callback)} />)}
+      {groupLater.length > 0 && <GroupRow label="Later today" count={groupLater.length} columns={tableColumns} />}
+      {groupLater.map((callback) => <CallbackTableRow key={callback.id} compact={compact} quietStatus {...rowProps(callback)} />)}
+      {groupOverdue.length > 0 && <GroupRow label="Overdue" count={`${groupOverdue.length} · oldest first`} tone="error" columns={tableColumns}
+        action={canSpread && spreadable(groupOverdue).length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => setSpreadIds(spreadable(groupOverdue))}><Shuffle aria-hidden="true" />Clear the overdue…</Button> : undefined} />}
+      {groupOverdue.slice(0, overdueShown).map((callback) => <CallbackTableRow key={callback.id} compact={compact} {...rowProps(callback)} />)}
+      {groupOverdue.length > overdueShown && moreRow(`Show ${Math.min(20, groupOverdue.length - overdueShown)} more overdue · ${groupOverdue.length - overdueShown} left`, () => setOverdueShown((count) => count + 20))}
+      {groupComing.length > 0 && <GroupRow label="Coming up" count={groupComing.length} columns={tableColumns} />}
+      {groupComing.slice(0, comingShown).map((callback) => <CallbackTableRow key={callback.id} compact={compact} quietStatus {...rowProps(callback)} />)}
+      {groupComing.length > comingShown && moreRow(`Show ${Math.min(20, groupComing.length - comingShown)} more · ${groupComing.length - comingShown} left`, () => setComingShown((count) => count + 20))}
+    </tbody>
+  );
+  const groupedCards = (
+    <CardList label="Callbacks">
+      {[...groupDueNow, ...groupLater, ...groupOverdue.slice(0, overdueShown), ...groupComing.slice(0, comingShown)].map((callback) => <CallbackCard key={callback.id} {...rowProps(callback)} />)}
+    </CardList>
+  );
+  const shownRows = grouped ? rows : pageRows;
+  const spreadNames = Object.fromEntries(callbacks.map((item) => [item.id, item.customerName]));
 
   return (
     <main className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Callbacks"
-        actions={<div className="flex flex-wrap items-center gap-2">{viewToggle}{scopeToggle}<Button variant="outline" asChild><Link href="/app/dialer">Open the queue</Link></Button></div>}
+        actions={<div className="flex flex-wrap items-center gap-2">
+          {scopeToggle}
+          <Button variant="outline" asChild><Link href="/app/dialer">Open the queue</Link></Button>
+          {/* The page's one primary action. */}
+          <Button type="button" disabled={!canAdd} onClick={() => openAdd(null)}><Plus aria-hidden="true" />Add callback</Button>
+        </div>}
+      />
+      {stats}
+      <GiveToDialog
+        open={giveIds !== null}
+        onOpenChange={(next) => { if (!next) setGiveIds(null); }}
+        count={giveIds?.length ?? 0}
+        people={assignees}
+        currentHolder={(() => { const holders = new Set(callbacks.filter((item) => giveIds?.includes(item.id) && !item.releasedAt).map((item) => item.assignedTo)); return holders.size === 1 ? [...holders][0] ?? null : null; })()}
+        viewerId={viewer?.userId ?? null}
+        busy={handingOver}
+        onGive={(assigneeId) => void handOver(giveIds ?? [], assigneeId)}
+      />
+      <SpreadDialog open={spreadIds !== null} onOpenChange={(next) => { if (!next) setSpreadIds(null); }} ids={spreadIds ?? []} names={spreadNames} yourZone={yourZone} onDone={() => { selection.clear(); void load(); }} />
+      <AddCallbackDialog
+        open={adding !== null}
+        onOpenChange={(next) => { if (!next) setAdding(null); }}
+        initialLead={adding?.lead ?? null}
+        suggestions={waitingLeads}
+        yourZone={yourZone}
+        now={now}
+        onBooked={() => void load()}
       />
       {demoPreview && <div role="status" className="portal-callbacks-notice">Demo preview — sample callbacks, read-only and not stored.</div>}
       {readOnly && <div role="status" className="portal-callbacks-notice">Account suspended — callbacks are read-only.</div>}
@@ -656,29 +795,11 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
         );
       })}</div>}
 
-      {view === "day" ? (
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-          {planColumn}
-          <DayTimeline
-            day={shownDay}
-            today={today}
-            yourZone={yourZone}
-            items={dayItems}
-            stateOf={stateOf}
-            settledOf={isSettled}
-            selectedId={panelOpen ? selectedId : null}
-            onSelect={choose}
-            onDay={(delta) => setPlanDay(shiftDay(shownDay, delta))}
-            onToday={() => setPlanDay("")}
-            callHrefOf={callHrefOf}
-          />
-          {panelOpen && personPanel}
-        </div>
-      ) : (
-      // List: the full table; a row opens the person panel beside it (70 / 30).
-      <div ref={setFillNode} className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:[height:var(--fill-h)]" style={{ "--fill-h": `${fillHeight}px` } as React.CSSProperties}>
+      {/* The work list, or a flat filtered list; a row opens the person panel beside it. A flat list fills
+          the window and pages; the work list grows with its groups and the page scrolls. */}
+      <div ref={grouped ? undefined : setFillNode} className={cn("flex flex-col gap-4", grouped ? "xl:flex-row xl:items-start" : "lg:flex-row lg:items-stretch lg:[height:var(--fill-h)]")} style={grouped ? undefined : { "--fill-h": `${fillHeight}px` } as React.CSSProperties}>
         <TableCard
-          className="flex min-h-0 min-w-0 flex-1 flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto"
+          className={cn("flex min-w-0 flex-1 flex-col", !grouped && "min-h-0 [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto")}
           toolbar={<>
             {toolbar}
             {/* In the toolbar band rather than above the rows: the table fits the window by measuring
@@ -689,82 +810,61 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
               count={selection.count}
               noun={["callback", "callbacks"]}
               onClear={selection.clear}
-              actions={<Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>}
+              actions={<>
+                {canSpread && <Button type="button" variant="outline" disabled={spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setSpreadIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><Shuffle aria-hidden="true" />Spread into open times</Button>}
+                {canSpread && !solo && <Button type="button" variant="outline" disabled={handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setGiveIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><UserRoundPlus aria-hidden="true" />Give to…</Button>}
+                {canSpread && !solo && <Button type="button" variant="outline" disabled={handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)).length === 0} onClick={() => void toQueue(spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)))}><Users aria-hidden="true" />Put in shared queue</Button>}
+                <Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>
+              </>}
             />
           </>}
-          footer={<Pager page={listCurrent} total={rows.length} pageSize={pageSize} noun="callbacks" suffix={settledView ? "newest first" : "soonest first"} onPage={setListPage} />}
+          footer={grouped ? undefined : <Pager page={listCurrent} total={rows.length} pageSize={pageSize} noun="callbacks" suffix={settledView ? "newest first" : "soonest first"} onPage={setListPage} />}
         >
           <div>
-            {pageRows.length === 0 ? (
+            {shownRows.length === 0 ? (
               filtersOn
                 ? <NoMatches noun="callbacks" onClear={clearFilters} />
                 : mineOnly
                   ? <EmptyState title="You have no open callbacks" hint="Others' callbacks are under All." action={<Button type="button" variant="outline" onClick={() => setScope("all")}>Show all callbacks</Button>} />
-                  : <EmptyState title="No open callbacks" hint="Book one from a call outcome." action={<Button asChild variant="outline"><Link href="/app/dialer">Open the dialer</Link></Button>} />
+                  : <EmptyState title="No open callbacks" hint="Book one here, or from a call outcome." action={canAdd ? <Button type="button" variant="outline" onClick={() => openAdd(null)}><Plus aria-hidden="true" />Add callback</Button> : <Button asChild variant="outline"><Link href="/app/dialer">Open the dialer</Link></Button>} />
             ) : !wide ? (
               <>
                 {/* Select the page, as the table's header checkbox does. */}
                 <div className="flex items-center border-b border-border px-4 py-1">
                   <label className="inline-flex h-9 cursor-pointer items-center gap-2 text-sm text-[var(--body)]">
-                    <SelectAllCheckbox selection={selection} ids={pageRows.map((item) => item.id)} label="Select every callback on this page" />
-                    Select page
+                    <SelectAllCheckbox selection={selection} ids={shownRows.map((item) => item.id)} label="Select every callback shown" />
+                    Select all
                   </label>
                 </div>
+                {grouped ? groupedCards : (
                 <CardList label="Callbacks">
-                  {pageRows.map((callback) => (
-                    <CallbackCard
-                      key={callback.id}
-                      callback={callback}
-                      now={now}
-                      callWindow={callback.state ? windows[callback.state] : undefined}
-                      selected={panelOpen && callback.id === selectedId}
-                      readOnly={readOnly}
-                      settled={settledView}
-                      selection={selection}
-                      onReschedule={() => choose(callback)}
-                    />
-                  ))}
+                  {pageRows.map((callback) => <CallbackCard key={callback.id} {...rowProps(callback)} />)}
                 </CardList>
+                )}
               </>
             ) : (
               <table className={st.table}>
                 <thead>
                   <tr className={st.headRow}>
-                    <th scope="col" className={cn(st.th, "w-10")}><SelectAllCheckbox selection={selection} ids={pageRows.map((item) => item.id)} label="Select every callback on this page" /></th>
+                    <th scope="col" className={cn(st.th, "w-10")}><SelectAllCheckbox selection={selection} ids={shownRows.map((item) => item.id)} label="Select every callback shown" /></th>
                     <th scope="col" className={cn(st.th, "min-w-[180px]")}>Customer</th>
-                    <th scope="col" className={st.th}>Phone</th>
-                    <th scope="col" className={st.th}>Attempt</th>
-                    {!compact && <th scope="col" className={st.th}>Source</th>}
-                    <th scope="col" className={st.th}>Due</th>
-                    <th scope="col" className={st.th}>Status</th>
+                    <th scope="col" className={st.th}>Their time</th>
+                    <th scope="col" className={st.th}>{grouped ? "Status · source" : "Status"}</th>
                     {!compact && <th scope="col" className={st.th}>Agent</th>}
                     <th scope="col" className={cn(st.th, "text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
+                {grouped ? groupedBody : (
                 <tbody>
-                  {pageRows.map((callback) => (
-                    <CallbackTableRow
-                      key={callback.id}
-                      callback={callback}
-                      now={now}
-                      callWindow={callback.state ? windows[callback.state] : undefined}
-                      selected={panelOpen && callback.id === selectedId}
-                      readOnly={readOnly}
-                      compact={compact}
-                      settled={settledView}
-                      rowHeight={rowHeight}
-                      selection={selection}
-                      onReschedule={() => choose(callback)}
-                    />
-                  ))}
+                  {pageRows.map((callback) => <CallbackTableRow key={callback.id} compact={compact} rowHeight={rowHeight} {...rowProps(callback)} />)}
                 </tbody>
+                )}
               </table>
             )}
           </div>
         </TableCard>
         {panelOpen && personPanel}
       </div>
-      )}
     </main>
   );
 }

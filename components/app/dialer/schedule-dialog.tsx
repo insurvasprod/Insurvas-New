@@ -26,7 +26,9 @@ export function ScheduleDialog({ open, onOpenChange, title, description, submitL
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 sm:max-w-[720px]">
+      {/* Never taller than the screen: on a phone the calendar and the times run past it, and the
+          buttons at the foot must stay reachable (2026-10-28). */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-[720px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

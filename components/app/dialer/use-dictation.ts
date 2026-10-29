@@ -81,6 +81,8 @@ const MIC_BLOCKED = "The microphone is blocked for this site. Allow it from the 
 
 export function useDictation(onText: (text: string) => void) {
   const [engine, setEngine] = useState<Engine | null>(null);
+  // Whether the browser has been asked yet: until then "no dictation here" is not known to be true.
+  const [checked, setChecked] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [heard, setHeard] = useState("");
@@ -95,7 +97,7 @@ export function useDictation(onText: (text: string) => void) {
   useEffect(() => { onTextRef.current = onText; }, [onText]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- which engine works is only known in the browser
-  useEffect(() => { setEngine(pickEngine()); }, []);
+  useEffect(() => { setEngine(pickEngine()); setChecked(true); }, []);
   useEffect(() => () => {
     recognition.current?.abort();
     if (recorder.current?.state === "recording") recorder.current.stop();
@@ -205,5 +207,5 @@ export function useDictation(onText: (text: string) => void) {
     recognition.current?.stop();
     if (recorder.current?.state === "recording") recorder.current.stop();
   }
-  return { supported: engine !== null, engine, listening, transcribing, heard, seconds, download, problem, start, stop };
+  return { supported: engine !== null, checked, engine, listening, transcribing, heard, seconds, download, problem, start, stop };
 }
