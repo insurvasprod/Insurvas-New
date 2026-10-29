@@ -307,9 +307,9 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                     );
                   })}
                 </ul>
-                {/* The card is as tall as its carriers (it was held to the tiles' height and squeezed its list, owner
-                    29 Oct); only a very long list scrolls, inside the card. */}
-                <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 @3xl:self-start">
+                {/* The card runs the tiles' full length, and grows past it for a long carrier list (it was once held
+                    to the tiles' height and squeezed its list, owner 29 Oct). Past 400px the list scrolls inside. */}
+                <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-3">
                   {(() => {
                     const focus = open ? US_STATES.find(([code]) => code === open) : null;
                     if (!focus) return <p className="m-0 py-8 text-center text-sm text-[var(--muted)]">Pick a state to see its carriers here.</p>;
@@ -321,7 +321,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                           <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]">{name}</span>
                           <span className="shrink-0 text-xs text-[var(--muted)] tabular-nums">{here.length} of {mine.length} carriers</span>
                         </div>
-                        <div className="flex max-h-[min(45vh,400px)] flex-col overflow-y-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
+                        <div className="flex max-h-[min(45vh,400px)] flex-1 flex-col overflow-y-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
                           {mine.map((carrier) => {
                             const has = here.includes(carrier.id);
                             return (
