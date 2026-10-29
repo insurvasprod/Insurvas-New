@@ -421,7 +421,7 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 
 ## 15. Settings pages (v3)
 **Status:** Live. The owner approved the patterns on 2026-10-29; parts in
-`components/app/settings/patterns.tsx`, worked examples on `/design/settings/patterns#patterns`).
+`components/app/settings/patterns.tsx`, worked examples on `/design/settings/patterns#patterns`.
 
 - **One frame:** breadcrumb, the section's title top-left and one line on what it is for; the
   "Last changed · History" line under it. The settings menu starts level with the first card.
