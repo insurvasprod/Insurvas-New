@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
 
 import { control } from "@/components/app/settings/primitives";
@@ -77,7 +78,7 @@ export function setupProgress(vault: SetupVault, today = todayIso()) {
   return { mine, withStates, percent, complete: mine.length > 0 && withStates.length === mine.length };
 }
 
-export function ContractingSetup({ vault, setVault, salesAvailable, send, reload, onStatesSaved, onFinish, search = "", onStepChange }: {
+export function ContractingSetup({ vault, setVault, salesAvailable, send, reload, onStatesSaved, onFinish, search = "", onStepChange, stepsSlot }: {
   vault: SetupVault;
   setVault: (update: (current: SetupVault) => SetupVault) => void;
   /** Applications is on: a new carrier is also put on the applications list (its products). */
@@ -96,6 +97,8 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   search?: string;
   /** Tells the bar which step is open, so its search names what it searches. */
   onStepChange?: (step: 1 | 2) => void;
+  /** Where the two step bars go: above Contracting's tab bar (owner, 29 Oct). In place without one. */
+  stepsSlot?: HTMLElement | null;
 }) {
   const today = todayIso();
   const [step, setStepState] = useState<1 | 2>(1);
@@ -263,31 +266,35 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
     ? <span role="alert" className="text-xs text-[var(--error-ink)]">{failed}</span>
     : <span role="status" aria-live="polite" className="text-xs text-[var(--muted)] empty:hidden">{saving ? "Saving…" : ""}</span>;
 
+  const steps = (
+    <ol aria-label="Set-up steps" className="m-0 grid list-none grid-cols-2 gap-3 p-0">
+      {([[1, "Your carriers", mine.length > 0], [2, "Your states", progress.complete]] as const).map(([n, label, done]) => (
+        <li key={n}>
+          <button
+            type="button"
+            onClick={() => setStep(n)}
+            aria-current={step === n ? "step" : undefined}
+            className="group flex w-full flex-col gap-2 rounded-md pt-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+          >
+            <span aria-hidden="true" className={cn("h-1 w-full rounded-full transition-colors", step === n || done ? "bg-[var(--primary)]" : "bg-[var(--border)] group-hover:bg-[var(--border-strong)]")} />
+            <span className={cn("flex items-center gap-2 text-sm font-medium", step === n ? "text-[var(--ink)]" : "text-[var(--muted)] group-hover:text-[var(--ink)]")}>
+              <span className="text-xs tabular-nums text-[var(--muted)]">Step {n}</span>
+              {label}
+              {done && <Check aria-label="done" className="size-3.5 text-[var(--accent-ink)]" />}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+
   return (
     <div id="contracting-setup" className="flex min-w-0 scroll-mt-24 flex-col gap-4">
       {/* Where you are: two steps, each with its own bar, no card and no connector line (manager review
           29 Oct, 08:32: "these lines don't look good"). One brand green for the step you are on and
           a done one (owner, 29 Oct: two greens looked wrong); grey for one not started. The current step
           reads by its ink label. Either step can be opened from here. */}
-      <ol aria-label="Set-up steps" className="m-0 grid list-none grid-cols-2 gap-3 p-0">
-        {([[1, "Your carriers", mine.length > 0], [2, "Your states", progress.complete]] as const).map(([n, label, done]) => (
-          <li key={n}>
-            <button
-              type="button"
-              onClick={() => setStep(n)}
-              aria-current={step === n ? "step" : undefined}
-              className="group flex w-full flex-col gap-2 rounded-md pt-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
-            >
-              <span aria-hidden="true" className={cn("h-1 w-full rounded-full transition-colors", step === n || done ? "bg-[var(--primary)]" : "bg-[var(--border)] group-hover:bg-[var(--border-strong)]")} />
-              <span className={cn("flex items-center gap-2 text-sm font-medium", step === n ? "text-[var(--ink)]" : "text-[var(--muted)] group-hover:text-[var(--ink)]")}>
-                <span className="text-xs tabular-nums text-[var(--muted)]">Step {n}</span>
-                {label}
-                {done && <Check aria-label="done" className="size-3.5 text-[var(--accent-ink)]" />}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
+      {stepsSlot ? createPortal(steps, stepsSlot) : steps}
       {step === 1 ? (
         <section ref={stepCard} style={stepMinHeight ? { minHeight: stepMinHeight } : undefined} aria-labelledby="contracting-step-1" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
           <div className="flex flex-wrap items-center justify-between gap-3">

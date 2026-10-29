@@ -113,6 +113,8 @@ export function CarriersSettings() {
   // starts empty on each step.
   const [setupSearch, setSetupSearch] = useState("");
   const [setupStep, setSetupStep] = useState<1 | 2>(1);
+  // Set Up's two step bars are drawn here, above the tab bar (owner, 29 Oct).
+  const [stepsSlot, setStepsSlot] = useState<HTMLDivElement | null>(null);
   const onSetupStep = useCallback((next: 1 | 2) => { setSetupStep(next); setSetupSearch(""); }, []);
   const [carrierFilter, setCarrierFilter] = useState<"all" | "ready" | "setup" | "off">("all");
   // States opens on all 51 (owner, 29 Oct: "it should show all the states … to check if I have any
@@ -334,6 +336,7 @@ export function CarriersSettings() {
       {/* Manager review 29 Oct (10:02–11:10): once set up, the wizard goes and Carriers and States are
           read-only overviews, changed on the Set Up tab, which is always there (owner, 29 Oct). No Add Carriers, no ⋯:
           a person only ticks the carriers that are there, and Field maps (postponed) has its link. */}
+      {step === "setup" && <div ref={setStepsSlot} />}
       {/* The tabs, the search and the filter in one bar, the same card as the pager at the foot of
           the list (owner, 29 Oct), so the list sits between two matching bars. */}
       <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5">
@@ -412,6 +415,7 @@ export function CarriersSettings() {
           reload={afterSetupSaves}
           onStatesSaved={async (codes) => { for (const code of codes) touched.current.add(code); }}
           search={setupSearch}
+          stepsSlot={stepsSlot}
           onStepChange={onSetupStep}
           onFinish={() => {
             notify.done("Contracting is set up", { detail: "Change a carrier or a state any time on Carriers and States." });
