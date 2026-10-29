@@ -89,6 +89,13 @@ const ZONES = [
   "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
   "America/Phoenix", "America/Anchorage", "Pacific/Honolulu", "Asia/Manila", "Asia/Kolkata", "UTC",
 ];
+/** Time zones in words, US first (settings audit: the list showed raw codes in an odd order). */
+const ZONE_NAMES: Record<string, string> = {
+  "America/New_York": "Eastern (New York)", "America/Chicago": "Central (Chicago)", "America/Denver": "Mountain (Denver)",
+  "America/Los_Angeles": "Pacific (Los Angeles)", "America/Phoenix": "Arizona (Phoenix)", "America/Anchorage": "Alaska (Anchorage)",
+  "Pacific/Honolulu": "Hawaii (Honolulu)", "Asia/Manila": "Philippines (Manila)", "Asia/Kolkata": "India (Kolkata)", UTC: "UTC",
+};
+const zoneName = (zone: string) => ZONE_NAMES[zone] ?? zone.replace(/_/g, " ");
 
 const LENGTHS = [20, 30, 45, 60];
 const BUFFERS = [0, 5, 10, 15];
@@ -336,7 +343,8 @@ export function CalendarAvailabilitySettings() {
   const { appointmentMinutes: length, bufferMinutes: buffer } = draft.policy;
   const openDays = new Set(draft.hours.map((hour) => hour.weekday)).size;
   const busy = !editable || saving;
-  const zoneOptions = [...new Set([...(zone ? [zone] : []), Intl.DateTimeFormat().resolvedOptions().timeZone, ...ZONES])].filter(Boolean);
+  // The usual list in its own order; the saved zone and this browser's zone follow it when they are not on it.
+  const zoneOptions = [...new Set([...ZONES, ...(zone ? [zone] : []), Intl.DateTimeFormat().resolvedOptions().timeZone])].filter(Boolean);
 
   // Monday–Friday and friends in one tap: the hours most agents keep (owner pick C, 2026-10-26).
   const presets: Array<{ label: string; days: number[]; from: string; to: string }> = [
@@ -409,7 +417,7 @@ export function CalendarAvailabilitySettings() {
                   className={cn(control, "w-[240px]")}
                 >
                   <option value="">Choose a timezone…</option>
-                  {zoneOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                  {zoneOptions.map((option) => <option key={option} value={option}>{zoneName(option)}</option>)}
                 </select>
               </span>
             }

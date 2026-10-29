@@ -210,7 +210,8 @@ function Editor({ view, save }: { view: SalesSettingsView; save: (next: SalesSet
           </SettingsCard>
         </div>
 
-        <Preview subject={subject} body={body} me={view.me} />
+        {/* Stays in view while the body is edited, so the change shows as it is typed (settings redesign R7). */}
+        <div className="min-w-0 lg:sticky lg:top-24"><Preview subject={subject} body={body} me={view.me} /></div>
       </div>
 
       <LeaveGuard dirty={view.canEdit && dirty} onDiscard={() => { setSubject(saved.subject); setBody(saved.body); setSaveError(null); }} what="the welcome pack" />
