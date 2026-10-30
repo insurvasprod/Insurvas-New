@@ -152,28 +152,30 @@ export function ChatThread({
   className?: string;
 }) {
   const scroller = useRef<HTMLDivElement | null>(null);
-  const newest = messages.at(-1)?.id ?? null;
+  /** Whether the reader is at the newest message. Starts true: that is where a thread opens. */
+  const atNewest = useRef(true);
+  const newestMessage = messages.at(-1) ?? null;
+  const newest = newestMessage?.id ?? null;
+  const newestIsMine = Boolean(viewerId && newestMessage?.createdBy === viewerId);
 
-  // Open on the newest message, and follow it as one arrives or is sent — the only place in a
-  // conversation anybody wants to start.
+  // Open on the newest message, and stay with it — but only while the reader is already there. Your
+  // own message always wins: you pressed send, you should see it land.
   useEffect(() => {
     const element = scroller.current;
     if (!element) return;
     const toBottom = () => { element.scrollTop = element.scrollHeight; };
-    toBottom();
+    if (newestIsMine || atNewest.current) toBottom();
 
-    // On a phone the thread is display:none until a conversation is opened, so the line above
-    // measured a box of no height and left the reader at the oldest message. Catch the moment it is
-    // shown — and only that moment, so someone reading history is not dragged back down when the
-    // composer grows under them.
-    let wasHidden = element.clientHeight === 0;
-    const observer = new ResizeObserver(() => {
-      if (element.clientHeight === 0) { wasHidden = true; return; }
-      if (wasHidden) { wasHidden = false; toBottom(); }
-    });
+    const onScroll = () => { atNewest.current = element.scrollHeight - element.clientHeight - element.scrollTop <= 24; };
+    element.addEventListener("scroll", onScroll, { passive: true });
+
+    // The box can change height after that first line runs — the pane grows into the page on the
+    // first paint, and on a phone the thread is display:none behind the conversation list until one
+    // is opened. Both leave the reader at the oldest message unless the bottom is taken again.
+    const observer = new ResizeObserver(() => { if (element.clientHeight > 0 && atNewest.current) toBottom(); });
     observer.observe(element);
-    return () => observer.disconnect();
-  }, [newest]);
+    return () => { element.removeEventListener("scroll", onScroll); observer.disconnect(); };
+  }, [newest, newestIsMine]);
 
   const items = buildThread(messages, { viewerId, zone });
 

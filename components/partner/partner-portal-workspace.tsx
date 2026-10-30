@@ -1922,7 +1922,7 @@ function LegacyPartnerPortalWorkspace({
   }, [section]);
 
   return (
-    <div className="m-stagger mx-auto w-full max-w-7xl space-y-8">
+    <div className={section === "messages" ? "m-stagger mx-auto flex min-h-0 w-full flex-1 flex-col" : "m-stagger mx-auto w-full max-w-7xl space-y-8"}>
       {section === "overview" && (
         <section id="overview" className="scroll-mt-6">
           {/* The one page header (UI-CONSISTENCY §2): no eyebrow, the 24px title. */}
@@ -2215,7 +2215,7 @@ function LegacyPartnerPortalWorkspace({
         </section>
       )}
       {section === "messages" && (
-        <section id="messages" className="scroll-mt-6">
+        <section id="messages" className="flex min-h-0 flex-1 flex-col scroll-mt-6">
           <PartnerChatPanel role={role} />
         </section>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { ArrowLeft, Building2, CircleDot, FileText, Info, MessageCircle, Plus, Search, User, Users } from "lucide-react";
@@ -34,6 +34,9 @@ import { cn } from "@/lib/utils";
  * (§11), the page is built from the shared kit, and on a phone it is one pane at a time: the list,
  * then the conversation, with a way back.
  */
+
+/** Below this the frame stops shrinking and the page scrolls instead — a laptop in a short window. */
+const MIN_FRAME_PX = 416;
 
 type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string };
 type DirectoryUser = { id: string; name: string; email: string; label: string; scope: "agent" | "partner"; role?: string; partnerName?: string };
@@ -144,6 +147,30 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
     (userId: string | null) => (userId ? data.directory.find((user) => user.id === userId)?.name ?? "Workspace member" : "INSURVAS"),
     [data.directory]);
 
+  // The frame runs from where it sits to the page's own bottom margin. The gutter is read from the
+  // first ancestor that has one, so it follows the shell's p-4 / sm:p-6 / lg:p-8 without repeating
+  // those numbers here — and a header that wraps on a narrow window moves the top, not the margin.
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [frameHeight, setFrameHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const fit = () => {
+      let gutter = 0;
+      for (let node = frame.parentElement; node; node = node.parentElement) {
+        const padding = Number.parseFloat(getComputedStyle(node).paddingBottom) || 0;
+        if (padding > 0) { gutter = padding; break; }
+      }
+      const top = frame.getBoundingClientRect().top;
+      setFrameHeight(Math.max(MIN_FRAME_PX, Math.round(window.innerHeight - top - gutter)));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    const observer = new ResizeObserver(fit);
+    if (frame.parentElement) observer.observe(frame.parentElement);
+    return () => { window.removeEventListener("resize", fit); observer.disconnect(); };
+  }, []);
+
   function openConversation(id: string) { setSelectedId(id); setThreadOnPhone(true); setDetailsOpen(false); }
 
   async function createChannel() {
@@ -158,7 +185,7 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
   }
 
   return (
-    <main className="m-stagger mx-auto flex w-full max-w-[1440px] flex-col">
+    <main className="m-stagger mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 flex-col">
       <PageHeader
         className="pb-[1.1rem]"
         title="Messages"
@@ -168,7 +195,9 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
         actions={<Button type="button" onClick={() => setNewOpen(true)}><Plus aria-hidden="true" />New conversation</Button>}
       />
 
-      <Card className="h-[clamp(30rem,calc(100vh-13rem),52rem)] min-h-0 flex-row gap-0 overflow-hidden p-0 py-0 md:h-[clamp(36rem,calc(100vh-15rem),52rem)]">
+      {/* It reaches the page's bottom margin exactly — measured, not guessed from the viewport with
+          a fixed subtraction, which is what left a band of empty page under it (owner, 30 Oct). */}
+      <Card ref={frameRef} style={frameHeight ? { height: frameHeight } : undefined} className="min-h-[26rem] flex-row gap-0 overflow-hidden p-0 py-0">
         {/* Conversations. On a phone this is the page until one is opened. */}
         <aside
           className={cn("flex w-full min-w-0 flex-col md:w-[16rem] md:shrink-0 md:border-r md:border-border lg:w-[17rem]", threadOnPhone && "hidden md:flex")}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
 import { Paperclip, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { isTypingTarget } from "@/lib/keyboard/listNavigation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -37,6 +38,7 @@ export function ChatComposer({
   accept,
   maxFiles = 3,
   countLabel,
+  captureTyping = true,
   className,
 }: {
   value: string;
@@ -52,9 +54,12 @@ export function ChatComposer({
   maxFiles?: number;
   /** How the count reads when it is close enough to the cap to matter. */
   countLabel?: (length: number) => string;
+  /** Typing anywhere on the page starts a message here. Off for a composer that shares a page. */
+  captureTyping?: boolean;
   className?: string;
 }) {
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
+  const caretToEnd = useRef(false);
 
   // Grow with the content up to MAX_ROWS, then scroll. A DOM write rather than state: the height is
   // the browser's measurement of the text, and React has nothing to add to it.
@@ -63,7 +68,43 @@ export function ChatComposer({
     if (!field) return;
     field.style.height = "auto";
     field.style.height = `${Math.min(field.scrollHeight, LINE_HEIGHT * MAX_ROWS)}px`;
+    // A character typed from outside lands at the end, and the caret follows it there — focusing a
+    // textarea that already has text otherwise leaves the caret at the start.
+    if (caretToEnd.current) {
+      caretToEnd.current = false;
+      field.setSelectionRange(field.value.length, field.value.length);
+    }
   }, [value]);
+
+  /**
+   * Start typing anywhere and the message starts here (owner, 30 Oct) — what every messenger does,
+   * and the reason nobody hunts for the box first. One printable character, no modifier, nothing
+   * else already taking keys: the caret moves into the field and the character is kept.
+   */
+  useEffect(() => {
+    if (!captureTyping) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key.length !== 1) return;
+      const field = fieldRef.current;
+      if (!field || disabled || field.disabled || document.activeElement === field) return;
+      // Not from a box someone is already writing in, and not from a layer sitting over the page.
+      if (isTypingTarget(event.target as HTMLElement | null)) return;
+      if (document.querySelector("[role=dialog][data-state=open], [role=alertdialog][data-state=open], [role=menu][data-state=open], [role=listbox][data-state=open]")) return;
+      // A sheet or detail panel over the page owns the keyboard while it is open (§11).
+      if (document.querySelector("[data-slot=detail-panel][data-mode=overlay]")) return;
+      // On a phone the thread can be display:none behind the conversation list.
+      if (field.offsetParent === null) return;
+      // A space would only put a space in front of the message; let it scroll the page instead.
+      if (event.key === " " && !value) return;
+      event.preventDefault();
+      caretToEnd.current = true;
+      field.focus();
+      onChange(value + event.key);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [captureTyping, disabled, onChange, value]);
 
   const nothingToSend = !value.trim() && files.length === 0;
   const blocked = busy || disabled || nothingToSend;

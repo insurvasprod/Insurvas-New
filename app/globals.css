@@ -1331,22 +1331,6 @@ a.portal-top-foot-action { text-decoration: none; }
   .portal-partner-dashboard-page > div > div:first-child > [data-slot="button"] { width: 100%; }
 }
 
-.portal-partner-messages-page { color: var(--portal-ink); }
-.portal-partner-messages-page > div { max-width: none; }
-.portal-partner-messages-page > div > section > [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); }
-.portal-partner-messages-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
-.portal-partner-messages-page [data-slot="card-header"] { border-bottom: 1px solid var(--portal-line); }
-.portal-partner-messages-page [data-slot="card-title"] { font-size: 1.35rem; letter-spacing: -.025em; }
-.portal-partner-messages-page [data-slot="button"] { border-radius: 999px; }
-.portal-partner-messages-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
-.portal-partner-messages-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
-.portal-partner-messages-page [data-slot="button"]:focus-visible,
-.portal-partner-messages-page textarea:focus-visible,
-.portal-partner-messages-page input:focus-visible,
-.portal-partner-messages-page a:focus-visible { outline: 2px solid var(--ring-color); outline-offset: 2px; }
-.portal-partner-messages-page textarea { border-color: var(--portal-line); border-radius: 8px; background: var(--portal-panel); }
-.portal-partner-messages-page [role="alert"],
-.portal-partner-messages-page [role="status"] { border-radius: 8px; }
 
 .portal-partner-pipeline-page { color: var(--portal-ink); }
 .portal-partner-pipeline-page > div { max-width: none; }
