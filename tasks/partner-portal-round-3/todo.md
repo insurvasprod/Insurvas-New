@@ -19,17 +19,17 @@ that have it.
 left, text growing in the middle, send on the right.
 
 **Acceptance criteria:**
-- [ ] One rounded bar: attach (icon, labelled) left, auto-growing textarea centre, send right
-- [ ] The textarea grows from one line to about six, then scrolls; the bar grows with it
-- [ ] Enter sends, Shift+Enter inserts a line break; the send control is disabled with nothing to send
-- [ ] Chosen files are removable chips **inside** the bar, above the text
-- [ ] The counter appears only within ~10% of the cap, not permanently
-- [ ] Sending, attaching and the existing error handling behave exactly as before
+- [x] One rounded bar: attach (icon, labelled) left, auto-growing textarea centre, send right
+- [x] The textarea grows from one line to about six, then scrolls; the bar grows with it
+- [x] Enter sends, Shift+Enter inserts a line break; the send control is disabled with nothing to send
+- [x] Chosen files are removable chips **inside** the bar, above the text
+- [x] The counter appears only within ~10% of the cap, not permanently
+- [x] Sending, attaching and the existing error handling behave exactly as before
 
 **Verification:**
-- [ ] Send a message; attach a file and send; remove a chosen file before sending
-- [ ] 375 wide: the bar fits, the send control is at least 36px, nothing overlaps
-- [ ] Paste a 2,000-character string: the counter appears and send still works
+- [x] Send a message; attach a file and send; remove a chosen file before sending
+- [x] 375 wide: the bar fits, the send control is at least 36px, nothing overlaps
+- [x] Paste a 2,000-character string: the counter appears and send still works
 
 **Dependencies:** None · **Files:** `components/partner/partner-chat-panel.tsx`,
 `components/ui/chat-composer.tsx` · **Scope:** Medium
@@ -41,17 +41,17 @@ left, text growing in the middle, send on the right.
 **Description:** Full-width blocks become bubbles with a side, grouped by sender, split by day.
 
 **Acceptance criteria:**
-- [ ] Your messages right on the brand surface; the agency's left on the card surface
-- [ ] Consecutive messages from one sender group under one name and time
-- [ ] Date separators between days ("Today", "Yesterday", "28 Oct" via `lib/format/dates`)
-- [ ] System cards keep their meaning but sit centred, narrower and quieter than a message
-- [ ] Attachments render inside their bubble; the delivered tick survives
-- [ ] The thread scrolls to the newest message on open and on send
+- [x] Your messages right on the brand surface; the agency's left on the card surface
+- [x] Consecutive messages from one sender group under one name and time
+- [x] Date separators between days ("Today", "Yesterday", "28 Oct" via `lib/format/dates`)
+- [x] System cards keep their meaning but sit centred, narrower and quieter than a message
+- [x] Attachments render inside their bubble; the delivered tick survives
+- [x] The thread scrolls to the newest message on open and on send
 
 **Verification:**
-- [ ] A thread with both senders, a system card and an attachment reads correctly
-- [ ] Contrast measured on both bubble grounds, against the real surface, ≥ 4.5:1
-- [ ] 375: bubbles cap at ~85% width and never overflow
+- [x] A thread with both senders, a system card and an attachment reads correctly
+- [x] Contrast measured on both bubble grounds, against the real surface, ≥ 4.5:1
+- [x] 375: bubbles cap at ~85% width and never overflow
 
 **Dependencies:** A1 · **Files:** `components/partner/partner-chat-panel.tsx`,
 `components/partner/chat-message.tsx` · **Scope:** Medium
