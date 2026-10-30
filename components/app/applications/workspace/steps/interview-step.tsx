@@ -18,6 +18,7 @@ import { ArrowLeft, ArrowRight, Check, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { appliesToInsured, insuredFacts } from "@/lib/applications/templates";
@@ -180,8 +181,20 @@ export function InterviewStep() {
           <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted)]">
             <AutosaveChip />
             {interview.completedAt && <StatusChip tone="good" title="Changes made after this are recorded with who and when.">Completed {calendarDate(interview.completedAt)}</StatusChip>}
-            <span>{interview.templateName} · v{interview.templateRevision}</span>
-            {progress.knockedOut && <span className="font-semibold text-[var(--error-ink)]">A knockout rules out this carrier, not the client: try another on the Quote step.</span>}
+            {/* S14 (owner 2026-10-30): the agent can see which questions these are and why, and a
+                knockout goes straight to Quote. */}
+            <span className="inline-flex items-center gap-1">
+              {interview.templateName} · v{interview.templateRevision}
+              <InfoTip label="Why these questions?">
+                Your agency picks the health questions for each product, and for a carrier that asks different ones. This call loads {interview.templateName}, version {interview.templateRevision}. Settings › Underwriting templates shows them all.
+              </InfoTip>
+            </span>
+            {progress.knockedOut && (
+              <span className="inline-flex flex-wrap items-center gap-2 font-semibold text-[var(--error-ink)]">
+                A knockout rules out this carrier, not the client.
+                {!readOnly && <Button type="button" variant="outline" size="sm" onClick={() => goTo("quote")}>Quote another carrier<ArrowRight aria-hidden="true" /></Button>}
+              </span>
+            )}
             {/* The way on, bottom right of the questions (owner 2026-10-28): lit once every required question is answered. */}
             <span className="ml-auto flex items-center gap-3">
               {!progress.allRequired && !interview.completedAt && <span>{progress.missingRequired} required left</span>}

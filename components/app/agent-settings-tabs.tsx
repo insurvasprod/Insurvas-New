@@ -347,6 +347,8 @@ export function AgentSettingsTabs({
       type="button"
       aria-current={isActive ? "page" : undefined}
       aria-controls={`settings-panel-${tab.id}`}
+      // Switching section unmounts the open one: LeaveGuard holds this click while it has a draft.
+      data-navigates=""
       disabled={Boolean(tab.disabled)}
       onClick={() => { selectTab(tab.id); setFlyout(null); }}
       className={cn(
@@ -513,6 +515,10 @@ export function AgentSettingsTabs({
                     aria-label={`${name}${warn ? ", needs attention" : ""}`}
                     onPointerEnter={() => hoverOpen(group)}
                     onPointerLeave={hoverClose}
+                    // A click opens, never toggles (owner 2026-10-30: "I have to double click it"): hovering
+                    // has already opened the list, so the trigger's own toggle shut it on the first click.
+                    // preventDefault skips that toggle; Escape and a click outside still close it.
+                    onClick={(event) => { event.preventDefault(); hoverOpen(group); }}
                     className={cn(RAIL_ICON_BUTTON, "relative mx-auto mb-1", (here || flyout === group) && "bg-[var(--primary-soft)] text-[var(--accent-ink)] hover:bg-[var(--primary-soft)] hover:text-[var(--accent-ink)]")}
                   >
                     <Icon aria-hidden="true" className="size-4" />

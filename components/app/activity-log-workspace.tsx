@@ -16,6 +16,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Segmented, ViewTabs } from "@/components/app/view-tabs";
 import { NextStepLine } from "@/components/app/next-step-line";
+import { InReportsSlot, ReportsSlot } from "@/components/app/reports/reports-slot";
+import { keepSharedPeriod } from "@/lib/reports/views";
 import {
   formatSpan,
   mayReviewZeroClick,
@@ -229,7 +231,7 @@ function AgentPanel({ row, recent, reviews, onClose, onCalls, onFlags }: { row: 
         <span className="text-xs font-semibold text-muted-foreground">How the calls ended</span>
         {mixTotal > 0 ? (
           <>
-            <div className="flex h-2.5 overflow-hidden rounded-full" role="img" aria-label={parts.map(([key, value]) => `${humanize(key)} ${Math.round((value / mixTotal) * 100)}%`).join(", ")}>
+            <div className="m-bar-x flex h-2.5 overflow-hidden rounded-full" role="img" aria-label={parts.map(([key, value]) => `${humanize(key)} ${Math.round((value / mixTotal) * 100)}%`).join(", ")}>
               {parts.map(([key, value], index) => <span key={key} style={{ width: `${(value / mixTotal) * 100}%`, background: MIX_COLOURS[index] }} />)}
             </div>
             <div className="flex flex-wrap gap-x-3.5 gap-y-1.5">
@@ -258,14 +260,21 @@ function AgentPanel({ row, recent, reviews, onClose, onCalls, onFlags }: { row: 
   );
 }
 
-export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { initialView?: Tab; role?: string } = {}) {
+/**
+ * `framed`: inside the Reports page (components/app/reports/reports-page.tsx), which draws the title;
+ * the tabs go to its top row and Export to its corner. `initialPeriod`: the Reports views' shared period
+ * (`?from&to`), opened as a custom range; a window picked here is kept in the address for the others.
+ */
+export function ActivityLogWorkspace({ initialView = "agents", role = "", framed = false, initialPeriod = null }: { initialView?: Tab; role?: string; framed?: boolean; initialPeriod?: { from: string; to: string } | null } = {}) {
   const reviewsZeroClick = mayReviewZeroClick(role);
-  const [range, setRange] = useState<Range>("30");
+  const [range, setRange] = useState<Range>(initialPeriod ? "custom" : "30");
   // Set once mounted, not during render: the server and the browser would each read their own
   // "now", and the export link built from it would differ between the two (a hydration mismatch).
   const [anchor, setAnchor] = useState<number | null>(null);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [customFrom, setCustomFrom] = useState(initialPeriod?.from ?? "");
+  const [customTo, setCustomTo] = useState(initialPeriod?.to ?? "");
+  // Only a window the person picks here is shared; opening the page changes nothing.
+  const [periodPicked, setPeriodPicked] = useState(false);
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -326,6 +335,13 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { in
     const days = Number(range);
     return { from: anchor - days * DAY, to: anchor, priorFrom: anchor - 2 * days * DAY, days, label: RANGE_LABEL[range] };
   }, [range, anchor, customFrom, customTo]);
+
+  // The picked window, as the day it starts and the day it ends, for the other Reports views.
+  useEffect(() => {
+    if (!framed || !periodPicked || !windows) return;
+    const day = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+    keepSharedPeriod(range === "custom" ? { from: customFrom, to: customTo } : { from: day(windows.from), to: day(windows.to) });
+  }, [framed, periodPicked, windows, range, customFrom, customTo]);
 
   const base = useMemo(() => {
     const params = new URLSearchParams();
@@ -484,6 +500,9 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { in
     }
   }
   const serverExport = tab === "log" || tab === "review";
+  const exportButton = serverExport
+    ? <Button asChild variant="outline"><a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export this table</a></Button>
+    : <Button type="button" variant="outline" onClick={exportTable} disabled={tab === "agents" ? !report?.scorecard.length : !(setterList === "roster" ? roster : setterRows).length}><Download aria-hidden="true" />Export this table</Button>;
 
   // First read of the page: the one loading look, header and all.
   if (loading && !report && !error) return <PageLoading />;
@@ -492,13 +511,9 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { in
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Team activity"
-        description="What each agent did, and how it turned out."
-        actions={serverExport
-          ? <Button asChild variant="outline"><a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export this table</a></Button>
-          : <Button type="button" variant="outline" onClick={exportTable} disabled={tab === "agents" ? !report?.scorecard.length : !(setterList === "roster" ? roster : setterRows).length}><Download aria-hidden="true" />Export this table</Button>}
-      />
+      {framed
+        ? <ReportsSlot slot="corner">{exportButton}</ReportsSlot>
+        : <PageHeader title="Team activity" description="What each agent did, and how it turned out." actions={exportButton} />}
 
       {reviewsZeroClick && toReview > 0 && tab !== "review" && (
         <NextStepLine action={<Button type="button" size="sm" onClick={() => choose("review")}>Review them</Button>}>
@@ -550,18 +565,20 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { in
 
       {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      <ViewTabs
-        label="Activity views"
-        idPrefix="activity-view"
-        value={tab}
-        onChange={choose}
-        tabs={[
-          { key: "agents", label: "Agents" },
-          { key: "log", label: "Call log" },
-          { key: "setters", label: "Setters" },
-          { key: "review", label: "To review" },
-        ]}
-      />
+      <InReportsSlot framed={framed} slot="lead">
+        <ViewTabs
+          label="Activity views"
+          idPrefix="activity-view"
+          value={tab}
+          onChange={choose}
+          tabs={[
+            { key: "agents", label: "Agents" },
+            { key: "log", label: "Call log" },
+            { key: "setters", label: "Setters" },
+            { key: "review", label: "To review" },
+          ]}
+        />
+      </InReportsSlot>
 
       <div role="tabpanel" aria-labelledby={`activity-view-${tab}`} className="flex min-w-0 flex-col gap-6">
       {tab === "review" && reviewsZeroClick && <AppointmentCloseOutStrip />}
@@ -586,7 +603,7 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { in
               aria-label="Date range"
               className={toolbarControl}
               value={range}
-              onChange={(event) => { setRange(event.target.value as Range); setAnchor(now()); setPage(1); }}
+              onChange={(event) => { setRange(event.target.value as Range); setAnchor(now()); setPage(1); setPeriodPicked(true); }}
             >
               <option value="7">Last 7 days</option>
               <option value="30">Last 30 days</option>
@@ -595,8 +612,8 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "" }: { in
             </select>
             {range === "custom" && (
               <>
-                <input type="date" aria-label="From" className={toolbarControl} value={customFrom} onChange={(event) => { setCustomFrom(event.target.value); setPage(1); }} />
-                <input type="date" aria-label="To" className={toolbarControl} value={customTo} onChange={(event) => { setCustomTo(event.target.value); setPage(1); }} />
+                <input type="date" aria-label="From" className={toolbarControl} value={customFrom} onChange={(event) => { setCustomFrom(event.target.value); setPage(1); setPeriodPicked(true); }} />
+                <input type="date" aria-label="To" className={toolbarControl} value={customTo} onChange={(event) => { setCustomTo(event.target.value); setPage(1); setPeriodPicked(true); }} />
               </>
             )}
             {tab !== "setters" && (

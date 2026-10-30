@@ -134,9 +134,14 @@ export function useSalesTemplates(kind: SalesTemplateKind) {
       await reload();
       return { saved: res.data, error: null };
     },
-    async publish(id: string, retirePrevious: boolean) {
-      if (sample) return local((list) => list.map((t) => (t.id === id ? { ...t, status: "published" } : t)));
-      await write<Created>(`${base}/${id}/publish`, "POST", { retire_previous: retirePrevious }, "Published");
+    /** `done` and `detail` name what went live (underwriting, round 3: "… is live", and which calls load it). Resolves true when it published. */
+    async publish(id: string, retirePrevious: boolean, done = "Published", detail?: string) {
+      if (sample) { local((list) => list.map((t) => (t.id === id ? { ...t, status: "published" } : t))); return true; }
+      const res = await salesApi<Created>(`${base}/${id}/publish`, { method: "POST", body: { retire_previous: retirePrevious } });
+      if (!res.ok) { notify.block(res.error); return false; }
+      notify.done(done, detail ? { detail } : undefined);
+      await reload();
+      return true;
     },
     async retire(id: string) {
       if (sample) return local((list) => list.map((t) => (t.id === id ? { ...t, status: "retired" } : t)));

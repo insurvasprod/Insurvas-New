@@ -6,6 +6,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { PartnerQualityDetailWorkspace } from "@/components/app/partner-quality-detail";
 import { validPartnerQualityPeriod } from "@/lib/partnerQuality/metrics";
+import { ReportsPage } from "@/components/app/reports/reports-page";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function single(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
@@ -19,5 +20,5 @@ export default async function PartnerQualityDetailPage({ params, searchParams }:
   const [{ partnerId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(partnerId)) notFound();
   // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
-  return <><PartnerQualityDetailWorkspace partnerId={partnerId} initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} /></>;
+  return <ReportsPage view="partner"><PartnerQualityDetailWorkspace partnerId={partnerId} initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} framed /></ReportsPage>;
 }

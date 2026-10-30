@@ -6,6 +6,7 @@ import { maskFromLast4, normaliseProse } from "./formats";
 import { applicationKeysForLeadKeys, clientStateOf, prefillFromLead } from "./prefill";
 import { encryptSensitive } from "./crypto";
 import { fieldSetRequired, interviewQuestions, type StoredDefinition } from "./templates";
+import { fieldSetLayout } from "./fieldSetLayout";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from "./db";
 import { effectiveCarrierFacts } from "@/lib/salesSettings/carriers";
 import { resolveSalesSettings } from "@/lib/salesSettings/schema";
@@ -244,7 +245,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
     return { fycCents: fyc, advanceCents: advance, advanceMonths: adv?.advance_months ?? 0, contractLevelBp: contract.contract_level_bp };
   };
 
-  const requiredFor = (carrierId: string | null, productCode: string | null) => {
+  const fieldSetFor = (carrierId: string | null, productCode: string | null) => {
     const code = productCode ?? "final_expense";
     // The carrier's own set (the agency's, then the platform's), then the product's general set (the
     // agency's, then the platform's) — what Settings › Field sets shows as in use — and only then the
@@ -254,7 +255,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
       ?? fieldSets.find((f) => f.tenant_id === tenantId && f.carrier_id === null && f.product_code === code)
       ?? fieldSets.find((f) => f.tenant_id === null && f.carrier_id === null && f.product_code === code)
       ?? fieldSets.find((f) => f.tenant_id === null && f.carrier_id === null && f.product_code === "final_expense");
-    return fieldSetRequired(mine?.definition);
+    return mine?.definition ?? null;
   };
 
   const attemptViews: AttemptView[] = attempts.map((a) => {
@@ -294,7 +295,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
       outcomeReasonCode: a.outcome_reason_code as OutcomeReasonCode | null, outcomeReasonText: a.outcome_reason_text,
       carrierId: a.carrier_id, carrierName: carrier?.name ?? null, carrierPortalUrl: portal?.portal_url ?? (a.carrier_id ? carrierFacts.get(a.carrier_id)?.portalOrigin : null) ?? carrier?.portal_origin ?? null, portalUsername: portal?.username ?? null,
       productCode: a.product_code, productLabel: product?.name ?? null, tier: quotes.find((q) => q.id === a.quote_id)?.tier ?? null, selectedQuoteId: a.quote_id,
-      values: vals, requiredKeys: requiredFor(a.carrier_id, a.product_code), payment,
+      values: vals, requiredKeys: fieldSetRequired(fieldSetFor(a.carrier_id, a.product_code)), fieldSet: fieldSetLayout(fieldSetFor(a.carrier_id, a.product_code)), payment,
       beneficiaries: beneficiaries.filter((b) => b.application_id === a.id).map((b) => ({ id: b.id, tier: b.tier, first_name: b.first_name ?? "", last_name: b.last_name, relationship: b.relationship, relationship_other: b.relationship_other ?? undefined, dob: b.dob, share_bp: b.share_bp, phone: b.phone })),
       disclosures: disclosures.filter((d) => d.application_id === a.id).map((d) => {
         const lib = libraryById.get(d.disclosure_id);

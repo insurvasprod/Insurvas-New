@@ -530,7 +530,9 @@
 /* 1 · Entrance. Eight steps of 32ms, then everything else lands together — a
    page that keeps arriving for two seconds feels slow, not premium. */
 .m-in,
-.m-stagger > * { animation: m-rise var(--t-enter) var(--e-out) both; }
+/* backwards, not both: a held end transform makes the element a containing block, and every
+   position:fixed sheet inside it (DetailPanel on a phone) is then pinned to it, not the screen. */
+.m-stagger > * { animation: m-rise var(--t-enter) var(--e-out) backwards; }
 .m-stagger > *:nth-child(1) { animation-delay: 0ms; }
 .m-stagger > *:nth-child(2) { animation-delay: 32ms; }
 .m-stagger > *:nth-child(3) { animation-delay: 64ms; }
@@ -561,7 +563,7 @@
 
 /* 5 · View swap. The outgoing view is cut, not faded, so the two are never on
    screen together. */
-.m-swap { animation: m-rise 260ms var(--e-out) both; }
+.m-swap { animation: m-rise 260ms var(--e-out) backwards; }
 /* A side panel (a record's details, a create form) slides in from the edge it is attached to, and a
    tab's view fades in when the tab changes (2026-10-09). Transform and opacity only, like the rest. */
 @keyframes m-panel-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
@@ -2339,7 +2341,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .lead-form-control { width: 100%; min-height: 2.25rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 0 .65rem; color: var(--accent-ink); font-size: .82rem; }
 
 /* Settings is a focused workspace: one configuration surface is visible at a time. */
-.portal-settings-panel { min-width: 0; animation: portal-settings-panel-in 180ms ease both; }
+.portal-settings-panel { min-width: 0; animation: portal-settings-panel-in 180ms ease backwards; }
 .portal-settings-empty { border: 1px dashed var(--portal-line); border-radius: 12px; padding: 2rem; color: var(--portal-muted); font-size: .82rem; text-align: center; }
 @keyframes portal-settings-panel-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .portal-settings-panel { animation: none; } }

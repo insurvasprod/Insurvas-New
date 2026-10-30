@@ -136,7 +136,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
 
   // ── Sales process ───────────────────────────────────────────────────────────────────────────────
-  { group: "Sales process", id: "sales-underwriting", label: "Underwriting templates", sort_order: 10, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The health questions an agent reads on the Interview step, and which answers put a carrier out of reach.", search_keywords: ["underwriting", "health questions", "knockout"] },
+  { group: "Sales process", id: "sales-underwriting", label: "Underwriting templates", sort_order: 10, owned_by_module: "LA-3.17", required_feature: "applications",
+    // Producers read it (owner 2026-10-30, step S13): "what you'll ask on a call", read-only; the API already serves them.
+    required_roles: ["owner", "producer"], description: "The health questions an agent reads on the Interview step, and which answers put a carrier out of reach.", search_keywords: ["underwriting", "health questions", "knockout"] },
   { group: "Sales process", id: "sales-quotation", label: "Quotation templates", sort_order: 20, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "What the Quote step asks for before an agent can record a premium against a carrier and product.", search_keywords: ["quote", "quotation", "premium"] },
   { group: "Sales process", id: "sales-field-sets", label: "Application field sets", sort_order: 30, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The list of things a carrier asks for on paper, named once so the workspace, the QA checks and the extension all mean the same field.", search_keywords: ["application fields", "field set"] },
   { group: "Sales process", id: "sales-disclosures", label: "Disclosures", sort_order: 40, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The disclosures an application may need, and the rules that make each one required.", search_keywords: ["disclosure", "script", "replacement"] },
@@ -155,7 +157,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     // Hidden from the menu and search for now (owner 2026-10-30); the panel and its data stay.
     disabled: "Hidden for now." },
   { group: "Sales process", id: "sales-ai", label: "AI assistant", sort_order: 70, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The underwriting assistant, and exactly what it would be sent.", search_keywords: ["ai", "assistant"] },
-  { group: "Sales process", id: "sales-pipeline-sync", label: "Pipeline sync", sort_order: 80, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Which pipeline stage a lead's card moves to as its application progresses.", search_keywords: ["stage sync"] },
+  { group: "Sales process", id: "sales-pipeline-sync", label: "Application stages", sort_order: 80, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Which pipeline stage a lead's card moves to as its application progresses.", search_keywords: ["pipeline sync", "stage sync", "move cards", "application status"] },
 
   // ── Leads & dialing ─────────────────────────────────────────────────────────────────────────────
   // Pipelines and Dispositions are one page (owner, 2026-10-27); old "#dispositions" links land here (registry.ts).

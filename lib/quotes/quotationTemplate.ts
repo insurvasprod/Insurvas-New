@@ -5,9 +5,9 @@
 // The catalogue (lib/applications/catalog.ts) passes this on as `quotationTemplate.fields`, so the
 // Quote step renders exactly the published template's fields, in order.
 
-export type QuotationField = { key: string; label: string; type: string; required: boolean; options: string[] };
+export type QuotationField = { key: string; label: string; type: string; required: boolean; options: string[]; /** The note the agent reads under the input (LA-3.4 help_text). */ help?: string };
 
-type StoredField = { field_key?: unknown; label?: unknown; type?: unknown; is_required?: unknown; options?: unknown; sort_order?: unknown };
+type StoredField = { field_key?: unknown; label?: unknown; type?: unknown; is_required?: unknown; options?: unknown; sort_order?: unknown; help_text?: unknown };
 type StoredRef = { field_key?: unknown; is_required?: unknown };
 type StoredDefinition = { fields?: unknown; form_definition?: { sections?: unknown } | null };
 
@@ -94,6 +94,7 @@ export function quotationFieldsOf(definition: unknown): QuotationField[] {
       type: typeof f.type === "string" ? f.type : "text",
       required: Boolean(ref?.is_required ?? f.is_required ?? false),
       options: Array.isArray(f.options) ? f.options.map(optionText) : [],
+      ...(typeof f.help_text === "string" && f.help_text.trim() ? { help: f.help_text.trim() } : {}),
     });
   };
   for (const s of ordered) {

@@ -82,18 +82,20 @@ export function dashboardAlerts(input: {
   if (input.failed?.complaints) out.push({ key: "complaints_unchecked", severity: "critical", text: "Couldn't check complaint deadlines just now — overdue regulator complaints may not be shown", href: "/app/complaints", action: "Open complaints" });
   if (input.failed?.gaps) out.push({ key: "gaps_unchecked", severity: "critical", text: "Couldn't check your book for calls after DNC, after a complaint or outside legal hours just now — do not read the empty list as clean", href: "/app/evidence-report", action: "Run the scan" });
   if (input.purgeSkipped) out.push({ key: "purge_skipped", severity: "warning", text: `The scheduled record purge did not run: ${PURGE_SKIP_REASONS[input.purgeSkipped.reason] ?? input.purgeSkipped.reason.replace(/_/g, " ")}. A new dry run follows.`, href: "/app/compliance/settings#purge", action: "Review" });
+  // Each problem opens its own fix (LA-6.7 "everything clicks through"; one Compliance page, 2026-10-30):
+  // one complaint opens itself, a finding opens the scan with its numbers showing, a licence opens Licences.
   const window = input.windowDays ?? 60;
   const reg = (input.complaints ?? []).filter((c) => c.channel === "doi" || c.channel === "ftc");
   const overdue = reg.filter((c) => c.tone === "overdue");
-  if (overdue.length) out.push({ key: "complaints_overdue", severity: "incident", text: `${plural(overdue.length, "regulator complaint")} past the response deadline`, href: "/app/complaints", action: "Respond now" });
+  if (overdue.length) out.push({ key: "complaints_overdue", severity: "incident", text: `${plural(overdue.length, "regulator complaint")} past the response deadline`, href: overdue.length === 1 ? `/app/complaints?open=${overdue[0].id}` : "/app/complaints", action: "Respond now" });
   const hours = input.gaps?.find((g) => g.category === "outside_legal_hours");
-  if (hours && hours.count > 0) out.push({ key: "outside_hours", severity: "incident", text: `${plural(hours.count, "call")} outside legal hours — calling-hours enforcement let these through`, href: "/app/evidence-report", action: "See the calls" });
+  if (hours && hours.count > 0) out.push({ key: "outside_hours", severity: "incident", text: `${plural(hours.count, "call")} outside legal hours — calling-hours enforcement let these through`, href: "/app/evidence-report?focus=outside_legal_hours", action: "See the calls" });
   const soon = reg.filter((c) => c.tone === "red").sort((a, b) => (a.daysLeft ?? 0) - (b.daysLeft ?? 0));
   for (const c of soon) out.push({ key: `complaint_${c.id}`, severity: "critical", text: `${c.channel === "ftc" ? "FTC" : `${c.regulatorState ?? ""} DOI`.trim()} complaint — ${c.label.toLowerCase()}`, href: `/app/complaints?open=${c.id}`, action: "Open" });
   const dnc = input.gaps?.find((g) => g.category === "called_after_dnc");
-  if (dnc && dnc.numbers > 0) out.push({ key: "called_after_dnc", severity: "critical", text: `${plural(dnc.numbers, "number")} called after a DNC entry — fix today`, href: "/app/evidence-report", action: "See the numbers" });
+  if (dnc && dnc.numbers > 0) out.push({ key: "called_after_dnc", severity: "critical", text: `${plural(dnc.numbers, "number")} called after a DNC entry — fix today`, href: "/app/evidence-report?focus=called_after_dnc", action: "See the numbers" });
   const complaint = input.gaps?.find((g) => g.category === "called_after_complaint");
-  if (complaint && complaint.numbers > 0) out.push({ key: "called_after_complaint", severity: "critical", text: `${plural(complaint.numbers, "number")} called after a complaint — fix today`, href: "/app/evidence-report", action: "See the numbers" });
+  if (complaint && complaint.numbers > 0) out.push({ key: "called_after_complaint", severity: "critical", text: `${plural(complaint.numbers, "number")} called after a complaint — fix today`, href: "/app/evidence-report?focus=called_after_complaint", action: "See the numbers" });
   const expiring = input.expiries
     // Calendar days, date to date: a licence expiring on 7 Nov is "23 days" from 15 Oct at any hour.
     .map((e) => ({ ...e, days: Math.round((Date.parse(`${e.expiresAt.slice(0, 10)}T00:00:00Z`) - Date.parse(`${input.now.toISOString().slice(0, 10)}T00:00:00Z`)) / DAY) }))
@@ -101,9 +103,9 @@ export function dashboardAlerts(input: {
     .sort((a, b) => a.days - b.days);
   for (const e of expiring) {
     const what = `${STATE_NAMES[e.name] ?? e.name} licence`;
-    out.push({ key: `${e.kind}_${e.name}`, severity: e.days < 0 ? "critical" : "warning", text: e.days < 0 ? `${what} expired ${plural(-e.days, "day")} ago` : `${what} expires in ${plural(e.days, "day")}`, href: "/app/appointments", action: "Renew" });
+    out.push({ key: `${e.kind}_${e.name}`, severity: e.days < 0 ? "critical" : "warning", text: e.days < 0 ? `${what} expired ${plural(-e.days, "day")} ago` : `${what} expires in ${plural(e.days, "day")}`, href: `/app/appointments?tab=licences&state=${encodeURIComponent(e.name)}`, action: "Renew" });
   }
-  if (input.deadlineCoverage && input.deadlineCoverage.missing.length) out.push({ key: "deadlines_unset", severity: "warning", text: input.deadlineCoverage.sentence, href: "/app/compliance/settings", action: "Set them" });
+  if (input.deadlineCoverage && input.deadlineCoverage.missing.length) out.push({ key: "deadlines_unset", severity: "warning", text: input.deadlineCoverage.sentence, href: "/app/compliance/settings#deadlines", action: "Set them" });
   const rank: Record<AlertSeverity, number> = { incident: 0, critical: 1, warning: 2 };
   return out.map((a, i) => ({ a, i })).sort((x, y) => rank[x.a.severity] - rank[y.a.severity] || x.i - y.i).map((x) => x.a);
 }
@@ -118,7 +120,7 @@ export function dashboardTiles(input: { figures: Figures | null; gaps: GapLine[]
   else if (!f.called_numbers) tiles.push({ key: "consent_coverage", label: TILE_LABELS.consent_coverage, value: "No calls yet", footnote: "nothing to cover", href: "/app/consent", action: "Consent locker" });
   else {
     const missing = f.called_numbers - f.consented_called_numbers;
-    tiles.push({ key: "consent_coverage", label: TILE_LABELS.consent_coverage, value: `${n(f.consented_called_numbers)} of ${n(f.called_numbers)}`, footnote: missing ? `↳ ${n(missing)} missing` : "every number called", tone: missing ? "warning" : undefined, href: "/app/evidence-report", action: missing ? `Open the ${n(missing)}` : "Details" });
+    tiles.push({ key: "consent_coverage", label: TILE_LABELS.consent_coverage, value: `${n(f.consented_called_numbers)} of ${n(f.called_numbers)}`, footnote: missing ? `↳ ${n(missing)} missing` : "every number called", tone: missing ? "warning" : undefined, href: missing ? "/app/evidence-report?focus=calls_without_consent" : "/app/consent", action: missing ? `Open the ${n(missing)}` : "Details" });
   }
   // Campaigns scrubbed
   if (!f) tiles.push(unavailable("campaigns_scrubbed", "Needs a database update.", "/app/compliance/settings", "Set up"));
@@ -127,7 +129,7 @@ export function dashboardTiles(input: { figures: Figures | null; gaps: GapLine[]
   // Outside legal hours: should always be zero; anything else is an incident.
   const hours = input.gaps?.find((g) => g.category === "outside_legal_hours");
   if (!input.gaps || !hours) tiles.push(unavailable("outside_hours", "Calling-hours results not recorded yet.", "/app/compliance/settings", "Set up"));
-  else tiles.push({ key: "outside_hours", label: TILE_LABELS.outside_hours, value: n(hours.count), footnote: hours.count ? "incident — should be zero" : hours.undeterminedCount ? `${n(hours.undeterminedCount)} could not be checked` : "as it should be", tone: hours.count ? "danger" : hours.undeterminedCount ? "warning" : undefined, href: "/app/evidence-report", action: hours.count || hours.undeterminedCount ? "See the calls" : "Details" });
+  else tiles.push({ key: "outside_hours", label: TILE_LABELS.outside_hours, value: n(hours.count), footnote: hours.count ? "incident — should be zero" : hours.undeterminedCount ? `${n(hours.undeterminedCount)} could not be checked` : "as it should be", tone: hours.count ? "danger" : hours.undeterminedCount ? "warning" : undefined, href: hours.count || hours.undeterminedCount ? "/app/evidence-report?focus=outside_legal_hours" : "/app/evidence-report", action: hours.count || hours.undeterminedCount ? "See the calls" : "Details" });
   // Internal DNC
   if (!f) tiles.push(unavailable("dnc_size", "Needs a database update.", "/app/compliance/settings", "Set up"));
   else tiles.push({ key: "dnc_size", label: TILE_LABELS.dnc_size, value: plural(f.dnc_active, "number"), footnote: "never deleted", href: "/app/tcpa", action: "Open the list" });
@@ -140,7 +142,7 @@ export function dashboardTiles(input: { figures: Figures | null; gaps: GapLine[]
   }
   // Deletions and holds
   if (!f) tiles.push(unavailable("deletions_and_holds", "Needs a database update.", "/app/compliance/settings", "Set up"));
-  else tiles.push({ key: "deletions_and_holds", label: TILE_LABELS.deletions_and_holds, value: `${n(f.deletions_open)} · ${n(f.holds_active)}`, footnote: `open requests · active holds${f.last_run_held ? ` (${n(f.last_run_held)} records held last run)` : ""}`, href: f.deletions_open ? "/app/deletion-requests" : "/app/compliance/settings", action: f.deletions_open ? "Requests" : "Holds" });
+  else tiles.push({ key: "deletions_and_holds", label: TILE_LABELS.deletions_and_holds, value: `${n(f.deletions_open)} · ${n(f.holds_active)}`, footnote: `open requests · active holds${f.last_run_held ? ` (${n(f.last_run_held)} records held last run)` : ""}`, href: f.deletions_open ? "/app/deletion-requests" : "/app/compliance/settings#holds", action: f.deletions_open ? "Requests" : "Holds" });
   const hidden = new Set(input.hidden ?? []);
   return tiles.filter((t) => !hidden.has(t.key));
 }

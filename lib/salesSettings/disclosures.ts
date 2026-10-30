@@ -49,6 +49,8 @@ export type DisclosureItem = {
   updatedAt: string;
   /** Applications that acknowledged this exact version. */
   acknowledged: number;
+  /** Who made this version (its creator's name); null for Insurvas rows and unknown people. */
+  createdBy: string | null;
 };
 export type InterviewFieldOption = { key: string; label: string; type: string };
 export type DisclosureLibrary = {
@@ -60,9 +62,9 @@ export type DisclosureLibrary = {
 
 type Row = {
   id: string; tenant_id: string | null; code: string; title: string; body_markdown: string; attachment_path: string | null;
-  states: string[] | null; carrier_ids: string[] | null; version: number; status: DisclosureStatus; updated_at: string;
+  states: string[] | null; carrier_ids: string[] | null; version: number; status: DisclosureStatus; updated_at: string; created_by: string | null;
 };
-const COLUMNS = "id, tenant_id, code, title, body_markdown, attachment_path, states, carrier_ids, version, status, updated_at";
+const COLUMNS = "id, tenant_id, code, title, body_markdown, attachment_path, states, carrier_ids, version, status, updated_at, created_by";
 
 // ── input ──────────────────────────────────────────────────────────────────
 
@@ -145,11 +147,23 @@ async function rulesFor(ids: string[]) {
   return by;
 }
 
-function toItem(row: Row, rules: Map<string, DisclosureRuleView[]>, acks: Map<string, number>): DisclosureItem {
+/** The names of the people who made these versions, by user id (only the agency's own rows have one). */
+async function creatorNames(list: Row[]) {
+  const ids = [...new Set(list.map((r) => r.created_by).filter((id): id is string => Boolean(id)))];
+  const by = new Map<string, string>();
+  if (!ids.length) return by;
+  const { data, error } = await db().from("users").select("id, name").in("id", ids);
+  if (error) return by;
+  for (const u of rows<{ id: string; name: string | null }>(data)) if (u.name) by.set(u.id, u.name);
+  return by;
+}
+
+function toItem(row: Row, rules: Map<string, DisclosureRuleView[]>, acks: Map<string, number>, names: Map<string, string> = new Map()): DisclosureItem {
   return {
     id: row.id, code: row.code, title: row.title, body: normaliseProse(row.body_markdown), states: row.states ?? [], carrierIds: row.carrier_ids ?? [],
     version: row.version, status: row.status, platform: row.tenant_id === null, hasAttachment: Boolean(row.attachment_path),
     rules: rules.get(row.id) ?? [], updatedAt: row.updated_at, acknowledged: acks.get(row.id) ?? 0,
+    createdBy: row.tenant_id && row.created_by ? names.get(row.created_by) ?? null : null,
   };
 }
 
@@ -190,8 +204,8 @@ async function writeRules(disclosureId: string, rules: DisclosureRuleView[] | Di
 
 async function itemById(tenantId: string, id: string) {
   const row = await visibleRow(tenantId, id);
-  const [rules, acks] = await Promise.all([rulesFor([row.id]), ackCounts(tenantId, [row.id])]);
-  return toItem(row, rules, acks);
+  const [rules, acks, names] = await Promise.all([rulesFor([row.id]), ackCounts(tenantId, [row.id]), creatorNames([row])]);
+  return toItem(row, rules, acks, names);
 }
 
 async function ackCounts(tenantId: string, ids: string[]) {
@@ -216,8 +230,8 @@ export async function listDisclosures(actor: Actor): Promise<DisclosureLibrary> 
   if (error) fail(error, "Could not load the disclosures");
   const list = rows<Row>(data);
   const ids = list.map((r) => r.id);
-  const [rules, acks, carriers, fields] = await Promise.all([rulesFor(ids), ackCounts(actor.tenantId, ids), tenantCarriers(actor.tenantId), interviewFields(actor.tenantId)]);
-  return { items: list.map((r) => toItem(r, rules, acks)), carriers, interviewFields: fields, canEdit: actor.role === "owner" };
+  const [rules, acks, carriers, fields, names] = await Promise.all([rulesFor(ids), ackCounts(actor.tenantId, ids), tenantCarriers(actor.tenantId), interviewFields(actor.tenantId), creatorNames(list)]);
+  return { items: list.map((r) => toItem(r, rules, acks, names)), carriers, interviewFields: fields, canEdit: actor.role === "owner" };
 }
 
 export async function disclosureAttachmentUrl(actor: Actor, id: string) {
@@ -352,6 +366,37 @@ export async function discardDraft(actor: Actor, id: string) {
   return { discarded: row.id };
 }
 
+/**
+ * Deletes a whole document of the agency's: every version of its code. Refused while any application
+ * carries any of them (in any status), because an application keeps the wording it was given; retire
+ * it instead. Deleting a published or retired version needs 20261030300000 (the guard allowed only a
+ * draft before); until it is applied the database refuses and this says so.
+ */
+export async function deleteDocument(actor: Actor, id: string) {
+  const row = await ownRow(actor.tenantId, id);
+  const client = db();
+  const versions = await client.from("application_disclosures").select("id, version, status, attachment_path").eq("tenant_id", actor.tenantId).eq("code", row.code);
+  if (versions.error) fail(versions.error, "Could not load the document's versions");
+  const list = rows<{ id: string; version: number; status: DisclosureStatus; attachment_path: string | null }>(versions.data);
+  const carried = await client.from("tenant_application_disclosures").select("disclosure_id", { count: "exact", head: true }).eq("tenant_id", actor.tenantId).in("disclosure_id", list.map((v) => v.id));
+  if (carried.error) fail(carried.error, "Could not check which applications carry it");
+  if ((carried.count ?? 0) > 0) {
+    const n = carried.count ?? 0;
+    throw new ApplicationError("DISCLOSURE_IN_USE", `${n} ${n === 1 ? "application carries" : "applications carry"} ${row.code}, so it can't be deleted. Retire it instead; they keep the wording they were given.`, 409);
+  }
+  const del = await client.from("application_disclosures").delete().eq("tenant_id", actor.tenantId).in("id", list.map((v) => v.id));
+  if (del.error) {
+    if (/DISCLOSURE_PUBLISHED_IMMUTABLE/.test(del.error.message ?? "")) {
+      throw new ApplicationError("DISCLOSURE_DELETE_PENDING", "Deleting a published document needs a database update that isn't applied yet. Retire it for now.", 409);
+    }
+    fail(del.error, "Could not delete the document");
+  }
+  const files = list.map((v) => v.attachment_path).filter((p): p is string => Boolean(p && list.some((v) => p.startsWith(`${actor.tenantId}/disclosures/${v.id}-`))));
+  if (files.length) await client.storage.from(BUCKET).remove(files);
+  await auditSales(actor, "tenant.application_disclosure_discarded", "application_disclosure", row.id, { code: row.code, wholeDocument: true, versions: list.map((v) => ({ version: v.version, status: v.status })) });
+  return { deleted: row.code, versions: list.length };
+}
+
 /** Attaches (or replaces) a draft's PDF. A published version's PDF is part of what was acknowledged. */
 export async function attachPdf(actor: Actor, id: string, file: File) {
   const row = await ownRow(actor.tenantId, id);
@@ -367,5 +412,20 @@ export async function attachPdf(actor: Actor, id: string, file: File) {
   const upd = await db().from("application_disclosures").update({ attachment_path: path }).eq("tenant_id", actor.tenantId).eq("id", row.id).eq("status", "draft");
   if (upd.error) fail(upd.error, "Could not attach the PDF");
   await auditSales(actor, "tenant.application_disclosure_attached", "application_disclosure", row.id, { version: row.version, bytes: file.size, replaced: Boolean(row.attachment_path) });
+  return itemById(actor.tenantId, row.id);
+}
+
+/**
+ * Takes the PDF off a draft. The file itself is deleted only when this draft uploaded it: a draft that
+ * follows a published version (or copies an Insurvas one) shares that version's file, which stays.
+ */
+export async function removePdf(actor: Actor, id: string) {
+  const row = await ownRow(actor.tenantId, id);
+  if (row.status !== "draft") throw new ApplicationError("DISCLOSURE_PUBLISHED_IMMUTABLE", `v${row.version} is ${row.status}; its PDF is part of what was acknowledged.`, 409);
+  if (!row.attachment_path) throw new ApplicationError("DISCLOSURE_NO_ATTACHMENT", "This draft has no PDF attached.", 404);
+  const upd = await db().from("application_disclosures").update({ attachment_path: null }).eq("tenant_id", actor.tenantId).eq("id", row.id).eq("status", "draft");
+  if (upd.error) fail(upd.error, "Could not remove the PDF");
+  if (row.attachment_path.startsWith(`${actor.tenantId}/disclosures/${row.id}-`)) await db().storage.from(BUCKET).remove([row.attachment_path]);
+  await auditSales(actor, "tenant.application_disclosure_attached", "application_disclosure", row.id, { version: row.version, removed: true });
   return itemById(actor.tenantId, row.id);
 }

@@ -63,7 +63,8 @@ export async function LeadsInPage({ step, actions, ownContinue = false, children
     // own space below instead of the grid's row gap, so an empty row adds no gap either.
     // The step's own row (its tabs, its actions) is the first line of the step's column, level with the
     // rail's top (owner 2026-10-30: "same thing as the Source page, for all of the pages"), not a row above it.
-    <div className="grid w-full min-w-0 gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
+    // One column under lg: minmax(0,1fr), or the rail's row of chips would stretch it past the phone's width.
+    <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
       <PageHeader title={leadsInStepLabel(step)} className="lg:col-span-2 lg:pb-6" />
       <div className="lg:col-start-1 lg:row-start-2 lg:min-h-0">
         <LeadsInRail steps={steps} step={step} initialCollapsed={collapsed} />
@@ -79,7 +80,8 @@ export async function LeadsInPage({ step, actions, ownContinue = false, children
           </div>
         </div>
         {/* The step scrolls inside its own column under its row; the rail stays put (owner 2026-10-28: no outer scroll). */}
-        <div key={step} className="flex min-w-0 flex-col gap-6 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+        {/* [&>*]:shrink-0: a step's own wrapper never gives up height to the scroll box (a StatStrip squeezed to a line). */}
+        <div key={step} className="flex min-w-0 flex-col gap-6 [&>*]:shrink-0 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
           {children}
         </div>
       </div>

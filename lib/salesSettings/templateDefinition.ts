@@ -239,9 +239,112 @@ export const quoteValidDays = (def: StoredDefinition | null | undefined) => {
   return v === 14 || v === 60 ? v : 30;
 };
 
+/** The inputs a quote cannot be saved without (templateSchemas refuses a template missing either). */
+export const ALWAYS_ASKED_INPUTS: readonly string[] = ["dob", "face_amount"];
+
+/**
+ * One input as the quotation editor holds it (LA-3.4 `quotation_template_field`): the carrier's own
+ * wording (`label`), its choices, whether it blocks Save quote, the note the agent reads under it,
+ * and whether it is asked at all. `custom` marks an input the agency added itself; a catalogue input
+ * switched off keeps its place in the "Not asked" list and is not stored.
+ */
+export type QuoteDraftField = { key: string; title: string; label: string; type: string; options: string[]; required: boolean; help: string; on: boolean; custom: boolean };
+
+/** The types an agency's own input may take: the ones the Quote step can draw (rating-inputs.tsx). */
+export const CUSTOM_QUOTE_TYPES = [
+  { type: "boolean", label: "Yes / no" },
+  { type: "single_select", label: "One choice" },
+  { type: "number", label: "Number" },
+  { type: "currency", label: "Dollar amount" },
+  { type: "date", label: "Date" },
+  { type: "text", label: "Short text" },
+] as const;
+
+/** The draft list for a stored definition: asked inputs in their stored order, then the catalogue inputs it does not ask. */
+export function quoteDraftFields(def: StoredDefinition | null | undefined): QuoteDraftField[] {
+  const catalogue = new Map(QUOTE_INPUTS.map((i) => [i.key, i]));
+  const refs = new Map((def?.form_definition?.sections ?? []).flatMap((s) => s.fields ?? []).map((r) => [r.field_key, r]));
+  const stored = [...(def?.fields ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const asked: QuoteDraftField[] = stored.map((f) => {
+    const input = catalogue.get(f.field_key);
+    return {
+      key: f.field_key,
+      title: input?.title ?? f.label,
+      label: f.label || input?.field.label || f.field_key,
+      type: f.type,
+      options: (f.options ?? []).map(String),
+      required: ALWAYS_ASKED_INPUTS.includes(f.field_key) || Boolean(refs.get(f.field_key)?.is_required ?? f.is_required),
+      help: f.help_text ?? "",
+      on: true,
+      custom: !input,
+    };
+  });
+  const have = new Set(asked.map((f) => f.key));
+  const off = QUOTE_INPUTS.filter((i) => !have.has(i.key)).map((i) => ({
+    key: i.key, title: i.title, label: i.field.label, type: i.field.type, options: [...i.field.options], required: i.field.is_required, help: "", on: false, custom: false,
+  }));
+  return [...asked, ...off];
+}
+
+/** The definition a draft list stores: only the asked inputs, in order; age basis and validity beside them. */
+export function quoteDefinitionFrom(def: StoredDefinition | null | undefined, draft: readonly QuoteDraftField[], ageBasis: "nearest" | "last", validDays: number): QuoteDef {
+  const asked = draft.filter((f) => f.on);
+  const fields = asked.map((f, idx) => ({
+    field_key: f.key,
+    label: f.label.trim(),
+    type: f.type,
+    options: f.options.map((o) => o.trim()).filter(Boolean),
+    is_required: ALWAYS_ASKED_INPUTS.includes(f.key) || f.required,
+    help_text: f.help.trim() || null,
+    sort_order: (idx + 1) * 10,
+  }));
+  const section = def?.form_definition?.sections?.[0];
+  return {
+    age_basis: ageBasis,
+    valid_days: validDays,
+    fields,
+    form_definition: {
+      sections: [{
+        section_key: section?.section_key ?? "quote",
+        label: section?.label ?? "Quote",
+        sort_order: 10,
+        fields: fields.map((f) => ({ field_key: f.field_key, is_required: f.is_required, show_when: null })),
+      }],
+    },
+  } as QuoteDef;
+}
+
+/** A key for an agency's own input, from its wording: lowercase words joined by "_", never one already used. */
+export function customQuoteKey(label: string, taken: Iterable<string>) {
+  const used = new Set(taken);
+  let base = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 50);
+  if (!/^[a-z]/.test(base)) base = `q_${base}`.replace(/_+$/, "");
+  if (base.length < 2) base = "q_input";
+  let key = base;
+  for (let n = 2; used.has(key); n++) key = `${base}_${n}`;
+  return key;
+}
+
+/** What the editor refuses before the server does: blank wording, and a choice input with nothing to choose. */
+export function quoteDraftProblem(draft: readonly QuoteDraftField[]): string | null {
+  for (const f of draft.filter((x) => x.on)) {
+    if (!f.label.trim()) return `${f.title || "An input"} needs the words the agent reads`;
+    if (f.custom && f.type === "single_select" && !f.options.some((o) => o.trim())) return `${f.label} is a choice, so give it at least one option`;
+  }
+  return null;
+}
+
 // ── application field sets (LA-3.7) ────────────────────────────────────────
 
-export type FieldSetEntry = { key: string; canonicalLabel: string; label: string; typeLabel: string; required: boolean; sensitive: boolean };
+export type FieldSetEntry = {
+  key: string; canonicalLabel: string; label: string; typeLabel: string; required: boolean; sensitive: boolean;
+  /** The line the agent reads under the field ("" for none). */
+  help: string;
+  /** Its section: a canonical group key, or "pay". */
+  group: string;
+  /** Set for the agency's own question; null for a built-in field. */
+  custom: FieldSetCustom | null;
+};
 
 const INPUT_LABEL: Record<FieldInput, string> = {
   text: "Text", date: "Date", select: "Choice", number: "Number", tel: "Phone", email: "Email", boolean: "Yes / no", money: "Currency", ssn: "Masked text", state: "State",
@@ -269,25 +372,59 @@ export function fieldMeta(key: string) {
   return p ?? { label: key, type: "Text" };
 }
 
-type FieldSetDef = { required?: string[]; optional?: string[]; labels?: Record<string, string> };
+/** An agency's own question (templateSchemas CUSTOM_FIELD_TYPES): its type, choices and section. */
+export type FieldSetCustom = { type: string; options: string[] };
+type CustomDef = { key: string; label: string; type: string; options?: string[]; group: string };
+type FieldSetDef = { required?: string[]; optional?: string[]; labels?: Record<string, string>; order?: string[]; help?: Record<string, string>; custom?: CustomDef[] };
 
-/** The set's fields in canonical order (groups, then payment), each with its label and handling. */
+export const CUSTOM_TYPE_LABEL: Record<string, string> = {
+  text: "Short text", long_text: "Long text", date: "Date", number: "Number", currency: "Dollar amount", choice: "One choice", yes_no: "Yes / no", state: "State", phone: "Phone", email: "Email",
+};
+
+/** The section a built-in key sits in: its canonical group, or "pay" for the payment keys. */
+export function groupOfKey(key: string) {
+  return CANONICAL_GROUPS.find((g) => g.fields.some((f) => f.key === key))?.key ?? (key.startsWith("pay.") ? "pay" : "custom");
+}
+
+/**
+ * The set's fields in the order the agent sees them (owner 2026-10-30): the stored `order` first,
+ * then anything it does not name in canonical order, each section's own questions after its built-in
+ * fields. Each entry carries its label, help line and handling.
+ */
 export function fieldSetEntries(def: FieldSetDef | StoredDefinition | null | undefined): FieldSetEntry[] {
   const d = (def ?? {}) as FieldSetDef;
   const required = new Set(d.required ?? []);
   const inSet = new Set([...(d.required ?? []), ...(d.optional ?? [])]);
-  return FIELD_SET_KEYS.filter((k) => inSet.has(k)).map((k) => {
+  const custom = new Map((Array.isArray(d.custom) ? d.custom : []).filter((c) => inSet.has(c.key)).map((c) => [c.key, c]));
+  const groups = [...CANONICAL_GROUPS.map((g) => g.key), "pay"];
+  const canonical = groups.flatMap((g) => [...FIELD_SET_KEYS.filter((k) => groupOfKey(k) === g && inSet.has(k)), ...[...custom.values()].filter((c) => c.group === g).map((c) => c.key)]);
+  const named = (Array.isArray(d.order) ? d.order : []).filter((k) => canonical.includes(k));
+  const keys = [...new Set([...named, ...canonical])];
+  return keys.map((k) => {
+    const c = custom.get(k);
+    const help = d.help?.[k] ?? "";
+    if (c) return { key: k, canonicalLabel: c.label, label: c.label, typeLabel: CUSTOM_TYPE_LABEL[c.type] ?? c.type, required: required.has(k), sensitive: false, help, group: c.group, custom: { type: c.type, options: c.options ?? [] } };
     const meta = fieldMeta(k);
-    return { key: k, canonicalLabel: meta.label, label: d.labels?.[k] ?? meta.label, typeLabel: meta.type, required: required.has(k), sensitive: isSensitiveKey(k) };
+    return { key: k, canonicalLabel: meta.label, label: d.labels?.[k] ?? meta.label, typeLabel: meta.type, required: required.has(k), sensitive: isSensitiveKey(k), help, group: groupOfKey(k), custom: null };
   });
 }
 
-export function fieldSetFromEntries(entries: Pick<FieldSetEntry, "key" | "label" | "canonicalLabel" | "required">[]) {
+export function fieldSetFromEntries(entries: (Pick<FieldSetEntry, "key" | "label" | "canonicalLabel" | "required"> & Partial<Pick<FieldSetEntry, "help" | "group" | "custom">>)[]) {
   const labels: Record<string, string> = {};
-  for (const e of entries) if (e.label.trim() && e.label.trim() !== e.canonicalLabel) labels[e.key] = e.label.trim();
+  const help: Record<string, string> = {};
+  const custom: CustomDef[] = [];
+  for (const e of entries) {
+    if (e.custom) {
+      custom.push({ key: e.key, label: e.label.trim(), type: e.custom.type, ...(e.custom.type === "choice" ? { options: e.custom.options.map((o) => o.trim()).filter(Boolean) } : {}), group: e.group ?? "insured" });
+    } else if (e.label.trim() && e.label.trim() !== e.canonicalLabel) labels[e.key] = e.label.trim();
+    if (e.help?.trim()) help[e.key] = e.help.trim();
+  }
   return {
     required: entries.filter((e) => e.required).map((e) => e.key),
     optional: entries.filter((e) => !e.required).map((e) => e.key),
     ...(Object.keys(labels).length ? { labels } : {}),
+    order: entries.map((e) => e.key),
+    ...(Object.keys(help).length ? { help } : {}),
+    ...(custom.length ? { custom } : {}),
   };
 }

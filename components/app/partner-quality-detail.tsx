@@ -15,6 +15,7 @@ import type { PartnerQualityDetail, PartnerQualityDetailLead, PartnerQualityMemb
 import { count, dateText, dispositionText, downloadCsv, humanize, MetricCell, metricLabel, paginate, Pager, partnerTypeLabel, percent, PeriodInputs, periodQuery, periodText, Prior, productText, useDrilldown, type Period } from "./partner-quality-parts";
 import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { InReportsSlot, useReportsTitle } from "@/components/app/reports/reports-slot";
 
 /** The partner's sections, one at a time (2026-10-06 redesign: five stacked tables became tabs). */
 type DetailTab = "leads" | "outcomes" | "team" | "agents" | "daily";
@@ -63,7 +64,11 @@ function rateDelta(current: number | null, previous: number | null, goodWhen: "u
  * `embedded`: shown as the Quality tab of the partner's own record (2026-10-25, Module 1 simplified):
  * the record already names the partner, so the back link and the title are left out here.
  */
-export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedded = false }: { partnerId: string; initialPeriod?: Period | null; embedded?: boolean }) {
+/**
+ * `framed`: inside the Reports page (components/app/reports/reports-page.tsx): the partner's name is the
+ * frame's title (Reports › Partner quality › the partner), the sections and period go to its top row.
+ */
+export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedded = false, framed = false }: { partnerId: string; initialPeriod?: Period | null; embedded?: boolean; framed?: boolean }) {
   const [period, setPeriod] = useState<Period>(() => initialPeriod ?? defaultPartnerQualityPeriod());
   const [data, setData] = useState<PartnerQualityDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,12 +111,13 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
     return data.leads.filter((lead) => matchesFilter(lead, filter) && (!needle || [lead.full_name, lead.phone, lead.state, lead.product, lead.agent_name, lead.submitted_by, leadStatus(lead, labels)].some((value) => value?.toLowerCase().includes(needle))));
   }, [data, filter, search, labels]);
 
+  useReportsTitle(framed ? data?.partner.name ?? null : null);
   const backHref = `/app/partner-quality?${periodQuery(period)}`;
   // The way back is the trail above the title (owner 2026-10-30), keeping the period.
   const trail = (current: string) => [{ label: "Reports" }, { label: "Partner quality", href: backHref }, { label: current }];
 
   if (loading && !data) return <PageLoading />;
-  if (!data) return <div className="flex flex-col gap-6"><PageHeader title="Partner" breadcrumbs={trail("Partner")} /><ErrorState detail={error || "Could not load this partner"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
+  if (!data) return <div className="flex flex-col gap-6">{!framed && <PageHeader title="Partner" breadcrumbs={trail("Partner")} />}<ErrorState detail={error || "Could not load this partner"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
 
   const active: Period = { from: data.from, to: data.to };
   const now = data.current;
@@ -160,7 +166,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-362px)]`;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    {embedded ? <p className="m-0 text-sm leading-[1.5] text-muted-foreground">{periodText(active)}</p> : <PageHeader title={name} breadcrumbs={trail(name)} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />}
+    {embedded ? <p className="m-0 text-sm leading-[1.5] text-muted-foreground">{periodText(active)}</p> : framed ? null : <PageHeader title={name} breadcrumbs={trail(name)} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />}
 
     {/* Four figures (2026-10-06 redesign): claimed and worked ride on Sent's footnote, duplicates
         on DQ's. Every count is still in the Team and Daily tabs, and opens its leads there. */}
@@ -172,13 +178,15 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
     </StatStrip>
 
     {/* Sections as tabs on the left, the period (which every tab reads) on the right. */}
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <InReportsSlot framed={framed} slot="lead">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
       <ViewTabs label="Partner sections" tabs={tabs} value={tab} onChange={setTab} idPrefix="partner-tab" controls="partner-view" />
       <div className="flex flex-wrap items-center gap-2">
         <PeriodInputs value={active} onChange={changePeriod} />
         <RefreshButton onClick={() => void load(period)} refreshing={loading} />
       </div>
     </div>
+    </InReportsSlot>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
     {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}

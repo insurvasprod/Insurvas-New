@@ -32,6 +32,11 @@ export type MenuItem = {
    * tab but not the page's main item (a plan with the dialer and no list import).
    */
   sidebar_fallback_for?: string;
+  /**
+   * The whole group is this one page (2026-10-30, Compliance in one page): when it is the group's only item
+   * in the rail, the group is drawn as one link, named and iconned as the group, not a dropdown with one row.
+   */
+  groupLink?: boolean;
   /** One line on the coming-soon page saying what the screen will do. */
   blurb?: string;
   /**
@@ -232,24 +237,30 @@ export const AGENT_MENU: MenuSection[] = [
     id: "compliance",
     label: "Compliance",
     items: [
-      item("Compliance", { key: "compliance.dashboard", label: "Compliance", navLabel: "Overview", path: "/app/compliance", icon: "scale", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "Am I exposed right now: deadlines, gaps and coverage on one screen." }),
-      item("Compliance", { key: "compliance.tcpa", label: "TCPA / DNC", path: "/app/tcpa", icon: "phone-off", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer", "assistant", "setter"] }),
-      item("Compliance", { key: "compliance.consent", label: "Consent locker", path: "/app/consent", icon: "lock-keyhole", built: true, required_feature: "consent_locker", required_roles: ["owner", "producer", "assistant"] }),
-      item("Compliance", { key: "compliance.complaints", label: "Complaints", path: "/app/complaints", icon: "circle-alert", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "Every complaint with an owner, a deadline and a countdown." }),
-      item("Compliance", { key: "compliance.deletions", label: "Deletion requests", path: "/app/deletion-requests", icon: "user-x", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "One person asks to be deleted: verify, hold, delete, certify." }),
-      item("Compliance", { key: "compliance.litigation", label: "Evidence report", path: "/app/evidence-report", icon: "gavel", built: true, required_feature: "litigation_packet", required_roles: ["owner", "producer"], blurb: "Everything we hold about one number, and every gap." }),
+      // 2026-10-30 (owner: "all of the pages of compliance in one page", the Leads in treatment): the six pages
+      // are steps of one page with its own rail (components/app/compliance/compliance-flow.tsx). They keep their
+      // keys, gates and addresses; the sidebar shows the others only to someone who cannot open Overview
+      // (an assistant or a setter reaches TCPA / DNC and the Consent locker).
+      item("Compliance", { key: "compliance.dashboard", label: "Compliance", navLabel: "Overview", groupLink: true, path: "/app/compliance", icon: "scale", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "Am I exposed right now: deadlines, gaps and coverage on one screen." }),
+      item("Compliance", { key: "compliance.tcpa", sidebar_fallback_for: "compliance.dashboard", label: "TCPA / DNC", path: "/app/tcpa", icon: "phone-off", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer", "assistant", "setter"] }),
+      item("Compliance", { key: "compliance.consent", sidebar_fallback_for: "compliance.dashboard", label: "Consent locker", path: "/app/consent", icon: "lock-keyhole", built: true, required_feature: "consent_locker", required_roles: ["owner", "producer", "assistant"] }),
+      item("Compliance", { key: "compliance.complaints", sidebar_fallback_for: "compliance.dashboard", label: "Complaints", path: "/app/complaints", icon: "circle-alert", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "Every complaint with an owner, a deadline and a countdown." }),
+      item("Compliance", { key: "compliance.deletions", sidebar_fallback_for: "compliance.dashboard", label: "Deletion requests", path: "/app/deletion-requests", icon: "user-x", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "One person asks to be deleted: verify, hold, delete, certify." }),
+      item("Compliance", { key: "compliance.litigation", sidebar_fallback_for: "compliance.dashboard", label: "Evidence report", path: "/app/evidence-report", icon: "gavel", built: true, required_feature: "litigation_packet", required_roles: ["owner", "producer"], blurb: "Everything we hold about one number, and every gap." }),
     ],
   },
   {
     id: "reports",
     label: "Reports",
     items: [
-      item("Reports", { key: "insight.sales-performance", label: "Sales performance", path: "/app/sales-performance", icon: "chart-column", built: true, required_feature: "sales_report", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Funnel, timings and why carriers decline." }),
-      item("Reports", { key: "insight.activity", label: "Team activity", path: "/app/activity", icon: "activity", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
-      item("Reports", { key: "insight.scoring", label: "Queue scoring", path: "/app/scoring", icon: "brain", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"], blurb: "The order leads are served in, and whether it beats the plain order." }),
-      item("Reports", { key: "insight.book-scorecards", label: "Book scorecards", path: "/app/book-scorecards", icon: "gauge", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Persistency, placement, chargebacks and true cost per sale, from your carrier files." }),
-      item("Reports", { key: "insight.true-cpa", label: "True CPA", path: "/app/true-cpa", icon: "badge-dollar-sign", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "What your leads actually cost" }),
-      item("Reports", { key: "partners.review", label: "Partner quality", path: "/app/partner-quality", icon: "award", required_feature: "partner_quality", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
+      // One page with six views (owner 2026-10-30, components/app/reports/reports-page.tsx): the sidebar shows
+      // one Reports link (groupLink: no dropdown) to the first view this person may open; each later view stands in for the one before.
+      item("Reports", { key: "insight.sales-performance", groupLink: true, label: "Sales performance", path: "/app/sales-performance", icon: "chart-column", built: true, required_feature: "sales_report", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Funnel, timings and why carriers decline." }),
+      item("Reports", { key: "insight.activity", groupLink: true, sidebar_fallback_for: "insight.sales-performance", label: "Team activity", path: "/app/activity", icon: "activity", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
+      item("Reports", { key: "insight.scoring", groupLink: true, sidebar_fallback_for: "insight.activity", label: "Queue scoring", path: "/app/scoring", icon: "brain", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"], blurb: "The order leads are served in, and whether it beats the plain order." }),
+      item("Reports", { key: "insight.book-scorecards", groupLink: true, sidebar_fallback_for: "insight.scoring", label: "Book scorecards", path: "/app/book-scorecards", icon: "gauge", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Persistency, placement, chargebacks and true cost per sale, from your carrier files." }),
+      item("Reports", { key: "insight.true-cpa", groupLink: true, sidebar_fallback_for: "insight.book-scorecards", label: "True CPA", path: "/app/true-cpa", icon: "badge-dollar-sign", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "What your leads actually cost" }),
+      item("Reports", { key: "partners.review", groupLink: true, sidebar_fallback_for: "insight.true-cpa", label: "Partner quality", path: "/app/partner-quality", icon: "award", required_feature: "partner_quality", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
     ],
   },
   {

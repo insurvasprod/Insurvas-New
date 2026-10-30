@@ -8,7 +8,7 @@ import { loadScorecards, loadWeekEntries, SCORECARDS_PENDING_MESSAGE } from "@/l
 import { BookScorecards, ScoreDrill, type CellView, type ScorecardsView } from "@/components/app/book-scorecards";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { ReportsPage } from "@/components/app/reports/reports-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -39,12 +39,12 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
   const months = (PERIODS as readonly number[]).includes(Number(sp.months)) ? Number(sp.months) : 12;
   const drill = readDrill(sp.drill);
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
-  const header = <PageHeader title="Book scorecards" description="How your book is holding up, from the carriers' own files: every figure opens the policies behind it." />;
+  // Inside the Reports page, which draws the title and trail (a drill names its figure there).
 
   const todayUtc = new Date().toISOString().slice(0, 10);
   const firstRead = await loadScorecards(viewer, { from: addMonths(todayUtc, -months), to: todayUtc }, { withClients: Boolean(drill), withSpend: view === "scorecards" && !drill });
   if (!firstRead.available) {
-    return <div className="m-stagger flex flex-col gap-6">{header}<TableCard><EmptyState title="No carrier files read yet" hint="Scorecards appear once a policy file from a carrier has been read." /></TableCard></div>;
+    return <ReportsPage view="book" bar={false}><div className="m-stagger flex flex-col gap-6"><TableCard><EmptyState title="No carrier files read yet" hint="Scorecards appear once a policy file from a carrier has been read." /></TableCard></div></ReportsPage>;
   }
   const data = firstRead;
   const period = { from: addMonths(data.today, -months), to: data.today };
@@ -56,17 +56,18 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
     if (drill.kind === "week") {
       const entries = await loadWeekEntries(viewer, drill.week);
       return (
-        <div className="m-stagger flex flex-col gap-6">
-          {header}
-          <ScoreDrill back={back} title={`Commission lines in the week of ${drill.week}`} figure={entries ? `${entries.length} ${entries.length === 1 ? "line" : "lines"}` : SCORECARDS_PENDING_MESSAGE} entries={entries ?? []} />
-        </div>
+        <ReportsPage view="book" bar={false}>
+          <div className="m-stagger flex flex-col gap-6">
+            <ScoreDrill back={back} title={`Commission lines in the week of ${drill.week}`} figure={entries ? `${entries.length} ${entries.length === 1 ? "line" : "lines"}` : SCORECARDS_PENDING_MESSAGE} entries={entries ?? []} />
+          </div>
+        </ReportsPage>
       );
     }
     const set = drillRows(data.policies, drill, ctx);
     const byKey = new Map<string, ScorePolicy>(data.policies.map((p) => [p.key, p]));
     return (
+      <ReportsPage view="book" bar={false}>
       <div className="m-stagger flex flex-col gap-6">
-        {header}
         <ScoreDrill
           back={back}
           title={set?.title ?? "Nothing behind this figure"}
@@ -77,6 +78,7 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
           })}
         />
       </div>
+      </ReportsPage>
     );
   }
 
@@ -124,9 +126,10 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
   };
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      {header}
-      <BookScorecards model={model} />
-    </div>
+    <ReportsPage view="book">
+      <div className="m-stagger flex flex-col gap-6">
+        <BookScorecards model={model} framed />
+      </div>
+    </ReportsPage>
   );
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Sheet } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/page-states";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -18,13 +19,22 @@ import type { DeletionRequest } from "@/lib/compliance/dataSubjectStore";
 import { formatPhone } from "@/lib/compliance/evidenceGaps";
 import { notify } from "@/lib/notify";
 import { fieldLabel } from "@/components/ui/field";
+import { ViewTabs } from "@/components/app/view-tabs";
+import { NextUp } from "@/components/app/lead-sources/next-up";
+import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 
 /**
  * LA-6.5 · deletion requests: log one, verify who it is, hold, perform, certify. Performing deletes
  * data for good, so it asks once more and only the owner sees it.
+ *
+ * Compliance in one page (2026-10-30): the Deletions step. The queue is four tabs in the frame's top row
+ * (Open, Ready to delete, Done, All) with a search, Log a request is the corner's one primary, and the step
+ * opens on one next-up line: the oldest request to verify, or the first hold that is over.
  */
 const TONE: Record<DeletionStatus, StatusTone> = { received: "info", verifying: "info", verified: "info", scheduled: "warning", completed: "good", rejected: "neutral", cancelled: "neutral" };
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : "—");
+type Queue = "open" | "ready" | "done" | "all";
+const OPEN = new Set(["received", "verifying", "verified", "scheduled"]);
 const who = (r: DeletionRequest) => [r.requesterName, r.phoneDigits ? formatPhone(r.phoneDigits) : null, r.email].filter(Boolean).join(" · ") || "A client record";
 
 async function send(url: string, init: RequestInit) {
@@ -185,14 +195,44 @@ export function DeletionRequestsBoard({ requests, methods, holdDays, isOwner, re
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [queue, setQueue] = useState<Queue>("open");
+  const [q, setQ] = useState("");
   const [refreshing, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
   const pageSize = useFittingPageSize(480, 45);
-  const shown = paginate(requests, page, pageSize);
-  const openCount = requests.filter((r) => ["received", "verifying", "verified", "scheduled"].includes(r.status)).length;
-  const due = requests.filter((r) => r.status === "scheduled" && holdRemaining(r.scheduledPurgeAt, new Date()).due).length;
+  const [now] = useState(() => new Date());
+  const isDue = (r: DeletionRequest) => r.status === "scheduled" && holdRemaining(r.scheduledPurgeAt, now).due;
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const digits = needle.replace(/\D/g, "");
+    return requests.filter((r) =>
+      (queue === "all" || (queue === "open" && OPEN.has(r.status)) || (queue === "ready" && isDue(r)) || (queue === "done" && !OPEN.has(r.status))) &&
+      (!needle || [r.requesterName, r.email].some((v) => v?.toLowerCase().includes(needle)) || (digits.length >= 3 && (r.phoneDigits ?? "").includes(digits))));
+  }, [requests, queue, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = paginate(visible, page, pageSize);
+  const openCount = requests.filter((r) => OPEN.has(r.status)).length;
+  const due = requests.filter(isDue).length;
+  // The one next step: a hold that is over (the owner deletes), else the oldest request still to verify.
+  const ready = requests.find(isDue);
+  const toVerify = [...requests].reverse().find((r) => r.status === "received" || r.status === "verifying");
+  const nextUp = ready
+    ? <NextUp tone="warning" action={<Button variant="outline" onClick={() => setOpen(ready.id)}>Open it</Button>}>The hold on <strong>{who(ready)}</strong> is over: {isOwner ? "delete it and issue the certificate." : "the agency owner can delete it now."}</NextUp>
+    : toVerify
+      ? <NextUp tone="warning" action={<Button variant="outline" onClick={() => setOpen(toVerify.id)}>{isOwner ? "Verify" : "Open it"}</Button>}><strong>{who(toVerify)}</strong> asked to be deleted on {day(toVerify.receivedAt)}. {isOwner ? `Verify who it is to start the ${holdDays}-day hold.` : "The agency owner verifies who it is."}</NextUp>
+      : <NextUp tone="done">{openCount ? <><strong>{openCount}</strong> on hold; nothing needs you today.</> : "No open deletion requests."}</NextUp>;
   return (
     <>
+      <ComplianceSlot slot="lead">
+        <ViewTabs label="Deletion requests" idPrefix="deletions-view" value={queue} onChange={(next) => { setQueue(next); setPage(1); }}
+          tabs={[
+            { key: "open", label: "Open", count: openCount },
+            { key: "ready", label: "Ready to delete", count: due || null, tone: "danger" },
+            { key: "done", label: "Done", count: requests.length - openCount },
+            { key: "all", label: "All", count: requests.length },
+          ]} />
+      </ComplianceSlot>
+      {!readOnly ? <ComplianceSlot slot="corner"><Button onClick={() => setCreating(true)}><Plus aria-hidden="true" />Log a request</Button></ComplianceSlot> : null}
+      {nextUp}
       <StatStrip label="Deletion requests">
         <StatTile label="Open" value={String(openCount)} footnote="not yet deleted" />
         <StatTile label="Ready to delete" value={String(due)} valueTone={due ? "warning" : undefined} footnote="hold over" />
@@ -200,11 +240,14 @@ export function DeletionRequestsBoard({ requests, methods, holdDays, isOwner, re
         <StatTile label="Hold" value={`${holdDays} days`} footnote="after verification" />
       </StatStrip>
       <TableCard
-        toolbar={<DataToolbar actions={<>{!readOnly ? <Button onClick={() => setCreating(true)}>Log a request</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>} />}
-        footer={requests.length ? <Pager page={shown.current} pageSize={pageSize} total={requests.length} noun="requests" onPage={setPage} /> : undefined}
+        className="flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:flex-1"
+        toolbar={<DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}><ToolbarSearch value={q} onChange={(value) => { setQ(value); setPage(1); }} placeholder="Search name, phone or email" label="Search deletion requests" /></DataToolbar>}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="requests" onPage={setPage} /> : undefined}
       >
         {requests.length === 0 ? (
           <EmptyState title="No deletion requests" hint="When someone asks to be deleted, log it the day it arrives." action={!readOnly ? <Button onClick={() => setCreating(true)}>Log a request</Button> : undefined} />
+        ) : visible.length === 0 ? (
+          <NoMatches noun="requests" onClear={() => { setQ(""); setQueue("all"); }} />
         ) : (
           <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
             <thead><tr><th className="w-[120px]">Received</th><th>Who</th><th className="w-[200px]">Status</th><th className="w-[260px]">Next</th><th className="w-[90px] text-right" /></tr></thead>
@@ -214,7 +257,7 @@ export function DeletionRequestsBoard({ requests, methods, holdDays, isOwner, re
                   <td>{day(r.receivedAt)}</td>
                   <td>{who(r)}</td>
                   <td><StatusChip tone={TONE[r.status as DeletionStatus]}>{STATUS_LABELS[r.status as DeletionStatus] ?? r.status}</StatusChip></td>
-                  <td className="text-muted-foreground">{r.status === "scheduled" ? holdRemaining(r.scheduledPurgeAt, new Date()).label : r.status === "verifying" || r.status === "received" ? "Verify who it is" : r.status === "completed" ? "Certificate issued" : "—"}</td>
+                  <td>{r.status === "scheduled" ? holdRemaining(r.scheduledPurgeAt, now).label : r.status === "verifying" || r.status === "received" ? "Verify who it is" : r.status === "completed" ? "Certificate issued" : "—"}</td>
                   <td className="text-right"><Button size="sm" variant="outline" onClick={() => setOpen(r.id)}>Open</Button></td>
                 </tr>
               ))}

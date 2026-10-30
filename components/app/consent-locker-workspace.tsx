@@ -8,8 +8,6 @@ import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PageHeader } from "@/components/ui/page-header";
-import { PageLoading } from "@/components/ui/page-loading";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Meter, StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
@@ -21,6 +19,8 @@ import { ViewTabs } from "@/components/app/view-tabs";
 import { CONSENT_STATUS_HINTS, CONSENT_STATUS_LABELS, type ConsentArtefact } from "@/lib/consent/constants";
 import { EVIDENCE_FILTER_LABEL, EVIDENCE_LABEL, EVIDENCE_TONE, evidenceTime, keptFor, type EvidenceFilter, type EvidenceLevel } from "@/lib/consent/evidence";
 import { Pager, paginate } from "@/components/ui/pager";
+import { NextUp } from "@/components/app/lead-sources/next-up";
+import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
 /**
@@ -33,6 +33,10 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
  *
  * 2026-10-06 redesign: the leads and the coverage by vendor are two tabs; the source filter sits in
  * the toolbar as toggles instead of a panel that opened under it; the phone is its own column.
+ *
+ * Compliance in one page (2026-10-30): the Consent step. Its tabs sit in the frame's top row and Export in
+ * its corner; each figure's "Show" filters the table to the leads behind it, and the step's one next-up
+ * line names the biggest gap.
  */
 type Row = {
   leadId: string; name: string; phone: string | null; providerName: string; captured: string;
@@ -50,11 +54,11 @@ type Tab = "leads" | "coverage";
 
 const SOURCE_LABEL: Record<Source, string> = { partner: "Partner submitted", vendor: "Vendor list or post", direct: "Direct" };
 const CHIP_TONE: Record<"success" | "warning" | "error", StatusTone> = { success: "good", warning: "warning", error: "danger" };
-/** The tab's one card reaches the bottom of the window. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>*:nth-child(2)]:flex-1";
-/** The leads card: the server pages 50 at a time, so from lg the card holds the window height and its
-    table scrolls inside it under sticky headers, rather than the page scrolling (2026-10-06). */
-const LEADS_FILL = "flex flex-col lg:h-[calc(100dvh-var(--top-bar-h)-310px)] [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:bg-card";
+/** The tab's one card fills the rest of the step's column. */
+const FILL = "flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:flex-1";
+/** The leads card: the server pages 50 at a time, so from lg the card fills the rest of the step's column
+    and its table scrolls inside it under sticky headers, rather than the page scrolling (2026-10-06). */
+const LEADS_FILL = "flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:bg-card";
 const when = (value: string | null) => evidenceTime(value);
 const pct = (part: number, whole: number) => (whole ? `${((part / whole) * 100).toFixed(1)}%` : "—");
 
@@ -130,22 +134,13 @@ export function ConsentLockerWorkspace() {
   const coverage = paginate([...(loaded?.coverage ?? [])].sort((a, b) => (b.claimedPct ?? -1) - (a.claimedPct ?? -1)), coveragePage, coveragePageSize);
   const filtered = Boolean(search || filter !== "every" || sources.length);
   const clearFilters = () => { setSearch(""); setFilter("every"); setSources([]); setPage(0); };
-
-  // The first read only; a filter or page change keeps the page drawn and swaps the rows.
-  if (!loaded && !error) return <PageLoading />;
+  /** A figure's way into the rows behind it: the Leads tab, filtered to that evidence status. */
+  const showOnly = (next: EvidenceFilter) => { setTab("leads"); setFilter(next); setPage(0); };
+  const show = (next: EvidenceFilter, n: number | undefined) => (n ? <button type="button" onClick={() => showOnly(next)} className="font-semibold text-[var(--accent-ink)] hover:underline">Show</button> : undefined);
 
   return (
-    <div className="m-stagger flex flex-col gap-6 text-[var(--ink)]">
-      <PageHeader title="Consent locker" />
-
-      <StatStrip label="Consent evidence totals">
-        <StatTile label="Leads with full evidence" value={tiles ? tiles.full.toLocaleString() : "—"} valueTone={tiles && tiles.full > 0 ? "good" : undefined} footnote={tiles ? `${pct(tiles.full, tiles.leads)} of ${tiles.leads.toLocaleString()} leads` : " "} />
-        <StatTile label="Consent text missing" value={tiles ? tiles.textMissing.toLocaleString() : "—"} valueTone={tiles && tiles.textMissing > 0 ? "danger" : undefined} footnote="flagged; still dialable" />
-        <StatTile label="IP address missing" value={tiles ? tiles.noIp.toLocaleString() : "—"} valueTone={tiles && tiles.noIp > 0 ? "danger" : undefined} footnote="flagged; still dialable" />
-        <StatTile label="Oldest record kept" value={tiles?.oldestCapturedAt ? keptFor(tiles.oldestCapturedAt, now) : "—"} footnote={tiles?.oldestCapturedAt ? `captured ${when(tiles.oldestCapturedAt).replace(/, .*$/, "")}` : "no certificates yet"} />
-      </StatStrip>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <>
+      <ComplianceSlot slot="lead">
         <ViewTabs
           label="Consent locker views"
           idPrefix="consent-view"
@@ -156,11 +151,29 @@ export function ConsentLockerWorkspace() {
             ...(loaded?.coverageAvailable ? [{ key: "coverage" as const, label: "Coverage by vendor", count: loaded.coverage.length }] : []),
           ]}
         />
-        {/* Export follows the list's filters; with none set it is the whole locker. */}
-        <Button variant="outline" asChild><a href={`/api/app/consent?${query({ format: "csv" })}`}><Download aria-hidden="true" />Export</a></Button>
-      </div>
+      </ComplianceSlot>
+      {/* Export follows the list's filters; with none set it is the whole locker. The step's one primary. */}
+      <ComplianceSlot slot="corner">
+        <Button asChild><a href={`/api/app/consent?${query({ format: "csv" })}`}><Download aria-hidden="true" />Export</a></Button>
+      </ComplianceSlot>
 
-      <div role="tabpanel" aria-labelledby={`consent-view-${tab === "leads" || !loaded?.coverageAvailable ? "leads" : "coverage"}`} className="flex min-w-0 flex-col">
+      {/* The first read only; a filter or page change keeps the page drawn and swaps the rows. */}
+      {!loaded && !error ? <TableCard className={LEADS_FILL}><SectionLoading rows={6} columns={5} label="Loading consent evidence" /></TableCard> : <>
+
+      {tiles ? (tiles.textMissing > 0
+        ? <NextUp tone="warning" action={<Button variant="outline" onClick={() => showOnly("no_text")}>Show the {tiles.textMissing.toLocaleString()}</Button>}><strong>{tiles.textMissing.toLocaleString()}</strong> {tiles.textMissing === 1 ? "lead has" : "leads have"} no consent text. They stay dialable and flagged — ask the vendor for the certificate.</NextUp>
+        : tiles.noIp > 0
+          ? <NextUp tone="warning" action={<Button variant="outline" onClick={() => showOnly("no_ip")}>Show the {tiles.noIp.toLocaleString()}</Button>}><strong>{tiles.noIp.toLocaleString()}</strong> {tiles.noIp === 1 ? "lead's" : "leads'"} consent has no IP address. Still dialable and flagged.</NextUp>
+          : <NextUp tone="done">{tiles.leads ? <>Every lead with a certificate has its consent text and IP address.</> : "No leads yet: evidence arrives with each posted or imported lead."}</NextUp>) : null}
+
+      <StatStrip label="Consent evidence totals">
+        <StatTile label="Leads with full evidence" value={tiles ? tiles.full.toLocaleString() : "—"} valueTone={tiles && tiles.full > 0 ? "good" : undefined} footnote={tiles ? `${pct(tiles.full, tiles.leads)} of ${tiles.leads.toLocaleString()} leads` : " "} action={show("full", tiles?.full)} />
+        <StatTile label="Consent text missing" value={tiles ? tiles.textMissing.toLocaleString() : "—"} valueTone={tiles && tiles.textMissing > 0 ? "danger" : undefined} footnote="flagged; still dialable" action={show("no_text", tiles?.textMissing)} />
+        <StatTile label="IP address missing" value={tiles ? tiles.noIp.toLocaleString() : "—"} valueTone={tiles && tiles.noIp > 0 ? "danger" : undefined} footnote="flagged; still dialable" action={show("no_ip", tiles?.noIp)} />
+        <StatTile label="Oldest record kept" value={tiles?.oldestCapturedAt ? keptFor(tiles.oldestCapturedAt, now) : "—"} footnote={tiles?.oldestCapturedAt ? `captured ${when(tiles.oldestCapturedAt).replace(/, .*$/, "")}` : "no certificates yet"} />
+      </StatStrip>
+
+      <div role="tabpanel" aria-labelledby={`consent-view-${tab === "leads" || !loaded?.coverageAvailable ? "leads" : "coverage"}`} className="flex min-w-0 flex-1 flex-col">
       {tab === "leads" || !loaded?.coverageAvailable ? (
         <TableCard
           className={LEADS_FILL}
@@ -251,6 +264,7 @@ export function ConsentLockerWorkspace() {
         </TableCard>
       )}
       </div>
+      </>}
 
       <Dialog open={open !== null} onOpenChange={(next) => !next && setOpen(null)}>
         <DialogContent className="max-w-2xl">
@@ -275,6 +289,12 @@ export function ConsentLockerWorkspace() {
                   Open the provider&rsquo;s certificate <ExternalLink className="size-3.5" aria-hidden />
                 </a>
               )}
+              {/* Everything else held about this number is one step over, on Evidence (owners and producers). */}
+              {open.leadPhone && open.leadPhone.replace(/\D/g, "").length >= 10 && (
+                <Link className="inline-flex items-center gap-1 text-sm underline" href={`/app/evidence-report?phone=${open.leadPhone.replace(/\D/g, "").slice(-10)}`}>
+                  Evidence report for this number
+                </Link>
+              )}
               {open.hasStoredCopy ? (
                 <div className="space-y-2">
                   <p className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="size-4 text-[var(--success-ink)]" aria-hidden /> Our stored copy</p>
@@ -287,7 +307,7 @@ export function ConsentLockerWorkspace() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 

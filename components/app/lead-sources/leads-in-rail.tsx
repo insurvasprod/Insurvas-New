@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlignLeft, Download, GitBranch, PanelLeftClose, PanelLeftOpen, RotateCw, SquareCheck, Trash, type LucideIcon } from "lucide-react";
+import { AlignLeft, ChevronsLeft, ChevronsRight, Download, GitBranch, RotateCw, SquareCheck, Trash, type LucideIcon } from "lucide-react";
 
 import { RAIL_COOKIE, leadsInStepStatus, type LeadsInStep } from "@/lib/leadSources/steps";
 import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
@@ -118,7 +118,6 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
                 )}><Icon className="size-[18px]" strokeWidth={1.8} /></span>
                 <span className={cn("min-w-0 flex-1", collapsed && "lg:sr-only")}>
                   <span className="block text-sm font-semibold text-[var(--ink)]">{item.label}</span>
-                  <span className="block truncate text-xs text-[var(--ink)]">{status?.text ?? item.sub}</span>
                 </span>
                 {status?.needsYou && n ? (collapsed
                   // Collapsed, the count rides on the icon's corner as a dot with its number in the tooltip.
@@ -145,7 +144,7 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
         title={collapsed ? "Show labels" : "Collapse"}
         className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto")}
       >
-        {collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+        {collapsed ? <ChevronsRight className="size-4" aria-hidden="true" /> : <ChevronsLeft className="size-4" aria-hidden="true" />}
       </button>
     </nav>
   );

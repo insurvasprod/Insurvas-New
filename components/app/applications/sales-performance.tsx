@@ -13,6 +13,8 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/app/book-of-business-views";
+import { InReportsSlot } from "@/components/app/reports/reports-slot";
+import { keepSharedPeriod } from "@/lib/reports/views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { REQUIREMENT_KIND_LABEL } from "@/lib/applications/constants";
 import { dayMonth } from "@/lib/applications/listRules";
@@ -74,10 +76,15 @@ function windowFor(range: RangeKey, now: number, timeZone: string, custom: { fro
 type Filters = { carrierId: string; productCode: string; source: string; producerId: string };
 const NO_FILTERS: Filters = { carrierId: "", productCode: "", source: "", producerId: "" };
 
-export function SalesPerformance({ report: initialReport, sample = false, timeZone = "UTC", initialTab = "declines" }: { report: SalesReport; sample?: boolean; timeZone?: string; initialTab?: Tab }) {
+/**
+ * `framed`: inside the Reports page (components/app/reports/reports-page.tsx), which draws the title;
+ * the tabs go to its top row. `periodFromAddress`: the report was read for the Reports views' shared
+ * period (`?from&to`), so it opens on those dates; any change of window is kept in the address.
+ */
+export function SalesPerformance({ report: initialReport, sample = false, timeZone = "UTC", initialTab = "declines", framed = false, periodFromAddress = false }: { report: SalesReport; sample?: boolean; timeZone?: string; initialTab?: Tab; framed?: boolean; periodFromAddress?: boolean }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [report, setReport] = useState(initialReport);
-  const [range, setRange] = useState<RangeKey>("90");
+  const [range, setRange] = useState<RangeKey>(periodFromAddress ? "custom" : "90");
   const [custom, setCustom] = useState({ from: initialReport.from, to: initialReport.to });
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [loading, setLoading] = useState(false);
@@ -120,7 +127,9 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
     if (next.range) setRange(next.range);
     if (next.custom) setCustom(next.custom);
     if (next.filters) setFilters(next.filters);
-    void load(queryFor(r, c, fl));
+    const q = queryFor(r, c, fl);
+    if (framed && (next.range || next.custom)) keepSharedPeriod(q);
+    void load(q);
   };
   const refresh = () => { if (sample) sampleRefresh.refresh(); void load(queryFor(range, custom, filters)); };
   const panelCount = Object.values(filters).filter(Boolean).length;
@@ -328,16 +337,18 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Sales performance"
-        description="Where applications stop, by carrier and reason."
-      />
+      {!framed && (
+        <PageHeader
+          title="Sales performance"
+          description="Where applications stop, by carrier and reason."
+        />
+      )}
 
-      {/* The views on the left, the page action on the right: one row under the title. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* The views under the title, or in the Reports frame's top row. ("Open the funnel" is gone,
+          2026-10-30: the Funnel tab opens it.) */}
+      <InReportsSlot framed={framed} slot="lead">
         <ViewTabs label="Sales performance views" tabs={TABS.map((item) => ({ key: item.key, label: item.label }))} active={tab} onChange={setTab} controls="sales-panel" />
-        <Button type="button" variant="outline" onClick={() => setTab("funnel")} disabled={tab === "funnel"} title={tab === "funnel" ? "The funnel is open" : undefined}>Open the funnel</Button>
-      </div>
+      </InReportsSlot>
       {sample && <SampleDataNotice />}
 
       <StatStrip label="Sales totals">
