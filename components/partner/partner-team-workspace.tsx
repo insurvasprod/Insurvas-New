@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ShieldCheck, UserPlus } from "lucide-react";
+import { MailCheck, ShieldCheck, UserMinus, UserPlus, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { PartnerInviteResultPanel, type PartnerInviteResult } from "@/components/app/partner-invite-result";
@@ -14,7 +14,7 @@ import { SelectMenu } from "@/components/ui/select-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
@@ -220,11 +220,28 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
       <PageHeader title="Team access" description="See who has access to your partner workspace." visible infoDescription actions={<Button type="button" onClick={() => setInviteOpen(true)}><UserPlus aria-hidden="true" />Invite teammate</Button>} />
       {error &&<p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team access could not be refreshed: {error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
 
-      <StatStrip label="Team totals">
-        <StatTile label="Active members" value={active} valueTone="good" footnote={seatLimit ? `${agencySeatsUsed ?? seatsUsed} of ${seatLimit} agency seats used` : "no seat limit"} />
-        <StatTile label="Pending invitations" value={pending} valueTone={pending ? "warning" : undefined} footnote={soonestExpiry ? expiresInLabel(soonestExpiry, now) : "none waiting"} />
-        <StatTile label="Deactivated" value={deactivated} valueTone={deactivated ? "danger" : undefined} footnote="history retained" />
-      </StatStrip>
+      <StatRow label="Team totals">
+        <StatCard
+          icon={Users}
+          label="Active members"
+          value={active}
+          meter={seatLimit ? { value: agencySeatsUsed ?? seatsUsed, max: seatLimit, tone: "good", label: `${agencySeatsUsed ?? seatsUsed} of ${seatLimit} agency seats used` } : undefined}
+          fact={{ label: seatLimit ? `${agencySeatsUsed ?? seatsUsed} of ${seatLimit} agency seats used` : "No seat limit" }}
+        />
+        <StatCard
+          icon={MailCheck}
+          label="Pending invitations"
+          value={pending}
+          tone={pending ? "warn" : "default"}
+          fact={{ label: soonestExpiry ? expiresInLabel(soonestExpiry, now) : "None waiting" }}
+        />
+        <StatCard
+          icon={UserMinus}
+          label="Deactivated"
+          value={deactivated}
+          fact={{ label: "History retained" }}
+        />
+      </StatRow>
       {invite && <PartnerInviteResultPanel result={invite} />}
 
       <TableCard

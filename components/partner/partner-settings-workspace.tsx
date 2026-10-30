@@ -7,12 +7,14 @@ import { PartnerNotificationPreferences } from "@/components/partner/partner-not
 import { NotificationSoundSettings } from "@/components/app/notification-sound-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { partnerRoleLabel, type PartnerRole } from "@/lib/partnerAuth/roles";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
@@ -24,9 +26,13 @@ type SettingsPayload = {
   products: SettingsProduct[];
 };
 
+/**
+ * "24 Sep 2026, 2:05 PM" in the reader's own zone. Through lib/format/dates, not Intl directly:
+ * the month names there are spelled out so a server and a browser with different ICU data agree.
+ * It only ever runs after the settings read lands, which is in the browser.
+ */
 function formatDate(value: string | null) {
-  if (!value) return "Not available";
-  try { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); } catch { return value; }
+  return value ? dateTime(value, viewerTimeZone(), { year: true, clock: "12h" }) : "Not available";
 }
 
 const noSubscription = () => () => {};
@@ -113,7 +119,7 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <div className="space-y-4">
         <Card>
-          <CardHeader><CardTitle className="flex items-center justify-between gap-3">Partner account<StatusChip tone={status === "active" ? "good" : "neutral"}>{status[0].toUpperCase() + status.slice(1)}</StatusChip></CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center justify-between gap-3"><span className="flex items-center gap-1.5">Partner account<InfoTip label="About the partner account">Your organisation as your agency has it on file. Ask them to change anything here.</InfoTip></span><StatusChip tone={status === "active" ? "good" : "neutral"}>{status[0].toUpperCase() + status.slice(1)}</StatusChip></CardTitle></CardHeader>
           <CardContent>
             <dl className="text-sm">
               <div className={detailRow}><dt className="text-muted-foreground">Partner</dt><dd className="truncate font-medium">{name}</dd></div>
@@ -125,7 +131,7 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Security &amp; sessions</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-1.5">Security &amp; sessions<InfoTip label="About security and sessions">Signing out other sessions ends every signed-in browser except this one. Use it if you have signed in somewhere you no longer control.</InfoTip></CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <dl className="text-sm">
               <div className={detailRow}><dt className="text-muted-foreground">This browser</dt><dd>{browserLabel}</dd></div>
@@ -136,7 +142,7 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
         </Card>
       </div>
       <Card>
-        <CardHeader><CardTitle>Notifications</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-1.5">Notifications<InfoTip label="About notifications">What reaches you, and when. These settings are yours alone — they do not change what your teammates receive.</InfoTip></CardTitle></CardHeader>
         <CardContent className="space-y-5">
           <PartnerNotificationPreferences timezone={timezone} canEditTimezone={role === "partner_admin"} onTimezoneSaved={setSavedTimezone} />
           <NotificationSoundSettings />

@@ -225,10 +225,10 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 ### Task C1: Team review to the kit
 
 **Acceptance criteria:**
-- [ ] Six `StatTile`s become v3 `StatCard`s; no `StatStrip` left (`mixed-stat` stays at 0)
-- [ ] The hand-rolled `<section className="rounded-lg border…">` becomes `Card`
-- [ ] The trend uses B1's chart and B1's helper — one implementation with Overview
-- [ ] The date range and Export Report keep working unchanged
+- [x] Six `StatTile`s become v3 `StatCard`s; no `StatStrip` left (`mixed-stat` stays at 0)
+- [x] The hand-rolled `<section className="rounded-lg border…">` becomes `Card`
+- [x] The trend uses B1's chart and B1's helper — one implementation with Overview
+- [x] The date range and Export Report keep working unchanged
 
 **Verification:** range change redraws; export downloads; 375 has no sideways scroll
 **Dependencies:** B1 · **Files:** `components/partner/partner-team-review-workspace.tsx` · **Scope:** Medium
@@ -238,9 +238,9 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 ### Task C2: Team access to the kit
 
 **Acceptance criteria:**
-- [ ] `StatStrip` → `StatCard`s; sentence case throughout
-- [ ] The members table keeps §6's 40px head and 44px rows; actions right-aligned
-- [ ] The invite flow and the fixed-role control (round 2) behave as before
+- [x] `StatStrip` → `StatCard`s; sentence case throughout
+- [x] The members table keeps §6's 40px head and 44px rows; actions right-aligned
+- [x] The invite flow and the fixed-role control (round 2) behave as before
 
 **Verification:** invite opens and validates; 375 readable
 **Dependencies:** C1 · **Files:** `components/partner/partner-team-workspace.tsx` · **Scope:** Small
@@ -250,9 +250,9 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 ### Task C3: Statements and Settings consistency
 
 **Acceptance criteria:**
-- [ ] Statements: figures as v3 cards, dates via `lib/format/dates`, §6a toolbar on the list
-- [ ] Settings: §15's frame — section titles with their (i), help behind the tip
-- [ ] The dispute flow unchanged
+- [x] Statements: figures as v3 cards, dates via `lib/format/dates`, §6a toolbar on the list
+- [x] Settings: §15's frame — section titles with their (i), help behind the tip
+- [x] The dispute flow unchanged
 
 **Verification:** a statement opens; a dispute can still be raised; both at 375
 **Dependencies:** C2 · **Files:** `components/partner/partner-payouts.tsx`,
@@ -261,8 +261,8 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 ---
 
 ### ✅ Checkpoint: Organization
-- [ ] Every Organization page uses the same stat pattern as Pipeline and Overview
-- [ ] No `StatStrip` left anywhere in `components/partner/**`
+- [x] Every Organization page uses the same stat pattern as Pipeline and Overview
+- [x] No `StatStrip` left anywhere in `components/partner/**`
 
 ---
 

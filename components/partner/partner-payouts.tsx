@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { CheckCircle2, Clock3, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { Sheet } from "@/components/ui/sheet";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import type { PartnerStatement } from "@/lib/accounting/payoutsCore";
+import { dayMonth, dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 
@@ -19,6 +24,12 @@ import { notify } from "@/lib/notify";
  */
 type RunRow = { id: string; periodStart: string; periodEnd: string; status: "published" | "paid"; netCents: number; paidOn: string | null };
 const money = (c: number) => formatCentsAsCurrency(c);
+
+/**
+ * "1 Sep – 30 Sep 2026". The period came through as the two raw day strings the database stores;
+ * a partner's statement is a month, and should read like one (lib/format/dates, §14).
+ */
+const period = (start: string, end: string) => `${dayMonth(start)} – ${dayMonthYear(end)}`;
 
 function Statement({ id, onClose }: { id: string; onClose: () => void }) {
   const [s, setS] = useState<PartnerStatement | null>(null);
@@ -55,8 +66,8 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
     }
   };
   return (
-    <Sheet title={s ? `Statement ${s.periodStart} to ${s.periodEnd}` : "Statement"} subtitle={s ? `Net payable ${money(s.totals.netCents)}` : undefined}
-      status={s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid ${s.paidOn ?? ""}` : "Published"}</StatusChip> : undefined} onClose={onClose}
+    <Sheet title={s ? `Statement · ${period(s.periodStart, s.periodEnd)}` : "Statement"} subtitle={s ? `Net payable ${money(s.totals.netCents)}` : undefined}
+      status={s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid ${s.paidOn ? dayMonthYear(s.paidOn) : ""}`.trim() : "Published"}</StatusChip> : undefined} onClose={onClose}
       footer={s && !dispute ? <Button variant="outline" onClick={() => setDispute({ itemId: null, reason: "", amount: "" })}>Dispute this statement</Button> : undefined}>
       {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
       {!s ? null : (
@@ -99,7 +110,7 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
             <table className="w-full text-left text-sm">
               <tbody>
                 {s.items.map((i) => (
-                  <tr key={i.id} className="border-t border-border"><td className="py-1 whitespace-nowrap">{i.occurredOn}</td><td>{i.label}{i.reference ? <span className="text-xs text-muted-foreground"> · ref {i.reference}</span> : null}{i.disputed ? <span className="text-xs text-[var(--warning-ink)]"> · disputed</span> : null}</td><td className="text-right tabular-nums">{money(i.amountCents)}</td><td className="w-[84px] text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</td></tr>
+                  <tr key={i.id} className="border-t border-border"><td className="py-1 whitespace-nowrap">{dayMonth(i.occurredOn)}</td><td>{i.label}{i.reference ? <span className="text-xs text-muted-foreground"> · ref {i.reference}</span> : null}{i.disputed ? <span className="text-xs text-[var(--warning-ink)]"> · disputed</span> : null}</td><td className="text-right tabular-nums">{money(i.amountCents)}</td><td className="w-[84px] text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -110,34 +121,85 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
   );
 }
 
-export function PartnerPayouts() {
-  const [runs, setRuns] = useState<RunRow[] | null>(null);
+/** Sample statements for `/design/organization`; a partner's own page never passes them. */
+export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
+  const [runs, setRuns] = useState<RunRow[] | null>(sample ?? null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => {
-    let live = true;
-    fetch("/api/partner/payouts").then(async (res) => {
-      const body = await res.json().catch(() => null);
-      if (!live) return;
-      if (!res.ok) setError(body?.error ?? "Statements could not be loaded");
-      else setRuns(body.runs);
-    });
-    return () => { live = false; };
+  const [loading, setLoading] = useState(!sample);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/partner/payouts", { cache: "no-store" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error ?? "Statements could not be loaded");
+      setRuns(body.runs as RunRow[]);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Statements could not be loaded");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Deferred by a tick: the read sets "loading" synchronously, and an effect body should not.
+  useEffect(() => { if (sample) return; const kickoff = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(kickoff); }, [load, sample]);
+
+  const total = (rows: RunRow[]) => rows.reduce((sum, run) => sum + run.netCents, 0);
+  const paid = runs?.filter((run) => run.status === "paid") ?? [];
+  const awaiting = runs?.filter((run) => run.status !== "paid") ?? [];
+  const latest = runs?.[0] ?? null;
+  const count = (rows: RunRow[]) => `${rows.length} statement${rows.length === 1 ? "" : "s"}`;
+
   return (
     <>
-      <TableCard>
+      <StatRow label="Statement totals" className="mb-4">
+        <StatCard
+          icon={WalletCards}
+          label="Latest statement"
+          value={runs === null ? "—" : latest ? money(latest.netCents) : "—"}
+          fact={{ label: latest ? period(latest.periodStart, latest.periodEnd) : runs === null ? "Reading" : "None published yet" }}
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Paid to date"
+          value={runs === null ? "—" : money(total(paid))}
+          fact={{ label: runs === null ? "Reading" : count(paid) }}
+        />
+        <StatCard
+          icon={Clock3}
+          label="Awaiting payment"
+          value={runs === null ? "—" : money(total(awaiting))}
+          tone={awaiting.length ? "warn" : "default"}
+          fact={{ label: runs === null ? "Reading" : count(awaiting) }}
+        />
+      </StatRow>
+
+      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />} />}>
         {error ? <EmptyState title="Statements are not available" hint={error} /> : runs === null ? <SectionLoading rows={4} columns={4} /> : runs.length === 0 ? (
           <EmptyState title="No statements yet" hint="When the agency publishes a payout statement for you, it appears here." />
         ) : (
-          <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
-            <thead><tr><th>Period</th><th className="w-[160px] text-right">Net payable</th><th className="w-[160px]">Status</th><th className="w-[90px] text-right" /></tr></thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Period</TableHead>
+                <TableHead className="w-[160px] text-right">Net payable</TableHead>
+                <TableHead className="w-[170px]">Status</TableHead>
+                <TableHead className="w-[90px] text-right"><span className="sr-only">Open</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {runs.map((r) => (
-                <tr key={r.id}><td>{r.periodStart} to {r.periodEnd}</td><td className="text-right tabular-nums">{money(r.netCents)}</td><td><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? `Paid ${r.paidOn ?? ""}` : "Published"}</StatusChip></td><td className="text-right"><Button size="sm" variant="outline" onClick={() => setOpen(r.id)}>Open</Button></td></tr>
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium text-foreground">{period(r.periodStart, r.periodEnd)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(r.netCents)}</TableCell>
+                  <TableCell><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? `Paid ${r.paidOn ? dayMonth(r.paidOn) : ""}`.trim() : "Published"}</StatusChip></TableCell>
+                  <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => setOpen(r.id)}>Open</Button></TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </TableCard>
       {open ? <Statement key={open} id={open} onClose={() => setOpen(null)} /> : null}

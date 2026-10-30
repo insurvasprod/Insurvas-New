@@ -368,3 +368,50 @@ export function sampleOverview(options: { state: SampleOverviewState; role?: Sam
           })),
   };
 }
+
+/* ── The Organization boards (/design/organization) ──────────────────────────────────────────── */
+
+type SampleMember = { user_id: string; name: string; email: string; role: SampleRole; status: "active" | "revoked"; accepted_at: string | null; last_login_at: string | null };
+
+export type PartnerOrganizationSampleData = {
+  review: {
+    rows: PartnerLeadRow[];
+    /** The stretch before the window, so the change pills have something to compare against. */
+    previousRows: PartnerLeadRow[];
+    users: SampleMember[];
+    pulse: { averageResponseMinutes: number | null; responses: number; pendingFollowUps: number } | null;
+  };
+  statements: Array<{ id: string; periodStart: string; periodEnd: string; status: "published" | "paid"; netCents: number; paidOn: string | null }>;
+};
+
+/**
+ * Team review and Statements on sample data. The development database has one lead and no
+ * published statement, so neither board can be seen with figures in it, a trend worth drawing, or
+ * a team to rank. Development only.
+ */
+export function sampleOrganization(options: { state: SampleOverviewState; role?: SampleRole; now?: number }): PartnerOrganizationSampleData {
+  const { state, role = "partner_admin", now = sampleNow() } = options;
+  const current = sampleOverview({ state, role, now });
+  // Two thirds of the window's volume, so "submitted" reads as a rise rather than a flat line.
+  const rows = current.windowRows ?? [];
+  const previousRows = rows.filter((unused, index) => index % 3 !== 0);
+
+  const day = (back: number) => new Date(now - back * 86_400_000).toISOString();
+  const users: SampleMember[] = [
+    { user_id: ME.id, name: ME.name, email: "rion@example-partner.test", role: "partner_admin", status: "active", accepted_at: day(300), last_login_at: day(0) },
+    { user_id: "u-dana", name: "Dana Whitfield", email: "dana@example-partner.test", role: "partner_user", status: "active", accepted_at: day(120), last_login_at: day(1) },
+    { user_id: "u-sam", name: "Sam Okafor", email: "sam@example-partner.test", role: "partner_user", status: "active", accepted_at: day(40), last_login_at: day(9) },
+    { user_id: "u-pending", name: "Alex Mora", email: "alex@example-partner.test", role: "partner_user", status: "active", accepted_at: null, last_login_at: null },
+    { user_id: "u-gone", name: "Jo Fenwick", email: "jo@example-partner.test", role: "partner_user", status: "revoked", accepted_at: day(400), last_login_at: day(95) },
+  ];
+
+  return {
+    review: {
+      rows,
+      previousRows,
+      users: role === "partner_user" ? users.slice(0, 1) : users,
+      pulse: state === "empty" ? { averageResponseMinutes: null, responses: 0, pendingFollowUps: 0 } : state === "error" ? null : { averageResponseMinutes: 18, responses: 64, pendingFollowUps: 2 },
+    },
+    statements: (current.statements ?? []).map((run, index) => ({ id: `run-${index}`, ...run })),
+  };
+}

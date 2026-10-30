@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, Download } from "lucide-react";
+import { ArrowRight, Download, FileCheck2, Hourglass, Percent, Send, Timer, Users } from "lucide-react";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,15 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { BarSeries } from "@/components/ui/chart";
+import { HomePanel } from "@/components/app/home/home-panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { activityLabel, dayMonth } from "@/lib/format/ago";
 import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { HELD_STATUSES, SALE_DISPOSITIONS } from "@/lib/partnerLeads/lanes";
+import { localDay, parseDay, shiftDay, spanDays, trendSeries } from "@/lib/partnerLeads/trend";
 import type { PartnerLeadRow } from "@/lib/partnerLeads/types";
 import { durationLabel } from "@/lib/partnerTeamReview/pulse";
 import { Sheet } from "@/components/ui/sheet";
@@ -42,25 +45,8 @@ function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: Select
 
 /** Below this many leads a member's conversion rate is noise, and showing it would rank people on it. */
 const MIN_CONVERSION_SAMPLE = 10;
-const DAY_MS = 86_400_000;
 const PAGE_SIZE = 10;
 
-function localDay(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-function parseDay(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-/** Whole days in an inclusive range. */
-function spanDays(from: string, to: string) {
-  return Math.round((parseDay(to).getTime() - parseDay(from).getTime()) / DAY_MS) + 1;
-}
-function shiftDay(value: string, days: number) {
-  const date = parseDay(value);
-  date.setDate(date.getDate() + days);
-  return localDay(date);
-}
 function isSold(row: PartnerLeadRow) {
   return row.status === "completed" && row.disposition !== null && (SALE_DISPOSITIONS as readonly string[]).includes(row.disposition);
 }
@@ -71,6 +57,12 @@ function figures(rows: PartnerLeadRow[]) {
   const applications = rows.filter(isSold).length;
   return { submitted: rows.length, progress: rows.filter(isOpen).length, applications, conversion: rows.length ? (applications / rows.length) * 100 : null };
 }
+/** The change pill's number. Nothing to compare against is no pill, not a rise from nothing. */
+function delta(current: number, previous: number | null | undefined) {
+  if (previous === null || previous === undefined || previous === 0) return undefined;
+  return { value: Math.round(((current - previous) / previous) * 100), goodWhen: "up" as const };
+}
+
 /** "+14% vs previous 30 days"; a previous period with nothing in it has no percentage to compare to. */
 function changeLabel(current: number, previous: number, days: number) {
   if (previous === 0) return current === 0 ? `none in the previous ${days} days either` : `none in the previous ${days} days`;
@@ -102,21 +94,28 @@ function rangeFromUrl(): { from: string; to: string } | null {
   return DAY.test(from) && DAY.test(to) && from <= to && spanDays(from, to) <= 366 ? { from, to } : null;
 }
 
-export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: string }) {
+/**
+ * What `/design/organization` hands the board instead of four endpoints. The partner's own page
+ * never passes it; with it set the board reads nothing (lib/partnerLeads/fixtures.ts).
+ */
+export type PartnerTeamReviewSample = { rows: PartnerLeadRow[]; previousRows: PartnerLeadRow[]; users: PartnerUser[]; pulse: Pulse | null };
+
+export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerName: string; sample?: PartnerTeamReviewSample }) {
+  const sampled = Boolean(sample);
   // The board's default: the last 30 days, ending today, in the viewer's own calendar.
   const [asked] = useState(rangeFromUrl);
-  const [initialTo] = useState(() => asked?.to ?? localDay(new Date()));
+  const [initialTo] = useState(() => asked?.to ?? localDay(new Date())!);
   const initialFrom = asked?.from ?? shiftDay(initialTo, -29);
   const [draftFrom, setDraftFrom] = useState(initialFrom);
   const [draftTo, setDraftTo] = useState(initialTo);
   const [range, setRange] = useState({ from: initialFrom, to: initialTo });
-  const [users, setUsers] = useState<PartnerUser[]>([]);
-  const [rows, setRows] = useState<PartnerLeadRow[]>([]);
-  const [previous, setPrevious] = useState<Figures | null>(null);
-  const [pulse, setPulse] = useState<Pulse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<PartnerUser[]>(sample?.users ?? []);
+  const [rows, setRows] = useState<PartnerLeadRow[]>(sample?.rows ?? []);
+  const [previous, setPrevious] = useState<Figures | null>(sample ? figures(sample.previousRows) : null);
+  const [pulse, setPulse] = useState<Pulse | null>(sample?.pulse ?? null);
+  const [loading, setLoading] = useState(!sample);
   // The first read draws the page skeleton; a new range keeps the page and its date controls.
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(sampled);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -126,6 +125,7 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
   const days = spanDays(range.from, range.to);
 
   useEffect(() => {
+    if (sampled) return;
     let cancelled = false;
     const leads = (from: string, to: string) => fetch(`/api/partner/leads/pipeline?${new URLSearchParams({ limit: "5000", date_from: from, date_to: to })}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
     const previousTo = shiftDay(range.from, -1);
@@ -147,7 +147,7 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
       setError(null);
     }).catch(() => { if (!cancelled) setError("Could not load team review. Check your connection and try again."); }).finally(() => { if (!cancelled) { setLoading(false); setLoaded(true); } });
     return () => { cancelled = true; };
-  }, [range, days, retryToken]);
+  }, [range, days, retryToken, sampled]);
 
   const metrics = useMemo(() => figures(rows), [rows]);
   const memberStats = useMemo(() => {
@@ -163,25 +163,12 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
     }
     return users.map((user) => ({ user, stats: map.get(user.user_id) ?? { submitted: 0, progress: 0, applications: 0, lastActivity: "" } }));
   }, [rows, users]);
-  // One bar a day; past two months a day is too thin to read, so a bar is a week.
-  const trend = useMemo(() => {
-    const step = days > 62 ? 7 : 1;
-    const buckets: Array<{ key: string; label: string; count: number }> = [];
-    for (let offset = 0; offset < days; offset += step) {
-      const start = shiftDay(range.from, offset);
-      const end = shiftDay(range.from, Math.min(days - 1, offset + step - 1));
-      buckets.push({ key: start, label: step === 1 ? dayMonth(parseDay(start), new Date(now)) : `${dayMonth(parseDay(start), new Date(now))} – ${dayMonth(parseDay(end), new Date(now))}`, count: 0 });
-    }
-    for (const row of rows) {
-      const submitted = new Date(row.submittedAt);
-      if (Number.isNaN(submitted.getTime())) continue;
-      const dayIndex = spanDays(range.from, localDay(submitted)) - 1;
-      const bucket = dayIndex >= 0 ? buckets[Math.floor(dayIndex / step)] : undefined;
-      if (bucket) bucket.count += 1;
-    }
-    const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
-    return { step, buckets: buckets.map((bucket) => ({ ...bucket, height: bucket.count ? Math.max(4, Math.round((bucket.count / max) * 100)) : 0 })) };
-  }, [rows, range.from, days, now]);
+  // One series, from the helper the Overview draws too (lib/partnerLeads/trend.ts): the two pages
+  // must not disagree about a week a partner can see on both.
+  const trend = useMemo(
+    () => trendSeries(rows.map((row) => row.submittedAt), { from: range.from, to: range.to, now }),
+    [rows, range.from, range.to, now],
+  );
 
   const selected = memberStats.find((item) => item.user.user_id === selectedUserId) ?? null;
   const selectedLeads = useMemo(() => !selected ? [] : rows.filter((row) => { const submitterId = row.submittedBy.id ?? row.submittedBy.name; return submitterId === selected.user.user_id || row.submittedBy.name === selected.user.name; }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [rows, selected]);
@@ -198,7 +185,6 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
   }
 
   const conversionChange = metrics.conversion !== null && previous?.conversion !== null && previous?.conversion !== undefined ? metrics.conversion - previous.conversion : null;
-  const tone = (current: number, before: number | null | undefined) => (!loading && before !== null && before !== undefined && current > before ? "good" as const : undefined);
   const reload = () => { setError(null); setLoading(true); setRetryToken((value) => value + 1); };
   const visible = paginate(memberStats, page, PAGE_SIZE);
 
@@ -220,43 +206,63 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
     />
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team review could not be loaded: {error}<Button type="button" variant="outline" onClick={reload}>Try again</Button></p>}
-    <StatStrip label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`}>
-      <StatTile label="Leads submitted" value={loading ? "—" : metrics.submitted} valueTone={tone(metrics.submitted, previous?.submitted)} footnote={loading || !previous ? undefined : changeLabel(metrics.submitted, previous.submitted, days)} reserveFootnote />
-      <StatTile label="In progress" value={loading ? "—" : metrics.progress} footnote={loading || !previous ? undefined : changeLabel(metrics.progress, previous.progress, days)} reserveFootnote />
-      <StatTile label="Applications" value={loading ? "—" : metrics.applications} valueTone={tone(metrics.applications, previous?.applications)} footnote={loading || !previous ? undefined : changeLabel(metrics.applications, previous.applications, days)} reserveFootnote />
-      <StatTile
+    {/* Six figures read as two rows of three, not five and a stray. */}
+    <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <StatCard
+        icon={Send}
+        label="Leads submitted"
+        value={loading ? "—" : metrics.submitted}
+        delta={delta(metrics.submitted, previous?.submitted)}
+        fact={loading || !previous ? undefined : { label: changeLabel(metrics.submitted, previous.submitted, days) }}
+      />
+      <StatCard
+        icon={Hourglass}
+        label="In progress"
+        value={loading ? "—" : metrics.progress}
+        fact={loading || !previous ? undefined : { label: changeLabel(metrics.progress, previous.progress, days) }}
+      />
+      <StatCard
+        icon={FileCheck2}
+        label="Applications"
+        value={loading ? "—" : metrics.applications}
+        delta={delta(metrics.applications, previous?.applications)}
+        fact={loading || !previous ? undefined : { label: changeLabel(metrics.applications, previous.applications, days) }}
+      />
+      <StatCard
+        icon={Percent}
         label="Conversion rate"
         value={loading || metrics.conversion === null ? "—" : metrics.conversion.toFixed(1)}
         unit={loading || metrics.conversion === null ? undefined : "%"}
-        valueTone={conversionChange !== null && conversionChange > 0 && !loading ? "good" : undefined}
-        footnote={loading ? undefined : `${metrics.applications} of ${metrics.submitted}${conversionChange === null ? "" : ` · ${conversionChange >= 0 ? "+" : "−"}${Math.abs(conversionChange).toFixed(1)} pts vs previous ${days} days`}`}
-        reserveFootnote
+        // Points, not a percentage of a percentage: a rate that goes 20% → 25% rose five points.
+        delta={conversionChange === null || loading ? undefined : { value: Math.round(conversionChange * 10) / 10, unit: " pts", goodWhen: "up" }}
+        fact={loading ? undefined : { label: `${metrics.applications} of ${metrics.submitted}`, value: conversionChange === null ? undefined : `vs previous ${days} days` }}
       />
-      <StatTile
+      <StatCard
+        icon={Timer}
         label="Avg response time"
         labelTitle={pulse?.responses ? `Over ${pulse.responses} ${pulse.responses === 1 ? "reply" : "replies"} to your agent` : undefined}
         value={loading ? "—" : pulse?.averageResponseMinutes != null ? durationLabel(pulse.averageResponseMinutes) : pulse ? "No replies yet" : "Unavailable"}
-        footnote={loading ? undefined : pulse ? `${pulse.pendingFollowUps} pending follow-up${pulse.pendingFollowUps === 1 ? "" : "s"}` : "pending follow-ups unavailable"}
-        reserveFootnote
+        fact={loading ? undefined : { label: pulse ? `${pulse.pendingFollowUps} pending follow-up${pulse.pendingFollowUps === 1 ? "" : "s"}` : "pending follow-ups unavailable" }}
       />
-      <StatTile
+      <StatCard
+        icon={Users}
         label="Active members"
         value={loading ? "—" : activeInPeriod}
         meter={loading ? undefined : { value: activeInPeriod, max: members.length || 1, tone: "good", label: `${activeInPeriod} of ${members.length} members active in this period` }}
-        footnote={loading ? undefined : `of ${members.length} · ${invitesOutstanding} invite${invitesOutstanding === 1 ? "" : "s"} outstanding`}
-        reserveFootnote
+        fact={loading ? undefined : { label: `of ${members.length} · ${invitesOutstanding} invite${invitesOutstanding === 1 ? "" : "s"} outstanding` }}
       />
-    </StatStrip>
-    <section className="rounded-lg border border-border bg-card p-4" aria-labelledby="partner-review-trend-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="partner-review-trend-heading" className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Submission trend</h2>
-        <p className="text-sm text-muted-foreground">Leads per {trend.step === 1 ? "day" : "week"} · {rangeLabel(range.from, range.to, new Date(now))}</p>
-      </div>
-      {loading ? <div className="mt-4"><SectionLoading rows={4} columns={1} label="Loading trend" /></div>
-        : <div className="mt-4 flex h-[150px] items-end gap-1.5 border-b border-border" role="img" aria-label={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}>
-          {trend.buckets.map((bucket) => <span key={bucket.key} className="min-w-[2px] flex-1 rounded-t-[2px] bg-[var(--primary)]" style={{ height: `${bucket.height}%` }} title={`${bucket.label}: ${bucket.count} ${bucket.count === 1 ? "lead" : "leads"}`} />)}
-        </div>}
-    </section>
+    </StatRow>
+    <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"} · ${rangeLabel(range.from, range.to, new Date(now))}`} className="min-h-[14rem]">
+      {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
+        : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
+        : <BarSeries
+            bars={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
+            summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
+            unit="leads"
+            className="flex-1"
+            minHeight={150}
+          />}
+    </HomePanel>
     <TableCard
       title="Partner performance"
       action={<RefreshButton onClick={reload} refreshing={loading} />}

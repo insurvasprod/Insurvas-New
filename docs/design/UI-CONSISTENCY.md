@@ -109,8 +109,10 @@ Helper text belongs in a field's `hint`, a tooltip, or nowhere.
 ### 4a. Stat cards (v3)
 **Status:** Live for new and reworked pages. Pages are moved one at a time, only when someone works
 on them; untouched pages keep `StatStrip` (decision 2026-10-27). The `mixed-stat` ratchet keeps a
-page from using both. Moved so far: the partner home, and the partner Pipeline
-(2026-10-30, preview on `/design/pipeline`).
+page from using both. Moved so far: the partner home, the partner Pipeline
+(2026-10-30, preview on `/design/pipeline`), and on the same day the rest of the partner portal —
+Team review, Team access and Statements (previews on `/design/overview` and `/design/organization`).
+**No `StatStrip` is left in `components/partner/**`.**
 
 The figures under a page header are a row of glossy stat cards: `StatRow` and `StatCard` from
 `components/ui/stat-card.tsx`. Reference: the "Footer fact, glossy" row in the mockup, and every
@@ -207,6 +209,14 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
   13/500 (`text-label`), body 14, meta 12.
 - **Chips.** A state is `StatusChip`; a choice someone presses or removes is `ToggleChip`
   (`components/ui/toggle-chip.tsx`). No local `Chip`/`Pill` (`local-chip`).
+- **Charts.** `BarSeries`, `ShareBar` and `Sparkline` from `components/ui/chart.tsx`, drawn in the
+  ramp that file sets (`CHART_TONES`). Tokens only, both themes, and every shape carries its
+  figures in text behind the picture. There is no charting dependency: the kit is one file with a
+  narrow surface so one could be swapped in later without touching a page. A chart's own series
+  belongs in a tested pure helper, as `lib/partnerLeads/trend.ts` is for submissions over time —
+  two pages drawing the same figures must not each work them out.
+- **Chat.** A message bar is `ChatComposer` (`components/ui/chat-composer.tsx`): one bar, Enter
+  sends, and typing anywhere on the page starts a message in it.
 - **Pop-ups.** By task (§11): `Dialog` at a size, `ConfirmDialog`/`confirmAction()` for a loss,
   `Sheet` for a record, `Popover` for a picker, `DropdownMenu` for actions. Never
   `window.confirm` (`window-confirm`) or a page's own click-outside listener (`hand-popover`).

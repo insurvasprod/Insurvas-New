@@ -53,6 +53,27 @@ Check a change on `/design/messages` (development only): busy, quiet and empty, 
 1536×826 and 375 wide. The development database has one channel and no reply, so two sides, a run,
 a day separator and an attachment exist only there.
 
+## Organization and Overview (2026-10-30)
+
+Every figure in the portal is now a v3 `StatCard` (§4a) — Team review's six, Team access's three,
+Statements' three — and there is no `StatStrip` left here. Every chart is the shared kit
+([`components/ui/chart.tsx`](../ui/chart.tsx)).
+
+- **One series, one helper.** Overview and Team review draw submissions over time from
+  [`lib/partnerLeads/trend.ts`](../../lib/partnerLeads/trend.ts), and the share breakdown from
+  [`lib/partnerLeads/overview.ts`](../../lib/partnerLeads/overview.ts), whose lane names come from
+  `PARTNER_BOARD_COLUMNS`. Change the arithmetic there, not in a component.
+- **No new reads.** The Overview's 30-day window is the pipeline endpoint Team review already
+  asks for the same chart, on its own slower clock so it never blocks the stat cards.
+- **Say what was not read.** A figure that did not arrive is "—", never 0; a panel whose read
+  failed says so while the rest of the page stays live. Time to claim is not drawn at all —
+  no partner-visible read carries it.
+- **Team review takes `?from=&to=`**, so a chart elsewhere can link to the window it was drawn over.
+
+Check a change on `/design/overview` (busy, quiet, empty, error; both roles; three payout models)
+and `/design/organization` (Team review and Statements). Team access and Settings have no preview:
+their figures are the shared cards and their data is a single list.
+
 ## Controls (2026-10-30)
 
 The portal has **no native `<select>` left**. Every dropdown is `SelectMenu` — the searchable one

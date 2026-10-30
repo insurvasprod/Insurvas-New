@@ -93,14 +93,16 @@ export function BarSeries({
     <figure className={cn("m-0 flex min-h-0 flex-col", className)}>
       <figcaption className="sr-only">{summary}</figcaption>
 
-      <div className="relative flex-1" style={{ minHeight, paddingRight: gutter }} aria-hidden="true">
+      <div className="relative flex-1" style={{ minHeight }} aria-hidden="true">
         {ticks(top).map((tick, index) => (
           <span key={tick} className="absolute inset-x-0 flex items-center" style={{ top: `${(index / 2) * 100}%` }}>
             <span className={cn("h-px flex-1", tick === 0 ? "bg-[var(--border)]" : "border-t border-dashed border-[var(--border)]")} />
             <span className="-translate-y-px whitespace-nowrap pl-2 text-xs leading-none tabular-nums text-muted-foreground" style={{ width: gutter }}>{tickText[index]}</span>
           </span>
         ))}
-        <ol className="relative m-0 grid h-full list-none items-end gap-[clamp(2px,0.5vw,8px)] p-0" style={{ gridTemplateColumns: `repeat(${bars.length}, minmax(0, 1fr))` }}>
+        {/* Laid out against the box rather than a percentage of it: `h-full` resolves to nothing when
+            the plot's height comes from min-height, which drew a chart with an axis and no bars. */}
+        <ol className="absolute inset-y-0 left-0 m-0 grid list-none items-end gap-[clamp(2px,0.5vw,8px)] p-0" style={{ right: gutter, gridTemplateColumns: `repeat(${bars.length}, minmax(0, 1fr))` }}>
           {bars.map((bar) => {
             const height = top > 0 ? (bar.value / top) * 100 : 0;
             const accentShare = bar.accent !== undefined && bar.value > 0 ? (bar.accent / bar.value) * 100 : null;
