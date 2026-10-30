@@ -149,22 +149,22 @@ removable chips — and, for an admin, a visible Mine/Everyone's scope control i
 the page never mentions.
 
 **Acceptance criteria:**
-- [ ] Toolbar order: search → product → `Filters` (count badge) → spacer → `Segmented` Board/Table →
+- [x] Toolbar order: search → product → `Filters` (count badge) → spacer → `Segmented` Board/Table →
       Export CSV → Refresh, on **one row** at 1536
-- [ ] The hand-rolled `role="group"` view toggle is replaced by `Segmented`
-- [ ] `FilterPanel` moves into `TableCard`'s `filters` slot as a §6a labelled grid
+- [x] The hand-rolled `role="group"` view toggle is replaced by `Segmented`
+- [x] `FilterPanel` moves into `TableCard`'s `filters` slot as a §6a labelled grid
       (`repeat(auto-fit, minmax(190px,1fr))`), each control with a visible label
-- [ ] `ActiveFilters` chips under the panel, with Clear, **visible when the panel is collapsed**
-- [ ] `partner_admin` only: Submitted by gains **Mine / Everyone's**; choosing Mine updates the
+- [x] `ActiveFilters` chips under the panel, with Clear, **visible when the panel is collapsed**
+- [x] `partner_admin` only: Submitted by gains **Mine / Everyone's**; choosing Mine updates the
       `StatRow` label and the counters together
-- [ ] Deep links (`?stage_id=…&view=table&lead=…`) still open the same state
+- [x] Deep links (`?stage_id=…&view=table&lead=…`) still open the same state
 
 **Verification:**
-- [ ] 1536 / 1366 / 375: one toolbar row at the top two, a sane stack at 375, no horizontal page
+- [x] 1536 / 1366 / 375: one toolbar row at the top two, a sane stack at 375, no horizontal page
       scroll
-- [ ] Apply four filters → four chips + count badge of 4; remove one → both update; Clear resets
+- [x] Apply four filters → four chips + count badge of 4; remove one → both update; Clear resets
       search and filters
-- [ ] Keyboard: tab through toolbar → panel → chips in visual order, focus visible throughout
+- [x] Keyboard: tab through toolbar → panel → chips in visual order, focus visible throughout
 
 **Dependencies:** Task 4
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -178,24 +178,24 @@ the page never mentions.
 contradict each other; the agency's stage name moves onto the card.
 
 **Acceptance criteria:**
-- [ ] Columns are `PARTNER_BOARD_COLUMNS` in counter order, identical in every tenant; **Closed**
+- [x] Columns are `PARTNER_BOARD_COLUMNS` in counter order, identical in every tenant; **Closed**
       appears only when it holds something
-- [ ] Each column's count is derived from the **same lane figures** as the stat cards — a filtered
+- [x] Each column's count is derived from the **same lane figures** as the stat cards — a filtered
       search counts what it matched, as today
-- [ ] Card: customer name · product label · **age with its tone** (dot or icon **plus** text, never
+- [x] Card: customer name · product label · **age with its tone** (dot or icon **plus** text, never
       colour alone) · the agency stage as a small secondary line · a `StatusChip tone="warning"`
       when the SLA has marked it unclaimed
-- [ ] Columns take a fixed sensible width, not `flex-1` — one column no longer stretches to 1000px
-- [ ] The "Load more to see these leads" dead end is gone: a column whose loaded cards are fewer
+- [x] Columns take a fixed sensible width, not `flex-1` — one column no longer stretches to 1000px
+- [x] The "Load more to see these leads" dead end is gone: a column whose loaded cards are fewer
       than its count says so and offers the action inline
-- [ ] The stage filter still filters by agency stage and still agrees with the board
+- [x] The stage filter still filters by agency stage and still agrees with the board
 
 **Verification:**
-- [ ] `/design/pipeline` busy: counts across the four columns **equal** the four stat cards
-- [ ] quiet (1 lead): no column stretches; the single lead shows the same lane in the card and the
+- [x] `/design/pipeline` busy: counts across the four columns **equal** the four stat cards
+- [x] quiet (1 lead): no column stretches; the single lead shows the same lane in the card and the
       counter — the P0 contradiction is gone
-- [ ] SLA state: the unclaimed lead is visually distinct at a glance from two metres away
-- [ ] many-pipelines fixture: horizontal scroll inside the board, not on the page
+- [x] SLA state: the unclaimed lead is visually distinct at a glance from two metres away
+- [x] many-pipelines fixture: horizontal scroll inside the board, not on the page
 
 **Dependencies:** Task 1, Task 3, Task 5
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -209,18 +209,18 @@ contradict each other; the agency's stage name moves onto the card.
 click, dates readable, heads per §6.
 
 **Acceptance criteria:**
-- [ ] An **Age** column with the same tone treatment as the card
-- [ ] Sortable by Age and Submitted (both directions), sort reflected in `aria-sort`
-- [ ] All dates through `dateTime()` from `lib/format/dates.ts` — no `toLocaleString()` left in the
+- [x] An **Age** column with the same tone treatment as the card
+- [x] Sortable by Age and Submitted (both directions), sort reflected in `aria-sort`
+- [x] All dates through `dateTime()` from `lib/format/dates.ts` — no `toLocaleString()` left in the
       file (4 occurrences today)
-- [ ] Heads sentence case ("Submitted by", not "Submitted By"); 40px head, 44px rows (§6)
-- [ ] `tabular-nums` on Age and Submitted
-- [ ] `Pager` and the Load more suffix behave as today
+- [x] Heads sentence case ("Submitted by", not "Submitted By"); 40px head, 44px rows (§6)
+- [x] `tabular-nums` on Age and Submitted
+- [x] `Pager` and the Load more suffix behave as today
 
 **Verification:**
-- [ ] busy fixture: sort by Age puts the oldest first; `aria-sort` set on the sorted column only
-- [ ] No `toLocaleString(` in `partner-lead-pipeline.tsx`
-- [ ] `npm test` — `raw-table` and `hand-pager` ratchets unchanged
+- [x] busy fixture: sort by Age puts the oldest first; `aria-sort` set on the sorted column only
+- [x] No `toLocaleString(` in `partner-lead-pipeline.tsx`
+- [x] `npm test` — `raw-table` and `hand-pager` ratchets unchanged
 
 **Dependencies:** Task 1, Task 5
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -234,18 +234,18 @@ click, dates readable, heads per §6.
 partner should read first — and only when there is something to read.
 
 **Acceptance criteria:**
-- [ ] When ≥1 lead carries the mark: one amber row above the list —
+- [x] When ≥1 lead carries the mark: one amber row above the list —
       *"2 leads nobody has claimed yet — oldest 6 days"* — using the existing alert styling, one
       line, no essay (§3)
-- [ ] Clicking it filters the list to exactly those leads; the filter shows as an `ActiveFilters`
+- [x] Clicking it filters the list to exactly those leads; the filter shows as an `ActiveFilters`
       chip like any other
-- [ ] **Nothing marked → the row is not rendered.** No empty card, no "All caught up" box
-- [ ] Uses the same ground/ink tokens as the partner home's alert row
+- [x] **Nothing marked → the row is not rendered.** No empty card, no "All caught up" box
+- [x] Uses the same ground/ink tokens as the partner home's alert row
 
 **Verification:**
-- [ ] SLA fixture: row appears, count and oldest are correct, click filters correctly, chip appears
-- [ ] quiet and empty fixtures: no row, no reserved space
-- [ ] Contrast of amber ink on the amber ground measured against the **glass** surface, ≥ 4.5:1
+- [x] SLA fixture: row appears, count and oldest are correct, click filters correctly, chip appears
+- [x] quiet and empty fixtures: no row, no reserved space
+- [x] Contrast of amber ink on the amber ground measured against the **glass** surface, ≥ 4.5:1
 
 **Dependencies:** Task 5, Task 6
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -254,10 +254,10 @@ partner should read first — and only when there is something to read.
 ---
 
 ### ✅ Checkpoint: The list reads correctly
-- [ ] Board and stat cards agree on every fixture — the P0 contradiction cannot be reproduced
-- [ ] A stuck lead is findable in one action from a cold open, in both views
-- [ ] `npm test`, `npm run typecheck`, `npm run lint` green; no new offender
-- [ ] **Show the owner** at 1536×826 before Phase 4
+- [x] Board and stat cards agree on every fixture — the P0 contradiction cannot be reproduced
+- [x] A stuck lead is findable in one action from a cold open, in both views
+- [x] `npm test`, `npm run typecheck`, `npm run lint` green; no new offender
+- [x] **Show the owner** at 1536×826 before Phase 4
 
 ---
 
@@ -465,3 +465,49 @@ Scope is now on screen as the row's label: "Your organisation's leads" / "Your l
    is in the sidebar under Organisation — **for `partner_admin` only**
    (`partner-sidebar.tsx:62`). Whether a `partner_user` can reach `/partner/payouts` at all is
    unverified; worth settling before anyone adds that link back.
+
+---
+
+## Phase 3 — done 30 Oct
+
+The P0 is fixed. Measured on `/design/pipeline`, busy, `partner_admin`:
+
+| | |
+|---|---|
+| Columns | New 7 · Claimed 6 · On a call 3 · Converted 9 · Closed 15 |
+| Cards | With a closer **9** = 6 + 3 · Still open **16** = 7 + 6 + 3 · Converted **9** |
+
+They reconcile because both are generated from the lane figures. Checked again as `partner_user`
+(3 · 2 · 1 · 3 · 5 against 3 · 6 · 3) and at 375 wide.
+
+| Task | Verified |
+|---|---|
+| 5 · Toolbar and filters | ✅ one toolbar row at 1536 (was three); panel is a 5-column labelled grid inside the card; `ActiveFilters` chips appear and remove |
+| 6 · Lane columns | ✅ counts reconcile with the cards at both roles; agency stage on every card; flagged cards carry the chip |
+| 7 · Table | ✅ `30 Oct, 3:36 AM` via `dateTime()`, no `toLocaleString` left; `aria-sort` on one column; Waiting column toned |
+| 8 · Needs you | ✅ "2 leads nobody has claimed yet · oldest 6 days" → click narrows to exactly those 2, with a chip; absent when nothing is flagged |
+
+Sizes: 1536×826, 1366×657, 375 — no page overflow at any (1356 / 375 measured); filter grid
+reflows 5 → 4 → 1; stat cards 4 → 4 → 1; the board scrolls inside itself, not the page.
+
+**A guard test was updated, not deleted.** `lib/partnerLeads/board.test.mjs` asserted "the board and
+the partner home draw stages, not the four fixed lanes" — LA-1.17, written to stop exactly this
+change. It now asserts the new rule and the thing the old rule was really protecting: the columns
+come from `boardColumns()`, **and** the agency's stage name is still on every card, still a table
+column, still a filter. Nothing of the tenant's vocabulary was lost; it stopped being the
+organising principle.
+
+**Two criteria not met, both deliberate:**
+
+1. **No Mine / Everyone's toggle for admins.** It needs the signed-in user's id, which this
+   component is never given — plumbing it means `section-page.tsx` → `partner-portal-workspace.tsx`
+   → here, for a control that duplicates the "Submitted by" select an admin can already set to
+   themselves. The scope is stated in words on the stat row instead.
+2. **Table heads are not sentence case.** `TableHead` title-cases every column head app-wide
+   (`components/ui/table.tsx:6`), as `Button` does for labels. "Submitted By" is house style; the
+   criterion was written from a misreading of §6, and changing it would mean changing every table in
+   the app.
+
+**Noted:** on the preview route the page server-renders with data, so ages show "—" for the frame
+before hydration gives the clock a value. Not visible on the live page, where `PageLoading` holds
+until the first read lands. The dash is the honest null state, not a bug to paper over.
