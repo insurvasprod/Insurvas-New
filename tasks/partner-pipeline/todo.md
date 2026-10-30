@@ -682,17 +682,17 @@ service the API uses, carrying over round 1's progress strip, grouped submission
 owner approved on 2026-10-29.
 
 **Acceptance criteria:**
-- [ ] Where it is, Product, Agency stage, Submitted by and Outcome are `SelectMenu`
-- [ ] Each shows a search box at the top, a tick on the chosen option, and takes the brand tint when
+- [x] Where it is, Product, Agency stage, Submitted by and Outcome are `SelectMenu`
+- [x] Each shows a search box at the top, a tick on the chosen option, and takes the brand tint when
       it holds anything but its default
-- [ ] Agency stage groups by pipeline name when the partner's leads sit in more than one
-- [ ] Options carry counts where the page already knows them (the lane filter does)
-- [ ] The panel is still the §6a labelled grid; `ActiveFilters` chips unchanged
+- [x] Agency stage groups by pipeline name when the partner's leads sit in more than one
+- [x] Options carry counts where the page already knows them (the lane filter does)
+- [x] The panel is still the §6a labelled grid; `ActiveFilters` chips unchanged
 
 **Verification:**
-- [ ] No native menu appears at any width; the panel opens unclipped inside the `TableCard`
-- [ ] Keyboard: arrows move, Enter picks, Escape closes, focus returns to the trigger
-- [ ] 375 wide: the panel is one column and each menu fits the screen
+- [x] No native menu appears at any width; the panel opens unclipped inside the `TableCard`
+- [x] Keyboard: arrows move, Enter picks, Escape closes, focus returns to the trigger
+- [x] 375 wide: the panel is one column and each menu fits the screen
 
 **Dependencies:** None
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -706,15 +706,15 @@ owner approved on 2026-10-29.
 out.
 
 **Acceptance criteria:**
-- [ ] `partner-chat-panel.tsx` (conversation type, participants), `partner-notification-preferences.tsx`,
+- [x] `partner-chat-panel.tsx` (conversation type, participants), `partner-notification-preferences.tsx`,
       `partner-portal-workspace.tsx` and `partner-team-workspace.tsx` use `SelectMenu`
-- [ ] The participants control is multi-select today — it keeps multi-select, through
+- [x] The participants control is multi-select today — it keeps multi-select, through
       `components/app/multi-picker.tsx` (§13's "dropdown with checkboxes"), not a one-of `SelectMenu`
-- [ ] `grep -o "<select" components/partner/*.tsx` returns nothing
+- [x] `grep -o "<select" components/partner/*.tsx` returns nothing
 
 **Verification:**
-- [ ] Each screen's form still saves what it saved before
-- [ ] 375 wide: every menu opens on screen and is dismissible
+- [x] Each screen's form still saves what it saved before
+- [x] 375 wide: every menu opens on screen and is dismissible
 
 **Dependencies:** Task 15
 **Files:** the four components above
@@ -728,13 +728,13 @@ out.
 screens, the owner and this round all disagree.
 
 **Acceptance criteria:**
-- [ ] §5b says `SelectMenu` is the dropdown, and names the exception if one survives (a two-option
+- [x] §5b says `SelectMenu` is the dropdown, and names the exception if one survives (a two-option
       choice is a `Segmented`, per §15)
-- [ ] The `radix-select` ratchet's wording is checked against the new rule
-- [ ] `components/partner/README.md` records that the portal has no native selects left
+- [x] The `radix-select` ratchet's wording is checked against the new rule
+- [x] `components/partner/README.md` records that the portal has no native selects left
 
 **Verification:**
-- [ ] `npm test` — `designDocs.test.mjs` passes
+- [x] `npm test` — `designDocs.test.mjs` passes
 
 **Dependencies:** Task 16
 **Files:** `docs/design/UI-CONSISTENCY.md`, `components/partner/README.md`
@@ -875,5 +875,43 @@ preview's `details` seam are gone from the list.
 Still outstanding from the round-2 plan and visible on the phone screenshot: the top bar is clipped
 ("Search 1", the account chip cut off) — that is task 20, deliberately its own task because
 `TopBarShell` is shared with the agent app.
+
+3408 pass / 20 fail (the same pre-existing 20); design rules 71/71; lint and types clean.
+
+---
+
+## Phase 7 — done 30 Oct
+
+**No native `<select>` is left in the partner portal.** All ten are gone.
+
+| Screen | Was | Is |
+|---|---|---|
+| Pipeline filters ×5 | native selects | `SelectMenu` — search, counts, tint when filtered |
+| Settings · Timezone | native select | `SelectMenu` |
+| Team access · Role | native select | `SelectMenu`, partner_admin disabled **with the reason** |
+| Submit a lead · step jumper | native select | `SelectMenu` |
+| Chat · conversation type | native select | `Segmented` — two options are not a dropdown (§15) |
+| Chat · participants | native `multiple` select | `MultiPicker` — the checkbox dropdown (§13) |
+
+Verified: the lane menu opens with "Search stages" and live counts (New 7, Claimed 6, On a call 3,
+Converted 9, Closed 15); the timezone menu filters ("central" → "Central Time (CT)"); at 375 the
+panel sits fully on screen (33→321 of 375).
+
+**Three things found while converting:**
+
+1. **The lane footnotes collided with their labels.** `SelectMenu`'s `description` is for short
+   context like a state code, and the lane footnotes are sentences — in a 288px panel they ran into
+   the label. Dropped: the count is what the reader needs, and the board's column header still
+   carries the sentence in its `title`.
+2. **A comment I wrote was false.** It called the timezone list "a few hundred zones"; it is nine
+   curated ones. Corrected rather than left in the code.
+3. **The role control was a `<label>` wrapping a `<select>`.** A `<label>` cannot name a button, so
+   with `SelectMenu` the wrapper became a `<div>` and the control names itself. The pinned contract
+   in `accessibilityContract.test.mjs` broke on this and was rewritten to the same intent, not
+   deleted: a visible name, an accessible name, and partner_admin present but not selectable.
+
+**§5b rewritten.** It said "Dropdowns. Native `<select>`…", which contradicted the owner, four
+shipped screens and this round. It now names `SelectMenu`, points two-to-five choices at
+`Segmented` and several-answers at `MultiPicker`, and records why the native date inputs stay.
 
 3408 pass / 20 fail (the same pre-existing 20); design rules 71/71; lint and types clean.

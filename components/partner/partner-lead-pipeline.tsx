@@ -7,6 +7,7 @@ import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Download, 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Field } from "@/components/ui/field";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Segmented } from "@/components/ui/view-tabs";
 import { LiveStamp, useClockSeconds } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
@@ -249,43 +250,109 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   </DataToolbar>;
 
   // §6a: the panel opens inside the card, under the toolbar, as a grid of labelled fields.
+  // §6a: the panel opens inside the card, under the toolbar, as a grid of labelled fields. Each
+  // choice is the kit's searchable SelectMenu (owner, 2026-10-29: the native dropdowns were "so
+  // plain", and a long list needs a search at the top) — never a native <select>, whose menu the
+  // operating system draws in its own colours.
+  const menuPanel = "w-72 max-w-[calc(100vw-2rem)]";
   const filterPanel = <>
     <FilterPanel id="partner-lead-filters" open={moreFilters}>
-      <Field label="Where it is">
-        <select aria-label="Where it is" className={cn(toolbarControl, "w-full")} value={lane} onChange={(event) => narrowTo(event.target.value as PartnerLane | "")}>
-          <option value="">Anywhere</option>
-          {columns.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}
-        </select>
+      <Field label="Where it is" htmlFor="partner-lead-lane">
+        <SelectMenu
+          id="partner-lead-lane"
+          label="Where it is"
+          value={lane}
+          defaultValue=""
+          onChange={(next) => narrowTo(next)}
+          searchPlaceholder="Search stages"
+          className="w-full"
+          panelClassName={menuPanel}
+          panelAlign="start"
+          options={[
+            { value: "" as PartnerLane | "", label: "Anywhere" },
+            // No description: the lane footnotes are sentences, and SelectMenu's description is for
+            // short context (a state name beside its code) — in a 288px panel they collide with the
+            // label. The count is what the reader needs here; the board's column header carries the
+            // sentence in its title.
+            ...columns.map((column) => ({ value: column.key as PartnerLane | "", label: column.label, count: laneTotal(column.key) })),
+          ]}
+        />
       </Field>
-      <Field label="Product">
-        <select aria-label="Product" className={cn(toolbarControl, "w-full")} value={filters.product} onChange={(event) => setFilter("product", event.target.value)}>
-          <option value="">All products</option>
-          {data?.facets.products.map((item) => <option key={item} value={item}>{productLineLabel(item)}</option>)}
-        </select>
+      <Field label="Product" htmlFor="partner-lead-product">
+        <SelectMenu
+          id="partner-lead-product"
+          label="Product"
+          value={filters.product}
+          defaultValue=""
+          onChange={(next) => setFilter("product", next)}
+          searchPlaceholder="Search products"
+          className="w-full"
+          panelClassName={menuPanel}
+          panelAlign="start"
+          options={[
+            { value: "", label: "All products" },
+            ...(data?.facets.products ?? []).map((item) => ({ value: item, label: productLineLabel(item) })),
+          ]}
+        />
       </Field>
-      <Field label="Agency stage">
-        <select aria-label="Agency stage" className={cn(toolbarControl, "w-full")} value={filters.stage_id} onChange={(event) => setFilter("stage_id", event.target.value)}>
-          <option value="">All stages</option>
-          {(data?.stages ?? []).map((item) => <option key={item.id} value={item.id}>{manyPipelines ? `${item.pipelineName} · ${item.name}` : item.name}</option>)}
-        </select>
+      <Field label="Agency stage" htmlFor="partner-lead-stage">
+        <SelectMenu
+          id="partner-lead-stage"
+          label="Agency stage"
+          value={filters.stage_id}
+          defaultValue=""
+          onChange={(next) => setFilter("stage_id", next)}
+          searchPlaceholder="Search stages"
+          className="w-full"
+          panelClassName={menuPanel}
+          panelAlign="start"
+          options={[
+            { value: "", label: "All stages" },
+            // Grouped by pipeline only when the partner's leads sit in more than one, so the usual
+            // case is a plain list rather than a list under one heading.
+            ...(data?.stages ?? []).map((item) => ({ value: item.id, label: item.name, group: manyPipelines ? item.pipelineName : undefined, count: item.leadCount })),
+          ]}
+        />
       </Field>
-      {role === "partner_admin" && <Field label="Submitted by">
-        <select aria-label="Submitted by" className={cn(toolbarControl, "w-full")} value={filters.closer_id} onChange={(event) => setFilter("closer_id", event.target.value)}>
-          <option value="">Anyone on your team</option>
-          {data?.facets.closers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
+      {role === "partner_admin" && <Field label="Submitted by" htmlFor="partner-lead-closer">
+        <SelectMenu
+          id="partner-lead-closer"
+          label="Submitted by"
+          value={filters.closer_id}
+          defaultValue=""
+          onChange={(next) => setFilter("closer_id", next)}
+          searchPlaceholder="Search your team"
+          className="w-full"
+          panelClassName={menuPanel}
+          panelAlign="start"
+          options={[
+            { value: "", label: "Anyone on your team" },
+            ...(data?.facets.closers ?? []).map((item) => ({ value: item.id, label: item.name })),
+          ]}
+        />
       </Field>}
-      <Field label="Outcome">
-        <select aria-label="Outcome" className={cn(toolbarControl, "w-full")} value={filters.outcome} onChange={(event) => setFilter("outcome", event.target.value)}>
-          <option value="">Any outcome</option>
-          {data?.facets.outcomes.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-        </select>
+      <Field label="Outcome" htmlFor="partner-lead-outcome">
+        <SelectMenu
+          id="partner-lead-outcome"
+          label="Outcome"
+          value={filters.outcome}
+          defaultValue=""
+          onChange={(next) => setFilter("outcome", next)}
+          searchPlaceholder="Search outcomes"
+          className="w-full"
+          panelClassName={menuPanel}
+          panelAlign="start"
+          options={[
+            { value: "", label: "Any outcome" },
+            ...(data?.facets.outcomes ?? []).map((item) => ({ value: item.key, label: item.label })),
+          ]}
+        />
       </Field>
-      <Field label="Submitted from">
-        <input type="date" aria-label="Submitted from" className={cn(toolbarControl, "w-full")} value={filters.date_from} onChange={(event) => setFilter("date_from", event.target.value)} />
+      <Field label="Submitted from" htmlFor="partner-lead-from">
+        <input id="partner-lead-from" type="date" aria-label="Submitted from" className={cn(toolbarControl, "w-full")} value={filters.date_from} onChange={(event) => setFilter("date_from", event.target.value)} />
       </Field>
-      <Field label="Submitted to">
-        <input type="date" aria-label="Submitted to" className={cn(toolbarControl, "w-full")} value={filters.date_to} onChange={(event) => setFilter("date_to", event.target.value)} />
+      <Field label="Submitted to" htmlFor="partner-lead-to">
+        <input id="partner-lead-to" type="date" aria-label="Submitted to" className={cn(toolbarControl, "w-full")} value={filters.date_to} onChange={(event) => setFilter("date_to", event.target.value)} />
       </Field>
     </FilterPanel>
     <ActiveFilters filters={chips} onClear={clearAll} />

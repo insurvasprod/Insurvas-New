@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { toolbarControl } from "@/components/ui/data-toolbar";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { SectionLoading } from "@/components/ui/page-states";
-import { cn } from "@/lib/utils";
 import type { PartnerAlertEvent, PartnerAlertSettings } from "@/lib/partnerAlerts/presentation";
 
 /**
@@ -119,9 +118,19 @@ export function PartnerNotificationPreferences({
     </div>
     <label className="flex w-full flex-col gap-1.5">
       <span className="text-sm font-semibold text-[var(--body)]">Timezone</span>
-      <select className={cn(toolbarControl, "w-full")} value={zone} disabled={!canEditTimezone || saving} onChange={(event) => setZoneDraft(event.target.value)}>
-        {zones.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-      </select>
+      {/* Nine curated zones rather than the IANA list, so the search is for consistency with the
+          rest of the portal rather than because the list is long. */}
+      <SelectMenu
+        label="Timezone"
+        value={zone}
+        onChange={(next) => setZoneDraft(next)}
+        disabled={!canEditTimezone || saving}
+        searchPlaceholder="Search timezones"
+        className="w-full"
+        panelClassName="w-80 max-w-[calc(100vw-2rem)]"
+        panelAlign="start"
+        options={zones.map(([value, label]) => ({ value, label }))}
+      />
       {!canEditTimezone && <small className="text-xs text-muted-foreground">Your partner admin sets the timezone your submission dates are read in.</small>}
     </label>
     {error && <p className="text-sm text-[var(--error-ink)]" role="alert">{error}</p>}

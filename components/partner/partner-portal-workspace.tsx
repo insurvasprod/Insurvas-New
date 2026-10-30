@@ -1349,20 +1349,22 @@ export function PartnerLeadForm({
                   <small>{requiredLeft(activeSection)} required {requiredLeft(activeSection) === 1 ? "field" : "fields"} left</small>
                 )}
               </div>
-              <label className="portal-partner-submit-stepper-select">
-                <span className="sr-only">Go to a form section</span>
-                <select
-                  value={reviewStep ? sections.length : sectionIndex}
-                  onChange={(event) => steps[Number(event.target.value)]?.select()}
-                  aria-label="Go to a form step"
-                >
-                  {steps.map((step, index) => (
-                    <option key={step.key} value={index}>
-                      {step.label}{step.complete ? " · Complete" : step.left ? ` · ${step.left} required left` : " · In progress"}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="portal-partner-submit-stepper-select">
+                <SelectMenu
+                  label="Go to a form step"
+                  value={String(reviewStep ? sections.length : sectionIndex)}
+                  onChange={(next) => steps[Number(next)]?.select()}
+                  searchPlaceholder="Search sections"
+                  className="w-full"
+                  panelClassName="w-72 max-w-[calc(100vw-2rem)]"
+                  panelAlign="end"
+                  options={steps.map((step, index) => ({
+                    value: String(index),
+                    label: step.label,
+                    description: step.complete ? "Complete" : step.left ? `${step.left} required left` : "In progress",
+                  }))}
+                />
+              </div>
             </div>
           )}
         </>

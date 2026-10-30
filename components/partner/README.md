@@ -29,4 +29,11 @@ is still a filter. It stopped being the thing that sorts the board, nothing more
 Check a change on `/design/pipeline` (development only): busy, quiet, SLA-flagged, many pipelines,
 empty and error, for both roles and three payout models, at 1536×826, 1366×657 and 375 wide.
 
-Do not: introduce partner-only colours, controls or table styles.
+## Controls (2026-10-30)
+
+The portal has **no native `<select>` left**. Every dropdown is `SelectMenu` — the searchable one
+the owner approved on 2026-10-29 — a two-way choice is a `Segmented`, and picking several people is
+`MultiPicker`. UI-CONSISTENCY §5b carries the rule. Native date inputs remain, for the reason §5b
+gives.
+
+Do not: introduce partner-only colours, controls or table styles, or a native `<select>`.

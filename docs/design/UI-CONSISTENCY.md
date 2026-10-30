@@ -216,8 +216,17 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
   (`DraftActions` or `SettingsSaveBar`) and a `LeaveGuard` (`components/ui/leave-guard.tsx`), so a
   click away asks Save changes / Discard changes / Stay (`unguarded-dirty`).
 - **Tabs.** `ViewTabs` or `Segmented`; never a hand-made `role="tablist"` (`hand-tablist`).
-- **Dropdowns.** Native `<select>` with `toolbarControl` or `control`. The console's radix
-  `Select` moves to the same (`radix-select`).
+- **Dropdowns.** `SelectMenu` (`components/ui/select-menu.tsx`): a 36px trigger that takes the
+  brand tint while it holds anything but its default, and a panel with a search box at the top,
+  titled groups, optional dots and counts, and a tick on the chosen option. Set by the owner on
+  2026-10-29 — the native dropdowns were "so plain", and the operating system draws their menu in
+  its own colours, which is why a filter on a dark page opened bright blue. A native `<select>` is
+  no longer the rule; the console's radix `Select` moves to `SelectMenu` too (`radix-select`).
+  - **Two to five options that are not a list to search through is a `Segmented`** (§15), not a
+    dropdown; **several answers from a short list is the checkbox dropdown**
+    (`components/app/multi-picker.tsx`, §13), never a native multiple `<select>`.
+  - Native date inputs with `toolbarControl` stay for now: `DateTimePicker` picks a date *and* a
+    time, so a date-only filter has nowhere to go until it gains a date-only mode.
 - Pill shapes remain only for toggle tracks, the count badge on the Filters button, and the
   marketing and pricing CTAs, which keep the brand's pill ([BRAND.md](BRAND.md)).
 

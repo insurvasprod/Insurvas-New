@@ -7,9 +7,10 @@ import { notify } from "@/lib/notify";
 import { PartnerInviteResultPanel, type PartnerInviteResult } from "@/components/app/partner-invite-result";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -19,7 +20,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TableCard } from "@/components/ui/table-card";
 import { activityLabel, dayMonth, dayMonthTime, expiresInLabel } from "@/lib/format/ago";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
-import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -285,15 +285,26 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
               <Input id="partner-team-email" className="mt-1.5" type="email" autoComplete="email" maxLength={254} value={email} aria-invalid={fieldError?.field === "email"} onChange={(event) => { setEmail(event.target.value); if (fieldError?.field === "email") setFieldError(null); }} />
               {fieldError?.field === "email" && <small className="mt-1.5 block text-xs text-[var(--error-ink)]" role="alert">{fieldError.message}</small>}
             </label>
-            <label className="block">
+            <div className="block">
               <span className={labelText}>Role</span>
-              <select value="partner_user" onChange={() => undefined} className={cn(toolbarControl, "mt-1.5 w-full")}>
-                <option value="partner_user">Partner user</option>
-                {/* A partner admin can grant only what they cannot use to widen their own access. */}
-                <option value="partner_admin" disabled>Partner admin — added by your agent</option>
-              </select>
+              {/* A partner admin can grant only what they cannot use to widen their own access, so
+                  the one option they cannot pick is shown disabled with the reason rather than
+                  hidden — the control opens and explains itself instead of ignoring the press. */}
+              <SelectMenu
+                label="Role"
+                value="partner_user"
+                onChange={() => undefined}
+                className="mt-1.5 w-full"
+                panelClassName="w-72 max-w-[calc(100vw-2rem)]"
+                panelAlign="start"
+                searchPlaceholder="Search roles"
+                options={[
+                  { value: "partner_user", label: "Partner user" },
+                  { value: "partner_admin", label: "Partner admin", description: "Added by your agent", disabled: true },
+                ]}
+              />
               <small className="mt-1.5 block text-xs text-muted-foreground">Partner users can submit leads, track your organization&rsquo;s pipeline, and message the agent.</small>
-            </label>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={busy !== null}>{busy === "invite" ? "Sending…" : "Send invitation"}</Button>
