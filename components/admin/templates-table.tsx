@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { SlidersHorizontal } from "lucide-react";
 
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -44,7 +45,6 @@ import { TemplateEditorDialog } from "./template-editor-dialog";
 
 export type CatalogTemplate = TemplateRow & { state: TemplateState };
 
-const PAGE_SIZE = 10;
 
 const STATE_TONE: Record<TemplateState, PillTone> = {
   published: "success",
@@ -111,9 +111,8 @@ export function TemplatesTable({
   );
 
   const filterCount = activeFilterCount({ states });
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(page, pages);
-  const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageSize = useFittingPageSize(420, 45);
+  const { current, rows: visible } = paginate(filtered, page, pageSize);
   const editing = editor?.mode === "edit" ? templates.find((template) => template.id === editor.id) ?? null : null;
 
   function toggleState(state: TemplateState, on: boolean) {
@@ -144,6 +143,7 @@ export function TemplatesTable({
       {tiles}
 
       <TableCard
+        footer={templates.length ? <Pager page={current} pageSize={pageSize} total={filtered.length} noun={filtered.length === 1 ? "template" : "templates"} suffix={TEMPLATE_CATALOG_ORDER} onPage={setPage} /> : undefined}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
             <ToolbarSearch
@@ -295,16 +295,6 @@ export function TemplatesTable({
             </tbody>
           </table>
         </div>
-        {templates.length > 0 && (
-          <BoardTableFooter
-            page={current}
-            pageSize={PAGE_SIZE}
-            total={filtered.length}
-            itemLabel={filtered.length === 1 ? "template" : "templates"}
-            order={TEMPLATE_CATALOG_ORDER}
-            onPageChange={setPage}
-          />
-        )}
       </TableCard>
 
       {editor && (editor.mode === "create" || editing) && (

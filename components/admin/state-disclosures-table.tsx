@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { SlidersHorizontal } from "lucide-react";
 
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { NoMatches } from "@/components/admin/empty-state";
 import { StateDisclosureEditor, type EditorTarget } from "@/components/admin/state-disclosures-editor";
 import { StateDisclosuresImport } from "@/components/admin/state-disclosures-import";
@@ -35,7 +36,6 @@ import {
 import type { DisclosureProposal, StateDisclosure } from "@/lib/stateDisclosures/constants";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
 const TOTAL_STATES = STATE_CODES.length;
 
 type CoverageFilter = "all" | "in_force" | "not_covered";
@@ -109,9 +109,8 @@ export function StateDisclosuresTable({
   }, [scopeRows, query, coverage, placeholderOnly, changingOnly]);
 
   const activeFilters = (placeholderOnly ? 1 : 0) + (changingOnly ? 1 : 0);
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(page, pages);
-  const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: visible } = paginate(filtered, page, pageSize);
   const productName = scope.find((entry) => entry.code === product)?.name ?? "Every product";
 
   function resetPage<T>(setter: (value: T) => void) {
@@ -234,6 +233,7 @@ export function StateDisclosuresTable({
       />
 
       <TableCard
+        footer={<Pager page={current} pageSize={pageSize} total={filtered.length} noun={filtered.length === 1 ? "state and product pair" : "state and product pairs"} suffix="by state, then product" onPage={setPage} />}
         toolbar={
           <DataToolbar
             actions={
@@ -376,14 +376,6 @@ export function StateDisclosuresTable({
             </tbody>
           </table>
         </div>
-        <BoardTableFooter
-          page={current}
-          pageSize={PAGE_SIZE}
-          total={filtered.length}
-          itemLabel={filtered.length === 1 ? "state and product pair" : "state and product pairs"}
-          order="by state, then product"
-          onPageChange={setPage}
-        />
       </TableCard>
 
       {editor && (

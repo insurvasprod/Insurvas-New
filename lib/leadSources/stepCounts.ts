@@ -11,7 +11,7 @@ import type { LeadsInStep } from "./steps";
  *   source   active campaigns                      tenant_campaigns
  *   review   files staged and waiting for review     agent_lead_import_batches  (processing, touched this week:
  *                                                  an older staged file is one somebody walked away from)
- *   clean    duplicate pairs waiting for a person  contact_duplicate_reviews  (status pending)
+ *   clean    duplicate pairs waiting for a person  contact_duplicate_reviews + lead_duplicate_reviews (pending)
  *   lists    active lists not scrubbed yet         tenant_campaigns           (nobody can dial them)
  *   route    leads nobody owns yet                 lead_queue                 (unclaimed, no owner)
  *   recycle  leads out of tries or parked          agent_leads                (exhausted, nurture)
@@ -45,7 +45,11 @@ export async function readStepCounts(input: { tenantId: string; roles: readonly 
   if (has("lead_import") && may("owner", "producer", "assistant") && !input.narrow && shown("leads.import"))
     reads.push(["review", count(head("agent_lead_import_batches").eq("tenant_id", t).eq("status", "processing").gte("updated_at", weekAgo))]);
   if (has("duplicate_detection") && may("owner", "producer", "assistant") && !input.narrow && shown("leads.duplicates"))
-    reads.push(["clean", count(head("contact_duplicate_reviews").eq("tenant_id", t).eq("status", "pending"))]);
+    // Contact pairs plus same-phone leads (owner 2026-10-29); the second reads as 0 before 20261029600000.
+    reads.push(["clean", Promise.all([
+      count(head("contact_duplicate_reviews").eq("tenant_id", t).eq("status", "pending")),
+      count(head("lead_duplicate_reviews").eq("tenant_id", t).eq("status", "pending")),
+    ]).then(([pairs, sameNumber]) => (pairs === null ? null : pairs + (sameNumber ?? 0)))]);
   if (has("lead_import") && may("owner", "producer", "assistant") && !input.narrow && shown("leads.lists"))
     reads.push(["lists", count(head("tenant_campaigns").eq("tenant_id", t).eq("status", "active").eq("scrub_status", "unscrubbed"))]);
   if (((has("outbound_dialing") && may("owner", "producer", "assistant", "setter")) || (has("lead_assignment") && may("owner"))) && (!input.narrow || may("owner")) && shown("leads.assignments") && !input.solo)

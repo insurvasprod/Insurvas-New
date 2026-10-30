@@ -20,13 +20,13 @@ import { useNow } from "@/components/app/applications/outcome/use-now";
 import { BookAppointmentDialog } from "@/components/app/dialer/book-appointment-dialog";
 import { ScheduleDialog } from "@/components/app/dialer/schedule-dialog";
 import { CallbackPicker } from "@/components/app/callbacks/callback-picker";
-import { CalendarPlus, Check, Phone, PhoneCall, ShieldCheck, User, Zap, type LucideIcon } from "lucide-react";
+import { CalendarPlus, Check, Phone, PhoneCall, ShieldCheck, Zap, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 export function DialerWorkspace({ readOnly = false, role = "producer", canCheckNumber = false, requestedLeadId = null }: { readOnly?: boolean; role?: string; canCheckNumber?: boolean; requestedLeadId?: string | null }) {
   const dialer = useDialer({ readOnly, role, canCheckNumber, requestedLeadId });
   const now = useNow();
-  const { needsDnc, checkingDnc, checkDnc, isSetter, searchMode, panel, attempt, working, dialled, serving, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, serveNext, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, blockers, callReady, stats, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep, confirmed, calendar, autoNext, setAutoNext } = dialer;
+  const { needsDnc, checkingDnc, checkDnc, isSetter, searchMode, panel, attempt, working, dialled, serving, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, serveNext, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, blockers, callReady, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep, confirmed, calendar, autoNext, setAutoNext } = dialer;
   const [bookOpen, setBookOpen] = useState(false);
   const canBook = !readOnly && Boolean(calendar && calendar.agents.length > 0);
 
@@ -189,47 +189,35 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
 
   // The lead you are on, above the queue table.
   const current = <div className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={callButton}>{callArea}</DialerLeadColumn></div>;
-  const chip = "inline-flex h-7 items-center gap-1.5 rounded-full bg-[var(--surface-alt)] px-2.5 text-xs leading-[1.5] font-semibold text-[var(--body)] tabular-nums";
 
   return (
     /* The list is the page (Dialer A round 2, owner 2026-10-27): one centred column. The lead you
        are on opens in place at the head of the list — its facts, the call and the outcome — and the
        rest of the queue (or the search results) follows as rows. */
     <div className="flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
-      <PageHeader
-        title="Dialer"
-        actions={canCheckNumber || !readOnly ? (
-          <>
-            {/* Owners and producers (sales.use), as the check route admits; a setter dials what the queue serves. */}
-            {canCheckNumber && <Button type="button" variant="outline" onClick={() => setCheckOpen(true)}><ShieldCheck aria-hidden="true" />Check a number</Button>}
-            {/* Auto-next: serve the next lead as soon as an outcome is recorded (on by default). */}
-            {!searchMode && !readOnly && (
-              <Button type="button" variant="outline" onClick={() => setAutoNext(!autoNext)} aria-pressed={autoNext} title={autoNext ? "The next lead is served as soon as you record an outcome." : "After an outcome the screen clears; serve the next lead when you are ready."} className={autoNext ? "border-[var(--primary)] text-[var(--accent-ink)]" : undefined}>
-                <Zap aria-hidden="true" />Auto-next {autoNext ? "on" : "off"}
-              </Button>
-            )}
-            {!readOnly && <Button data-guide="dialer-next" type="button" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
-              {serving ? "Serving…" : "Serve next lead"}
-            </Button>}
-          </>
-        ) : null}
-      />
+      <PageHeader title="Dialer" />
       {canCheckNumber && <DialerPreflightDialog open={checkOpen} onOpenChange={setCheckOpen} readOnly={readOnly} />}
 
       {readOnly && <Callout tone="info" title="Read-only access — review only, no calls." />}
 
-      {/* Today and the priority filter, one row above the list; the search and the campaign live in
-          the queue table's toolbar (owner 2026-10-29). */}
-      {(stats || !searchMode) && <div className="flex flex-wrap items-center gap-2">
-        {/* Your own calls today, from midnight in the agency's timezone. */}
-        {stats && (
-          <span className="flex flex-wrap items-center gap-1.5" title={`Your calls since midnight ${zoneShort(stats.zone) || stats.zone}. A contact is a recorded outcome that was a conversation.`}>
-            <span className={chip}><Phone aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{stats.dials.toLocaleString()} {stats.dials === 1 ? "dial" : "dials"}</span>
-            <span className={chip}><User aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{stats.contacts.toLocaleString()} {stats.contacts === 1 ? "contact" : "contacts"}</span>
-            <span className={chip}>{stats.contactRate === null ? "no contact rate yet" : `${Math.round(stats.contactRate)}% contact rate`}</span>
-          </span>
-        )}
+      {/* One row above the list (owner 2026-10-30): the priority filter on the left, the page's
+          actions on the right. Today's dial and contact counts are gone from here. The search and
+          the campaign live in the queue table's toolbar (owner 2026-10-29). */}
+      {(!searchMode || canCheckNumber || !readOnly) && <div className="flex flex-wrap items-center gap-2">
         {!searchMode && <QueuePriorityChips d={dialer} />}
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          {/* Owners and producers (sales.use), as the check route admits; a setter dials what the queue serves. */}
+          {canCheckNumber && <Button type="button" variant="outline" onClick={() => setCheckOpen(true)}><ShieldCheck aria-hidden="true" />Check a number</Button>}
+          {/* Auto-next: serve the next lead as soon as an outcome is recorded (on by default). */}
+          {!searchMode && !readOnly && (
+            <Button type="button" variant="outline" onClick={() => setAutoNext(!autoNext)} aria-pressed={autoNext} title={autoNext ? "The next lead is served as soon as you record an outcome." : "After an outcome the screen clears; serve the next lead when you are ready."} className={autoNext ? "border-[var(--primary)] text-[var(--accent-ink)]" : undefined}>
+              <Zap aria-hidden="true" />Auto-next {autoNext ? "on" : "off"}
+            </Button>
+          )}
+          {!readOnly && <Button data-guide="dialer-next" type="button" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
+            {serving ? "Serving…" : "Serve next lead"}
+          </Button>}
+        </span>
       </div>}
 
       {/* Outcomes on the left, the list in the middle, the lead's notes on the right; the two

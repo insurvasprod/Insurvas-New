@@ -19,6 +19,20 @@ import type { MaintenanceStatus } from "@/lib/system/constants";
 const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
 
 /**
+ * A refused sign-in's message. A 429 is the attempt limit (lib/authProtection), checked before the
+ * password, so its body is the generic "Invalid email or password" — which read as a wrong password
+ * on a shared demo account whose budget was spent (2026-10-30). The 429 and its Retry-After already
+ * say so for any address, existing or not, so naming it here reveals nothing new.
+ */
+function signInError(response: Response, body: { error?: string } | null, fallback: string) {
+  if (response.status === 429) {
+    const minutes = Math.max(1, Math.ceil(Number(response.headers.get("retry-after") || 60) / 60));
+    return `Too many sign-in attempts for this address. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  }
+  return body?.error ?? fallback;
+}
+
+/**
  * The brand panel beside the agent forms: the product, moving (components/app/auth-showcase.tsx).
  * Manager review, 2026-10-28: show what the software looks like, one feature at a time, animated.
  * Sign-up screen N opens on feature N, so each step moves the story on; sign-in starts at the first.
@@ -165,7 +179,7 @@ export function TenantAuthWorkspace({
     try {
       const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, remember }) });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { setLoginError(body?.error ?? "Something went wrong"); return; }
+      if (!response.ok) { setLoginError(signInError(response, body, "Something went wrong")); return; }
       if (body?.twoFactor) { setLinkToken(null); setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
       router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
@@ -182,7 +196,7 @@ export function TenantAuthWorkspace({
     try {
       const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword, remember }) });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { setLoginError(body?.error ?? "Something went wrong"); return; }
+      if (!response.ok) { setLoginError(signInError(response, body, "Something went wrong")); return; }
       rememberEmail();
       if (body?.twoFactor) { setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
       // Straight to the landing page, once. The old push("/app") + refresh() rendered the landing page
@@ -207,7 +221,7 @@ export function TenantAuthWorkspace({
       const response = await fetch("/api/app/auth/verify-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json().catch(() => null);
       if (response.status === 401 && /Sign in again/.test(body?.error ?? "")) { setTwoFactorStep(false); setLoginError(body.error); return; }
-      if (!response.ok) { setLoginError(body?.error ?? "That code is not right."); if (!useRecoveryCode) setTwoFactorCode(""); return; }
+      if (!response.ok) { setLoginError(signInError(response, body, "That code is not right.")); if (!useRecoveryCode) setTwoFactorCode(""); return; }
       router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
       setLoginError("Could not check the code. Check your connection and try again.");

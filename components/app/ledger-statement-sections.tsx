@@ -50,7 +50,7 @@ const RECONCILE: Record<ReconciliationStatus, { label: string; tone: StatusTone 
 };
 
 /** Header, tabs and the toolbar above a list; the card fills the rest of the window. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>.overflow-x-auto]:flex-1";
+const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>.overflow-x-auto]:flex-1";
 const RESERVED = 500;
 const ROW = 41;
 

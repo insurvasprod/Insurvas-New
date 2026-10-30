@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Callout } from "@/components/app/settings/primitives";
@@ -42,17 +43,18 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
   const now = useNow();
   const [complianceOpen, setComplianceOpen] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
-  const { searchMode, panel, panelError, loading, served, serving, serveNext, emptyReason, loadingPanel, eligibility, callReady, reasonParts, stateName, stackHits, phoneLabel, cityState, disclosureUnapproved } = d;
+  const { searchMode, panel, panelError, loading, served, serving, serveNext, loadingPanel, eligibility, callReady, reasonParts, stateName, stackHits, phoneLabel, cityState, disclosureUnapproved } = d;
 
   if (panelError) return <div className="p-4"><Callout tone="error" title={`Could not load this lead: ${panelError}`} /></div>;
   if (loading || loadingPanel) return <div aria-label="Lead"><SectionLoading rows={5} columns={4} label={loading ? "Serving your next lead" : "Loading call guidance"} /></div>;
   if (!panel) {
+    if (searchMode) return <EmptyState title="Open a search result" hint="Pick a lead from the results." />;
+    // No explanation under the title (owner 2026-10-30): the title and Serve next lead say enough.
     return (
-      <EmptyState
-        title={searchMode ? "Open a search result" : "No lead on your screen"}
-        hint={searchMode ? "Pick a lead from the results." : emptyReason ?? (readOnly ? "Read-only access does not serve leads." : "Serve the next lead, or pick one from the list below.")}
-        action={!searchMode && !readOnly ? <Button type="button" onClick={() => void serveNext()} disabled={serving}>{serving ? "Serving…" : "Serve next lead"}</Button> : undefined}
-      />
+      <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+        <p className="m-0 text-sm font-semibold text-[var(--ink)]">No lead on your screen</p>
+        {!readOnly && <Button type="button" onClick={() => void serveNext()} disabled={serving}>{serving ? "Serving…" : "Serve next lead"}</Button>}
+      </div>
     );
   }
 
@@ -66,6 +68,79 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
   const why = servedHere && served
     ? `Served to you${served.tierName ? ` · ${served.tierName.replaceAll("_", " ")}` : ""}: ${[reasonParts.join(" · ") || served.selectionReason || "from the queue", served.lockedUntil ? `locked to you until ${new Date(served.lockedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "held by you"].join(" · ")}`
     : reasonParts.length > 0 ? `Last chosen: ${reasonParts.join(" · ")}` : undefined;
+
+  // Every check in full and the suppression stack: what Details opens.
+  const complianceDetail = (
+    <div className="p-4">
+      <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3">
+        <div className="min-w-0"><dt className={label}>Consent on file</dt><dd className={cn(value, "m-0")}>{consentLabel(panel.consent)}</dd></div>
+        {/* D15: whether the state's wording is the approved text or still the placeholder. */}
+        <div className="min-w-0">
+          <dt className={label}>State disclosure</dt>
+          <dd className={cn(value, "m-0", (!panel.disclosure.configured || disclosureUnapproved) && "text-[var(--error-ink)]")}>
+            {!panel.disclosure.configured ? "None on file · dialing refused" : disclosureUnapproved ? "Placeholder · not approved" : "Approved wording on file"}
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className={label}>DNC</dt>
+          <dd className={cn(value, "m-0", eligibility?.dncCheck === "unavailable" && "text-[var(--error-ink)]")}>
+            {eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}
+            {panel.lastDncCheck && <span className="block font-normal text-[var(--muted)] text-xs">Last: {panel.lastDncCheck.result === "clear" ? "clear" : panel.lastDncCheck.result === "listed" ? "listed, dial refused" : "lists could not be read"} · {agoLabel(Date.parse(panel.lastDncCheck.checkedAt), now)}</span>}
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className={label}>Licence</dt>
+          <dd className={cn(value, "m-0", eligibility?.licence && eligibility.licence.status !== "live" && "text-[var(--error-ink)]")}>
+            {!eligibility?.licence
+              ? eligibility?.reason === "no_state" ? "Unknown · the lead has no state" : "Checked when you call"
+              : eligibility.licence.status === "live"
+                ? `${eligibility.licence.state} licence live${eligibility.licence.expiresAt ? ` · until ${shortDate(eligibility.licence.expiresAt)}` : ""}`
+                : eligibility.licence.status === "refused" ? `Not licensed in ${eligibility.licence.state}` : "Could not be checked"}
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className={label}>Calling window</dt>
+          <dd className={cn(value, "m-0", panel.window ? !panel.window.allowed && "text-[var(--error-ink)]" : eligibility?.reason === "outside_window" && "text-[var(--error-ink)]")}>
+            {panel.window
+              ? panel.window.allowed && panel.window.endMinute !== null
+                ? `Open until ${minuteLabel(panel.window.endMinute)}${panel.window.zone ? ` ${zoneShort(panel.window.zone)}` : ""}`
+                : windowClosedLabel(panel.window.reason, panel.window.startMinute, panel.window.zone)
+              : eligibility?.reason === "outside_window" ? "Closed now" : eligibility?.reason === "no_state" ? "Unknown · the lead has no state" : "Checked when you call"}
+          </dd>
+        </div>
+      </dl>
+      {/* The suppression stack (user decision 2026-09-25): every stored list, re-read at the
+          moment of dialing — the agency's own list plus the litigator, federal and state DNC
+          scrub hits. A hit refuses the dial with the list named. */}
+      <div className="mt-4 border-t border-[var(--border)] pt-3">
+        <p className={label}>Suppression stack · re-checked at dial</p>
+        {/* LA-2.3-3: every use of an exemption is audited; the agent sees it on the dial. */}
+        {eligibility?.dncExemption && (
+          <p className="mt-2 flex flex-wrap items-center gap-2">
+            <StatusChip tone="warning" dot>{dncExemptionLine(eligibility.dncExemption)}</StatusChip>
+            {eligibility.dncExemption.certificateUrl && <a href={eligibility.dncExemption.certificateUrl} target="_blank" rel="noreferrer" className={cn(small, "font-semibold text-[var(--ink)] underline underline-offset-2")}>Consent certificate</a>}
+          </p>
+        )}
+        <dl className="m-0 mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1">
+          {SUPPRESSION_LISTS.filter((list) => list.key !== "invalid" || stackHits?.some((hit) => hit.listType === "invalid")).map((list) => {
+            const hit = stackHits?.find((row) => row.listType === list.key) ?? null;
+            const result = list.key === "internal"
+              ? eligibility?.suppression === "suppressed" || hit ? "Listed" : eligibility?.suppression === "unavailable" ? "Could not be checked" : eligibility?.suppression === "not_checked" ? "Not checked · no valid phone" : eligibility?.suppression === "clear" ? "Clear" : "—"
+              : hit ? "Listed" : stackHits ? "Clear" : eligibility?.suppression === "not_checked" ? "Not checked · no valid phone" : "Not re-read here yet";
+            const bad = result === "Listed" || result === "Could not be checked";
+            return (
+              <div key={list.key} className="contents">
+                <dt className={body14}>{list.label}</dt>
+                <dd className={cn("m-0 text-right text-sm leading-[1.5] font-semibold tracking-[-0.02em]", bad ? "text-[var(--error-ink)]" : result === "Clear" ? "text-[var(--success-ink)]" : "text-[var(--muted)]")}>
+                  {result}{hit?.addedAt && <span className="block text-xs font-normal text-[var(--muted)]">since {shortDate(hit.addedAt)}</span>}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+      </div>
+    </div>
+  );
 
   return (
     <article aria-label="Lead" className="@container flex flex-col gap-4 p-5">
@@ -117,93 +192,37 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
               : eligibility?.reason === "outside_window" ? "Window closed" : "Window"}
           </Fact>
           <Fact icon={!panel.disclosure.configured || disclosureUnapproved ? ShieldAlert : ShieldCheck} tone={!panel.disclosure.configured ? "bad" : disclosureUnapproved ? "warn" : "good"} title="The state's disclosure wording">{!panel.disclosure.configured ? "No disclosure" : disclosureUnapproved ? "Placeholder disclosure" : "Disclosure"}</Fact>
-          <button type="button" onClick={() => setComplianceOpen((open) => !open)} aria-expanded={complianceOpen} aria-controls="dialer-compliance-detail" className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)]">
-            Details<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", complianceOpen && "rotate-180")} />
-          </button>
+          {/* Details and the state's disclosure on the same line as the checks (owner 2026-10-30). Each
+              opens over the page, so the card keeps its shape when they are read. */}
+          <Popover open={complianceOpen} onOpenChange={setComplianceOpen}>
+            <PopoverTrigger asChild>
+              <button type="button" className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--body)] hover:text-[var(--ink)] data-[state=open]:border-[var(--border-strong)] data-[state=open]:text-[var(--ink)]">
+                Details<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", complianceOpen && "rotate-180")} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="max-h-[min(70dvh,560px)] w-[min(92vw,560px)] overflow-y-auto p-0">
+              {complianceDetail}
+            </PopoverContent>
+          </Popover>
+          {/* The state's wording (owner 2026-10-27: not on the card). One click away, never removed: the
+              Call click still records it on the attempt, and a placeholder is still flagged by the
+              Disclosure tick. */}
+          {panel.disclosure.configured && (
+            <Popover open={disclosureOpen} onOpenChange={setDisclosureOpen}>
+              <PopoverTrigger asChild>
+                <button type="button" className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--body)] hover:text-[var(--ink)] data-[state=open]:border-[var(--border-strong)] data-[state=open]:text-[var(--ink)]">
+                  {`${stateName ?? panel.disclosure.state} disclosure`}<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", disclosureOpen && "rotate-180")} />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="max-h-[min(70dvh,480px)] w-[min(92vw,480px)] overflow-y-auto">
+                <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--ink)]">{panel.disclosure.requiredText}</p>
+              </PopoverContent>
+            </Popover>
+          )}
           <span className="sr-only">{callReady ? "Allowed" : "Blocked"}</span>
         </div>
-        {complianceOpen && <div id="dialer-compliance-detail" className="rounded-xl bg-[var(--surface-alt)] p-4">
-          <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3">
-            <div className="min-w-0"><dt className={label}>Consent on file</dt><dd className={cn(value, "m-0")}>{consentLabel(panel.consent)}</dd></div>
-            {/* D15: whether the state's wording is the approved text or still the placeholder. */}
-            <div className="min-w-0">
-              <dt className={label}>State disclosure</dt>
-              <dd className={cn(value, "m-0", (!panel.disclosure.configured || disclosureUnapproved) && "text-[var(--error-ink)]")}>
-                {!panel.disclosure.configured ? "None on file · dialing refused" : disclosureUnapproved ? "Placeholder · not approved" : "Approved wording on file"}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className={label}>DNC</dt>
-              <dd className={cn(value, "m-0", eligibility?.dncCheck === "unavailable" && "text-[var(--error-ink)]")}>
-                {eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}
-                {panel.lastDncCheck && <span className="block font-normal text-[var(--muted)] text-xs">Last: {panel.lastDncCheck.result === "clear" ? "clear" : panel.lastDncCheck.result === "listed" ? "listed, dial refused" : "lists could not be read"} · {agoLabel(Date.parse(panel.lastDncCheck.checkedAt), now)}</span>}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className={label}>Licence</dt>
-              <dd className={cn(value, "m-0", eligibility?.licence && eligibility.licence.status !== "live" && "text-[var(--error-ink)]")}>
-                {!eligibility?.licence
-                  ? eligibility?.reason === "no_state" ? "Unknown · the lead has no state" : "Checked when you call"
-                  : eligibility.licence.status === "live"
-                    ? `${eligibility.licence.state} licence live${eligibility.licence.expiresAt ? ` · until ${shortDate(eligibility.licence.expiresAt)}` : ""}`
-                    : eligibility.licence.status === "refused" ? `Not licensed in ${eligibility.licence.state}` : "Could not be checked"}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className={label}>Calling window</dt>
-              <dd className={cn(value, "m-0", panel.window ? !panel.window.allowed && "text-[var(--error-ink)]" : eligibility?.reason === "outside_window" && "text-[var(--error-ink)]")}>
-                {panel.window
-                  ? panel.window.allowed && panel.window.endMinute !== null
-                    ? `Open until ${minuteLabel(panel.window.endMinute)}${panel.window.zone ? ` ${zoneShort(panel.window.zone)}` : ""}`
-                    : windowClosedLabel(panel.window.reason, panel.window.startMinute, panel.window.zone)
-                  : eligibility?.reason === "outside_window" ? "Closed now" : eligibility?.reason === "no_state" ? "Unknown · the lead has no state" : "Checked when you call"}
-              </dd>
-            </div>
-          </dl>
-          {/* The suppression stack (user decision 2026-09-25): every stored list, re-read at the
-              moment of dialing — the agency's own list plus the litigator, federal and state DNC
-              scrub hits. A hit refuses the dial with the list named. */}
-          <div className="mt-4 border-t border-[var(--border)] pt-3">
-            <p className={label}>Suppression stack · re-checked at dial</p>
-            {/* LA-2.3-3: every use of an exemption is audited; the agent sees it on the dial. */}
-            {eligibility?.dncExemption && (
-              <p className="mt-2 flex flex-wrap items-center gap-2">
-                <StatusChip tone="warning" dot>{dncExemptionLine(eligibility.dncExemption)}</StatusChip>
-                {eligibility.dncExemption.certificateUrl && <a href={eligibility.dncExemption.certificateUrl} target="_blank" rel="noreferrer" className={cn(small, "font-semibold text-[var(--ink)] underline underline-offset-2")}>Consent certificate</a>}
-              </p>
-            )}
-            <dl className="m-0 mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1">
-              {SUPPRESSION_LISTS.filter((list) => list.key !== "invalid" || stackHits?.some((hit) => hit.listType === "invalid")).map((list) => {
-                const hit = stackHits?.find((row) => row.listType === list.key) ?? null;
-                const result = list.key === "internal"
-                  ? eligibility?.suppression === "suppressed" || hit ? "Listed" : eligibility?.suppression === "unavailable" ? "Could not be checked" : eligibility?.suppression === "not_checked" ? "Not checked · no valid phone" : eligibility?.suppression === "clear" ? "Clear" : "—"
-                  : hit ? "Listed" : stackHits ? "Clear" : eligibility?.suppression === "not_checked" ? "Not checked · no valid phone" : "Not re-read here yet";
-                const bad = result === "Listed" || result === "Could not be checked";
-                return (
-                  <div key={list.key} className="contents">
-                    <dt className={body14}>{list.label}</dt>
-                    <dd className={cn("m-0 text-right text-sm leading-[1.5] font-semibold tracking-[-0.02em]", bad ? "text-[var(--error-ink)]" : result === "Clear" ? "text-[var(--success-ink)]" : "text-[var(--muted)]")}>
-                      {result}{hit?.addedAt && <span className="block text-xs font-normal text-[var(--muted)]">since {shortDate(hit.addedAt)}</span>}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-          </div>
-        </div>}
       </section>
 
-          {/* The state's wording, folded behind one toggle (owner 2026-10-27: not on the card). It is
-              one click away, never removed: the Call click still records it on the attempt, and a
-              placeholder text is still flagged by the Disclosure tick. */}
-          {panel.disclosure.configured && (
-            <div className="flex flex-col gap-2 @max-2xl:order-2">
-              <button type="button" onClick={() => setDisclosureOpen((open) => !open)} aria-expanded={disclosureOpen} aria-controls="dialer-disclosure" className="inline-flex h-7 w-fit items-center gap-1 rounded-full border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)]">
-                {`${stateName ?? panel.disclosure.state} disclosure`}<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", disclosureOpen && "rotate-180")} />
-              </button>
-              {disclosureOpen && <p id="dialer-disclosure" className="m-0 rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-surface)]/40 px-4 py-3 text-sm leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--body)]">{panel.disclosure.requiredText}</p>}
-            </div>
-          )}
       </div>
       {call && <div className="flex shrink-0 flex-col items-stretch gap-2 @max-2xl:order-1">{call}</div>}
       </div>

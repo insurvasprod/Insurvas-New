@@ -16,7 +16,9 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS } from "@/lib/ingestion/constants";
 import { guessTargetField, isKeptEntry, mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
 import type { AssignmentView, CarrierOption, LayoutMapView, WaitingFile } from "@/lib/ingestion/layoutAdmin";
@@ -52,6 +54,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
   const [page, setPage] = useState(1);
   const [versionPage, setVersionPage] = useState(1);
   const [carrierPage, setCarrierPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 49);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -101,8 +104,8 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
     const words = query.trim().toLowerCase();
     return !words || entry.sourceColumn.toLowerCase().includes(words) || (!isKeptEntry(entry) && label(entry.targetField).toLowerCase().includes(words));
   });
-  const shown = paginate(rows, page);
-  const lastPage = (count: number) => Math.max(1, Math.ceil(count / 10));
+  const shown = paginate(rows, page, pageSize);
+  const lastPage = (count: number) => Math.max(1, Math.ceil(count / pageSize));
 
   async function reload(select?: string) {
     const data = await call<{ maps: LayoutMapView[]; assignments: AssignmentView[] }>("/api/admin/layout-maps");
@@ -236,10 +239,12 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
               ) : undefined}
             >
               <ToolbarSearch value={query} onChange={(next) => { setQuery(next); setPage(1); }} placeholder="Search columns" />
-              <Segmented label="Which columns" value={show} onChange={(next) => { setShow(next); setPage(1); }} options={[{ key: "all", label: "All", count: draft.entries.length }, { key: "used", label: "Used", count: used }, { key: "kept", label: "Kept", count: kept }]} />
+              <div role="radiogroup" aria-label="Which columns" className="flex flex-wrap items-center gap-2">
+                {([["all", "All", draft.entries.length], ["used", "Used", used], ["kept", "Kept", kept]] as const).map(([key, label, count]) => <ToggleChip key={key} role="radio" selected={show === key} count={count} onClick={() => { setShow(key); setPage(1); }}>{label}</ToggleChip>)}
+              </div>
             </DataToolbar>
           }
-          footer={rows.length > 0 ? <Pager page={shown.current} total={rows.length} noun="columns" onPage={setPage} suffix={editable ? (dirty ? "unsaved changes" : "saved") : "frozen: start the next version to change it"} /> : undefined}
+          footer={rows.length > 0 ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="columns" onPage={setPage} suffix={editable ? (dirty ? "unsaved changes" : "saved") : "frozen: start the next version to change it"} /> : undefined}
         >
           {draft.entries.length === 0 ? (
             <EmptyState title="No columns yet" hint="Read a carrier's sample file to list every column at once." action={editable ? <Button type="button" onClick={() => sampleInput.current?.click()}>Read a sample file</Button> : undefined} />
@@ -350,7 +355,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
 
       {tab === "carriers" && (
         <TableCard
-          footer={assignments.length > 10 ? <Pager page={paginate(assignments, carrierPage).current} total={assignments.length} noun="carriers" onPage={setCarrierPage} /> : undefined}
+          footer={assignments.length ? <Pager page={paginate(assignments, carrierPage, pageSize).current} pageSize={pageSize} total={assignments.length} noun="carriers" onPage={setCarrierPage} /> : undefined}
           toolbar={
             <DataToolbar>
               <select aria-label="Carrier" className={`${toolbarControl} max-w-[300px]`} value={assignCarrier} onChange={(event) => setAssignCarrier(event.target.value)}>
@@ -372,7 +377,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
             <table className="portal-lead-table w-full text-left text-sm">
               <thead><tr><th>Carrier</th><th className="w-[160px]">File type</th><th className="w-[120px] text-right"><span className="sr-only">Remove</span></th></tr></thead>
               <tbody>
-                {paginate(assignments, carrierPage).rows.map((row) => (
+                {paginate(assignments, carrierPage, pageSize).rows.map((row) => (
                   <tr key={row.id}>
                     <td className="font-semibold text-foreground">{row.carrierName}</td>
                     <td>{FILE_TYPE_LABELS[row.fileType]}</td>
@@ -386,11 +391,11 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
       )}
 
       {tab === "versions" && (
-        <TableCard footer={sorted.length > 10 ? <Pager page={paginate(sorted, versionPage).current} total={sorted.length} noun="versions" onPage={setVersionPage} /> : undefined}>
+        <TableCard footer={sorted.length ? <Pager page={paginate(sorted, versionPage, pageSize).current} pageSize={pageSize} total={sorted.length} noun="versions" onPage={setVersionPage} /> : undefined}>
           <table className="portal-lead-table w-full text-left text-sm">
             <thead><tr><th className="w-[100px]">Version</th><th className="w-[130px]">State</th><th className="w-[160px]">Columns</th><th className="w-[150px]">Published</th><th>Last change</th><th className="w-[100px] text-right"><span className="sr-only">Open</span></th></tr></thead>
             <tbody>
-              {paginate(sorted, versionPage).rows.map((map) => {
+              {paginate(sorted, versionPage, pageSize).rows.map((map) => {
                 const mapKept = map.entries.filter(isKeptEntry).length;
                 return (
                   <tr key={map.id}>

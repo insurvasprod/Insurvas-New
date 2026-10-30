@@ -6,6 +6,8 @@ import { notify } from "@/lib/notify";
 import { PageHeader } from "@/components/ui/page-header";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
@@ -35,9 +37,12 @@ export function AttributionBoard({ canResolve }: { canResolve: boolean }) {
   const [choice, setChoice] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
   const name = useMemo(() => new Map((roster.data?.rows ?? []).map((p) => [p.userId, p.displayName])), [roster.data]);
   const all = items.data?.items ?? [];
   const rows = all.filter((i) => (tab === "resolved" ? i.status === "resolved" : i.status === "open" && i.kind === tab));
+  const shown = paginate(rows, page, pageSize);
   const count = (k: "disagreement" | "unattributed") => all.filter((i) => i.status === "open" && i.kind === k).length;
 
   function pick(i: (typeof all)[number]) {
@@ -60,13 +65,13 @@ export function AttributionBoard({ canResolve }: { canResolve: boolean }) {
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="Attribution queue" description="Statement rows we could not safely give to one producer." />
-      <ViewTabs label="Attribution" value={tab} onChange={setTab} idPrefix="attr-tab" tabs={[
+      <ViewTabs label="Attribution" value={tab} onChange={(next) => { setTab(next); setPage(1); }} idPrefix="attr-tab" tabs={[
         { key: "disagreement", label: "Disagreements", count: count("disagreement"), tone: count("disagreement") ? "danger" : undefined },
         { key: "unattributed", label: "Unattributed", count: count("unattributed") },
         { key: "resolved", label: "Resolved" },
       ]} />
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row lg:items-stretch">
-        <TableCard className="min-w-0 flex-1" toolbar={<DataToolbar actions={<RefreshButton onClick={items.reload} refreshing={items.refreshing} />} />}>
+        <TableCard className="min-w-0 flex-1" toolbar={<DataToolbar actions={<RefreshButton onClick={items.reload} refreshing={items.refreshing} />} />} footer={rows.length ? <Pager page={shown.current} total={rows.length} noun="rows" pageSize={pageSize} onPage={setPage} /> : undefined}>
           {items.error ? <ErrorState detail={items.error} /> : items.loading ? <SectionLoading rows={4} columns={5} label="Loading the queue" /> : rows.length === 0 ? (
             <EmptyState title={tab === "resolved" ? "Nothing resolved yet" : "Nothing waiting"} hint={tab === "resolved" ? "Rows you decide appear here with who decided and why." : tab === "disagreement" ? "No row has a writing number and an application naming different producers." : "Every statement row matched one producer by its writing number or its application."} />
           ) : (
@@ -78,7 +83,7 @@ export function AttributionBoard({ canResolve }: { canResolve: boolean }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((i) => (
+                {shown.rows.map((i) => (
                   <TableRow key={i.id} className={open?.id === i.id ? "bg-[var(--primary-soft)]" : canResolve && i.status === "open" ? "cursor-pointer" : undefined} onClick={() => { if (canResolve && i.status === "open") pick(i); }}>
                     <TableCell className="max-w-[16rem] truncate font-medium" title={i.fileName ?? undefined}>{i.fileName ?? "File"} · {i.rowNumber ?? "—"}</TableCell>
                     <TableCell>{i.carrierName ?? "—"}</TableCell>

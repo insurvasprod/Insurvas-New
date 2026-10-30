@@ -5,7 +5,8 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -17,8 +18,6 @@ import { attachableTo, CYCLE_SUFFIX, type PlanRef } from "@/lib/addons/catalogVi
 import type { PlanListRow } from "@/lib/plans/constants";
 import { cn } from "@/lib/utils";
 import { AddonDialog, type AddonFeatureOption, type AddonMeterOption } from "./addon-dialog";
-
-const PAGE_SIZE = 10;
 
 type StatusFilter = "all" | "active" | "retired";
 
@@ -61,6 +60,7 @@ export function AddonsCatalog({
   const [cycle, setCycle] = useState<"all" | BillingCycle>("all");
   const [plan, setPlan] = useState<string>("all");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
 
   const archived = useMemo(() => new Set(archivedFeatureKeys), [archivedFeatureKeys]);
   const attachable = useMemo(
@@ -95,9 +95,7 @@ export function AddonsCatalog({
   }, [addons, query, status, cycle, plan, attachable, featureLabels]);
 
   const activeFilters = (status !== "all" ? 1 : 0) + (cycle !== "all" ? 1 : 0) + (plan !== "all" ? 1 : 0);
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(page, pages);
-  const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const { current, rows: visible } = paginate(filtered, page, pageSize);
 
   function clearFilters() {
     setQuery("");
@@ -125,6 +123,7 @@ export function AddonsCatalog({
 
       <TableCard
         className="min-w-0"
+        footer={addons.length > 0 ? <Pager page={current} pageSize={pageSize} total={filtered.length} noun={filtered.length === 1 ? "add-on" : "add-ons"} suffix="by sort order, then name" onPage={setPage} /> : undefined}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
             <ToolbarSearch
@@ -297,16 +296,6 @@ export function AddonsCatalog({
               })}
             </tbody>
           </table>
-        {addons.length > 0 && (
-          <BoardTableFooter
-            page={current}
-            pageSize={PAGE_SIZE}
-            total={filtered.length}
-            itemLabel={filtered.length === 1 ? "add-on" : "add-ons"}
-            order="by sort order, then name"
-            onPageChange={setPage}
-          />
-        )}
       </TableCard>
 
       {editor && (

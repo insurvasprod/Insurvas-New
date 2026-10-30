@@ -151,7 +151,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       { label: "Welcome pack sending", anchor: "qa-welcome", keywords: ["welcome pack", "auto send"] },
     ],
   },
-  { group: "Sales process", id: "sales-welcome-pack", label: "Welcome pack", sort_order: 60, owned_by_module: "LA-3.20", required_feature: "applications", required_roles: OWNER, description: "The email a client gets after submit, so their first draft is never a surprise.", search_keywords: ["welcome email", "client email"] },
+  { group: "Sales process", id: "sales-welcome-pack", label: "Welcome pack", sort_order: 60, owned_by_module: "LA-3.20", required_feature: "applications", required_roles: OWNER, description: "The email a client gets after submit, so their first draft is never a surprise.", search_keywords: ["welcome email", "client email"],
+    // Hidden from the menu and search for now (owner 2026-10-30); the panel and its data stay.
+    disabled: "Hidden for now." },
   { group: "Sales process", id: "sales-ai", label: "AI assistant", sort_order: 70, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The underwriting assistant, and exactly what it would be sent.", search_keywords: ["ai", "assistant"] },
   { group: "Sales process", id: "sales-pipeline-sync", label: "Pipeline sync", sort_order: 80, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Which pipeline stage a lead's card moves to as its application progresses.", search_keywords: ["stage sync"] },
 

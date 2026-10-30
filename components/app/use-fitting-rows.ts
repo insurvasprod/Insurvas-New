@@ -4,9 +4,9 @@
  * @deprecated 2026-10-09: the one implementation is components/ui/use-fitting-page-size. This module
  * keeps its old name as a pass-through so existing imports keep working.
  */
-import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { MAX_ROWS, useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
-export function useFittingRows(reserved: number, rowHeight: number, min = 5, max = 10) {
+export function useFittingRows(reserved: number, rowHeight: number, min = 5, max = MAX_ROWS) {
   return useFittingPageSize(reserved, rowHeight, { min, max });
 }
 

@@ -11,6 +11,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import {
   ACQUISITION_CONSEQUENCE,
@@ -119,11 +120,15 @@ export function ExpensesBoard({ expenses, defaults, readOnly, openId = null }: {
   const target = openId ? expenses.find((e) => e.id === openId) ?? null : null;
   const [view, setView] = useState<View>(target ? viewOf(target) : unconfirmed.length ? "confirm" : "booked");
   const [q, setQ] = useState("");
-  const [page, setPage] = useState(() => {
-    if (!target) return 1;
+  const pageSize = useFittingPageSize(480, 45);
+  // Until someone pages, the page follows the target row, so a re-fitted page size still shows it.
+  const [picked, setPage] = useState<number | null>(null);
+  const targetIndex = useMemo(() => {
+    if (!target) return 0;
     const list = target.status === "unconfirmed" ? unconfirmed : target.status === "template" ? expenses.filter((e) => e.status === "template") : expenses.filter((e) => e.status === "confirmed" || e.status === "void");
-    return Math.floor(Math.max(list.findIndex((e) => e.id === target.id), 0) / 20) + 1;
-  });
+    return Math.max(list.findIndex((e) => e.id === target.id), 0);
+  }, [target, unconfirmed, expenses]);
+  const page = picked ?? Math.floor(targetIndex / pageSize) + 1;
   useEffect(() => {
     if (target) document.getElementById(`expense-${target.id}`)?.scrollIntoView({ block: "center" });
   }, [target]);
@@ -191,7 +196,7 @@ export function ExpensesBoard({ expenses, defaults, readOnly, openId = null }: {
     const base = view === "confirm" ? unconfirmed : view === "recurring" ? templates : expenses.filter((e) => e.status === "confirmed" || e.status === "void");
     return base.filter((e) => !needle || e.vendorName.toLowerCase().includes(needle) || (e.description ?? "").toLowerCase().includes(needle));
   }, [expenses, unconfirmed, templates, view, q]);
-  const shown = paginate(rows, page, 20);
+  const shown = paginate(rows, page, pageSize);
 
   return (
     <>
@@ -217,7 +222,7 @@ export function ExpensesBoard({ expenses, defaults, readOnly, openId = null }: {
             <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search who it was paid to" />
           </DataToolbar>
         }
-        footer={rows.length > 20 ? <Pager page={shown.current} pageSize={20} total={rows.length} noun="expenses" onPage={setPage} /> : undefined}
+        footer={rows.length ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="expenses" onPage={setPage} /> : undefined}
       >
         {expenses.length === 0 ? (
           <EmptyState title="No expenses yet" hint="Add the dialer, the CRM, the lead spend: without them cost per policy is too low." action={!readOnly ? <Button onClick={() => setCreating(true)}>Add an expense</Button> : undefined} />

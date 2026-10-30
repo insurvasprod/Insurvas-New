@@ -16,7 +16,10 @@ import { Callout, Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
+import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { notify } from "@/lib/notify";
 import { PASSWORD_MIN } from "@/lib/tenantAuth/securityRules";
@@ -443,24 +446,32 @@ export function SecurityLog({ timeZone }: { timeZone: string | null }) {
     });
     return () => { live = false; };
   }, [reloads]);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 41);
+  const listed = (events ?? []).slice(0, 50);
+  const paged = paginate(listed, page, pageSize);
   return (
-    <section id="security-log" aria-label="Sign-ins and security" className="m-glass scroll-mt-24 rounded-[12px] border border-[var(--border)] p-4">
-      {events === undefined ? <SectionLoading rows={4} columns={3} label="Loading your sign-ins" /> : failed ? (
-        <LoadFailed what="your sign-ins" onRetry={() => { setEvents(undefined); setReloads((n) => n + 1); }} />
-      ) : events === null ? (
-        <p className="m-0 text-sm text-[var(--muted)]">The security log is not available yet. Contact support.</p>
-      ) : events.length === 0 ? (
-        <p className="m-0 text-sm text-[var(--muted)]">Nothing yet. Sign-ins, password changes and two-step changes show here.</p>
-      ) : (
-        <ul className="m-0 flex list-none flex-col p-0">
-          {events.slice(0, 50).map((e) => (
-            <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 border-t border-[var(--border)] py-2.5 text-sm first:border-t-0 first:pt-0 last:pb-0">
-              <span className={e.type === "failed_logins" ? "font-semibold text-[var(--warning-ink)]" : "text-[var(--ink)]"}>{e.label}</span>
-              <span className="text-xs text-[var(--muted)] tabular-nums">{when(e.at)}{e.ip ? ` · ${e.ip}` : ""}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <section id="security-log" aria-label="Sign-ins and security" className="scroll-mt-24">
+      <TableCard footer={listed.length ? <Pager page={paged.current} total={listed.length} noun={listed.length === 1 ? "event" : "events"} pageSize={pageSize} onPage={setPage} suffix="newest first" /> : undefined}>
+        <div className="px-4 py-3">
+          {events === undefined ? <SectionLoading rows={4} columns={3} label="Loading your sign-ins" /> : failed ? (
+            <LoadFailed what="your sign-ins" onRetry={() => { setEvents(undefined); setReloads((n) => n + 1); }} />
+          ) : events === null ? (
+            <p className="m-0 text-sm text-[var(--muted)]">The security log is not available yet. Contact support.</p>
+          ) : events.length === 0 ? (
+            <p className="m-0 text-sm text-[var(--muted)]">Nothing yet. Sign-ins, password changes and two-step changes show here.</p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col p-0">
+              {paged.rows.map((e) => (
+                <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 border-t border-[var(--border)] py-2.5 text-sm first:border-t-0 first:pt-0 last:pb-0">
+                  <span className={e.type === "failed_logins" ? "font-semibold text-[var(--warning-ink)]" : "text-[var(--ink)]"}>{e.label}</span>
+                  <span className="text-xs text-[var(--muted)] tabular-nums">{when(e.at)}{e.ip ? ` · ${e.ip}` : ""}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </TableCard>
     </section>
   );
 }

@@ -236,7 +236,7 @@ export function StatTile({
    */
   reserveFootnote?: boolean;
   unit?: string;
-  delta?: { value: number; unit?: string; goodWhen?: "up" | "down" };
+  delta?: { value: number; unit?: string; goodWhen?: "up" | "down" | "neither" };
   trend?: { points: number[]; tone?: MeterTone };
   /** A figure that is a fraction of something — seats used, capacity filled — draws its bar here. */
   meter?: { value: number; max?: number; tone?: MeterTone; label: string };
@@ -248,13 +248,12 @@ export function StatTile({
       className={cn(
         // m-stat-tile: inside a <StatStrip> the tile loses its own border, radius and shadow and
         // becomes one cell of the strip (app/globals.css).
-        "m-stat-tile rounded-lg border border-border bg-card px-4 pb-3 pt-3.5 shadow-[var(--shadow-rest)]",
+        "m-stat-tile rounded-lg border border-border bg-card px-4 py-3 shadow-[var(--shadow-rest)]",
         className
       )}
     >
-      {/* The system's `label` style (12px/600, 0.02em, uppercase), not the board's 10.5px: 12px is
-          the smallest text the system allows, and a label is read before the figure it names. */}
-      <div className="flex items-center gap-1 text-xs font-semibold leading-[1.33] uppercase tracking-[0.02em] text-muted-foreground">
+      {/* The mockups' label (owner 2026-10-30, board LirS1): 12px/700, 0.06em, uppercase. */}
+      <div className="flex items-center gap-1 text-xs font-bold leading-[1.33] uppercase tracking-[0.06em] text-muted-foreground">
         {label}
         {labelTitle && <InfoTip label={`About ${label.toLowerCase()}`} className="size-4 normal-case tracking-normal">{labelTitle}</InfoTip>}
       </div>
@@ -264,7 +263,7 @@ export function StatTile({
       <div className="mt-1 flex items-end justify-between gap-3">
         {/* m-figure: the glass layer's halo behind the number in dark mode (app/globals.css). A plain
             number or numeric string counts to its value (CountUp); anything richer renders as given. */}
-        <span className={cn(valueSize === "text" ? "min-w-0 truncate text-base font-semibold leading-[1.5]" : "m-figure text-2xl font-semibold leading-[1.2] tracking-[-0.025em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
+        <span className={cn(valueSize === "text" ? "min-w-0 truncate text-base font-semibold leading-[1.5]" : "m-figure text-2xl font-bold leading-[1.2] tracking-[-0.025em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
           {valueSize !== "text" && (typeof value === "number" || (typeof value === "string" && /\d/.test(value))) ? <CountUp text={String(value)} /> : value}
           {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
         </span>
@@ -282,7 +281,7 @@ export function StatTile({
       )}
 
       {(delta || footnote || action || reserveFootnote) && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
           {delta && <DeltaChip value={delta.value} unit={delta.unit} goodWhen={delta.goodWhen} />}
           {footnote && <span className="text-xs text-muted-foreground">{footnote}</span>}
           {action && <span className="ml-auto text-xs">{action}</span>}

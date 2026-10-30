@@ -10,6 +10,8 @@ import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import type { ColumnMap } from "@/lib/accounting/bankCore";
 import { MATCH_STATUS_LABELS, type MatchStatus } from "@/lib/accounting/bankLabels";
@@ -154,6 +156,8 @@ function ImportDialog({ accounts, onClose, onDone }: { accounts: Account[]; onCl
 export function BankBoard({ data, readOnly }: { data: BankData; readOnly: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<"queue" | "unexplained" | "not_received" | "accounts">("queue");
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(520, 45);
   const [importing, setImporting] = useState(false);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -176,6 +180,13 @@ export function BankBoard({ data, readOnly }: { data: BankData; readOnly: boolea
     }
   };
   const toReview = data.queue.filter((t) => t.matches.some((m) => !m.confirmed));
+  // One page number for whichever list the tab shows; a new tab starts on page 1.
+  const queueShown = paginate(data.queue, page, pageSize);
+  const unexplainedShown = paginate(data.findings.unexplained, page, pageSize);
+  const notReceivedShown = paginate(data.findings.notReceived, page, pageSize);
+  const tabTotal = tab === "queue" ? data.queue.length : tab === "unexplained" ? data.findings.unexplained.length : tab === "not_received" ? data.findings.notReceived.length : 0;
+  const tabCurrent = tab === "queue" ? queueShown.current : tab === "unexplained" ? unexplainedShown.current : notReceivedShown.current;
+  const pickTab = (next: typeof tab) => { setTab(next); setPage(1); };
   const unexplainedCents = data.findings.unexplained.reduce((s, d) => s + d.amountCents - d.appliedCents, 0);
   const missingCents = data.findings.notReceived.reduce((s, n) => s + n.paidCents - n.receivedCents, 0);
   const account = (id: string) => data.accounts.find((a) => a.id === id);
@@ -187,7 +198,7 @@ export function BankBoard({ data, readOnly }: { data: BankData; readOnly: boolea
         <StatTile label="Not explained" value={money(unexplainedCents)} footnote={`${data.findings.unexplained.length} deposit${data.findings.unexplained.length === 1 ? "" : "s"} nothing accounts for`} />
         <StatTile label="Paid but not received" value={money(missingCents)} valueTone={missingCents ? "danger" : undefined} footnote={`${data.findings.notReceived.length} statement${data.findings.notReceived.length === 1 ? "" : "s"} past the carrier's lag`} />
       </StatStrip>
-      <ViewTabs label="Bank views" value={tab} onChange={setTab} tabs={[
+      <ViewTabs label="Bank views" value={tab} onChange={pickTab} tabs={[
         { key: "queue", label: "To match", count: data.queue.length },
         { key: "unexplained", label: "Not explained", count: data.findings.unexplained.length },
         { key: "not_received", label: "Not received", count: data.findings.notReceived.length, tone: "danger" },
@@ -197,7 +208,7 @@ export function BankBoard({ data, readOnly }: { data: BankData; readOnly: boolea
         <DataToolbar actions={<>{!readOnly && data.accounts.length ? <Button variant="outline" disabled={busy !== null} onClick={() => void act("suggest", { op: "suggest" }, "Suggestions refreshed")}>Suggest again</Button> : null}{!readOnly ? <Button variant="outline" onClick={() => setAdding(true)}>Add account</Button> : null}{!readOnly && data.accounts.length ? <Button onClick={() => setImporting(true)}>Import a bank export</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>}>
           <span className="text-sm text-muted-foreground">Nothing is matched until a person confirms it.</span>
         </DataToolbar>
-      }>
+      } footer={data.accounts.length && tabTotal ? <Pager page={tabCurrent} total={tabTotal} noun={tab === "not_received" ? "statements" : "deposits"} pageSize={pageSize} onPage={setPage} /> : undefined}>
         {data.accounts.length === 0 ? (
           <EmptyState title="No bank account yet" hint="Add the account commission is paid into, then import its CSV export." action={!readOnly ? <Button onClick={() => setAdding(true)}>Add account</Button> : undefined} />
         ) : tab === "accounts" ? (
@@ -209,14 +220,14 @@ export function BankBoard({ data, readOnly }: { data: BankData; readOnly: boolea
           data.findings.notReceived.length === 0 ? <EmptyState title="Nothing missing" hint="Every statement past its lag has a deposit — or no bank data covers it yet." /> : (
             <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
               <thead><tr><th>Carrier</th><th>Statement</th><th className="text-right">Said it paid</th><th className="text-right">Received</th><th>Due by</th></tr></thead>
-              <tbody>{data.findings.notReceived.map((n) => <tr key={n.statementId}><td className="font-medium">{n.carrierName}</td><td>{n.statementDate}</td><td className="text-right tabular-nums">{money(n.paidCents)}</td><td className="text-right tabular-nums">{money(n.receivedCents)}</td><td>{n.dueBy} <span className="text-xs text-muted-foreground">({n.lagDays}-day lag)</span></td></tr>)}</tbody>
+              <tbody>{notReceivedShown.rows.map((n) => <tr key={n.statementId}><td className="font-medium">{n.carrierName}</td><td>{n.statementDate}</td><td className="text-right tabular-nums">{money(n.paidCents)}</td><td className="text-right tabular-nums">{money(n.receivedCents)}</td><td>{n.dueBy} <span className="text-xs text-muted-foreground">({n.lagDays}-day lag)</span></td></tr>)}</tbody>
             </table>
           )
         ) : tab === "unexplained" ? (
           data.findings.unexplained.length === 0 ? <EmptyState title="Everything is explained" hint="Every deposit is matched to a carrier statement, or ignored with a reason." /> : (
             <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
               <thead><tr><th className="w-[110px]">Date</th><th>On the bank statement</th><th className="w-[130px] text-right">Amount</th><th className="w-[130px] text-right">Explained</th></tr></thead>
-              <tbody>{data.findings.unexplained.map((d) => <tr key={d.id}><td>{d.postedOn}</td><td className="font-mono text-xs">{d.descriptionRaw}</td><td className="text-right tabular-nums">{money(d.amountCents)}</td><td className="text-right tabular-nums">{money(d.appliedCents)}</td></tr>)}</tbody>
+              <tbody>{unexplainedShown.rows.map((d) => <tr key={d.id}><td>{d.postedOn}</td><td className="font-mono text-xs">{d.descriptionRaw}</td><td className="text-right tabular-nums">{money(d.amountCents)}</td><td className="text-right tabular-nums">{money(d.appliedCents)}</td></tr>)}</tbody>
             </table>
           )
         ) : data.queue.length === 0 ? (
@@ -225,7 +236,7 @@ export function BankBoard({ data, readOnly }: { data: BankData; readOnly: boolea
           <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
             <thead><tr><th className="w-[110px]">Date</th><th>On the bank statement</th><th className="w-[120px] text-right">Amount</th><th className="w-[340px]">Matches</th><th className="w-[140px]">Status</th></tr></thead>
             <tbody>
-              {data.queue.map((t) => {
+              {queueShown.rows.map((t) => {
                 const pending = t.matches.filter((m) => !m.confirmed);
                 return (
                   <tr key={t.id} className="align-top">

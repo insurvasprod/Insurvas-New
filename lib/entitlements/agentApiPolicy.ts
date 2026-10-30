@@ -68,6 +68,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/contacts/import/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/contacts/merge/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/contacts/merge/undo/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
+  { sourceFile: "app/api/app/contacts/lead-reviews/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
+  { sourceFile: "app/api/app/contacts/missing-data/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/contacts/reviews/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/dial/preflight/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/dialer/search/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
@@ -109,6 +111,10 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/dialer/rebuttals/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/campaigns/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/campaigns/[id]/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/campaigns/[id]/lists/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/campaigns/[id]/lists/[listId]/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
+  // Import › "Your own book (no vendor)": finds or creates the own-book vendor and campaign; gated as campaign creation.
+  { sourceFile: "app/api/app/campaigns/own-book/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
   // Re-screens every lead in a campaign and bills each screening lookup: owners only.
   { sourceFile: "app/api/app/campaigns/[id]/scrub/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/vendors/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },

@@ -6,7 +6,8 @@ import { MoreHorizontal } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { StatusChip } from "@/components/admin/status-chip";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,6 @@ import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS, type ProductCategory, type
 import { cn } from "@/lib/utils";
 import { ProductDialog } from "./product-dialog";
 
-const PAGE = 10;
 const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
@@ -51,9 +51,8 @@ export function ProductsTable({ products, usage, partnerCount }: { products: Pro
     () => products.filter((p) => (includeArchived || p.is_active) && (!category || p.category === category) && (!needle || p.name.toLowerCase().includes(needle) || p.code.toLowerCase().includes(needle))),
     [products, includeArchived, category, needle],
   );
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
-  const current = Math.min(page, pages);
-  const shown = rows.slice((current - 1) * PAGE, current * PAGE);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(rows, page, pageSize);
   const anyFilter = Boolean(needle || category);
 
   async function setArchived(product: ProductRow, archived: boolean) {
@@ -89,6 +88,7 @@ export function ProductsTable({ products, usage, partnerCount }: { products: Pro
 
       <TableCard
         className="min-w-0"
+        footer={rows.length ? <Pager page={current} pageSize={pageSize} total={rows.length} noun={rows.length === 1 ? "product" : "products"} suffix="by sort order" onPage={setPage} /> : undefined}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
             <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search product or code" />
@@ -154,7 +154,6 @@ export function ProductsTable({ products, usage, partnerCount }: { products: Pro
               })}
             </tbody>
           </table>
-        {rows.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={rows.length} itemLabel={rows.length === 1 ? "product" : "products"} order="by sort order" onPageChange={setPage} />}
       </TableCard>
 
       <ProductDialog mode="create" open={creating} onClose={() => setCreating(false)} onSaved={() => router.refresh()} />

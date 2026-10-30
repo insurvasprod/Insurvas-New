@@ -16,11 +16,12 @@ import { Meter, StatStrip, StatTile, type MeterTone } from "@/components/ui/stat
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { ViewTabs } from "@/components/app/view-tabs";
-import { cn } from "@/lib/utils";
 import { CONSENT_STATUS_HINTS, CONSENT_STATUS_LABELS, type ConsentArtefact } from "@/lib/consent/constants";
 import { EVIDENCE_FILTER_LABEL, EVIDENCE_LABEL, EVIDENCE_TONE, evidenceTime, keptFor, type EvidenceFilter, type EvidenceLevel } from "@/lib/consent/evidence";
-import { Pager } from "@/components/ui/pager";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
 /**
  * The consent locker by lead (p-app-consent). Every lead, with the best evidence it has — the words,
@@ -50,7 +51,7 @@ type Tab = "leads" | "coverage";
 const SOURCE_LABEL: Record<Source, string> = { partner: "Partner submitted", vendor: "Vendor list or post", direct: "Direct" };
 const CHIP_TONE: Record<"success" | "warning" | "error", StatusTone> = { success: "good", warning: "warning", error: "danger" };
 /** The tab's one card reaches the bottom of the window. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(2)]:flex-1";
+const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>*:nth-child(2)]:flex-1";
 /** The leads card: the server pages 50 at a time, so from lg the card holds the window height and its
     table scrolls inside it under sticky headers, rather than the page scrolling (2026-10-06). */
 const LEADS_FILL = "flex flex-col lg:h-[calc(100dvh-var(--top-bar-h)-310px)] [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:bg-card";
@@ -74,6 +75,8 @@ export function ConsentLockerWorkspace() {
   const [now] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>("leads");
+  const [coveragePage, setCoveragePage] = useState(1);
+  const coveragePageSize = useFittingPageSize(480, 45);
 
   const query = useCallback((extra: Record<string, string> = {}) => {
     const params = new URLSearchParams({ view: "leads", evidence: filter, page: String(page), ...extra });
@@ -124,6 +127,7 @@ export function ConsentLockerWorkspace() {
   }
 
   const tiles = loaded?.tiles;
+  const coverage = paginate([...(loaded?.coverage ?? [])].sort((a, b) => (b.claimedPct ?? -1) - (a.claimedPct ?? -1)), coveragePage, coveragePageSize);
   const filtered = Boolean(search || filter !== "every" || sources.length);
   const clearFilters = () => { setSearch(""); setFilter("every"); setSources([]); setPage(0); };
 
@@ -170,20 +174,11 @@ export function ConsentLockerWorkspace() {
                 {(Object.keys(EVIDENCE_FILTER_LABEL) as EvidenceFilter[]).map((key) => <option key={key} value={key}>{EVIDENCE_FILTER_LABEL[key]}</option>)}
               </select>
               {/* Sources are toggles, any number on at once; none on is every source. */}
-              <span role="group" aria-label="Filter by source" className="inline-flex h-9 max-w-full gap-0.5 overflow-x-auto rounded-md bg-[var(--canvas)] p-0.5">
+              <span role="group" aria-label="Filter by source" className="inline-flex max-w-full gap-1.5 overflow-x-auto">
                 {(Object.keys(SOURCE_LABEL) as Source[]).map((source) => (
-                  <button
-                    key={source}
-                    type="button"
-                    aria-pressed={sources.includes(source)}
-                    onClick={() => toggleSource(source)}
-                    className={cn(
-                      "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-md border px-2.5 text-sm font-semibold tracking-[-0.01em]",
-                      sources.includes(source) ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-                    )}
-                  >
+                  <ToggleChip key={source} selected={sources.includes(source)} onClick={() => toggleSource(source)} className="shrink-0">
                     {SOURCE_LABEL[source]}
-                  </button>
+                  </ToggleChip>
                 ))}
               </span>
             </DataToolbar>
@@ -230,6 +225,7 @@ export function ConsentLockerWorkspace() {
         <TableCard
           className={FILL}
           toolbar={<DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />} />}
+          footer={loaded.coverage.length ? <Pager page={coverage.current} total={loaded.coverage.length} noun={loaded.coverage.length === 1 ? "vendor" : "vendors"} pageSize={coveragePageSize} onPage={setCoveragePage} /> : undefined}
         >
           {loaded.coverage.length === 0 ? <EmptyState title="No vendor coverage yet" hint="No vendor has supplied leads yet." />
             : <Table className="min-w-[640px]">
@@ -240,7 +236,7 @@ export function ConsentLockerWorkspace() {
                   <TableHead className="w-[40%]"><span className="sr-only">Coverage</span></TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {[...loaded.coverage].sort((a, b) => (b.claimedPct ?? -1) - (a.claimedPct ?? -1)).map((vendor) => (
+                  {coverage.rows.map((vendor) => (
                     <TableRow key={vendor.vendorId}>
                       <TableCell className="max-w-[260px] truncate font-semibold text-[var(--ink)]" title={vendor.vendorName}>{vendor.vendorName}</TableCell>
                       <TableCell className="text-right tabular-nums">{vendor.leads.toLocaleString()}</TableCell>

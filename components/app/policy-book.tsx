@@ -18,6 +18,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import { activeFilterCount, inForce, CSV_HEADER, csvRows, EMPTY_FILTERS, filterRows, NONE, readQuery, RISK_LABELS, rowStatusLabel, sortRows, toCsv, totals, writeQuery, type BookFilters, type BookRow, type RiskBand, type Sort, type SortKey } from "@/lib/ingestion/policyBook";
 import { STATUS_LABELS, STATUS_VOCABULARY } from "@/lib/ingestion/statuses";
@@ -123,7 +124,8 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
 
   const visible = useMemo(() => sortRows(filterRows(rows, filters), sort), [rows, filters, sort]);
   const sum = useMemo(() => totals(visible), [visible]);
-  const { current, rows: pageRows } = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(420, 45);
+  const { current, rows: pageRows } = paginate(visible, page, pageSize);
   const set = (key: keyof BookFilters, value: string) => { setFilters((now) => ({ ...now, [key]: value })); setPage(1); };
   const clear = () => { setFilters(EMPTY_FILTERS); setPage(1); };
   const filtered = activeFilterCount(filters) > 0 || Boolean(filters.q.trim());
@@ -240,7 +242,7 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
             <Field label="Issued to" htmlFor="policy-filter-to"><input id="policy-filter-to" type="date" aria-label="Issued to" className={control} value={filters.issuedTo} min={filters.issuedFrom || undefined} onChange={(event) => set("issuedTo", event.target.value)} /></Field>
           </FilterPanel>
         }
-        footer={rows.length ? <Pager page={current} pageSize={10} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "policy" : "policies"} /> : undefined}
+        footer={rows.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "policy" : "policies"} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title={scoped ? "No policies are credited to you yet" : "No policies from carrier files yet"} hint={scoped ? "Policies appear once a carrier's file names you as the writing agent and the code is mapped to you." : "Import each carrier's latest policy file in Import your book, and they appear here."} />

@@ -5,7 +5,8 @@ import { MoreHorizontal } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { StatusChip, type StatusTone } from "@/components/admin/status-chip";
 import { Callout } from "@/components/app/settings/primitives";
@@ -126,7 +127,6 @@ function overlaps(a: OfferRow, b: OfferRow): boolean {
   return true;
 }
 
-const PAGE = 10;
 const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
@@ -189,9 +189,8 @@ export function OffersTable({
       .sort((a, b) => Date.parse(b.offer.starts_at ?? b.offer.created_at) - Date.parse(a.offer.starts_at ?? a.offer.created_at)),
     [withState, stateFilter, target, needle],
   );
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
-  const current = Math.min(page, pages);
-  const shown = rows.slice((current - 1) * PAGE, current * PAGE);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(rows, page, pageSize);
   const anyFilter = Boolean(needle || target || stateFilter);
   function clear() { setQuery(""); setTarget(""); setStateFilter(""); setPage(1); }
 
@@ -344,6 +343,7 @@ export function OffersTable({
 
       <TableCard
         className="min-w-0"
+        footer={rows.length ? <Pager page={current} pageSize={pageSize} total={rows.length} noun={rows.length === 1 ? "offer" : "offers"} suffix="latest start first" onPage={setPage} /> : undefined}
         toolbar={
           <DataToolbar>
             <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search offer or coupon" />
@@ -419,7 +419,6 @@ export function OffersTable({
               })}
             </tbody>
           </table>
-        {rows.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={rows.length} itemLabel={rows.length === 1 ? "offer" : "offers"} order="latest start first" onPageChange={setPage} />}
       </TableCard>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>

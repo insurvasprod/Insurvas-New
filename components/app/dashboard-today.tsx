@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { countdown, dayOnDay } from "@/lib/dashboard/todayMath";
 import { hourLabel, periodChange } from "@/lib/dashboard/insights";
 import { waitLabel } from "@/lib/dashboard/summaryText";
@@ -347,14 +348,13 @@ function NeedsList({ needs, rows: wanted }: { needs: DashboardToday["needs"]; ro
 type Lens = "dials" | "contacts" | "rate";
 const LENSES: Array<{ key: Lens; label: string }> = [{ key: "dials", label: "Dials" }, { key: "contacts", label: "Reached" }, { key: "rate", label: "Contact rate" }];
 
-function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: Array<{ key: T; label: string }>; onChange: (next: T) => void; label: string }) {
+function LensChips<T extends string>({ value, options, onChange, label }: { value: T; options: Array<{ key: T; label: string }>; onChange: (next: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-border bg-[var(--surface-alt)] p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap gap-1.5">
       {options.map((option) => (
-        <button key={option.key} type="button" role="radio" aria-checked={value === option.key} onClick={() => onChange(option.key)}
-          className={`h-7 rounded-md px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${value === option.key ? "bg-card text-foreground shadow-[var(--shadow-rest)]" : "text-muted-foreground hover:text-foreground"}`}>
+        <ToggleChip key={option.key} role="radio" selected={value === option.key} onClick={() => onChange(option.key)}>
           {option.label}
-        </button>
+        </ToggleChip>
       ))}
     </div>
   );
@@ -386,7 +386,7 @@ function ActivityPanel({ data }: { data: DashboardToday }) {
               : <>{totalDials.toLocaleString()} dials · {totalContacts.toLocaleString()} reached · {withDials.length} active day{withDials.length === 1 ? "" : "s"}{data.scope === "you" ? " · yours" : ""}</>}
           </p>
         </div>
-        <Segmented value={lens} options={LENSES} onChange={setLens} label="Chart measure" />
+        <LensChips value={lens} options={LENSES} onChange={setLens} label="Chart measure" />
       </div>
       <div className="relative mt-4 flex flex-1 flex-col">
         {/* Gridlines at a quarter, a half and three quarters, with the scale on the right. */}

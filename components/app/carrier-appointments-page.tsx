@@ -31,6 +31,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import {
   Callout,
   Field,
@@ -96,7 +97,7 @@ type Dialog = null | "license" | "training" | { carrierId: string; state: string
 type Tab = "appointments" | "licences" | "cover";
 
 /** The tab's one card reaches the bottom of the window. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(2)]:flex-1";
+const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>*:nth-child(2)]:flex-1";
 const MUTED = "text-sm leading-normal tracking-[-0.02em] text-[var(--muted)]";
 const TONE: Record<"success" | "warning" | "error" | "neutral", StatusTone> = { success: "good", warning: "warning", error: "danger", neutral: "neutral" };
 
@@ -129,12 +130,20 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const [licenceQuery, setLicenceQuery] = useState("");
   const [carrierPage, setCarrierPage] = useState(1);
   const [licencePage, setLicencePage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>("appointments");
   // "?tab=licences" opens on Licences: where the dialer's licence refusals and a lead list's
   // "Add a licence" point, since Settings › Carriers no longer edits licences (2026-10-26).
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the URL once, after hydration
-  useEffect(() => { if (new URLSearchParams(window.location.search).get("tab") === "licences") setTab("licences"); }, []);
+  // "&state=TX" (Route's "Add a TX licence", 2026-10-30) also opens Add licence on that state for an editor.
+  const [licenceState, setLicenceState] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") !== "licences") return;
+    setTab("licences"); // eslint-disable-line react-hooks/set-state-in-effect -- reads the URL once, after hydration
+    const state = (params.get("state") ?? "").toUpperCase();
+    if (canEdit && /^[A-Z]{2}$/.test(state)) { setLicenceState(state); setDialog("license"); } // eslint-disable-line react-hooks/set-state-in-effect -- same read
+  }, [canEdit]);
 
   const applyVault = useCallback((next: Vault) => {
     setVault(next);
@@ -280,10 +289,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     !licenceNeedle || [state, stateName(state), ...more].some((value) => value?.toLowerCase().includes(licenceNeedle));
   const shownLicences = licenceRows.filter((row) => matchesState(row.state, row.license_number));
   const shownUnlicensed = unlicensedAppointedStates.filter((state) => matchesState(state));
-  const carrierRows = paginate(shownCarriers, carrierPage, 10);
+  const carrierRows = paginate(shownCarriers, carrierPage, pageSize);
   // Licences first, then the appointed states with none, paged as one list (a state is a string).
   const licenceTotal = shownLicences.length + shownUnlicensed.length;
-  const licencePageRows = paginate<LicenseRow | string>([...shownLicences, ...shownUnlicensed], licencePage, 10);
+  const licencePageRows = paginate<LicenseRow | string>([...shownLicences, ...shownUnlicensed], licencePage, pageSize);
 
   const outstanding = trainings ? outstandingTrainings(trainings) : null;
   const overdueTrainings = outstanding ? outstanding.filter((row) => row.due_on < today).length : 0;
@@ -401,7 +410,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
               </select>
             </DataToolbar>
           }
-          footer={tableCarriers.length > 0 && footprint.length > 0 ? shownCarriers.length > 10 && columns.length > 0 ? <Pager page={carrierRows.current} pageSize={10} total={shownCarriers.length} noun="carriers" onPage={setCarrierPage} suffix={`${columns.length} of ${footprint.length} states · grouped by region`} /> : <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
+          footer={tableCarriers.length > 0 && footprint.length > 0 ? shownCarriers.length > pageSize && columns.length > 0 ? <Pager page={carrierRows.current} pageSize={pageSize}total={shownCarriers.length} noun="carriers" onPage={setCarrierPage} suffix={`${columns.length} of ${footprint.length} states · grouped by region`} /> : <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
         >
           {tableCarriers.length === 0 ? (
             noCarrier
@@ -484,7 +493,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
               <ToolbarSearch value={licenceQuery} onChange={(value) => { setLicenceQuery(value); setLicencePage(1); }} placeholder="Search states, licences" />
             </DataToolbar>
           }
-          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > 10 ? <Pager page={licencePageRows.current} pageSize={10} total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
+          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > pageSize ? <Pager page={licencePageRows.current} pageSize={pageSize}total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
         >
           {licenceRows.length + unlicensedAppointedStates.length === 0 ? (
             <EmptyState title="No licences recorded yet" hint="Until one is, no lead can be assigned to an owner or producer." />
@@ -556,8 +565,9 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
           {dialog === "license" && (
             <LicenceDialog
               open
-              onOpenChange={(open) => setDialog(open ? "license" : null)}
+              onOpenChange={(open) => { setDialog(open ? "license" : null); if (!open) setLicenceState(null); }}
               licences={vault.licenses}
+              initialState={licenceState}
               extended={extended}
               saving={saving === "license"}
               onSave={async (payload) => save("/api/app/appointment-vault/licenses", payload, "Licence saved", "license")}

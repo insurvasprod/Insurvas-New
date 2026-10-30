@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -72,6 +72,8 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   const [filter, setFilter] = useState<LeadFilter>("all");
   const [leadPage, setLeadPage] = useState(1);
   const [dayPage, setDayPage] = useState(1);
+  const [teamPage, setTeamPage] = useState(1);
+  const [agentPage, setAgentPage] = useState(1);
   const [tab, setTab] = useState<DetailTab>("leads");
   // Back link, header, strip, tab row, toolbar, column heads and pager around the rows.
   const pageSize = useFittingRows(480, 45);
@@ -105,10 +107,11 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   }, [data, filter, search, labels]);
 
   const backHref = `/app/partner-quality?${periodQuery(period)}`;
-  const back = <Link href={backHref} className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"><ChevronLeft className="size-4" aria-hidden="true" />Partner quality</Link>;
+  // The way back is the trail above the title (owner 2026-10-30), keeping the period.
+  const trail = (current: string) => [{ label: "Reports" }, { label: "Partner quality", href: backHref }, { label: current }];
 
   if (loading && !data) return <PageLoading />;
-  if (!data) return <div className="flex flex-col gap-6">{back}<PageHeader title="Partner quality" /><ErrorState detail={error || "Could not load this partner"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
+  if (!data) return <div className="flex flex-col gap-6"><PageHeader title="Partner" breadcrumbs={trail("Partner")} /><ErrorState detail={error || "Could not load this partner"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
 
   const active: Period = { from: data.from, to: data.to };
   const now = data.current;
@@ -120,6 +123,8 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   });
   const { current: leadCurrent, rows: leadRows } = paginate(shownLeads, leadPage, pageSize);
   const { current: dayCurrent, rows: dayRows } = paginate(data.daily, dayPage, pageSize);
+  const { current: teamCurrent, pages: teamPages, rows: teamRows } = paginate(data.team, teamPage, pageSize);
+  const { current: agentCurrent, rows: agentRows } = paginate(data.agents, agentPage, pageSize);
   const section = (content: ReactNode, columns = 4) => loading ? <SectionLoading rows={4} columns={columns} /> : content;
   const leadsFiltered = filter !== "all" || search.trim() !== "";
   const clearLeadFilters = () => { setSearch(""); setFilter("all"); setLeadPage(1); };
@@ -152,11 +157,10 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
     { key: "agents", label: "By agent", count: data.agents.length },
     { key: "daily", label: "Daily volume" },
   ];
-  const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`;
+  const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-362px)]`;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    {!embedded && back}
-    {embedded ? <p className="m-0 text-sm leading-[1.5] text-muted-foreground">{periodText(active)}</p> : <PageHeader title={name} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />}
+    {embedded ? <p className="m-0 text-sm leading-[1.5] text-muted-foreground">{periodText(active)}</p> : <PageHeader title={name} breadcrumbs={trail(name)} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />}
 
     {/* Four figures (2026-10-06 redesign): claimed and worked ride on Sent's footnote, duplicates
         on DQ's. Every count is still in the Team and Daily tabs, and opens its leads there. */}
@@ -256,13 +260,13 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
       </TableCard>
     </div>}
 
-    {tab === "team" && <TableCard className={fill}>
+    {tab === "team" && <TableCard className={fill} footer={data.team.length ? <Pager page={teamCurrent} total={data.team.length} pageSize={pageSize} noun="members" onPage={setTeamPage} /> : undefined}>
       {section(data.team.length === 0 && data.unattributed.sent === 0
         ? <EmptyState title="No partner users" hint="Invite them from the partner's record." action={<Button asChild variant="outline"><Link href={`/app/publishers/${data.partner.id}`}>Open partner</Link></Button>} />
         : <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
             <thead><tr><th>Member</th><th>Email</th><th>Role</th><th>Access</th><th>Reports to</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Conversion</th></tr></thead>
             <tbody>
-              {data.team.map((member) => (
+              {teamRows.map((member) => (
                 <tr key={member.id}>
                   <td className="max-w-[200px]"><span className="block truncate font-semibold" title={member.name}>{member.name}</span></td>
                   <td className="max-w-[220px] truncate text-muted-foreground" title={member.email ?? undefined}>{member.email}</td>
@@ -276,18 +280,18 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
                   <td className="text-right tabular-nums">{rate(member.conversion_rate, member.sent)}<Prior label="Conversion" value={rate(member.previous.conversion_rate, member.previous.sent)} /></td>
                 </tr>
               ))}
-              {data.unattributed.sent > 0 && <UnattributedRow metrics={data.unattributed} />}
+              {data.unattributed.sent > 0 && teamCurrent === teamPages && <UnattributedRow metrics={data.unattributed} />}
             </tbody>
           </table>, 6)}
     </TableCard>}
 
-    {tab === "agents" && <TableCard className={fill}>
+    {tab === "agents" && <TableCard className={fill} footer={data.agents.length ? <Pager page={agentCurrent} total={data.agents.length} pageSize={pageSize} noun="agents" onPage={setAgentPage} /> : undefined}>
       {section(data.agents.length === 0
         ? <EmptyState title="No leads claimed yet" hint="Agents appear here once they claim this partner's leads." />
         : <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
             <thead><tr><th>Agent</th><th className="text-right">Leads</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Conversion</th></tr></thead>
             <tbody>
-              {data.agents.map((agent) => (
+              {agentRows.map((agent) => (
                 <tr key={agent.user_id}>
                   <td className="font-semibold">{agent.name}</td>
                   <td className="text-right tabular-nums">{count(agent.leads)}</td>

@@ -62,7 +62,7 @@ type SetterReport = {
 };
 
 /** The tab's one card reaches the bottom of the window. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(2)]:flex-1";
+const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>*:nth-child(2)]:flex-1";
 const DAY = 86_400_000;
 const RANGE_LABEL: Record<Exclude<Range, "custom">, string> = { "7": "Last 7 days", "30": "Last 30 days", "90": "Last 90 days" };
 const FLAG_LABEL: Record<string, string> = {

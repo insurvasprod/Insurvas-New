@@ -10,6 +10,7 @@ import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { Button } from "@/components/ui/button";
 
@@ -33,6 +34,7 @@ export function LoginProtectionPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,12 +75,12 @@ export function LoginProtectionPanel() {
   }
 
   const locked = lockouts.filter((entry) => entry.locked_until).length;
-  const { current, rows: pageRows } = paginate(lockouts, page);
+  const { current, rows: pageRows } = paginate(lockouts, page, pageSize);
 
   return (
     <TableCard
       title="Login lockouts"
-      footer={loading ? undefined : <Pager page={current} total={lockouts.length} noun="lockouts" onPage={setPage} />}
+      footer={loading ? undefined : <Pager page={current} pageSize={pageSize} total={lockouts.length} noun="lockouts" onPage={setPage} />}
       toolbar={
         <DataToolbar
           actions={

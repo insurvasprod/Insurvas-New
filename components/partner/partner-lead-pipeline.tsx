@@ -14,6 +14,8 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { productLineLabel } from "@/lib/format/productLine";
@@ -31,7 +33,6 @@ type PipelineResponse = {
 };
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
-const PAGE_SIZE = 10;
 
 /** A stage column's header ground and ink, by the stage's type in the partner's pipeline. */
 const STAGE_TONE: Record<string, string> = {
@@ -112,6 +113,7 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const loadedLimitRef = useRef(250);
 
   const query = useMemo(() => new URLSearchParams(Object.entries(filters).filter(([, value]) => Boolean(value))).toString(), [filters]);
@@ -163,7 +165,7 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
   const selectLead = (id: string) => { setSelectedId((current) => current === id ? null : id); };
   const setFilter = (key: keyof Filters, value: string) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
   const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setPage(1); };
-  const tablePage = paginate(visibleRows, page, PAGE_SIZE);
+  const tablePage = paginate(visibleRows, page, pageSize);
   const canLoadMore = Boolean(data && data.rows.length < data.total);
 
   if (firstLoad) return <PageLoading />;
@@ -171,15 +173,10 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
   const toolbar = <>
     <DataToolbar
       actions={<>
-        <div role="group" aria-label="View" className="inline-flex h-9 items-center rounded-md border border-border bg-background p-0.5">
-          {([["board", "Board", LayoutGrid], ["table", "Table", List]] as const).map(([key, label, Icon]) => <button
-            key={key}
-            type="button"
-            aria-label={`${label} view`}
-            aria-pressed={view === key}
-            onClick={() => setView(key)}
-            className={cn("inline-flex h-full items-center gap-1.5 rounded-[5px] px-2.5 text-sm font-semibold transition-colors", view === key ? "bg-[var(--surface-alt)] text-foreground" : "text-muted-foreground hover:text-foreground")}
-          ><Icon className="size-4" aria-hidden="true" />{label}</button>)}
+        <div role="radiogroup" aria-label="View" className="flex items-center gap-2">
+          {([["board", "Board", LayoutGrid], ["table", "Table", List]] as const).map(([key, label, Icon]) => <ToggleChip key={key} role="radio" selected={view === key} onClick={() => setView(key)}>
+            {view === key ? null : <Icon className="size-4" aria-hidden="true" />}{label}
+          </ToggleChip>)}
         </div>
         <Button asChild variant="outline"><a href={exportHref}><Download aria-hidden="true" />Export CSV</a></Button>
         <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} />
@@ -242,8 +239,14 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
   const loadMore = canLoadMore && data
     ? <Button type="button" variant="outline" size="sm" disabled={loadingMore || data.nextOffset == null} aria-busy={loadingMore} onClick={() => void load(data.nextOffset ?? data.rows.length, true)}>Load more</Button>
     : null;
+  // The table pages through what is loaded and fetches the next batch as the last loaded page opens,
+  // so it never needs a Load more button (owner 2026-10-30: every table pages like Source campaigns).
+  const turnTablePage = (next: number) => {
+    setPage(next);
+    if (data && canLoadMore && !loadingMore && data.nextOffset != null && next >= Math.ceil(visibleRows.length / pageSize)) void load(data.nextOffset, true);
+  };
   const footer = !data ? undefined : view === "table"
-    ? <><Pager page={tablePage.current} total={visibleRows.length} noun="leads" pageSize={PAGE_SIZE} onPage={setPage} suffix={canLoadMore ? `${data.rows.length.toLocaleString()} of ${data.total.toLocaleString()} loaded` : undefined} />{loadMore}</>
+    ? <Pager page={tablePage.current} total={visibleRows.length} noun="leads" pageSize={pageSize} onPage={turnTablePage} disabled={loadingMore} suffix={canLoadMore ? `${data.rows.length.toLocaleString()} of ${data.total.toLocaleString()} loaded` : undefined} />
     : canLoadMore ? <><span>Showing {data.rows.length.toLocaleString()} of {data.total.toLocaleString()} leads</span>{loadMore}</> : undefined;
 
   return <div className="m-stagger space-y-6">

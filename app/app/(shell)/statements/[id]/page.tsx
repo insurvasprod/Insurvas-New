@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -36,19 +35,13 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!isRecordId(id)) notFound();
   const { available, detail } = await getStatementDetail(guard.context.tenantId, id);
-  // A detail page keeps one back link above its title instead of a breadcrumb or a header button.
-  const back = (
-    <Link href="/app/statements" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
-      <ChevronLeft className="size-4" aria-hidden="true" />
-      Statements
-    </Link>
-  );
+  // A detail page's way back is the trail above its title (owner 2026-10-30).
+  const trail = (current: string) => [{ label: "Commissions" }, { label: "Statements", href: "/app/statements" }, { label: current }];
 
   if (!available) {
     return (
       <div className="m-stagger flex flex-col gap-6">
-        {back}
-        <PageHeader title="Statement" />
+        <PageHeader title="Statement" breadcrumbs={trail("Statement")} />
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
           {STATEMENT_SCHEMA_PENDING_MESSAGE}
         </div>
@@ -67,9 +60,9 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      {back}
       <PageHeader
         title={`${statement.carrierName} · ${statementPeriod(statement.periodStart, statement.periodEnd)}`}
+        breadcrumbs={trail(`${statement.carrierName} · ${statementPeriod(statement.periodStart, statement.periodEnd)}`)}
         description={`${statement.fileName} · ${kindLabel} · imported ${statementDay(statement.uploadedAt)}${statement.uploadedByName ? ` by ${statement.uploadedByName}` : ""} · ${awaitingEntry ? "lines not entered yet" : `${statement.rowCount.toLocaleString("en-US")} ${statement.rowCount === 1 ? "line" : "lines"}`}`}
         actions={<>
           {statement.hasFile && <StatementFileButton statementId={statement.id} />}

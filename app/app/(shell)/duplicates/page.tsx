@@ -6,8 +6,12 @@ import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 
-export default async function DuplicatesPage() {
-  const [guard, lists, outbound, returns] = await Promise.all([guardPage("duplicate_detection"), guardPage("lead_import"), guardPage("outbound_dialing"), guardPage("true_cpa")]);
+export default async function DuplicatesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const [guard, lists, outbound, returns, query] = await Promise.all([guardPage("duplicate_detection"), guardPage("lead_import"), guardPage("outbound_dialing"), guardPage("true_cpa"), searchParams]);
+  // ?tab=duplication|missing|contacts|merges|problems opens that tab; Missing data also takes
+  // &missing=phone|state|dob|address and &campaign=<id> (the campaign and list pages link straight there).
+  const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? null;
+  const initial = { tab: one(query.tab), missing: one(query.missing), campaign: one(query.campaign) };
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Duplicate check" description="Catch household duplicates before you pay twice." />;
   // The contact APIs admit these three roles; anyone else would reach a page whose every read 403s.
   if (!actAsPage(guard, ["owner", "producer", "assistant"])) {
@@ -24,6 +28,7 @@ export default async function DuplicatesPage() {
     claim: returns.entitled && holdsAnyRole(lists.roles, ["owner", "producer"]),
     readOnly: lists.entitlement.access === "read_only",
   } : null;
-  // Step 3 · Clean of the one Leads page (owner pick B, 2026-10-28).
-  return <LeadsInPage step="clean"><ContactWorkspace readOnly={guard.entitlement.access !== "full"} listProblems={listProblems} /></LeadsInPage>;
+  // Step 3 · Clean of the one Leads page (owner pick B, 2026-10-28). ownContinue: Missing data puts
+  // Download, Upload and Save in the frame's corner (owner 2026-10-30); the other tabs leave it empty.
+  return <LeadsInPage step="clean" ownContinue><ContactWorkspace readOnly={guard.entitlement.access !== "full"} listProblems={listProblems} initial={initial} /></LeadsInPage>;
 }

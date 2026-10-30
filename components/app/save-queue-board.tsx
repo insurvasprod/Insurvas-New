@@ -11,6 +11,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import { ACTION_TAKEN, BANDS, CLIENT_REASON_LABELS, CLIENT_REASONS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_LABELS, SIGNAL_LABELS, SNOOZE_DAYS, type ActionTaken, type Band, type ClientReason, type ContactOutcome, type Signal } from "@/lib/retention/constants";
 import { SORT_LABELS, SORTS, type QueueSort } from "@/lib/retention/queue";
@@ -67,7 +68,8 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
   const cards = queue.cards;
   const carriers = useMemo(() => [...new Map(cards.map((c) => [c.carrierId, c.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [cards]);
   const visible = useMemo(() => cards.filter((c) => (!band || c.band === band) && (!carrier || c.carrierId === carrier)), [cards, band, carrier]);
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(visible, page, pageSize);
   const { stats } = queue;
   const clear = () => { setBand(""); setCarrier(""); setPage(1); };
 
@@ -107,7 +109,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
             </span>
           </DataToolbar>
         }
-        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
       >
         {cards.length === 0 ? (
           <EmptyState title="Nobody to call" hint={queue.lowConfidence ? `${queue.lowConfidence.toLocaleString("en-US")} ${queue.lowConfidence === 1 ? "policy scores" : "policies score"} high, but on too little to call: add incomes, set the carriers' grace rules, or wait for a second carrier file.` : stats.scored ? "No policy that is paying today scores high enough to call. Past-due policies are on Lapse risk." : "No in-force policy has been scored yet. Scores appear after your carrier policy files are in."} />

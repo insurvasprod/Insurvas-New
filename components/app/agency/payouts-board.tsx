@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
@@ -68,6 +70,9 @@ export function PayoutsBoard({ canCommit }: { canCommit: boolean }) {
   const negative = preview.filter((p) => p.balanceCents < 0);
   const positive = preview.filter((p) => p.balanceCents >= 0);
   const names = useMemo(() => new Map(preview.map((p) => [p.producerUserId, p.displayName])), [preview]);
+  const [runPage, setRunPage] = useState(1);
+  const runPageSize = useFittingPageSize(380, 45);
+  const runs = paginate(data?.runs ?? [], runPage, runPageSize);
   const chosen = preview.filter((p) => decisions[p.producerUserId]?.include);
   const toPay = chosen.reduce((s, p) => s + payFor(p, decisions[p.producerUserId]), 0);
   const withheld = chosen.reduce((s, p) => s + Math.max(Math.max(p.periodCents, 0) - payFor(p, decisions[p.producerUserId]), 0), 0);
@@ -165,12 +170,12 @@ export function PayoutsBoard({ canCommit }: { canCommit: boolean }) {
           </TableCard>
         </>
       ) : (
-        <TableCard>
+        <TableCard footer={data.runs.length ? <Pager page={runs.current} total={data.runs.length} noun="runs" pageSize={runPageSize} onPage={setRunPage} /> : undefined}>
           {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Each committed run appears here, one row per producer, with their statement." /> : (
             <Table>
               <TableHeader><TableRow><TableHead>Producer</TableHead><TableHead>Period</TableHead><TableHead>Decision</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Withheld</TableHead><TableHead>How</TableHead><TableHead /></TableRow></TableHeader>
               <TableBody>
-                {data.runs.map((r) => (
+                {runs.rows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{names.get(r.producerUserId) ?? "Producer"}</TableCell>
                     <TableCell className="tabular-nums">{r.periodStart} – {r.periodEnd}</TableCell>

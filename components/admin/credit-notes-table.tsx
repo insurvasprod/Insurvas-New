@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState } from "@/components/admin/empty-state";
 import { StatusChip, type StatusTone } from "@/components/admin/status-chip";
 import { fullDate } from "@/components/admin/tenant-record/billing-format";
@@ -57,7 +58,6 @@ const RECONCILIATION: Record<string, { label: string; tone: StatusTone }> = {
   failed: { label: "Reconciliation failed", tone: "danger" },
 };
 
-const PAGE = 10;
 const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
@@ -72,9 +72,8 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
   const [refreshing, startRefresh] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const pages = Math.max(1, Math.ceil(notes.length / PAGE));
-  const current = Math.min(page, pages);
-  const shown = useMemo(() => notes.slice((current - 1) * PAGE, current * PAGE), [notes, current]);
+  const pageSize = useFittingPageSize(420, 45);
+  const { current, rows: shown } = useMemo(() => paginate(notes, page, pageSize), [notes, page, pageSize]);
 
   async function act(note: CreditNoteRow, action: "approve" | "reconcile") {
     setBusy(note.id);
@@ -92,6 +91,7 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
   return (
     <TableCard
       className="min-w-0"
+      footer={notes.length > 0 ? <Pager page={current} pageSize={pageSize} total={notes.length} noun={notes.length === 1 ? "credit note" : "credit notes"} suffix="newest first" onPage={setPage} /> : undefined}
       toolbar={<DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />} />}
     >
         <table className="w-full min-w-[920px] border-collapse">
@@ -154,7 +154,6 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
             })}
           </tbody>
         </table>
-      {notes.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={notes.length} itemLabel={notes.length === 1 ? "credit note" : "credit notes"} order="newest first" onPageChange={setPage} />}
     </TableCard>
   );
 }

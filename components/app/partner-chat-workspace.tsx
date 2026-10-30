@@ -14,6 +14,7 @@ import { inputControl } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { ComposerFiles, FileTypeTile, kb, MessageAttachments } from "@/components/app/partner-chat/attachments";
 import { GroupMembers, PeoplePicker, PersonFace, type DirectoryUser } from "@/components/app/partner-chat/group-members";
 import { LeadUpdate } from "@/components/app/partner-chat/lead-update";
@@ -499,15 +500,14 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
               <span className="sr-only">Search conversations and messages</span>
               <input type="search" value={conversationSearch} onChange={(event) => { setConversationSearch(event.target.value); resetList(); }} placeholder="Search conversations and messages" className={cn(toolbarControl, "w-full pl-9")} />
             </label>
-            <div className="-mx-0.5 flex flex-wrap gap-1" role="group" aria-label="Show conversations">
+            <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 [scrollbar-width:none]" role="radiogroup" aria-label="Show conversations">
               {LIST_FILTERS.map(([value, label]) => {
                 const count = filterCount(value);
                 if (value !== "all" && value !== listFilter && count === 0) return null;
-                const on = listFilter === value;
                 return (
-                  <button key={value} type="button" aria-pressed={on} onClick={() => { setListFilter(value); resetList(); }} className={cn("inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors", on ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground")}>
-                    {label}{value !== "all" && <span className="tabular-nums opacity-70">{count}</span>}
-                  </button>
+                  <ToggleChip key={value} role="radio" selected={listFilter === value} count={value === "all" ? undefined : count} onClick={() => { setListFilter(value); resetList(); }}>
+                    {label}
+                  </ToggleChip>
                 );
               })}
             </div>
@@ -648,11 +648,11 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                     {selected.members.length}
                   </button>
                 )}
-                <div className={cn("hidden shrink-0 items-center gap-0.5 rounded-md bg-[var(--surface-alt)] p-0.5 sm:flex", detailsOpen && "sm:hidden 2xl:flex")} role="group" aria-label="Show in this conversation">
+                <div className={cn("hidden shrink-0 items-center gap-1.5 sm:flex", detailsOpen && "sm:hidden 2xl:flex")} role="radiogroup" aria-label="Show in this conversation">
                   {([["all", "All", threadMessages.length], ["messages", "Messages", threadMessages.length - updateCount], ["updates", "Updates", updateCount]] as const).map(([value, label, count]) => (
-                    <button key={value} type="button" aria-pressed={threadView === value} onClick={() => setThreadView(value)} title={value === "updates" ? "Automatic lead and call updates" : value === "messages" ? "Messages people wrote" : "Everything"} className={cn("inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-semibold transition-colors", threadView === value ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "text-muted-foreground hover:text-foreground")}>
-                      {label}<span className="tabular-nums opacity-60">{count}</span>
-                    </button>
+                    <span key={value} className="contents" title={value === "updates" ? "Automatic lead and call updates" : value === "messages" ? "Messages people wrote" : "Everything"}>
+                      <ToggleChip role="radio" selected={threadView === value} count={count} onClick={() => setThreadView(value)}>{label}</ToggleChip>
+                    </span>
                   ))}
                 </div>
                 <Button type="button" variant={searchOpen ? "secondary" : "ghost"} size="icon" aria-pressed={searchOpen} aria-label={searchOpen ? "Close the search" : "Search this conversation"} title="Search this conversation (Ctrl + F)" onClick={() => (searchOpen ? closeThreadSearch() : setThreadSearch({ channelId: selected.id, query: "" }))}>

@@ -29,12 +29,12 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { capacityLabel } from "@/lib/partners/limits";
 import { cn } from "@/lib/utils";
 import { UnderlineTabs } from "@/components/ui/view-tabs";
 
-const PAGE_SIZE = 10;
 const TIMEOUT_MS = 10000;
 
 type Member = {
@@ -116,6 +116,7 @@ export function PartnerUsersPanel({
   const [scope, setScope] = useState<TeamScope>("all");
   const [adminFilter, setAdminFilter] = useState<string>("");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 57);
   const [selected, setSelected] = useState<Selected | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   // The first read draws the skeleton; a reload after an action keeps the rows on screen.
@@ -197,7 +198,7 @@ export function PartnerUsersPanel({
       return matchesQuery && matchesAdmin;
     });
   }, [adminFilter, admins, members, query, scope, unassigned, users]);
-  const visible = paginate(filtered, page, PAGE_SIZE);
+  const visible = paginate(filtered, page, pageSize);
 
   useEffect(() => {
     if (!selected) return;
@@ -459,7 +460,7 @@ export function PartnerUsersPanel({
         }
         footer={
           loaded && members.length ? (
-            <Pager page={visible.current} total={filtered.length} noun="members" pageSize={PAGE_SIZE} onPage={setPage} suffix={seats} />
+            <Pager page={visible.current} total={filtered.length} noun="members" pageSize={pageSize} onPage={setPage} suffix={seats} />
           ) : seats ? (
             <span>{seats[0].toUpperCase() + seats.slice(1)}</span>
           ) : undefined

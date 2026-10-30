@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, ToolbarCheckbox, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -41,7 +42,8 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
     (!carrier || r.carrierId === carrier) &&
     (!issuesOnly || r.producerLevelBps === null || (r.spreadBps !== null && r.spreadBps < 0)) &&
     (!search.trim() || `${r.producerName} ${r.carrierName}`.toLowerCase().includes(search.trim().toLowerCase())));
-  const { rows: pageRows, current } = paginate(filtered, page, 15);
+  const pageSize = useFittingPageSize(480, 45);
+  const { rows: pageRows, current } = paginate(filtered, page, pageSize);
   const total = rows.reduce((s, r) => s + (r.overrideCents ?? 0), 0);
   const missing = rows.filter((r) => r.producerLevelBps === null).length;
   const negative = rows.filter((r) => r.spreadBps !== null && r.spreadBps < 0).length;
@@ -66,7 +68,7 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
           </select>
           <ToolbarCheckbox checked={issuesOnly} onChange={(v) => { setIssuesOnly(v); setPage(1); }} label="Issues only" />
         </DataToolbar>
-      } footer={filtered.length > 15 ? <Pager page={current} total={filtered.length} noun="rows" onPage={setPage} pageSize={15} /> : undefined}>
+      } footer={filtered.length ? <Pager page={current} total={filtered.length} noun="rows" onPage={setPage} pageSize={pageSize} /> : undefined}>
         {error ? <ErrorState detail={error} /> : loading ? <SectionLoading rows={5} columns={8} label="Loading overrides" /> : rows.length === 0 ? (
           <EmptyState title="Nothing to show yet" hint="Add your carrier contracts on the rate card and your producers' levels on each producer's Carriers tab." />
         ) : filtered.length === 0 ? <NoMatches noun="rows" onClear={() => { setSearch(""); setCarrier(""); setIssuesOnly(false); }} /> : (

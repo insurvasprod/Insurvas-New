@@ -13,6 +13,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import {
   CATEGORY_LABELS,
   CHANNEL_LABELS,
@@ -264,7 +265,8 @@ export function ComplaintsBoard({ complaints, coverage, thresholds, search, open
   const refresh = () => startRefresh(() => router.refresh());
 
   const visible = useMemo(() => complaints.filter((c) => view === "all" || c.status !== "resolved"), [complaints, view]);
-  const shown = paginate(visible, page, 15);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(visible, page, pageSize);
   const open5 = complaints.filter((c) => c.countdown.pinned).length;
   const regulator = complaints.filter((c) => (c.channel === "doi" || c.channel === "ftc") && c.status !== "resolved").length;
   const noDeadline = complaints.filter((c) => c.countdown.tone === "no_deadline").length;
@@ -293,7 +295,7 @@ export function ComplaintsBoard({ complaints, coverage, thresholds, search, open
             </select>
           </DataToolbar>
         }
-        footer={visible.length > 15 ? <Pager page={shown.current} pageSize={15} total={visible.length} noun="complaints" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="complaints" onPage={setPage} /> : undefined}
       >
         {complaints.length === 0 && !search ? (
           <EmptyState title="No complaints recorded" hint="Record one the day it arrives: a regulator's deadline starts counting then." action={!readOnly ? <Button onClick={() => setCreating(true)}>Record a complaint</Button> : undefined} />

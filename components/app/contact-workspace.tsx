@@ -20,7 +20,11 @@ import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Callout, Field, control, pillTone } from "@/components/app/settings/primitives";
 import { ViewTabs, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
 import { LeadsInSlot, useInLeadsFrame } from "@/components/app/lead-sources/leads-in-slot";
+import { LeadDuplicateReview } from "@/components/app/lead-duplicate-review";
 import { CleanListProblems, listProblemsOf, type ListProblemRow, type ListProblemsAccess } from "@/components/app/clean-list-problems";
+import { LeadMissingData, type MissingDataStatus } from "@/components/app/lead-missing-data";
+import { NextUp } from "@/components/app/lead-sources/next-up";
+import { MISSING_BLOCKS, MISSING_FIX_ORDER, firstMissing, missingFilterOf, type MissingCounts, type MissingFilter } from "@/lib/leadDuplicates/missingData";
 import { cn } from "@/lib/utils";
 import { dobConflict, matchedOnLabel } from "@/lib/contacts/matchPolicy";
 import type { ContactDirectory, ContactRow, ContactWorkspace as Workspace, DuplicateMatch, FieldSchemaRow, RecentMerge, ReviewPair, ReviewQueue } from "@/lib/contacts/types";
@@ -34,6 +38,9 @@ import type { ContactDirectory, ContactRow, ContactWorkspace as Workspace, Dupli
  * keeps it, then "No — keep both" or "Yes — merge them". The directory is paged and searched on the server; the tiles come
  * from one stats read (the strip under the header). Every merge can be undone from Recent merges, and the page only offers the
  * undo the server will accept (see undo_contact_merge's later-merge guard).
+ *
+ * Tabs (owner 2026-10-29, board LirK2): Duplication (same-phone leads, then contact pairs) · Missing data
+ * (components/app/lead-missing-data.tsx) · Contacts · Merges · List problems. ?tab= opens one.
  */
 
 type WorkspacePayload = Workspace & { queue: ReviewQueue };
@@ -230,10 +237,15 @@ function ChevronIcon({ direction }: { direction: "left" | "right" }) {
 
 /* ── the page ───────────────────────────────────────────────────────────── */
 
-export function ContactWorkspace({ readOnly = false, listProblems = null }: {
+type TabKey = "duplication" | "missing" | "contacts" | "merges" | "problems";
+const TAB_KEYS: readonly TabKey[] = ["duplication", "missing", "contacts", "merges", "problems"];
+
+export function ContactWorkspace({ readOnly = false, listProblems = null, initial = null }: {
   readOnly?: boolean;
   /** Lists' gates for this person; null when they cannot see lead lists, and the List problems tab is not drawn. */
   listProblems?: ListProblemsAccess | null;
+  /** From the address: ?tab= opens a tab; Missing data's ?missing= and ?campaign= pre-filter it. */
+  initial?: { tab: string | null; missing: string | null; campaign: string | null } | null;
 }) {
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -252,11 +264,25 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
   const [formError, setFormError] = useState<string | null>(null);
   const [field, setField] = useState({ field_key: "", label: "", type: "text" });
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"review" | "directory" | "merges" | "problems">("review");
+  const [tab, setTab] = useState<TabKey>(() => {
+    const asked = TAB_KEYS.find((key) => key === initial?.tab);
+    return asked && (asked !== "problems" || listProblems) ? asked : "duplication";
+  });
+  /** Leads missing a phone, state, date of birth or address (any campaign); null until read or when it could not be counted. */
+  const [missingTotal, setMissingTotal] = useState<number | null>(null);
   const [problemLists, setProblemLists] = useState<ListProblemRow[] | null>(null);
   const [problemsError, setProblemsError] = useState<string | null>(null);
   const [problemsLoading, setProblemsLoading] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  /** Same-phone leads waiting (LeadDuplicateReview); 0 before 20261029600000. */
+  const [samePhone, setSamePhone] = useState(0);
+  /** Leads missing each field: undefined while read, null when it could not be. */
+  const [missingCounts, setMissingCounts] = useState<MissingCounts | null | undefined>(undefined);
+  /** Missing data's held edits and filter, for the "next up" line. */
+  const [missingStatus, setMissingStatus] = useState<MissingDataStatus>({ held: 0, saving: false, filter: "any" });
+  /** The "next up" line asking Missing data for a field, and for a save. */
+  const [missingAsk, setMissingAsk] = useState<{ filter: MissingFilter; nonce: number } | null>(null);
+  const [saveRequest, setSaveRequest] = useState(0);
   const [mergePage, setMergePage] = useState(1);
   const pageSize = useFittingPageSize(400, 45);
   const inFrame = useInLeadsFrame();
@@ -301,6 +327,26 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
     } finally { setProblemsLoading(false); }
   }, [hasListProblems]);
   useEffect(() => { void loadProblems(); }, [loadProblems]); // eslint-disable-line react-hooks/set-state-in-effect
+
+  // Missing data's count for its tab, and how many leads miss each field (the "next up" line and the
+  // Missing filter). Read on arrival and again after a save; a count that cannot be taken stays null.
+  const loadMissingCounts = useCallback(() => {
+    void fetch("/api/app/contacts/missing-data?pageSize=5", { cache: "no-store" })
+      .then(async (response) => { const body = await readJson(response); if (response.ok && typeof body?.total === "number") setMissingTotal(body.total); })
+      .catch(() => undefined);
+    void fetch("/api/app/contacts/missing-data?counts=1", { cache: "no-store" })
+      .then(async (response) => { const body = await readJson(response); setMissingCounts(response.ok && body?.counts ? body.counts as MissingCounts : null); })
+      .catch(() => setMissingCounts(null));
+  }, []);
+  useEffect(() => { loadMissingCounts(); }, [loadMissingCounts]);
+  const onMissingTotal = useCallback((total: number | null) => { if (total !== null) setMissingTotal(total); }, []);
+  // Same-phone leads waiting, read once so the "next up" line counts them on every tab (the
+  // Duplication tab's own card keeps it current while open).
+  useEffect(() => {
+    void fetch("/api/app/contacts/lead-reviews?index=0", { cache: "no-store" })
+      .then(async (response) => { const body = await readJson(response); if (response.ok && body?.ready === true && typeof body.total === "number") setSamePhone(body.total); })
+      .catch(() => undefined);
+  }, []);
 
   // /app/duplicates#list-problems opens the List problems tab (on arrival and when the hash changes).
   useEffect(() => {
@@ -427,7 +473,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
       const outcome = body.outcome as string;
       const mergeId = typeof body.mergeId === "string" ? body.mergeId : null;
       // A pair waiting for review is the next thing to look at, so the queue's tab comes forward.
-      if (outcome === "review") setTab("review");
+      if (outcome === "review") setTab("duplication");
       if (outcome === "auto_merged") notify.done("Probable duplicate auto-merged", { detail: "Same date of birth, and the phone or address matched. Undo it from Recent merges if that is wrong.", action: mergeId ? { label: "Undo", onClick: () => void undo(mergeId) } : undefined });
       else if (outcome === "review") notify.warn("Possible duplicate: waiting for review", { detail: "Compare the two records under Duplicate check and choose what to keep." });
       else notify.done("Contact created");
@@ -513,8 +559,10 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
     value={tab}
     onChange={setTab}
     tabs={[
-      { key: "review", label: "Review queue", count: current.total },
-      { key: "directory", label: "Contacts", count: directory.total },
+      // Owner 2026-10-29: "Duplication" holds the same-phone lead questions, then the contact pairs.
+      { key: "duplication", label: "Duplication", count: current.total + samePhone },
+      { key: "missing", label: "Missing data", count: missingTotal },
+      { key: "contacts", label: "Contacts", count: directory.total },
       // "Merges", not "Recent merges": with List problems the four tabs must fit the top row at 1440px.
       { key: "merges", label: "Merges", count: merges.length },
       // Owner 2026-10-29: a list problem that stops a campaign is fixed here, not on Lists.
@@ -529,7 +577,8 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
       {busy === "import" ? "Importing…" : "Import contacts"}
       <input id="contact-import-file" type="file" accept=".csv,text/csv" className="sr-only" disabled={readOnly || busy === "import"} onChange={(event) => void importFile(event)} />
     </label>
-    <Button type="button" disabled={readOnly} onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>
+    {/* Outline: the page's one primary is the "next up" line. */}
+    <Button type="button" variant="outline" disabled={readOnly} onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>
   </>;
 
   // This pair, in words: who it is, what matched (green ticks) and what differs (amber).
@@ -542,24 +591,100 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
   const otherFirstName = pair ? firstName(pair.incoming) !== firstName(pair.existing) && !firstName(pair.incoming).startsWith(firstName(pair.existing)) && !firstName(pair.existing).startsWith(firstName(pair.incoming)) : false;
   const likelyTwo = pair ? conflict || otherFirstName : false;
 
+  // The one "next up" line (owner 2026-10-30), ranked across the tabs: held edits first (they are lost
+  // on leaving), then what stops calling (a list problem), what waits on a person (a possible
+  // duplicate), then the missing field that blocks the most (state, phone, date of birth, address).
+  // Its button is the page's one primary; on the tab that already shows the work it has none, and the
+  // work's own answer is the primary there.
+  const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+  const duplicatesWaiting = current.total + samePhone;
+  const problemCount = listProblems && problemLists ? listProblemsOf(problemLists).length : 0;
+  const nextField = firstMissing(missingCounts);
+  const nothingMissing = Boolean(missingCounts) && MISSING_FIX_ORDER.every((column) => missingCounts?.[column] === 0);
+  const askMissing = (filter: MissingFilter) => { setMissingAsk((was) => ({ filter, nonce: (was?.nonce ?? 0) + 1 })); setTab("missing"); };
+  const nextUp = (() => {
+    if (tab === "missing" && missingStatus.held > 0) {
+      const held = missingStatus.held;
+      return (
+        <NextUp tone="warning" action={<Button type="button" disabled={readOnly || missingStatus.saving} onClick={() => setSaveRequest((value) => value + 1)}>{missingStatus.saving ? "Saving…" : `Save ${held.toLocaleString()} ${plural(held, "change", "changes")}`}</Button>}>
+          <strong>{held.toLocaleString()}</strong> {plural(held, "change is", "changes are")} held and not saved yet.
+        </NextUp>
+      );
+    }
+    if (problemCount > 0) {
+      return (
+        // On Duplication with a question on screen, its answer stays the one primary.
+        <NextUp tone="danger" action={tab === "problems" ? null : <Button type="button" onClick={() => setTab("problems")} variant={tab === "duplication" && duplicatesWaiting !== 0 ? "outline" : "default"}>Fix list problems</Button>}>
+          <strong>{problemCount.toLocaleString()}</strong> {plural(problemCount, "list has a problem", "lists have problems")} to fix before {plural(problemCount, "its", "their")} leads are called{tab === "problems" ? ", listed below." : "."}
+        </NextUp>
+      );
+    }
+    if (duplicatesWaiting > 0) {
+      return (
+        <NextUp tone="warning" action={tab === "duplication" ? null : <Button type="button" onClick={() => setTab("duplication")}>Review the first</Button>}>
+          <strong>{duplicatesWaiting.toLocaleString()}</strong> possible {plural(duplicatesWaiting, "duplicate", "duplicates")} to confirm{tab === "duplication" ? ", one at a time below." : "."}
+        </NextUp>
+      );
+    }
+    if (nextField) {
+      const block = MISSING_BLOCKS[nextField.column];
+      const showing = tab === "missing" && missingStatus.filter === nextField.column;
+      return (
+        <NextUp tone="warning" action={showing ? null : <Button type="button" onClick={() => askMissing(nextField.column)}>{block.action}</Button>}>
+          <strong>{nextField.count.toLocaleString()}</strong> {plural(nextField.count, "lead has", "leads have")} no {block.noun}, {block.stops}.{showing ? " Type into the amber boxes below, then save." : ""}
+        </NextUp>
+      );
+    }
+    if (nothingMissing) return <NextUp tone="done">Nothing to clean: no duplicates to confirm, and every lead has a state, phone, date of birth and address.</NextUp>;
+    // The counts are still being read: say nothing yet rather than "all clear".
+    if (missingCounts === undefined) return null;
+    return (
+      <NextUp tone="action" action={tab === "missing" ? null : <Button type="button" onClick={() => askMissing("any")}>Open Missing data</Button>}>
+        No duplicates to confirm. Missing data could not be counted just now{tab === "missing" ? "; the table below still lists them." : "."}
+      </NextUp>
+    );
+  })();
+
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1">
-      {/* Compact, as Lists draws its strip: the figures only, each one's detail behind its tip. */}
-      <StatStrip label="Contact and merge totals">
+      {/* First, above every tab's content: the one thing to do next, and its button. */}
+      {nextUp}
+
+      {/* Compact, as Lists draws its strip: the figures only, each one's detail behind its tip. Not on
+          Missing data, which is about leads, not contacts (board LirK2 starts with its table). */}
+      {tab !== "missing" && <StatStrip label="Contact and merge totals">
         <StatTile label="Contacts" labelTitle={stats.households === null ? "Active records." : `Active records, across ${stats.households.toLocaleString()} household${stats.households === 1 ? "" : "s"}.`} value={stats.contacts.toLocaleString()} />
         <StatTile label="Pending review" valueTone="warning" labelTitle={stats.pending === null ? "The review queue is not set up yet." : stats.pending && stats.oldestPendingAt ? `Pairs waiting for an answer; the oldest has waited ${age(stats.oldestPendingAt)}.` : "Nothing waiting."} value={stats.pending === null ? "—" : stats.pending.toLocaleString()} />
         <StatTile label="Merged this month" valueTone="good" labelTitle={`Calendar month in ${stats.timezone}.${stats.undoableThisMonth === null ? "" : ` ${stats.undoableThisMonth.toLocaleString()} can be undone.`}`} value={(stats.mergedThisMonth ?? 0).toLocaleString()} />
         <StatTile label="Merges undone" labelTitle={stats.mergedThisMonth ? `${undonePercent}% of this month's merges.` : "No merges this month."} value={(stats.undoneThisMonth ?? 0).toLocaleString()} />
-      </StatStrip>
+      </StatStrip>}
 
       {readOnly && <Callout tone="warning" title="This workspace is read-only: adding, importing, merging and undoing are paused." />}
 
       {/* The tabs sit in the Lead sources frame's top row, level with the rail (owner 2026-10-28), so
           the content starts at the top; outside the frame they keep their own row. */}
-      {inFrame ? <LeadsInSlot slot="lead">{tabs}</LeadsInSlot> : tabs}
+      {/* Missing data draws the row itself: the tabs, then its filters and its actions. */}
+      {tab !== "missing" && (inFrame ? <LeadsInSlot slot="lead">{tabs}</LeadsInSlot> : tabs)}
 
       <div key={tab} role="tabpanel" id="duplicates-panel" aria-labelledby={`duplicates-panel-tab-${tab}`} className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
-      {tab === "review" && (
+      {/* Same-phone leads first (owner 2026-10-29), one question at a time; the contact pairs once they are answered. */}
+      {tab === "missing" && (
+        <LeadMissingData
+          tabs={tabs}
+          inFrame={inFrame}
+          readOnly={readOnly}
+          initialFilter={initial?.missing ? missingFilterOf(initial.missing) : null}
+          initialCampaign={initial?.campaign && /^[0-9a-f-]{36}$/i.test(initial.campaign) ? initial.campaign : null}
+          counts={missingCounts}
+          ask={missingAsk}
+          saveRequest={saveRequest}
+          onTotal={onMissingTotal}
+          onStatus={setMissingStatus}
+          onSaved={loadMissingCounts}
+        />
+      )}
+      {tab === "duplication" && <LeadDuplicateReview readOnly={writeBlocked} onTotal={setSamePhone} />}
+      {tab === "duplication" && !samePhone && (
         // Board LinB3, card 1: one pair at a time, field | incoming | already yours, each differing value
         // a cell you pick; Merge keeps the contact you already have as the record (its leads and
         // history stay put) with the values picked here.
@@ -624,7 +749,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
         </Card>
       )}
 
-      {tab === "directory" && (
+      {tab === "contacts" && (
         <TableCard
           className={fillCard}
           toolbar={
@@ -701,7 +826,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
               <EmptyState
                 title="No contacts yet"
                 hint="Each one is checked for duplicates first."
-                action={readOnly ? undefined : <Button type="button" onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>}
+                action={readOnly ? undefined : <Button type="button" variant="outline" onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>}
               />
             )}
           </div>
@@ -757,7 +882,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null }: {
             <EmptyState
               title="No merges yet"
               hint="Merges land here and can be undone."
-              action={current.total > 0 ? <Button type="button" variant="outline" onClick={() => setTab("review")}>Review pairs</Button> : undefined}
+              action={current.total > 0 ? <Button type="button" variant="outline" onClick={() => setTab("duplication")}>Review pairs</Button> : undefined}
             />
           )}
         </TableCard>

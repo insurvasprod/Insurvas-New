@@ -31,6 +31,7 @@ import { Suspense } from "react";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
 import { SoloProvider } from "@/components/app/solo-context";
+import { PageTrailProvider } from "@/components/ui/page-trail";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -194,7 +195,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
         <Suspense fallback={null}><SetupGuideBar /></Suspense>
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage className="flex min-w-0 flex-1 flex-col"><SoloProvider solo={solo}><PortalPageTransition>{children}</PortalPageTransition></SoloProvider></DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><SoloProvider solo={solo}><PageTrailProvider menu={menu}><PortalPageTransition>{children}</PortalPageTransition></PageTrailProvider></SoloProvider></DashboardStage>
       </div>
       </main>
     </div>

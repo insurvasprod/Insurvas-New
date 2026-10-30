@@ -39,6 +39,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/app/book-of-business-views";
 import { StatementMappingFields } from "@/components/app/statement-import";
 import {
@@ -334,20 +335,13 @@ export function StatementReview({
       </>}
     >
       <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search policy or insured" />
-      <span role="group" aria-label="Show lines" className="inline-flex h-9 max-w-full gap-0.5 overflow-x-auto rounded-md bg-[var(--canvas)] p-0.5">
+      <div role="radiogroup" aria-label="Show lines" className="flex flex-wrap items-center gap-2">
         {FILTERS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            aria-pressed={filter === item.key}
-            onClick={() => { setFilter(item.key); setPage(1); }}
-            className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-semibold tracking-[-0.01em] whitespace-nowrap", filter === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
-          >
+          <ToggleChip key={item.key} role="radio" selected={filter === item.key} count={lines.filter((line) => item.includes(line.review)).length.toLocaleString("en-US")} onClick={() => { setFilter(item.key); setPage(1); }}>
             {item.label}
-            <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{lines.filter((line) => item.includes(line.review)).length.toLocaleString("en-US")}</span>
-          </button>
+          </ToggleChip>
         ))}
-      </span>
+      </div>
     </DataToolbar>
   );
 
@@ -358,7 +352,7 @@ export function StatementReview({
       {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
       <TableCard
-        className="flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>.overflow-x-auto]:flex-1"
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>.overflow-x-auto]:flex-1"
         toolbar={toolbar}
         footer={<Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun="lines" suffix={`${lines.length.toLocaleString("en-US")} on the statement`} />}
       >

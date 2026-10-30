@@ -1,14 +1,12 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { scopeFor } from "@/lib/agency/visibility";
 import { isAgencyTenant } from "@/lib/agency/audience";
 import { isSoloWorkspace } from "@/lib/tenantTeam/solo";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { LEADS_IN_STEPS, type LeadsInStep } from "@/lib/leadSources/steps";
+import { LEADS_IN_STEPS, RAIL_COOKIE, leadsInStepLabel, type LeadsInStep } from "@/lib/leadSources/steps";
+import { cookies } from "next/headers";
 import { LeadsInRail } from "@/components/app/lead-sources/leads-in-rail";
 
 /**
@@ -33,7 +31,6 @@ async function openSteps(): Promise<{ open: Set<LeadsInStep>; routeHref: string 
   if (outbound.entitled && (outbound.role === "owner" || outbound.role === "producer") && !narrow) open.add("source");
   if (lists.entitled && (lists.role === "owner" || lists.role === "producer" || lists.role === "assistant") && !narrow) { open.add("import"); open.add("review"); }
   if (dupes.entitled && actAsPage(dupes, ["owner", "producer", "assistant"]) && !narrow) open.add("clean");
-  if (lists.entitled && actAsPage(lists, ["owner", "producer", "assistant"]) && !narrow) open.add("lists");
   const dialRoute = outbound.entitled && actAsPage(outbound, ["owner", "producer", "assistant", "setter"]) && (!agency || outbound.role === "owner");
   const poolRoute = routing.entitled && routing.role === "owner";
   // Solo mode (owner 2026-10-29): nobody to route to, so the rail runs Lists → Recycle.
@@ -51,38 +48,40 @@ async function openSteps(): Promise<{ open: Set<LeadsInStep>; routeHref: string 
  * review", Review's "Import N leads"), which it puts in the corner through `LeadsInSlot slot="continue"`.
  */
 export async function LeadsInPage({ step, actions, ownContinue = false, children }: { step: LeadsInStep; actions?: ReactNode; ownContinue?: boolean; children: ReactNode }) {
-  const { open, routeHref } = await openSteps();
+  const [{ open, routeHref }, jar] = await Promise.all([openSteps(), cookies()]);
+  const collapsed = jar.get(RAIL_COOKIE)?.value === "collapsed";
   // The step on screen is always offered: its route already let this person in.
   open.add(step);
   const steps = LEADS_IN_STEPS.filter((item) => open.has(item.key)).map((item) => (item.key === "route" ? { ...item, href: routeHref } : item));
-  const here = steps.findIndex((item) => item.key === step);
-  // Review has no address of its own until a file is staged: Back from Clean goes to Import then.
-  const prev = steps[here - 1]?.key === "review" ? steps[here - 2] : steps[here - 1];
-  const next = steps[here + 1];
 
   return (
-    // Two rows (owner 2026-10-29): the top row sits over the step's column only, so the rail starts on
-    // the same line as the step's first card and ends with it — the rail is exactly the content's height.
-    <div className="grid w-full min-w-0 gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[264px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
-      <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-1">
-        <PageHeader title="Lead sources" />
-        <div className="flex min-h-[2.25rem] flex-wrap items-center gap-3">
-          <div id="leads-in-lead" className="flex min-w-0 flex-1 flex-wrap items-center gap-3" />
+    // The page's title and trail across the top (owner 2026-10-30), then two rows (owner 2026-10-29):
+    // the step's own row sits over the step's column only, so the rail starts on the same line as the
+    // step's first card and ends with it — the rail is exactly the content's height.
+    // The title sits 24px over the content, as on every other page (owner 2026-10-30: "not that much space
+    // from the title"): the step's own row takes no room when it has nothing in it, and the rows carry their
+    // own space below instead of the grid's row gap, so an empty row adds no gap either.
+    // The step's own row (its tabs, its actions) is the first line of the step's column, level with the
+    // rail's top (owner 2026-10-30: "same thing as the Source page, for all of the pages"), not a row above it.
+    <div className="grid w-full min-w-0 gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
+      <PageHeader title={leadsInStepLabel(step)} className="lg:col-span-2 lg:pb-6" />
+      <div className="lg:col-start-1 lg:row-start-2 lg:min-h-0">
+        <LeadsInRail steps={steps} step={step} initialCollapsed={collapsed} />
+      </div>
+      <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-2 lg:min-h-0">
+        <div className={`flex flex-none flex-wrap items-center gap-3 pb-4 ${actions ? "" : "[&:not(:has(#leads-in-lead>*)):not(:has(#leads-in-continue>*))]:hidden"}`}>
+          <div id="leads-in-lead" className="flex min-h-[2.25rem] min-w-0 flex-1 flex-wrap items-center gap-2" />
           <div className="ml-auto flex items-center gap-2">
             {actions}
-            {prev && <Button asChild variant="outline"><Link href={prev.href}><ArrowLeft aria-hidden="true" />Back</Link></Button>}
-            {ownContinue
-              ? <span id="leads-in-continue" className="contents" />
-              : next && <Button asChild><Link href={next.href}>Continue to {next.label}<ArrowRight aria-hidden="true" /></Link></Button>}
+            {/* No Back / "Continue to …" (manager 2026-10-29): each page stands alone, so the corner holds
+                the page's own actions only — never a step to take next. */}
+            {ownContinue && <span id="leads-in-continue" className="contents" />}
           </div>
         </div>
-      </div>
-      <div className="lg:col-start-1 lg:row-start-2 lg:min-h-0">
-        <LeadsInRail steps={steps} step={step} />
-      </div>
-      {/* The step scrolls inside its own column; the rail stays put (owner 2026-10-28: no outer scroll). */}
-      <div key={step} className="flex min-w-0 flex-col gap-6 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:col-start-2 lg:row-start-2 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-        {children}
+        {/* The step scrolls inside its own column under its row; the rail stays put (owner 2026-10-28: no outer scroll). */}
+        <div key={step} className="flex min-w-0 flex-col gap-6 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+          {children}
+        </div>
       </div>
     </div>
   );

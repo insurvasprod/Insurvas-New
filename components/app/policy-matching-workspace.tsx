@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import { MATCH_FIELD_LABELS, MATCH_FIELDS, type FieldOutcome } from "@/lib/ingestion/policyMatching";
 import type { LinkRow, MappedAgent, ReviewRow, UnmappedAgent } from "@/lib/ingestion/policyMatchingStore";
@@ -54,9 +55,10 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
     ...unmapped.map((a) => ({ kind: "unmapped" as const, ...a })),
     ...mapped.map((m) => ({ kind: "mapped" as const, ...m })),
   ].filter((a) => has(a.agentIdentifier, a.carrierName, a.kind === "mapped" ? a.userName : null)), [unmapped, mapped, q]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shownReviews = paginate(visibleReviews, reviewPage, 10);
-  const shownLinks = paginate(visibleLinks, linkPage, 10);
-  const shownAgents = paginate(visibleAgents, agentPage, 10);
+  const pageSize = useFittingPageSize(420, 45);
+  const shownReviews = paginate(visibleReviews, reviewPage, pageSize);
+  const shownLinks = paginate(visibleLinks, linkPage, pageSize);
+  const shownAgents = paginate(visibleAgents, agentPage, pageSize);
 
   async function post(key: string, body: Record<string, unknown>, done: string): Promise<boolean> {
     setBusy(key);
@@ -100,7 +102,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       />
 
       {tab === "review" && (
-        <TableCard toolbar={toolbar} footer={visibleReviews.length > 10 ? <Pager page={shownReviews.current} pageSize={10} total={visibleReviews.length} noun="policies" onPage={setReviewPage} /> : undefined}>
+        <TableCard toolbar={toolbar} footer={visibleReviews.length ? <Pager page={shownReviews.current} pageSize={pageSize} total={visibleReviews.length} noun="policies" onPage={setReviewPage} /> : undefined}>
           {reviews.length === 0 ? <EmptyState title="Nothing to review" hint="Policies whose number we don't hold appear here with the closest clients." />
             : visibleReviews.length === 0 ? <NoMatches noun="policies" onClear={() => search("")} />
             : (
@@ -128,7 +130,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       )}
 
       {tab === "links" && (
-        <TableCard toolbar={toolbar} footer={visibleLinks.length > 10 ? <Pager page={shownLinks.current} pageSize={10} total={visibleLinks.length} noun="links" onPage={setLinkPage} /> : undefined}>
+        <TableCard toolbar={toolbar} footer={visibleLinks.length ? <Pager page={shownLinks.current} pageSize={pageSize} total={visibleLinks.length} noun="links" onPage={setLinkPage} /> : undefined}>
           {links.length === 0 ? <EmptyState title="No policy is linked yet" hint="Links appear as carrier files arrive: by policy number when we hold it, otherwise once a person decides." />
             : visibleLinks.length === 0 ? <NoMatches noun="links" onClear={() => search("")} />
             : (
@@ -152,7 +154,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       )}
 
       {tab === "agents" && (
-        <TableCard toolbar={toolbar} footer={visibleAgents.length > 10 ? <Pager page={shownAgents.current} pageSize={10} total={visibleAgents.length} noun="agent codes" onPage={setAgentPage} suffix={unmapped.length ? `${unmapped.length} to map` : "all mapped"} /> : undefined}>
+        <TableCard toolbar={toolbar} footer={visibleAgents.length ? <Pager page={shownAgents.current} pageSize={pageSize} total={visibleAgents.length} noun="agent codes" onPage={setAgentPage} suffix={unmapped.length ? `${unmapped.length} to map` : "all mapped"} /> : undefined}>
           {unmapped.length === 0 && mapped.length === 0 ? <EmptyState title="No agent codes yet" hint="Each carrier's writing-agent code appears here the first time a file carries it, or add one yourself." action={!readOnly ? <Button type="button" onClick={() => setAdding(true)}>Add agent code</Button> : undefined} />
             : visibleAgents.length === 0 ? <NoMatches noun="agent codes" onClear={() => search("")} />
             : (

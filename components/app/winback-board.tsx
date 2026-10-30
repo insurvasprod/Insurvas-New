@@ -12,6 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import { BAND_LABELS, CATEGORY_LABELS, SOURCE_LABELS, type WinbackBand } from "@/lib/retention/winback";
 import type { ClaimRow, Winback, WinbackRow } from "@/lib/retention/winbackStore";
@@ -37,7 +38,8 @@ export function WinbackBoard({ data, readOnly }: { data: Winback; readOnly: bool
   const rows = data.rows;
   const stateOf = (r: WinbackRow): View => (r.band === "never" ? "never" : r.releasedAt ? "released" : r.blockedReason ? "blocked" : "waiting");
   const visible = useMemo(() => rows.filter((r) => view === "all" || stateOf(r) === view), [rows, view]);
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(visible, page, pageSize);
   const count = (v: View) => rows.filter((r) => stateOf(r) === v).length;
 
   return (
@@ -69,7 +71,7 @@ export function WinbackBoard({ data, readOnly }: { data: Winback; readOnly: bool
             </select>
           </DataToolbar>
         }
-        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="clients" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="clients" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title="No lapsed clients yet" hint="A client appears here once a carrier file shows their policy lapsed and it is past the carrier's reinstatement window." />

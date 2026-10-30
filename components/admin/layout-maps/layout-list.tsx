@@ -12,6 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
 import { isKeptEntry } from "@/lib/ingestion/layout";
@@ -36,6 +37,7 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
   const [page, setPage] = useState(1);
   const [carrierQuery, setCarrierQuery] = useState("");
   const [carrierPage, setCarrierPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -53,13 +55,13 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
     if ((state === "deleted") !== deleted) return false;
     return true;
   });
-  const shown = paginate(filtered, page);
+  const shown = paginate(filtered, page, pageSize);
 
   // Every active carrier, one row each, with the layout per file type.
   const carrierRows = carriers
     .filter((carrier) => !carrierQuery.trim() || carrier.name.toLowerCase().includes(carrierQuery.trim().toLowerCase()))
     .map((carrier) => ({ carrier, byType: Object.fromEntries(FILE_TYPES.map((fileType) => [fileType, assignments.find((row) => row.carrierId === carrier.id && row.fileType === fileType) ?? null])) as Record<CarrierFileType, AssignmentView | null> }));
-  const shownCarriers = paginate(carrierRows, carrierPage);
+  const shownCarriers = paginate(carrierRows, carrierPage, pageSize);
 
   const figures = {
     live: layouts.filter((layout) => layout.live).length,
@@ -122,7 +124,7 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
               </select>
             </DataToolbar>
           }
-          footer={filtered.length > 0 ? <Pager page={shown.current} total={filtered.length} noun="layouts" onPage={setPage} /> : undefined}
+          footer={filtered.length > 0 ? <Pager page={shown.current} pageSize={pageSize} total={filtered.length} noun="layouts" onPage={setPage} /> : undefined}
         >
           {layouts.every((layout) => !layout.live && !layout.draft) && !query.trim() && !type && !state ? (
             <EmptyState title={layouts.length ? "Every layout is deleted" : "No layout maps yet"} hint="Start one from a carrier's sample file, or type its columns one by one." action={<Button asChild><Link href="/admin/layout-maps/new">New layout</Link></Button>} />
@@ -169,7 +171,7 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
       ) : (
         <TableCard
           toolbar={<DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}><ToolbarSearch value={carrierQuery} onChange={(next) => { setCarrierQuery(next); setCarrierPage(1); }} placeholder="Search carriers" /></DataToolbar>}
-          footer={carrierRows.length > 0 ? <Pager page={shownCarriers.current} total={carrierRows.length} noun="carriers" onPage={setCarrierPage} /> : undefined}
+          footer={carrierRows.length > 0 ? <Pager page={shownCarriers.current} pageSize={pageSize} total={carrierRows.length} noun="carriers" onPage={setCarrierPage} /> : undefined}
         >
           {carrierRows.length === 0 ? <NoMatches noun="carriers" by="search" onClear={() => setCarrierQuery("")} /> : (
             <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">

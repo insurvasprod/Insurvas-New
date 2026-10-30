@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -24,9 +27,14 @@ type MoneyData = { balances: Balance[]; entries: Entry[]; runs: Run[] };
  */
 export function ProducerMoneyTab({ url, statementBase = "/app/producer-statements" }: { url: string; statementBase?: string }) {
   const { data, error, loading } = useAgencyData<MoneyData>(url);
+  const [runPage, setRunPage] = useState(1);
+  const [entryPage, setEntryPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   if (error) return <ErrorState detail={error} />;
   if (loading || !data) return <SectionLoading rows={6} columns={5} label="Loading pay" />;
   const reported = data.balances.find((b) => b.basis === "reported");
+  const runs = paginate(data.runs, runPage, pageSize);
+  const entries = paginate(data.entries.slice().reverse(), entryPage, pageSize);
   return (
     <div className="flex flex-col gap-4">
       <StatStrip label="Pay">
@@ -35,12 +43,12 @@ export function ProducerMoneyTab({ url, statementBase = "/app/producer-statement
         <StatTile label="Charged back · reported" value={dollars(reported?.chargebackCents ?? 0)} valueTone={(reported?.chargebackCents ?? 0) < 0 ? "danger" : undefined} />
         <StatTile label="Paid out" value={dollars(-(reported?.paidCents ?? 0))} />
       </StatStrip>
-      <TableCard title="Statements" description="Each one lists the policies behind the money, line by line.">
+      <TableCard title="Statements" description="Each one lists the policies behind the money, line by line." footer={data.runs.length ? <Pager page={runs.current} total={data.runs.length} noun="statements" pageSize={pageSize} onPage={setRunPage} /> : undefined}>
         {data.runs.length === 0 ? <EmptyState title="No statements yet" hint="A statement appears here each time the agency runs payouts." /> : (
           <Table>
             <TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Withheld</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
-              {data.runs.map((r) => (
+              {runs.rows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="tabular-nums">{r.periodStart} – {r.periodEnd}</TableCell>
                   <TableCell><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? `Paid ${r.paidOn ?? ""}` : "Published"}</StatusChip></TableCell>
@@ -53,12 +61,12 @@ export function ProducerMoneyTab({ url, statementBase = "/app/producer-statement
           </Table>
         )}
       </TableCard>
-      <TableCard title="Ledger" description="Every entry, oldest first. A correction is a new entry, never an edit.">
+      <TableCard title="Ledger" description="Every entry, oldest first. A correction is a new entry, never an edit." footer={data.entries.length ? <Pager page={entries.current} total={data.entries.length} noun="entries" pageSize={pageSize} onPage={setEntryPage} /> : undefined}>
         {data.entries.length === 0 ? <EmptyState title="No entries yet" hint="Entries appear as carrier statements are posted." /> : (
           <Table>
             <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Entry</TableHead><TableHead>Client</TableHead><TableHead>Carrier</TableHead><TableHead>Policy</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
             <TableBody>
-              {data.entries.slice().reverse().map((e) => (
+              {entries.rows.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="tabular-nums">{e.occurredOn}</TableCell>
                   <TableCell>{ENTRY_LABELS[e.entryType] ?? e.entryType}<BasisChip basis={e.basis} />{e.reason && <div className="text-xs text-[var(--muted)]">{e.reason}</div>}</TableCell>

@@ -12,6 +12,8 @@ import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { PAID_METHODS, PAID_METHOD_LABELS } from "@/lib/accounting/invoicesCore";
 import { BASIS_LABELS, NEGATIVE_POLICY_LABELS, PAYS_ON_LABELS, PRODUCER_ENTRY_LABELS, percent, type Basis, type NegativePolicy, type PaysOn, type ProducerEntry, type ProducerRun } from "@/lib/accounting/producersCore";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -154,6 +156,11 @@ export function ProducersBoard({ data, readOnly }: { data: Overview; readOnly: b
   const [splitFor, setSplitFor] = useState<Person | null>(null);
   const [acting, setActing] = useState<{ run: Run; kind: "paid" | "void"; on: string; method: string; reason: string } | null>(null);
   const [refreshing, startRefresh] = useTransition();
+  const [peoplePage, setPeoplePage] = useState(1);
+  const [runPage, setRunPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
+  const people = paginate(data.people, peoplePage, pageSize);
+  const runs = paginate(data.runs, runPage, pageSize);
   const refresh = () => startRefresh(() => router.refresh());
   const name = (id: string) => data.people.find((p) => p.userId === id)?.name ?? "Producer";
   const current = (id: string) => data.splits.find((s) => s.producerUserId === id && !s.carrierId && !s.productCode && s.effectiveFrom <= new Date().toISOString().slice(0, 10));
@@ -177,12 +184,15 @@ export function ProducersBoard({ data, readOnly }: { data: Overview; readOnly: b
         <StatTile label="Runs to publish" value={String(data.runs.filter((r) => r.status === "draft").length)} footnote="drafts" />
       </StatStrip>
       <p className="text-sm text-muted-foreground">Negative balances: {NEGATIVE_POLICY_LABELS[data.settings.negativePolicy as NegativePolicy] ?? data.settings.negativePolicy}{data.settings.negativePolicy === "cap" ? ` (at most ${percent(data.settings.recoveryCapBp)} of each payout)` : ""}. <Link className="underline" href="/app/accounting-settings">Change</Link></p>
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}><span className="text-sm font-semibold">Producers</span></DataToolbar>}>
+      <TableCard
+        toolbar={<DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}><span className="text-sm font-semibold">Producers</span></DataToolbar>}
+        footer={data.people.length ? <Pager page={people.current} total={data.people.length} noun="producers" pageSize={pageSize} onPage={setPeoplePage} /> : undefined}
+      >
         {data.people.length === 0 ? <EmptyState title="No producers" hint="Producer splits are for agencies: once producers join, record each one's split here." /> : (
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
             <thead><tr><th>Producer</th><th className="w-[160px]">Split</th><th className="w-[130px] text-right">Owed to date</th><th className="w-[130px] text-right">Clawed back</th><th className="w-[130px] text-right">Balance</th><th className="w-[200px] text-right" /></tr></thead>
             <tbody>
-              {data.people.map((p) => {
+              {people.rows.map((p) => {
                 const s = current(p.userId);
                 return (
                   <tr key={p.userId}>
@@ -199,12 +209,15 @@ export function ProducersBoard({ data, readOnly }: { data: Overview; readOnly: b
           </table>
         )}
       </TableCard>
-      <TableCard toolbar={<DataToolbar><span className="text-sm font-semibold">Payout runs</span></DataToolbar>}>
+      <TableCard
+        toolbar={<DataToolbar><span className="text-sm font-semibold">Payout runs</span></DataToolbar>}
+        footer={data.runs.length ? <Pager page={runs.current} total={data.runs.length} noun="runs" pageSize={pageSize} onPage={setRunPage} /> : undefined}
+      >
         {data.runs.length === 0 ? <EmptyState title="No producer runs yet" hint="Open a producer and draft a run for a period." /> : (
           <table className="portal-lead-table w-full min-w-[920px] text-left text-sm">
             <thead><tr><th>Producer</th><th className="w-[200px]">Period</th><th className="text-right">Earned</th><th className="text-right">Clawed back</th><th className="text-right">Withheld</th><th className="text-right">Net payable</th><th className="w-[150px]">Status</th><th className="w-[220px] text-right" /></tr></thead>
             <tbody>
-              {data.runs.map((r) => (
+              {runs.rows.map((r) => (
                 <tr key={r.id}>
                   <td>{name(r.producerUserId)}</td>
                   <td>{r.periodStart} to {r.periodEnd}</td>

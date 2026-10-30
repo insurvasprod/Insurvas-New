@@ -12,6 +12,7 @@ import { NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { US_STATES } from "@/lib/appointments/constants";
 import {
   FEDERAL_END,
@@ -42,8 +43,6 @@ import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const STATE_NAMES = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
 const stateName = (code: string) => STATE_NAMES.get(code) ?? code;
-const PAGE_SIZE = 10;
-
 type StateFilter = "all" | "no_rule" | "has_rule" | "scheduled";
 type HolidayScope = "upcoming" | "all";
 
@@ -70,6 +69,7 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
   const [holidayQuery, setHolidayQuery] = useState("");
   const [holidayScope, setHolidayScope] = useState<HolidayScope>("upcoming");
   const [holidayPage, setHolidayPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const [openState, setOpenState] = useState<string | null>(null);
   const [addingHoliday, setAddingHoliday] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -117,14 +117,14 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
     if (filter === "scheduled" && row.scheduled.length === 0) return false;
     return !needle || row.state.toLowerCase().includes(needle) || stateName(row.state).toLowerCase().includes(needle);
   });
-  const statePage = paginate(shown, page, PAGE_SIZE);
+  const statePage = paginate(shown, page, pageSize);
 
   const holidayNeedle = holidayQuery.trim().toLowerCase();
   const holidays = board.holidays
     .filter((h) => holidayScope === "all" || h.date >= today)
     .filter((h) => !holidayNeedle || h.name.toLowerCase().includes(holidayNeedle) || (h.state ?? "every state").toLowerCase().includes(holidayNeedle))
     .sort((a, b) => a.date.localeCompare(b.date));
-  const holidayRows = paginate(holidays, holidayPage, PAGE_SIZE);
+  const holidayRows = paginate(holidays, holidayPage, pageSize);
 
   const reviewed = board.feed ? new Date(board.feed.lastRefreshedAt) : null;
   const reviewedLabel = reviewed && !Number.isNaN(reviewed.getTime()) ? dayLabel(board.feed!.lastRefreshedAt.slice(0, 10)) : "Never";
@@ -178,7 +178,7 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
             </select>
           </DataToolbar>
         }
-        footer={<Pager page={statePage.current} total={shown.length} noun="states" pageSize={PAGE_SIZE} onPage={setPage} />}
+        footer={<Pager page={statePage.current} total={shown.length} noun="states" pageSize={pageSize} onPage={setPage} />}
       >
         {shown.length === 0 ? (
           <NoMatches noun="states" onClear={() => { setQuery(""); setFilter("all"); }} />
@@ -230,7 +230,7 @@ export function CallingRulesEditor({ board: initial, today }: { board: CallingRu
             </select>
           </DataToolbar>
         }
-        footer={<Pager page={holidayRows.current} total={holidays.length} noun="holidays" pageSize={PAGE_SIZE} onPage={setHolidayPage} />}
+        footer={<Pager page={holidayRows.current} total={holidays.length} noun="holidays" pageSize={pageSize} onPage={setHolidayPage} />}
       >
         {holidays.length === 0 ? (
           <NoMatches noun="holidays" onClear={() => { setHolidayQuery(""); setHolidayScope("all"); }} />

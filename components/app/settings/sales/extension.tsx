@@ -24,6 +24,7 @@ import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EXTENSION_GRANTS, EXTENSION_STATE, GRANT_MINUTES, SALES_CARRIERS } from "@/lib/applications/settingsFixtures";
 import { EXTENSION_LATEST_VERSION, GRANT_LIFETIME_MINUTES, type GrantStatus } from "@/lib/extension/constants";
 import type { CarrierSiteView, GrantView } from "@/lib/extension/types";
@@ -33,7 +34,6 @@ import { DangerZone } from "@/components/app/settings/patterns";
 
 import { DialogActions, SalesDialog, SalesLoadError, SalesPanelTop, WithReason, notRefreshed, notSaved, plural, useSalesSample } from "./shared";
 
-const HISTORY_PAGE = 10;
 const host = (origin: string) => origin.replace(/^https:\/\//, "");
 // One date form across Settings ("28 Oct, 12:12" / "28 Oct 2026"; settings audit P9).
 const when = (iso: string) => dateTime(iso, viewerTimeZone());
@@ -112,13 +112,14 @@ export function SalesExtension() {
   const latest = sample ? EXTENSION_STATE.latestVersion : EXTENSION_LATEST_VERSION;
   const refresh = sample ? notRefreshed : load;
 
+  const historyPageSize = useFittingPageSize(420, 45);
   const history = rows
     .flatMap((g) => [
       { key: `${g.id}-g`, at: g.issuedAt, revoked: false, g },
       ...(g.revokedAt ? [{ key: `${g.id}-r`, at: g.revokedAt, revoked: true, g }] : []),
     ])
     .sort((a, b) => b.at.localeCompare(a.at));
-  const shownHistory = paginate(history, historyPage, HISTORY_PAGE);
+  const shownHistory = paginate(history, historyPage, historyPageSize);
 
   async function revoke(grantIds: string[] | null) {
     if (sample) return notSaved();
@@ -220,7 +221,7 @@ export function SalesExtension() {
       <TableCard
         title="Grant history"
         info="Every grant and every revocation, newest first."
-        footer={history.length > 0 ? <Pager page={shownHistory.current} total={history.length} noun="events" pageSize={HISTORY_PAGE} onPage={setHistoryPage} /> : undefined}
+        footer={history.length > 0 ? <Pager page={shownHistory.current} total={history.length} noun="events" pageSize={historyPageSize} onPage={setHistoryPage} /> : undefined}
       >
         {pending ? loadingRows : history.length === 0 ? (
           <EmptyState title="No grants yet" hint="A grant is opened from an application's Submit step when the agent fills it on a carrier site." />

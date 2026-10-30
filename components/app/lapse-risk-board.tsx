@@ -230,7 +230,7 @@ export function LapseRiskBoard({
       </StatStrip>
 
       <TableCard
-        className="flex min-h-[calc(100dvh-var(--top-bar-h)-290px)] flex-col [&>*:nth-child(2)]:flex-1"
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-322px)] flex-col [&>*:nth-child(2)]:flex-1"
         toolbar={
           <DataToolbar actions={<>
             {filtered && <ClearFiltersButton onClick={clearFilters} />}

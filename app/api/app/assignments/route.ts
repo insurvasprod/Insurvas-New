@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { assignLead, assignLeadList, findReassignable, getAssignmentPreview, getAssignmentWorkspace, ListChangedError, previewLeadListAssignment, publishAssignmentRules, returnLeadToPool, saveAgentCapacity, saveAssignmentRule, saveAssignmentSettings, SchemaPendingError } from "@/lib/assignment/service";
+import { readRouteStats } from "@/lib/assignment/routeStats";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { audit } from "@/lib/audit/log";
 import { refuseRoutingInAgency } from "@/lib/agency/routingGuard";
@@ -153,6 +154,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ leads: await findReassignable(auth.context.tenantId, query) }, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Could not search leads" }, { status: 500 });
+    }
+  }
+  if (view === "stats") {
+    // The Route step's strip (Leads in round 3): pool size and age, handed out today, the next leads' states.
+    // Counts only, so every role that opens the page reads them, behind the same agency line as the page.
+    const auth = await requireFeatureRole("outbound_dialing", allRoles);
+    if (auth instanceof NextResponse) return auth;
+    const agencyRefusal = await refuseRouting(auth.context);
+    if (agencyRefusal) return agencyRefusal;
+    try {
+      return NextResponse.json(await readRouteStats(auth.context.tenantId), { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not read the pool figures" }, { status: 500 });
     }
   }
   if (view === "preview") {

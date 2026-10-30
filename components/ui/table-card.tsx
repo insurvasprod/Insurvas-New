@@ -49,7 +49,7 @@ export function TableCard({
       className={cn(
         // m-glass: the frosted surface shared with Card and StatStrip (app/globals.css, glass layer).
         "m-glass rounded-lg border border-border",
-        "[&>*:first-child]:rounded-t-[7px] [&>*:last-child]:rounded-b-[7px]",
+        "[&>*:first-child]:rounded-t-[15px] [&>*:last-child]:rounded-b-[15px]",
         className
       )}
     >
