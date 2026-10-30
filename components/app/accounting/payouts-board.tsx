@@ -135,6 +135,9 @@ function RunPanel({ id, readOnly, onClose, onChanged }: { id: string; readOnly: 
   };
   const section = "flex flex-col gap-2 border-t border-border pt-4";
   const disputedItem = (itemId: string) => run?.disputes.find((d) => d.itemId === itemId);
+  const missingTradingName = error?.toLowerCase().includes("trading name") ?? false;
+  const missingBusinessAddress = error?.toLowerCase().includes("business address") ?? false;
+  const businessIdentityBlocked = missingTradingName || missingBusinessAddress;
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent size="2xl" className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0">
@@ -150,7 +153,23 @@ function RunPanel({ id, readOnly, onClose, onChanged }: { id: string; readOnly: 
           </div>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-          {error ? <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p> : null}
+          {error ? businessIdentityBlocked ? (
+            <section role="alert" className="space-y-3 rounded-lg border border-[var(--warning)] bg-[var(--warning-surface)] p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--warning-ink)]">Add business details before publishing</h3>
+                <p className="mt-1 text-sm text-[var(--body)]">The partner statement needs to show who sent it. Add the missing details in Business identity settings:</p>
+              </div>
+              <ul className="m-0 list-disc space-y-1 pl-5 text-sm text-[var(--body)]">
+                {missingTradingName && <li><strong>Trading name:</strong> the name your agency does business under.</li>}
+                {missingBusinessAddress && <li><strong>Business address:</strong> street, city, state, and ZIP code.</li>}
+              </ul>
+              <div className="flex flex-wrap gap-2">
+                {missingTradingName && <Button asChild size="sm" variant="outline"><Link href="/app/settings#business-identity/identity-trading-name">Add trading name</Link></Button>}
+                {missingBusinessAddress && <Button asChild size="sm" variant="outline"><Link href="/app/settings#business-identity/identity-address-line1">Add business address</Link></Button>}
+              </div>
+              <p className="m-0 text-xs text-muted-foreground">Your partner will see these details on the payout statement. After saving, return here and publish the draft.</p>
+            </section>
+          ) : <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p> : null}
           {!run ? (error ? null : <SectionLoading rows={4} columns={2} label="Loading payout run" />) : (
         <>
           {paying ? (
