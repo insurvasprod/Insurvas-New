@@ -27,7 +27,7 @@ const bpSchema = z.coerce.number().int().min(0).max(100000);
 export const tenantCarrierSchema = z.object({
   carrier_id: z.string().uuid("Choose a valid carrier"),
   contract_level_bp: bpSchema,
-  writing_number: z.string().trim().min(1, "Enter the writing number").max(120),
+  writing_number: z.string().trim().max(120).optional().default(""),
   effective_from: dateSchema,
 });
 

@@ -2,7 +2,6 @@
 
 import { TopBarShell, type TopBarUser } from "@/components/app/app-top-bar";
 import { usePartnerTopBarFeed } from "@/components/partner/partner-alert-center";
-import { TopBarTitleCrumb } from "@/components/app/nav/top-bar-title-crumb";
 
 /**
  * The partner bar: the same bar as the agent's, with the partner's own contents (p-nav-spec,
@@ -22,9 +21,9 @@ export function PartnerTopBar({ user }: { user: TopBarUser }) {
       profileHref="/partner/settings"
       profileLabel="Settings"
       profileHint="Your organisation's portal settings"
+      leading={<span className="portal-top-crumb" aria-hidden="true" />}
       signOutEndpoint="/api/partner/auth/logout"
       signOutRedirect="/partner/login"
-      leading={<TopBarTitleCrumb />}
     />
   );
 }

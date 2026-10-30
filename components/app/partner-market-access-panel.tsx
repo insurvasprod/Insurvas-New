@@ -250,7 +250,7 @@ export function PartnerMarketAccessPanel({
           // Nothing to choose yet: one line and the way to fix it (2026-10-29), not a counter at 0
           // and a greyed Save.
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-3 text-sm">
-            <span className="text-[var(--body)]">A carrier can be granted once it has its contract details and at least one state in Contracting. None has both yet.</span>
+            <span className="text-[var(--body)]">No active carrier and state combinations are available yet. Turn on a carrier and select at least one state in Contracting.</span>
             <Button asChild size="sm" variant="outline"><Link href="/app/settings#carriers">Open Contracting</Link></Button>
           </div>
         )}

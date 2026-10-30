@@ -54,6 +54,13 @@ export async function eligibleTenantMarkets(
       .filter((carrier) => carrier.is_active && carrier.effective_from <= asOf && !switchedOff.has(carrier.carrier_id))
       .map((carrier) => carrier.carrier_id),
   );
+  // Contract level and writing number are finance details, not the agency's market switch.
+  // Contracting records that switch in tenant_carrier_requirements, while active state
+  // appointments determine which markets can be offered to partners. Keep existing active
+  // tenant_carriers as a compatibility path for older records without a switch row.
+  for (const requirement of vault.carrierRequirements ?? []) {
+    if (requirement.contracted) activeCarrierIds.add(requirement.carrier_id);
+  }
   const latest = new Map<string, (typeof vault.appointments)[number]>();
   for (const appointment of vault.appointments) {
     if (!activeCarrierIds.has(appointment.carrier_id)) continue;
