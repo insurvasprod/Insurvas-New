@@ -180,7 +180,16 @@ export function ChatThread({
   const items = buildThread(messages, { viewerId, zone });
 
   return (
-    <div ref={scroller} className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-4", className)} aria-live="polite">
+    <div
+      ref={scroller}
+      // Focusable, because a region that scrolls has to be reachable by someone who has no mouse;
+      // "log" is what a thread of messages is, and it carries the live announcement with it.
+      tabIndex={0}
+      role="log"
+      aria-label="Conversation"
+      aria-live="polite"
+      className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-3 py-4 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)] sm:px-4", className)}
+    >
       {items.length === 0 ? (
         <div className="m-auto flex flex-col items-center gap-2 px-4 text-center">
           <MessageCircle className="size-6 text-muted-foreground" aria-hidden="true" />

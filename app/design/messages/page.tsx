@@ -33,13 +33,13 @@ export default async function MessagesDesignPage({ searchParams }: { searchParam
     <div className="portal-agent portal-partner min-h-screen">
       <PartnerSidebar role={role} partnerStatus="active" partnerName="Sample Publishing Co." />
       <main className="min-w-0 flex-1 overflow-x-clip bg-[var(--color-page-bg)] flex flex-col">
-        <div className="portal-top-bar flex h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-[var(--surface)] px-6 text-sm text-muted-foreground">
+        <div className="sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-[var(--surface)] px-4 py-2 text-sm text-muted-foreground sm:px-6">
           <span className="font-semibold text-foreground">Messages preview</span>
-          <span className="flex items-center gap-1">
+          <span className="flex flex-wrap items-center gap-1">
             {SAMPLE_CHAT_STATES.map((item) => <a key={item} href={href({ state: item })} className={pill(item === state)}>{item}</a>)}
           </span>
           <span aria-hidden="true">·</span>
-          <span className="flex items-center gap-1">
+          <span className="flex flex-wrap items-center gap-1">
             {SAMPLE_ROLES.map((item) => <a key={item} href={href({ role: item })} className={pill(item === role)}>{item === "partner_admin" ? "admin" : "user"}</a>)}
           </span>
         </div>

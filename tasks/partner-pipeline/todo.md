@@ -828,10 +828,18 @@ two native date inputs.
 **Acceptance criteria:**
 - [ ] `/design/pipeline?width=phone` frames the page at 375 so every state can be checked there
 - [ ] Contrast re-measured against the real surface for anything this round changed
-- [ ] Touch targets: the `InfoTip` (i) finding (16×16 and 20×20) is either fixed in the shared
+- [x] Touch targets: the `InfoTip` (i) finding (16×16 and 20×20) is either fixed in the shared
       component or recorded as an accepted exception with its reason — not left unsaid
-- [ ] **Dates:** either a date-only mode on `DateTimePicker` and the two filters moved to it, or a
+      → **Settled 30 Oct: there was nothing to fix.** The drawn circle is 20×20, but the button
+      carries `before:absolute before:-inset-1.5`, and a pseudo-element of a button is part of
+      what you press. Hit-tested in the browser: the target reaches 16px either side of centre
+      and stops there — **32×32**, above WCAG 2.2 2.5.8's 24×24. The earlier finding measured
+      the glyph, not the target.
+- [x] **Dates:** either a date-only mode on `DateTimePicker` and the two filters moved to it, or a
       one-line note in the plan saying they stay native and why. Droppable without blocking
+      → **They stay native.** UI-CONSISTENCY §5b already carries the rule and the reason; a
+      calendar a partner opens to pick one day is a worse control than the one their phone
+      already gives them.
 - [ ] `components/partner/README.md` and UI-CONSISTENCY updated for the record page and the phone layout
 
 **Verification:**
