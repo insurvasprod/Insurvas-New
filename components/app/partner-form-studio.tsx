@@ -147,6 +147,7 @@ export function PartnerFormStudio({
   target,
   readOnly = false,
   compact = false,
+  embedded = false,
 }: {
   partnerId: string;
   target?: {
@@ -156,6 +157,12 @@ export function PartnerFormStudio({
   };
   readOnly?: boolean;
   compact?: boolean;
+  /**
+   * Drawn inside a tab that already has its own card and name (the publisher record's Forms tab).
+   * Drops this component's own card chrome and its title line, which otherwise read as a second
+   * page nested in the first (owner, 2026-10-29). Unlike `compact` it hides no controls.
+   */
+  embedded?: boolean;
 }) {
   const base = target
     ? `/api/app/partners/${partnerId}/users/${target.userId}/form-profile`
@@ -531,14 +538,18 @@ export function PartnerFormStudio({
     );
   return (
     <>
-      <Card className={cn("overflow-hidden", compact && "border-0 shadow-none")}>
+      <Card className={cn("overflow-hidden", (compact || embedded) && "border-0 shadow-none")}>
         <CardHeader
           className={cn(
             "gap-4 border-b bg-muted/10",
             compact && "px-0 pb-3 pt-0",
+            // Only `embedded` loses the rule and the tint: the tab's own card already supplies both,
+            // and `compact` (the per-user panel) is left exactly as it was.
+            embedded && "border-b-0 bg-transparent px-0 pb-3 pt-0",
           )}
         >
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className={cn("flex flex-wrap items-start gap-3", embedded ? "justify-end" : "justify-between")}>
+            {!embedded && (
             <div>
               <CardTitle className="text-base">
                 {target
@@ -551,6 +562,7 @@ export function PartnerFormStudio({
                   : "Admins and users can override these."}
               </p>
             </div>
+            )}
             <StatusChip tone={profile?.profile ? "info" : "neutral"}>
               {profile?.profile
                 ? "Custom configuration"
@@ -661,7 +673,7 @@ export function PartnerFormStudio({
         <CardContent
           className={cn(
             "grid gap-6 p-4 xl:grid-cols-[minmax(0,1fr)_320px]",
-            compact && "gap-4 p-0",
+            (compact || embedded) && "gap-4 p-0",
           )}
         >
           <div className="space-y-5">

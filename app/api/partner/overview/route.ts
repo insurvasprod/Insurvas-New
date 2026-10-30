@@ -18,7 +18,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
  *   team, pulse         partner_admin only: seats in use / invitations pending, and Team review's
  *                       reply time and waiting conversations over the last 30 days
  *
- * A failed part comes back null rather than failing the page; the home says "—" for it.
+ * A failed part comes back null rather than failing the page.
  */
 
 const PULSE_WINDOW_MS = 30 * 86_400_000;

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { AuthLayout, AuthStory } from "@/components/portal/auth-layout";
+import { AuthShowcase } from "@/components/app/auth-showcase";
 
 /**
  * The partner doors' frame (2026-10-13): sign-in, accepting an invitation and setting a first
@@ -44,9 +45,9 @@ function PartnerAuthStory() {
   );
 }
 
-export function PartnerAuthFrame({ children }: { children: ReactNode }) {
+export function PartnerAuthFrame({ children, animated = false }: { children: ReactNode; animated?: boolean }) {
   return (
-    <AuthLayout plane="partner" story={<PartnerAuthStory />}>
+    <AuthLayout plane="partner" story={animated ? <AuthShowcase step={0} /> : <PartnerAuthStory />}>
       {children}
     </AuthLayout>
   );

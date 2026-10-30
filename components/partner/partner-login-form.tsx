@@ -91,7 +91,7 @@ export function PartnerLoginForm() {
 
   if (resetting) {
     return (
-      <PartnerAuthFrame>
+      <PartnerAuthFrame animated>
         {resetState === "sent" ? (
           <AuthHeading title="Check your inbox">
             If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to a partner account, a link to choose a new password is on its way. It works once.
@@ -117,7 +117,7 @@ export function PartnerLoginForm() {
   }
 
   return (
-    <PartnerAuthFrame>
+    <PartnerAuthFrame animated>
       <AuthHeading title="Partner sign in">Submit leads and follow every one to its outcome.</AuthHeading>
 
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>

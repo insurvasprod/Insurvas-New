@@ -3,53 +3,68 @@
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 export type RailLink = { key: string; label: string; href: string; icon: Icon };
 export type RailGroup = { key: string; label: string; icon: Icon; items: RailLink[] };
+export type RailNode = RailLink | RailGroup;
 
 type Fly =
-  | { kind: "group"; key: string; label: string; items: RailLink[]; top: number }
   | { kind: "card"; key: string; label: string; top: number }
   | { kind: "tip"; key: string; label: string; top: number };
 
 /**
- * The desktop rail for the staff and partner shells (redesign 2026-10-25, owner: "sidebar and navbar
- * as A"). The agent shell's NavRail (components/app/agent-sidebar.tsx), class for class, with a
- * menu handed in rather than built from the agent menu: one icon per group, its pages opening beside
- * the rail when the group is pointed at, focused or clicked; single links show their name as a tip.
- * The card (who is signed in, which organisation) opens from the foot. The phone keeps each shell's
- * own drawer. `isActive` is the shell's own rule (the partner's Overview matches only itself).
+ * Desktop navigation for staff and partner shells. Each shell keeps its ordered menu data and
+ * active-route rules; partner can opt into the agent sidebar presentation while staff keeps the
+ * compact-rail treatment. Mobile keeps each shell's own drawer; partner Overview matches only itself.
  */
 export function NavRail({
   label,
   homeHref,
-  links,
-  groups,
+  items,
   foot,
   card,
   isActive,
+  sidebarPresentation = false,
 }: {
   label: string;
   homeHref: string;
-  links: RailLink[];
-  groups: RailGroup[];
+  items: RailNode[];
   foot: RailLink[];
   card?: { label: string; icon: Icon; body: ReactNode };
   isActive: (href: string, pathname: string) => boolean;
+  /** Use the agent shell's full sidebar geometry and left-aligned top-bar search. */
+  sidebarPresentation?: boolean;
 }) {
   const pathname = usePathname();
   const [fly, setFly] = useState<Fly | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const activeGroup = items.find((entry): entry is RailGroup =>
+    "items" in entry && entry.items.some((item) => isActive(item.href, pathname)),
+  );
+  const [openGroupKey, setOpenGroupKey] = useState<string | null>(() => activeGroup?.key ?? null);
   const [seenPath, setSeenPath] = useState(pathname);
   const closeTimer = useRef<number | null>(null);
-  const panelId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-rail-panel`;
+  const idPrefix = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-rail`;
+  const panelId = `${idPrefix}-panel`;
+  const navId = `${idPrefix}-navigation`;
 
-  // A navigation closes the panel (derived from the path, so set during render).
+  // A navigation closes transient panels and opens the group containing the current route.
   if (seenPath !== pathname) {
     setSeenPath(pathname);
     setFly(null);
+    if (activeGroup) setOpenGroupKey(activeGroup.key);
+  }
+
+  // Keep consecutive standalone links together, like Home and Settings in the agent sidebar.
+  const blocks: (RailLink[] | RailGroup)[] = [];
+  for (const item of items) {
+    if ("items" in item) blocks.push(item);
+    else if (Array.isArray(blocks.at(-1))) (blocks.at(-1) as RailLink[]).push(item);
+    else blocks.push([item]);
   }
 
   useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); }, []);
@@ -68,14 +83,10 @@ export function NavRail({
     const height = 56 + rows * 40;
     return Math.max(8, Math.min(rect.top - 8, window.innerHeight - height - 12));
   };
-  const openGroup = (group: RailGroup, element: HTMLElement) => {
-    cancelClose();
-    setFly({ kind: "group", key: group.key, label: group.label, items: group.items, top: place(element, group.items.length) });
-  };
   const openTip = (key: string, text: string, element: HTMLElement) => {
     cancelClose();
     const rect = element.getBoundingClientRect();
-    setFly((current) => (current?.kind === "group" && current.key === key ? current : { kind: "tip", key, label: text, top: rect.top + rect.height / 2 - 16 }));
+    setFly({ kind: "tip", key, label: text, top: rect.top + rect.height / 2 - 16 });
   };
   const openCard = (element: HTMLElement) => {
     if (!card) return;
@@ -84,11 +95,6 @@ export function NavRail({
   };
 
   function onKeyDown(event: React.KeyboardEvent) {
-    if ((event.key === "ArrowRight" || event.key === "ArrowDown") && fly?.kind === "group" && (event.target as HTMLElement).dataset.railKey === fly.key) {
-      const first = document.querySelector<HTMLElement>(`#${panelId} a`);
-      if (first) { event.preventDefault(); first.focus(); }
-      return;
-    }
     if (event.key !== "Escape" || !fly) return;
     const key = fly.key;
     setFly(null);
@@ -105,53 +111,124 @@ export function NavRail({
           data-rail-key={item.key}
           aria-label={item.label}
           aria-current={active ? "page" : undefined}
-          className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
+          title={item.label}
+          className={`portal-agent-nav-link ${active ? "is-active" : ""}`}
           onPointerEnter={(event) => openTip(item.key, item.label, event.currentTarget)}
           onPointerLeave={closeSoon}
           onFocus={(event) => openTip(item.key, item.label, event.currentTarget)}
           onBlur={closeSoon}
         >
-          <ItemIcon className="size-5" aria-hidden />
+          <span className="portal-agent-nav-link-copy">
+            <ItemIcon className="portal-agent-nav-icon" aria-hidden />
+            <span className="portal-agent-nav-label">{item.label}</span>
+          </span>
         </Link>
       </li>
+    );
+  };
+  const group = (entry: RailGroup) => {
+    const GroupIcon = entry.icon;
+    const open = openGroupKey === entry.key;
+    const active = entry.items.some((item) => isActive(item.href, pathname));
+    const sectionId = `${navId}-${entry.key.replace(/[^a-z0-9]+/gi, "-")}`;
+    return (
+      <section key={entry.key} className={`portal-agent-nav-section ${active ? "is-active" : ""}`}>
+        <button
+          type="button"
+          data-rail-key={entry.key}
+          title={entry.label}
+          aria-expanded={open && !isCollapsed}
+          aria-controls={open && !isCollapsed ? sectionId : undefined}
+          className="portal-agent-nav-disclosure"
+          onClick={() => {
+            if (isCollapsed) {
+              setFly(null);
+              setIsCollapsed(false);
+              setOpenGroupKey(entry.key);
+              return;
+            }
+            setOpenGroupKey((current) => current === entry.key ? null : entry.key);
+          }}
+        >
+          <span className="portal-agent-nav-disclosure-copy">
+            <GroupIcon className="portal-agent-nav-icon" aria-hidden />
+            <span>{entry.label}</span>
+          </span>
+          <ChevronDown className={`portal-agent-nav-chevron ${open && !isCollapsed ? "is-open" : ""}`} aria-hidden="true" />
+        </button>
+        {open && !isCollapsed && (
+          <ul id={sectionId} className="portal-agent-nav-sublist">
+            {entry.items.map((child) => {
+              const ChildIcon = child.icon;
+              const childActive = isActive(child.href, pathname);
+              return (
+                <li key={child.key}>
+                  <Link
+                    href={child.href}
+                    aria-label={child.label}
+                    aria-current={childActive ? "page" : undefined}
+                    title={child.label}
+                    className={`portal-agent-nav-link portal-agent-nav-link-nested ${childActive ? "is-active" : ""}`}
+                  >
+                    <span className="portal-agent-nav-link-copy">
+                      <ChildIcon className="portal-agent-nav-icon" aria-hidden />
+                      <span className="portal-agent-nav-label">{child.label}</span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     );
   };
   const CardIcon = card?.icon;
 
   return (
-    <aside data-print-hide className="portal-agent-rail hidden md:flex" onKeyDown={onKeyDown}>
-      <div className="portal-agent-rail-brand">
-        <Link href={homeHref} aria-label="Insurvas home">
-          <InsurvasLogo size="compact" variant="symbol" tone="dark" />
+    <aside
+      data-print-hide
+      className={`${sidebarPresentation ? "portal-agent-sidebar-desktop" : "portal-agent-rail"} portal-agent-rail-expanded portal-agent-desktop-nav hidden md:flex md:flex-col ${isCollapsed ? "is-collapsed" : ""}`}
+      onKeyDown={onKeyDown}
+    >
+      <div className={sidebarPresentation ? "portal-agent-sidebar-brand" : "portal-agent-rail-brand"}>
+        <Link
+          href={homeHref}
+          aria-label="Insurvas home"
+          className={sidebarPresentation ? "portal-agent-desktop-brand-link" : undefined}
+        >
+          <InsurvasLogo
+            size="sidebar"
+            tone="dark"
+            className={sidebarPresentation ? "portal-agent-desktop-brand-full" : "portal-agent-rail-brand-full"}
+          />
+          <InsurvasLogo
+            size="compact"
+            variant="symbol"
+            tone="dark"
+            className={sidebarPresentation ? "portal-agent-desktop-brand-compact" : "portal-agent-rail-brand-compact"}
+          />
         </Link>
+        <button
+          type="button"
+          onClick={() => { setFly(null); setIsCollapsed((collapsed) => !collapsed); }}
+          aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+          aria-expanded={!isCollapsed}
+          aria-controls={navId}
+          title={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+          className="portal-agent-sidebar-collapse portal-agent-rail-toggle rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+        >
+          {isCollapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+        </button>
       </div>
-      <nav className="portal-agent-rail-scroll" aria-label={label}>
-        <ul className="portal-agent-rail-list">
-          {links.map(link)}
-          {groups.map((group) => {
-            const GroupIcon = group.icon;
-            const open = fly?.kind === "group" && fly.key === group.key;
-            const active = group.items.some((item) => isActive(item.href, pathname));
-            return (
-              <li key={group.key}>
-                <button
-                  type="button"
-                  onClick={(event) => (open ? setFly(null) : openGroup(group, event.currentTarget))}
-                  data-rail-key={group.key}
-                  aria-label={group.label}
-                  aria-expanded={open}
-                  aria-controls={open ? panelId : undefined}
-                  className={`portal-agent-rail-item ${active ? "is-active" : ""}`}
-                  onPointerEnter={(event) => openGroup(group, event.currentTarget)}
-                  onPointerLeave={closeSoon}
-                  onFocus={(event) => openGroup(group, event.currentTarget)}
-                >
-                  <GroupIcon className="size-5" aria-hidden />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      <nav id={navId} className={`portal-agent-rail-scroll ${sidebarPresentation ? "portal-agent-sidebar-scroll" : ""}`} aria-label={label}>
+        <div className={`portal-agent-nav ${isCollapsed ? "is-collapsed" : ""}`}>
+          {blocks.map((block, index) => Array.isArray(block) ? (
+            <ul key={`links-${index}`} className={index === 0 ? "portal-agent-nav-home" : "portal-agent-nav-settings"}>
+              {block.map(link)}
+            </ul>
+          ) : group(block))}
+        </div>
       </nav>
       <ul className="portal-agent-rail-foot">
         {foot.map(link)}
@@ -164,11 +241,16 @@ export function NavRail({
               aria-label={card.label}
               aria-expanded={fly?.kind === "card"}
               aria-controls={fly?.kind === "card" ? panelId : undefined}
-              className="portal-agent-rail-item"
+              className="portal-agent-nav-link portal-agent-rail-card"
               onPointerEnter={(event) => openCard(event.currentTarget)}
               onPointerLeave={closeSoon}
+              onFocus={(event) => openCard(event.currentTarget)}
+              onBlur={closeSoon}
             >
-              <CardIcon className="size-5" aria-hidden />
+              <span className="portal-agent-nav-link-copy">
+                <CardIcon className="portal-agent-nav-icon" aria-hidden />
+                <span className="portal-agent-nav-label">{card.label}</span>
+              </span>
             </button>
           </li>
         )}
@@ -186,24 +268,6 @@ export function NavRail({
           onPointerLeave={closeSoon}
         >
           {fly.kind === "tip" && fly.label}
-          {fly.kind === "group" && (
-            <>
-              <p className="portal-agent-rail-fly-head">{fly.label}</p>
-              <ul>
-                {fly.items.map((item) => {
-                  const ItemIcon = item.icon;
-                  return (
-                    <li key={item.key}>
-                      <Link href={item.href} aria-current={isActive(item.href, pathname) ? "page" : undefined} onClick={() => setFly(null)} onBlur={closeSoon} onFocus={cancelClose}>
-                        <ItemIcon className="size-4 shrink-0" aria-hidden />
-                        <span>{item.label}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
           {fly.kind === "card" && card?.body}
         </div>
       )}

@@ -19,7 +19,7 @@ import {
 
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-import { NavRail } from "@/components/portal/nav-rail";
+import { NavRail, type RailNode } from "@/components/portal/nav-rail";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
 type PartnerNavItem = { label: string; path: string; icon: typeof Home };
@@ -121,6 +121,16 @@ function PartnerCard({ role, partnerStatus, partnerName }: { role: PartnerRole; 
 export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { role: PartnerRole; partnerStatus: PartnerStatus; partnerName: string; footer?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const navigation = <PartnerNav role={role} onNavigate={() => setOpen(false)} />;
+  const organization = organizationItems(role);
+  const railItems: RailNode[] = workspaceItems.map((item) => ({ key: item.path, label: item.label, href: item.path, icon: item.icon }));
+  if (organization.length) {
+    railItems.push({
+      key: "organization",
+      label: "Organization",
+      icon: Users,
+      items: organization.map((item) => ({ key: item.path, label: item.label, href: item.path, icon: item.icon })),
+    });
+  }
 
   return (
     <>
@@ -145,16 +155,16 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
         </div>
       )}
 
-      {/* The desktop rail (redesign 2026-10-25, "sidebar as A"): the workspace links as icons, the
-          organisation's pages as one group opening beside the rail, the partner card at the foot. */}
+      {/* The desktop rail uses the agent shell's labeled accordion and collapse control with the
+          partner's workspace links, organization section and settings in the same arrangement. */}
       <NavRail
         label="Partner workspace navigation"
         homeHref="/partner"
-        links={workspaceItems.map((item) => ({ key: item.path, label: item.label, href: item.path, icon: item.icon }))}
-        groups={organizationItems(role).length ? [{ key: "organization", label: "Organization", icon: Users, items: organizationItems(role).map((item) => ({ key: item.path, label: item.label, href: item.path, icon: item.icon })) }] : []}
+        items={railItems}
         foot={[{ key: "/partner/settings", label: "Settings", href: "/partner/settings", icon: Settings }]}
         card={{ label: "Partner organisation", icon: Building2, body: <><PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} />{footer && <div className="portal-agent-sidebar-footer">{footer}</div>}</> }}
         isActive={(href, pathname) => isActivePath(pathname, href)}
+        sidebarPresentation
       />
     </>
   );

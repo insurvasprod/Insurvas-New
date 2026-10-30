@@ -21,6 +21,7 @@ export function PartnerTopBar({ user }: { user: TopBarUser }) {
       profileHref="/partner/settings"
       profileLabel="Settings"
       profileHint="Your organisation's portal settings"
+      leading={<span className="portal-top-crumb" aria-hidden="true" />}
       signOutEndpoint="/api/partner/auth/logout"
       signOutRedirect="/partner/login"
     />

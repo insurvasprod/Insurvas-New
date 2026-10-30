@@ -14,7 +14,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { notify } from "@/lib/notify";
 import {
   Archive,
-  ArrowRight,
   Check,
   ChevronDown,
   ChevronRight,
@@ -26,6 +25,7 @@ import {
   Pause,
   Play,
   Plus,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 
@@ -62,11 +62,13 @@ import {
   type PartnerType,
 } from "@/lib/partners/constants";
 import { PageHeader } from "@/components/ui/page-header";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
 import { PartnerOnboarding } from "@/components/app/partner-onboarding";
 import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
-import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { SelectMenu } from "@/components/ui/select-menu";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
@@ -135,7 +137,7 @@ type PartnerDraft = {
   notes: string;
 };
 type DetailTab =
-  "overview" | "terms" | "products" | "markets" | "forms" | "team" | "activity" | PartnerExtraTab;
+  "overview" | "terms" | "products" | "markets" | "forms" | "team" | PartnerExtraTab;
 
 /**
  * Module 1 simplified (2026-10-25): one partner's quality and payout runs used to be pages of their
@@ -148,13 +150,16 @@ export type PartnerExtraTab = "quality" | "payouts";
 
 // Overview is one scroll (figures, quality, money, people, products, contact); the set-up sections
 // keep their tabs. Old links to ?tab=quality / payouts / team land on Overview at that section.
+// Five, named for the job (UI-CONSISTENCY §15). "Activity" went on 2026-10-29: its whole panel was a
+// paragraph saying the audit trail is not viewable here plus a link to the lead workspace, so it was
+// a tab that apologised rather than did anything ("whatever is not functional, we need to remove" —
+// owner, 29 Oct). An old ?tab=activity link falls through to Overview, as any unknown tab does.
 const detailTabs: DetailTab[] = [
   "overview",
   "products",
   "forms",
   "terms",
   "markets",
-  "activity",
 ];
 const OVERVIEW_SECTIONS = ["quality", "payouts", "team"] as const;
 
@@ -167,21 +172,8 @@ const detailTabLabel = (tab: DetailTab) =>
       ? "Commercial terms"
       : tab.charAt(0).toUpperCase() + tab.slice(1);
 
-function PartnerFact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</div>
-      <div className="mt-1 break-words text-sm font-semibold leading-normal tracking-[-0.02em] tabular-nums text-foreground">{children}</div>
-    </div>
-  );
-}
-
 /** On / off for a product, as the kit's status chip (Foundation v3: dot plus text). */
-function ProductChip({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabel: string }) {
-  return <StatusChip tone={on ? "good" : "neutral"}>{on ? onLabel : offLabel}</StatusChip>;
-}
-
-/** L4 (owner, 2026-10-28): what each kind of lead source does, in the agent's words. */
+/** L4 (owner, 2026-10-28): what each kind of publisher does, in the agent's words. */
 const SOURCE_TYPE_CHOICE: Record<PartnerType, string> = {
   publisher: "Transfers live calls to me",
   marketing: "Sells me leads",
@@ -202,23 +194,58 @@ function friendlyActivation(reason: string): string {
 const DEFAULT_PAY: Record<PartnerType, PartnerPayoutModel> = { publisher: "per_transfer", marketing: "per_lead", affiliate: "per_sale" };
 
 /**
- * Where the source works from (manager review 28 Oct §6: "Country" was free text). The US first; the
- * countries call centres most often work from after it. The time zone list follows the country.
+ * Where the source works from (manager review 28 Oct §6: "Country" was free text). Every ISO 3166-1
+ * country is offered (owner, 2026-10-29: "we should have all the countries here"); the nine call
+ * centres most often work from keep their place at the top, which is what the old short list was for.
+ * Names come from the runtime, so there is no name table here to fall out of date.
  */
-const COUNTRIES: ReadonlyArray<{ code: string; name: string; zones: ReadonlyArray<readonly [string, string]> }> = [
-  { code: "US", name: "United States", zones: [] },
-  { code: "CA", name: "Canada", zones: [["America/Toronto", "Eastern (Toronto)"], ["America/Winnipeg", "Central (Winnipeg)"], ["America/Edmonton", "Mountain (Edmonton)"], ["America/Vancouver", "Pacific (Vancouver)"]] },
-  { code: "MX", name: "Mexico", zones: [["America/Mexico_City", "Mexico City"], ["America/Tijuana", "Tijuana"]] },
-  { code: "DO", name: "Dominican Republic", zones: [["America/Santo_Domingo", "Santo Domingo"]] },
-  { code: "JM", name: "Jamaica", zones: [["America/Jamaica", "Kingston"]] },
-  { code: "CO", name: "Colombia", zones: [["America/Bogota", "Bogotá"]] },
-  { code: "PH", name: "Philippines", zones: [["Asia/Manila", "Manila"]] },
-  { code: "IN", name: "India", zones: [["Asia/Kolkata", "India"]] },
-  { code: "PK", name: "Pakistan", zones: [["Asia/Karachi", "Karachi"]] },
-];
+const COMMON_COUNTRY_CODES = ["US", "CA", "MX", "DO", "JM", "CO", "PH", "IN", "PK"];
+const ISO_COUNTRY_CODES = ("AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GT GU GW GY HK HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW").split(" ");
+const REGION_NAMES = (() => { try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch { return null; } })();
+/** A country's name, or its code where the runtime has no name for it. */
+const countryName = (code: string): string => { try { return REGION_NAMES?.of(code) ?? code; } catch { return code; } };
+
+/** The zones worth naming per country. Anywhere else gets every IANA zone, which the menu can search. */
+const CURATED_ZONES: Record<string, ReadonlyArray<readonly [string, string]>> = {
+  CA: [["America/Toronto", "Eastern (Toronto)"], ["America/Winnipeg", "Central (Winnipeg)"], ["America/Edmonton", "Mountain (Edmonton)"], ["America/Vancouver", "Pacific (Vancouver)"]],
+  MX: [["America/Mexico_City", "Mexico City"], ["America/Tijuana", "Tijuana"]],
+  DO: [["America/Santo_Domingo", "Santo Domingo"]],
+  JM: [["America/Jamaica", "Kingston"]],
+  CO: [["America/Bogota", "Bogotá"]],
+  PH: [["Asia/Manila", "Manila"]],
+  IN: [["Asia/Kolkata", "India"]],
+  PK: [["Asia/Karachi", "Karachi"]],
+};
+/** "Europe/Berlin" reads as "Berlin · Europe": the city first, since that is what people look for. */
+const zoneLabel = (id: string): string => {
+  const parts = id.split("/");
+  const city = (parts[parts.length - 1] ?? id).replace(/_/g, " ");
+  return parts.length > 1 ? `${city} · ${parts[0].replace(/_/g, " ")}` : city;
+};
+const ALL_TIME_ZONES: ReadonlyArray<readonly [string, string]> = (() => {
+  try {
+    const ids = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
+    return ids.map((id) => [id, zoneLabel(id)] as const);
+  } catch { return []; }
+})();
+/**
+ * The IANA zones the runtime knows for a country (`Intl.Locale.prototype.timeZones`). This is what
+ * keeps the zone honest when the country changes: offering every zone in the world made the old
+ * "is the current zone still valid?" test always true, so picking Germany kept New York.
+ */
+const regionZones = (code: string): readonly string[] => {
+  try {
+    const locale = new Intl.Locale(`und-${code}`) as Intl.Locale & { timeZones?: string[]; getTimeZones?: () => string[] };
+    return locale.timeZones ?? locale.getTimeZones?.() ?? [];
+  } catch { return []; }
+};
 const zonesFor = (country: string): ReadonlyArray<readonly [string, string]> => {
-  const found = COUNTRIES.find((row) => row.code === country);
-  return found && found.zones.length ? found.zones : US_TIME_ZONES;
+  const curated = CURATED_ZONES[country];
+  if (curated?.length) return curated;
+  if (country === "US") return US_TIME_ZONES;
+  const theirs = regionZones(country);
+  if (theirs.length) return theirs.map((id) => [id, zoneLabel(id)] as const);
+  return ALL_TIME_ZONES.length ? ALL_TIME_ZONES : US_TIME_ZONES;
 };
 
 /** L3: US time zones, so nobody types an IANA name. Anything else on file is kept as an extra option. */
@@ -280,6 +307,13 @@ const earliestTerm = (partner: Partner) =>
   partner.terms.reduce<string | null>((min, term) => (!min || term.effective_from < min ? term.effective_from : min), null);
 const statusTone = (status: PartnerStatus) =>
   status === "active" ? "good" : status === "paused" ? "warning" : "neutral";
+/** The same meaning as the row's chip, as a dot in the status filter's list (UI-CONSISTENCY §12). */
+const STATUS_DOT: Record<PartnerStatus, string> = {
+  draft: "bg-[var(--muted)]",
+  active: "bg-[var(--success)]",
+  paused: "bg-[var(--warning)]",
+  offboarded: "bg-[var(--muted)]",
+};
 
 /**
  * One limit of the plan, said once ("1 of 5"), with a thin bar. Four of these share one strip: the
@@ -538,7 +572,7 @@ export function PartnersWorkspace({
   async function savePartner(event: FormEvent) {
     event.preventDefault();
     if (editing) {
-      const ok = await send(`/api/app/partners/${editing}`, "PATCH", { action: "update", ...draft }, "Lead source updated");
+      const ok = await send(`/api/app/partners/${editing}`, "PATCH", { action: "update", ...draft }, "Publisher updated");
       if (ok) {
         setDraft(emptyDraft);
         setEditing(null);
@@ -553,7 +587,7 @@ export function PartnersWorkspace({
     try {
       const response = await fetch("/api/app/partners", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draft) });
       const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.partner?.id) { notify.block(result?.error ?? "Could not add the lead source"); return; }
+      if (!response.ok || !result?.partner?.id) { notify.block(result?.error ?? "Could not add the publisher"); return; }
       if (pay) {
         const today = new Date();
         const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -583,7 +617,7 @@ export function PartnersWorkspace({
         setDialogOpen(false);
       }
     } catch (reason) {
-      notify.fail("Could not add the lead source", { detail: reason instanceof Error ? reason.message : undefined });
+      notify.fail("Could not add the publisher", { detail: reason instanceof Error ? reason.message : undefined });
     } finally {
       setBusy(null);
     }
@@ -691,6 +725,17 @@ export function PartnersWorkspace({
   const { current: listCurrent, rows: listRows } = paginate(filteredPartners, listPage, listPageSize);
   const listFiltered = search.trim() !== "" || typeFilter !== "all" || statusFilter !== "all";
   const clearListFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setListPage(1); };
+  // What each filter would leave, shown on its option (owner, 2026-10-29). Counted against every
+  // publisher, not the filtered list, so the numbers do not move as you narrow them down.
+  const filterCounts = useMemo(() => {
+    const byType = {} as Record<PartnerType, number>;
+    const byStatus = {} as Record<PartnerStatus, number>;
+    for (const partner of partners) {
+      byType[partner.partner_type] = (byType[partner.partner_type] ?? 0) + 1;
+      byStatus[partner.status] = (byStatus[partner.status] ?? 0) + 1;
+    }
+    return { byType, byStatus };
+  }, [partners]);
   const selectedPartner =
     partners.find((partner) => partner.id === selectedId) ?? null;
   const selectedProducts = selectedPartner
@@ -729,17 +774,25 @@ export function PartnersWorkspace({
       )}
       <PageHeader
         visible
-        title={detailOnly ? (selectedPartner?.name ?? "Lead Source") : "Lead Sources"}
+        title={detailOnly ? (selectedPartner?.name ?? "Publisher") : "Publishers"}
+        // The list's one line is an explanation, so it goes behind the (i) and gives the row back to
+        // the table (owner, 2026-10-29). A partner's own line is not: it says which partner and whose
+        // contact this is, so it stays on screen.
+        infoDescription={!detailOnly}
         description={detailOnly
           ? (selectedPartner ? `${SOURCE_TYPE_SHORT[selectedPartner.partner_type]}${selectedPartner.contact_name ? ` · ${selectedPartner.contact_name}` : ""}` : undefined)
           : "Everyone who sends you leads or live calls: what you pay them, and how they are doing this month."}
         breadcrumbs={detailOnly
-          ? [{ label: "Partners" }, { label: "Lead Sources", href: "/app/publishers" }, { label: selectedPartner?.name ?? "Lead Source" }]
-          : [{ label: "Partners" }, { label: "Lead Sources" }]}
+          ? [{ label: "Partners" }, { label: "Publishers", href: "/app/publishers" }, { label: selectedPartner?.name ?? "Publisher" }]
+          : [{ label: "Partners" }, { label: "Publishers" }]}
+        // Status, then the two facts that used to sit in the figure strip pretending to be figures.
+        // The portal-user count has gone: Overview's onboarding already says whether anyone is
+        // invited, and saying it twice made the header look like a dashboard (owner, 2026-10-29).
         meta={detailOnly && selectedPartner ? (
-          <span className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <StatusChip tone={statusTone(selectedPartner.status)}>{PARTNER_STATUS_LABELS[selectedPartner.status]}</StatusChip>
-            <span className="text-xs text-muted-foreground">{selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}</span>
+            <span className="text-xs text-muted-foreground">{termText(selectedPartner.active_term)}</span>
+            {earliestTerm(selectedPartner) && <span className="text-xs text-muted-foreground">Since {dateLabel(earliestTerm(selectedPartner))}</span>}
           </span>
         ) : undefined}
         actions={
@@ -752,7 +805,7 @@ export function PartnersWorkspace({
                   </Button>
                 )}
                 <Button type="button" variant="outline" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
-                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit lead source
+                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit publisher
                 </Button>
                 {!readOnly && selectedPartner.status !== "offboarded" && (
                   <DropdownMenu>
@@ -781,7 +834,7 @@ export function PartnersWorkspace({
               <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
               <Button data-guide="publisher-add" type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus aria-hidden="true" />
-                Add lead source
+                Add publisher
               </Button>
             </>
           )
@@ -811,58 +864,88 @@ export function PartnersWorkspace({
       )}
       <div className="flex min-w-0 flex-col gap-4">
         {!detailOnly && <TableCard
-          className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-292px)] min-w-0`}
+          className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-164px)] min-w-0`}
           toolbar={
             <DataToolbar actions={<>
               {listFiltered && <ClearFiltersButton onClick={clearListFilters} />}
               <RefreshButton onClick={() => void load()} refreshing={refreshing} />
             </>}>
-              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search lead sources" />
-              <select
-                aria-label="Filter by partner type"
-                className={cn(toolbarControl, selectedPartner && "hidden")}
-                value={typeFilter}
-                onChange={(event) => { setTypeFilter(event.target.value as typeof typeFilter); setListPage(1); }}
-              >
-                <option value="all">All types</option>
-                {PARTNER_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {SOURCE_TYPE_SHORT[type]}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Filter by partner status"
-                className={cn(toolbarControl, selectedPartner && "hidden")}
-                value={statusFilter}
-                onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setListPage(1); }}
-              >
-                <option value="all">All statuses</option>
-                {(["draft", "active", "paused", "offboarded"] as PartnerStatus[]).map((status) => (
-                  <option key={status} value={status}>
-                    {PARTNER_STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </select>
+              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search publishers" />
+              {/* The kit's SelectMenu, not a native <select> (owner, 2026-10-29: the plain dropdowns,
+                  with a search at the top of the panel). Each option carries what it would leave, and
+                  the trigger tints while it holds anything but "all", so a narrowed list says so. */}
+              {!selectedPartner && (
+                <SelectMenu
+                  label="Filter by partner type"
+                  value={typeFilter}
+                  defaultValue="all"
+                  onChange={(next) => { setTypeFilter(next); setListPage(1); }}
+                  icon={<SlidersHorizontal className="size-4" />}
+                  searchPlaceholder="Search types"
+                  // The panel takes the trigger's own width (owner, 2026-10-29: the design is right,
+                  // the widths were not): a menu wider than the control it hangs off reads as loose.
+                  className="w-52"
+                  panelClassName="w-[var(--radix-popover-trigger-width)]"
+                  options={[
+                    { value: "all" as const, label: "All Types", count: partners.length, group: "Type" },
+                    ...PARTNER_TYPES.map((type) => ({
+                      value: type,
+                      label: SOURCE_TYPE_SHORT[type],
+                      count: filterCounts.byType[type] ?? 0,
+                      group: "Type",
+                      disabled: (filterCounts.byType[type] ?? 0) === 0,
+                    })),
+                  ]}
+                />
+              )}
+              {!selectedPartner && (
+                <SelectMenu
+                  label="Filter by partner status"
+                  value={statusFilter}
+                  defaultValue="all"
+                  onChange={(next) => { setStatusFilter(next); setListPage(1); }}
+                  icon={<SlidersHorizontal className="size-4" />}
+                  searchPlaceholder="Search statuses"
+                  className="w-52"
+                  panelClassName="w-[var(--radix-popover-trigger-width)]"
+                  options={[
+                    { value: "all" as const, label: "All Statuses", count: partners.length, group: "Status" },
+                    ...(["draft", "active", "paused", "offboarded"] as PartnerStatus[]).map((status) => ({
+                      value: status,
+                      label: PARTNER_STATUS_LABELS[status],
+                      count: filterCounts.byStatus[status] ?? 0,
+                      dot: STATUS_DOT[status],
+                      group: "Status",
+                      disabled: (filterCounts.byStatus[status] ?? 0) === 0,
+                    })),
+                  ]}
+                />
+              )}
             </DataToolbar>
           }
-          footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="lead sources" onPage={setListPage} suffix={`${partners.length} lead source${partners.length === 1 ? "" : "s"} in all`} />}
+          footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="publishers" onPage={setListPage} suffix={`${partners.length} publisher${partners.length === 1 ? "" : "s"} in all`} />}
         >
             {partners.length === 0 && !listFiltered ? (
-              <EmptyState title="No lead sources yet" hint="Add each company that sends you leads, transfers calls to you or refers clients." />
+              <EmptyState title="No publishers yet" hint="Add each company that sends you leads, transfers calls to you or refers clients." />
             ) : filteredPartners.length === 0 ? (
-              <NoMatches noun="lead sources" onClear={clearListFilters} />
+              <NoMatches noun="publishers" onClear={clearListFilters} />
             ) : (
-              <table className="portal-lead-table w-full text-left text-sm">
+              <table className="portal-lead-table w-full text-left text-sm table-fixed min-w-[940px]">
                 <thead>
                   <tr>
-                    <th>Lead Source</th>
-                    {!selectedPartner && <th>Status</th>}
-                    {!selectedPartner && <th className="text-right" title="Live transfers or leads received this month">This Month</th>}
-                    {!selectedPartner && <th className="text-right" title="Sales this month">Sales</th>}
-                    {!selectedPartner && <th>Last Lead</th>}
-                    {!selectedPartner && <th>You Pay</th>}
-                    <th className="text-right"><span className="sr-only">Actions</span></th>
+                    {/* Only the name is flexible: it is the column people scan, so it takes the slack.
+                        Every other column holds a known shape — a chip, a count, a date, a term — and
+                        is sized for it. Left to `auto`, the browser gave Status 355px to hold one chip
+                        while the name had 282 (owner, 2026-10-29: "somewhere there is more space,
+                        somewhere else"). Widths here are budgeted against the table's own min width;
+                        lib/design/uiConsistency.test.mjs keeps the flexible column from being crushed. */}
+                    <th>Publisher</th>
+                    {!selectedPartner && <th className="w-[220px]">Status</th>}
+                    {!selectedPartner && <th className="w-[110px] text-right" title="Live transfers or leads received this month">This Month</th>}
+                    {!selectedPartner && <th className="w-[90px] text-right" title="Sales this month">Sales</th>}
+                    {!selectedPartner && <th className="w-[120px]">Last Lead</th>}
+                    {!selectedPartner && <th className="w-[170px]">You Pay</th>}
+                    <th className="w-[64px] text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="m-seq">
@@ -883,7 +966,9 @@ export function PartnersWorkspace({
                           router.push(`/app/publishers/${partner.id}`);
                         }}
                       >
-                        <td className="max-w-[280px]">
+                        {/* The column's width now comes from its header, and the name truncates
+                            inside it, so the cell needs no cap of its own. */}
+                        <td>
                           <button
                             type="button"
                             className="flex w-full min-w-0 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -953,16 +1038,29 @@ export function PartnersWorkspace({
         )}
         {detailOnly && selectedPartner && (
           <div className="flex min-w-0 flex-col gap-6" aria-label={`${selectedPartner.name} details`}>
-            {/* The key facts in one compact block (2026-10-06 redesign): state chips, then the figures. */}
-            <section aria-label="Partner facts" className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Leads this month">{selectedPartner.lead_volume_this_month.toLocaleString()}</PartnerFact></div>
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Last lead">{selectedPartner.last_submission ? dateLabel(selectedPartner.last_submission) : "None yet"}</PartnerFact></div>
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Approved products">{selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}</PartnerFact></div>
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="You pay">{termText(selectedPartner.active_term)}</PartnerFact></div>
-                <div className="m-glass rounded-xl border border-border px-3.5 py-3"><PartnerFact label="Since">{earliestTerm(selectedPartner) ? dateLabel(earliestTerm(selectedPartner)) : "—"}</PartnerFact></div>
-              </div>
-            </section>
+            {/* Figures only, in the kit's strip (UI-CONSISTENCY §4). Until 2026-10-29 this was five
+                hand-rolled tiles of which three held no figure at all — "You pay", "Since" and
+                "Last lead" are facts about the publisher, and a strip that mixes how-many with
+                what-kind teaches the eye to skip all five. The two facts now sit on the identity
+                line under the title; "Last lead" is what this month's figure is doing, so it is its
+                footnote. Sales joins it: the list has shown that column all along. */}
+            <StatStrip label="This publisher's month">
+              <StatTile
+                label={selectedPartner.partner_type === "publisher" ? "Calls This Month" : "Leads This Month"}
+                value={(selectedPartner.partner_type === "publisher" ? selectedPartner.transfers_this_month : selectedPartner.lead_volume_this_month).toLocaleString()}
+                footnote={selectedPartner.last_submission ? `Last: ${dateLabel(selectedPartner.last_submission)}` : "None yet"}
+              />
+              <StatTile
+                label="Sales This Month"
+                value={selectedPartner.completed_this_month.toLocaleString()}
+                reserveFootnote
+              />
+              <StatTile
+                label="Approved Products"
+                value={selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}
+                reserveFootnote
+              />
+            </StatStrip>
 
             <div className="flex min-w-0 flex-col gap-6">
               <ViewTabs
@@ -974,7 +1072,9 @@ export function PartnersWorkspace({
                 tabs={shownTabs.map((tab) => ({ key: tab, label: detailTabLabel(tab) }))}
               />
               <section className="m-glass rounded-xl border border-border min-w-0 overflow-visible">
-            {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
+            {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09).
+                It does NOT scroll inside itself: penning a long tab into a short box looked worse than
+                the page scroll it replaced (owner, 2026-10-29). The page scrolls, as it always did. */}
             <div key={detailTab} role="tabpanel" id="partner-detail-view" aria-labelledby={`partner-detail-tab-${detailTab}`} className="space-y-5 p-5">
               {detailTab === "overview" && (
                 <div className="flex min-w-0 flex-col gap-6">
@@ -1015,46 +1115,10 @@ export function PartnersWorkspace({
                       onSeatsChanged={() => void refreshCapacity()}
                     />
                   </section>
-                  <section>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h3 className="text-base font-semibold">Products this partner may submit</h3>
-                      {canManageProductConfig && !readOnly && selectedPartner.status !== "offboarded" && (
-                        <Button type="button" variant="outline" onClick={() => setDetailTab("products")}>Change approvals</Button>
-                      )}
-                    </div>
-                    {selectedProducts.length > 0 ? (
-                      <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-                        <table className="portal-lead-table w-full min-w-0! text-left text-sm">
-                          <thead>
-                            <tr>
-                              <th>Product</th>
-                              <th>Enabled for the business</th>
-                              <th>Approved for {selectedPartner.name}</th>
-                            </tr>
-                          </thead>
-                          <tbody className="m-seq">
-                            {selectedProducts.map((product) => (
-                              <tr key={product.code} className="m-row">
-                                <td>{product.name}</td>
-                                <td><ProductChip on={product.is_enabled} onLabel="Enabled" offLabel="Not enabled" /></td>
-                                <td>{product.is_enabled ? <ProductChip on={product.approved} onLabel="Approved" offLabel="Not approved" /> : <ProductChip on={false} onLabel="" offLabel="Unavailable" />}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      canManageProductConfig ? (
-                        <EmptyState
-                          title="No products set up yet"
-                          hint="Enable the products you sell, then approve them here."
-                          action={readOnly || selectedPartner.status === "offboarded" ? undefined : <Button type="button" variant="outline" onClick={() => setDetailTab("products")}>Set up products</Button>}
-                        />
-                      ) : (
-                        <p className="mt-3 text-sm text-muted-foreground">Product approvals are managed by the account owner.</p>
-                      )
-                    )}
-                  </section>
+                  {/* The products table lived here as well as in its own tab, with a button whose only
+                      job was to open that tab — the same list twice, one linking to the other. The
+                      strip above already carries the figure ("Approved Products 2 of 8"); the detail
+                      is one tab away (owner, 2026-10-29: simplify). */}
                   <div className="grid gap-3 md:grid-cols-2">
                     <section className="rounded-lg border border-border p-4">
                       <div className="flex items-center justify-between gap-2">
@@ -1068,7 +1132,7 @@ export function PartnersWorkspace({
                         {selectedPartner.contact_email && <p className="break-all text-muted-foreground">{selectedPartner.contact_email}</p>}
                         <p className="flex items-center gap-2 text-muted-foreground">
                           <MapPin className="size-3.5" aria-hidden="true" />
-                          {COUNTRIES.find((row) => row.code === selectedPartner.country)?.name ?? selectedPartner.country} · {zonesFor(selectedPartner.country).find(([value]) => value === selectedPartner.timezone)?.[1] ?? selectedPartner.timezone} time
+                          {countryName(selectedPartner.country)} · {zonesFor(selectedPartner.country).find(([value]) => value === selectedPartner.timezone)?.[1] ?? selectedPartner.timezone} time
                         </p>
                       </div>
                     </section>
@@ -1201,36 +1265,15 @@ export function PartnersWorkspace({
                 />
               )}
               {detailTab === "forms" && (
-                <>
-                {/* Compliance: the screening dependency, said where the form is edited (it was a red
-                    banner on Overview, where it alarmed people who were not editing anything). */}
-                <p role="note" className="rounded-lg border border-[var(--info)]/30 bg-[var(--info-surface)] px-4 py-2.5 text-sm text-[var(--body)]">
-                  <strong className="font-semibold text-[var(--info-ink)]">The lead form always keeps its phone field.</strong> Phone is needed for screening, so it cannot be removed from a partner form.
-                </p>
+                // `embedded`: the studio draws its own card and title, which inside this tab's card
+                // read as a page nested in a page (owner, 2026-10-29). The banner that used to sit
+                // above it said the phone field cannot be removed — the field list already locks
+                // that row (`locked` on the phone field), so the banner only repeated the control.
                 <PartnerFormStudio
+                  embedded
                   partnerId={selectedPartner.id}
                   readOnly={readOnly || selectedPartner.status === "offboarded"}
                 />
-                </>
-              )}
-              {detailTab === "activity" && (
-                <section className="space-y-3 text-sm">
-                  {/* This used to link to /app/audit-log, which is not a route — the agent plane
-                      has no audit-log viewer, so the link rendered a 404 inside the shell. The
-                      events are still recorded; what is missing is a screen for them. Naming
-                      only what can actually be opened is the honest version. */}
-                  <p className="text-muted-foreground">
-                    Every lifecycle change, terms update, invitation, and access change is
-                    audit-logged and kept. Review the leads connected to this partner in the lead
-                    workspace; the audit trail itself is available to your account administrator.
-                  </p>
-                  <Button asChild variant="outline">
-                    <Link href="/app/leads">
-                      <ArrowRight aria-hidden="true" />
-                      Open lead workspace
-                    </Link>
-                  </Button>
-                </section>
               )}
             </div>
               </section>
@@ -1253,25 +1296,16 @@ export function PartnersWorkspace({
               className="space-y-4"
             >
               <div className="space-y-1.5">
-                <Label htmlFor={`term-model-${selectedPartner.id}`}>
-                  Payout model
-                </Label>
-                <select
-                  id={`term-model-${selectedPartner.id}`}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                <Label>Payout model</Label>
+                <SelectMenu
+                  label="Payout model"
                   value={termModel}
-                  onChange={(event) =>
-                    setTermModel(
-                      event.target.value as PartnerPayoutModel,
-                    )
-                  }
-                >
-                  {PARTNER_PAYOUT_MODELS.map((model) => (
-                    <option key={model} value={model}>
-                      {PARTNER_PAYOUT_MODEL_LABELS[model]}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(model: PartnerPayoutModel) => setTermModel(model)}
+                  searchPlaceholder="Search payout models"
+                  className="w-full"
+                  panelClassName="w-[var(--radix-popover-trigger-width)]"
+                  options={PARTNER_PAYOUT_MODELS.map((model) => ({ value: model, label: PARTNER_PAYOUT_MODEL_LABELS[model] }))}
+                />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -1353,7 +1387,7 @@ export function PartnersWorkspace({
         <DialogContent size={"lg"} className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit lead source" : "Add a lead source"}
+              {editing ? "Edit publisher" : "Add a publisher"}
             </DialogTitle>
             <DialogDescription>
               {editing
@@ -1382,23 +1416,20 @@ export function PartnersWorkspace({
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="partner-type">What they do for you</Label>
-              <select
-                id="partner-type"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              <Label>What they do for you</Label>
+              {/* Three choices, so all three stay on screen (UI-CONSISTENCY §15) instead of hiding two
+                  of them in a dropdown. The short name is the button and the sentence under it says
+                  what the chosen one means, so shortening the labels loses nothing. */}
+              <Segmented
+                label="What they do for you"
                 value={draft.partner_type}
-                onChange={(event) => {
-                  const type = event.target.value as PartnerType;
+                onChange={(type: PartnerType) => {
                   setDraft({ ...draft, partner_type: type });
                   if (!editing) setNewPay(DEFAULT_PAY[type]);
                 }}
-              >
-                {PARTNER_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {SOURCE_TYPE_CHOICE[type]}
-                  </option>
-                ))}
-              </select>
+                options={PARTNER_TYPES.map((type) => ({ key: type, label: SOURCE_TYPE_SHORT[type] }))}
+              />
+              <p className="m-0 text-xs text-muted-foreground">{SOURCE_TYPE_CHOICE[draft.partner_type]}</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="partner-contact">Contact name</Label>
@@ -1428,47 +1459,59 @@ export function PartnersWorkspace({
               {emailLooksWrong && <p id="partner-email-problem" className="m-0 text-xs text-[var(--error-ink)]">That doesn&rsquo;t look like an email address.</p>}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="partner-country">Country</Label>
-              <select
-                id="partner-country"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              <Label>Country</Label>
+              <SelectMenu
+                label="Country"
                 value={draft.country}
-                onChange={(event) => {
-                  const country = event.target.value;
+                onChange={(country: string) => {
                   const zones = zonesFor(country);
                   // The time zone follows the country unless it is already one of that country's.
                   setDraft({ ...draft, country, timezone: zones.some(([value]) => value === draft.timezone) ? draft.timezone : zones[0][0] });
                 }}
-              >
-                {COUNTRIES.map((row) => <option key={row.code} value={row.code}>{row.name}</option>)}
-                {!COUNTRIES.some((row) => row.code === draft.country) && <option value={draft.country}>{draft.country}</option>}
-              </select>
+                searchPlaceholder="Search countries"
+                className="w-full"
+                panelClassName="w-[var(--radix-popover-trigger-width)]"
+                options={[
+                  ...COMMON_COUNTRY_CODES.map((code) => ({ value: code, label: countryName(code), group: "Common" })),
+                  ...ISO_COUNTRY_CODES
+                    .filter((code) => !COMMON_COUNTRY_CODES.includes(code))
+                    .map((code) => ({ value: code, label: countryName(code), group: "All Countries" }))
+                    .sort((left, right) => left.label.localeCompare(right.label)),
+                  ...(ISO_COUNTRY_CODES.includes(draft.country) ? [] : [{ value: draft.country, label: draft.country, group: "On File" }]),
+                ]}
+              />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="partner-timezone">Their time zone</Label>
-              <select
-                id="partner-timezone"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              <Label>Their time zone</Label>
+              <SelectMenu
+                label="Their time zone"
                 value={draft.timezone}
-                onChange={(event) => setDraft({ ...draft, timezone: event.target.value })}
-              >
-                {zonesFor(draft.country).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                {!zonesFor(draft.country).some(([value]) => value === draft.timezone) && <option value={draft.timezone}>{draft.timezone}</option>}
-              </select>
+                onChange={(timezone: string) => setDraft({ ...draft, timezone })}
+                searchPlaceholder="Search time zones"
+                className="w-full"
+                panelClassName="w-[var(--radix-popover-trigger-width)]"
+                options={[
+                  ...zonesFor(draft.country).map(([value, label]) => ({ value, label })),
+                  ...(zonesFor(draft.country).some(([value]) => value === draft.timezone) ? [] : [{ value: draft.timezone, label: draft.timezone }]),
+                ]}
+              />
             </div>
             {!editing && (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="partner-pay">How you pay them</Label>
-                  <select
-                    id="partner-pay"
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  <Label>How you pay them</Label>
+                  <SelectMenu
+                    label="How you pay them"
                     value={newPay}
-                    onChange={(event) => setNewPay(event.target.value as PartnerPayoutModel | "none")}
-                  >
-                    {PARTNER_PAYOUT_MODELS.map((model) => <option key={model} value={model}>{PARTNER_PAYOUT_MODEL_LABELS[model]}</option>)}
-                    <option value="none">Not sure yet</option>
-                  </select>
+                    onChange={(model: PartnerPayoutModel | "none") => setNewPay(model)}
+                    searchPlaceholder="Search payout models"
+                    className="w-full"
+                    panelClassName="w-[var(--radix-popover-trigger-width)]"
+                    options={[
+                      ...PARTNER_PAYOUT_MODELS.map((model) => ({ value: model, label: PARTNER_PAYOUT_MODEL_LABELS[model] })),
+                      { value: "none" as const, label: "Not sure yet" },
+                    ]}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="partner-rate">{newPay === "revenue_share" ? "Share (%)" : "Amount ($)"}</Label>
@@ -1512,7 +1555,7 @@ export function PartnersWorkspace({
                 {justAdded ? "Done" : "Cancel"}
               </Button>
               <Button type="submit" disabled={busy !== null || createAtLimit || emailLooksWrong}>
-                {busy ? "Saving…" : editing ? "Save" : justAdded ? "Add another" : "Add lead source"}
+                {busy ? "Saving…" : editing ? "Save" : justAdded ? "Add another" : "Add publisher"}
               </Button>
             </DialogFooter>
           </form>

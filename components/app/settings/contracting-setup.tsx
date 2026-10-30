@@ -477,7 +477,7 @@ function CarrierRow({ carrier, on, contract, height, fill, onToggle, send, enque
   // Saved when all three are there (the contract needs all three); a half-filled row waits quietly.
   function save() {
     const bp = levelToBp(level);
-    if (bp === null || !from || !writing.trim()) return;
+    if (bp === null || !from) return;
     if (contract && bp === contract.contract_level_bp && from === contract.effective_from && writing.trim() === contract.writing_number) return;
     enqueue(async () => (await send("/api/app/carrier-library/tenant-carriers", "POST", { carrier_id: carrier.id, contract_level_bp: bp, writing_number: writing.trim(), effective_from: from })).ok);
   }

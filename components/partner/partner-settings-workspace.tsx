@@ -103,6 +103,9 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
   return <div className="m-stagger space-y-6">
     <PageHeader
       title="Settings"
+      description="Manage your account, notifications, and security."
+      visible
+      infoDescription
       actions={<Button asChild variant="outline"><a href="/partner/messages"><MessageSquare aria-hidden="true" />Message your agent</a></Button>}
     />
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void loadSettings()}>Retry</Button></p>}

@@ -14,16 +14,20 @@ import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SelectMenu } from "@/components/ui/select-menu";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
+  cardSurface,
 } from "@/components/ui/card";
-import { Check, CheckCircle2, Send, Users } from "lucide-react";
+import { Check, CheckCircle2, ChevronRight, FileText, Send, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
+import { Sheet } from "@/components/ui/sheet";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { PartnerChatPanel } from "@/components/partner/partner-chat-panel";
 import { PartnerLeadPipeline } from "@/components/partner/partner-lead-pipeline";
 import { PartnerPortalOverview } from "@/components/partner/partner-portal-overview";
@@ -53,6 +57,7 @@ import {
 import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
 import { StatusChip } from "@/components/ui/status-chip";
 import { placementWidth } from "@/lib/templates/placementWidth";
+import { US_STATES } from "@/lib/signup/constants";
 
 type ApprovedProduct = { code: string; name: string; category: string };
 type PartnerMarket = {
@@ -60,6 +65,8 @@ type PartnerMarket = {
   carrier_name: string;
   state: string;
 };
+
+const US_STATE_NAME_BY_CODE = Object.fromEntries(US_STATES) as Record<string, string>;
 
 // The submission's retry key, per draft, in this browser (LA-1 audit: it was regenerated on every
 // mount, so a resumed draft lost its number-entry screening link and its replay protection).
@@ -108,45 +115,43 @@ export function PartnerField({
   /** A derived value (age, from the date of birth) is shown, not typed. */
   readOnly?: boolean;
 }) {
-  if (field.type === "boolean")
+  if (field.type === "boolean" || field.type === "single_select") {
+    const isBoolean = field.type === "boolean";
+    const isState = /\bstate\b/i.test(field.field_key.replaceAll("_", " ")) || /\bstate\b/i.test(field.label);
+    const selectedValue = isBoolean ? (value === undefined ? "" : String(value)) : String(value ?? "");
+    const options = isBoolean
+      ? [
+          { value: "", label: "Choose…", disabled: true },
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ]
+      : [
+          { value: "", label: "Choose…", disabled: true },
+          ...field.options.map((option) => ({
+            value: option,
+            label: option,
+            ...(isState && US_STATE_NAME_BY_CODE[option.toUpperCase()]
+              ? { description: US_STATE_NAME_BY_CODE[option.toUpperCase()] }
+              : {}),
+          })),
+        ];
+
     return (
-      <select id={id}
-        aria-label={field.label}
-        aria-invalid={Boolean(error)}
-        className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-        value={value === undefined ? "" : String(value)}
-        onChange={(event) =>
-          onChange(
-            event.target.value === ""
-              ? undefined
-              : event.target.value === "true",
-          )
-        }
-        onBlur={onBlur}
-      >
-        <option value="">Choose…</option>
-        <option value="true">Yes</option>
-        <option value="false">No</option>
-      </select>
+      <SelectMenu
+        id={id}
+        label={field.label}
+        value={selectedValue}
+        defaultValue=""
+        ariaInvalid={Boolean(error)}
+        onChange={(selected) => onChange(isBoolean ? (selected === "" ? undefined : selected === "true") : selected || undefined)}
+        searchPlaceholder={isBoolean ? "Search choices" : `Search ${field.label.toLowerCase()}`}
+        className="w-full"
+        panelClassName="w-72 max-w-[calc(100vw-2rem)]"
+        panelAlign="start"
+        options={options}
+      />
     );
-  if (field.type === "single_select")
-    return (
-      <select id={id}
-        aria-label={field.label}
-        aria-invalid={Boolean(error)}
-        className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-        value={String(value ?? "")}
-        onChange={(event) => onChange(event.target.value || undefined)}
-        onBlur={onBlur}
-      >
-        <option value="">Choose…</option>
-        {field.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    );
+  }
   if (field.type === "multi_select")
     return (
       <div id={id} role="group" aria-labelledby={labelId}
@@ -261,6 +266,7 @@ export function PartnerLeadForm({
   partnerStatus,
   agencyName,
   onFormVersion,
+  onHasAnswersChange,
   market,
   draftId: resumeDraftId = null,
   onDraftChange,
@@ -273,6 +279,7 @@ export function PartnerLeadForm({
   partnerName?: string;
   agencyName?: string | null;
   onFormVersion?: (version: number | null) => void;
+  onHasAnswersChange?: (hasAnswers: boolean) => void;
   market: PartnerMarket;
   /** LA-1.6-5: the saved draft this form resumes; null starts a new form. */
   draftId?: string | null;
@@ -325,12 +332,19 @@ export function PartnerLeadForm({
   >([]);
   const [duplicateJustification, setDuplicateJustification] = useState("");
   const [sectionIndex, setSectionIndex] = useState(0);
+  const [reviewStep, setReviewStep] = useState(false);
   const [formRefresh, setFormRefresh] = useState(0);
   // The rest of the form opens once the number has been screened (and a DNC warning acknowledged).
   // After that it stays open: changing the number re-screens it in place, as the board draws it.
   const [formOpened, setFormOpened] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
   const consentRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!formOpened) return;
+    document
+      .getElementById(reviewStep ? `partner-review-${productCode}` : `partner-section-${productCode}`)
+      ?.focus();
+  }, [formOpened, productCode, sectionIndex, reviewStep]);
   const [screenedAt, setScreenedAt] = useState<number | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const [duplicateCheck, setDuplicateCheck] = useState<{
@@ -366,7 +380,7 @@ export function PartnerLeadForm({
     valuesRef.current = pruned;
     setValues(pruned);
     setStatus((current) => (current.startsWith("Loading") ? "Enter a phone number to begin screening" : current));
-  }, [preview, onFormVersion]);
+  }, [preview, onFormVersion, onHasAnswersChange]);
 
   useEffect(() => {
     if (preview) return;
@@ -430,6 +444,7 @@ export function PartnerLeadForm({
             : NaN;
         setDraftSavedAt(Number.isFinite(savedAt) ? savedAt : null);
         setValues(nextValues);
+        onHasAnswersChange?.(Object.values(nextValues).some((value) => !isEmpty(value)));
         valuesRef.current = nextValues;
         // A reload (the tab regaining focus) can bring back answers without the number that was
         // screened. The screening result belongs to that number, so it does not survive the swap.
@@ -456,7 +471,7 @@ export function PartnerLeadForm({
     return () => {
       cancelled = true;
     };
-  }, [productCode, formRefresh, onFormVersion, onDraftChange, preview]);
+  }, [productCode, formRefresh, onFormVersion, onDraftChange, onHasAnswersChange, preview]);
 
   const persistDraft = useCallback(
     (visibleStatus = true) => {
@@ -697,6 +712,7 @@ export function PartnerLeadForm({
     dirtyRef.current = true;
     editRevision.current += 1;
     setValues(next);
+    onHasAnswersChange?.(Object.values(next).some((candidate) => !isEmpty(candidate)));
     setFieldErrors((current) => {
       if (!current[fieldKey]) return current;
       const errors = { ...current };
@@ -917,7 +933,6 @@ export function PartnerLeadForm({
   const duplicateFlagged = duplicateMatches.length > 0 || duplicateState === "match" || internalDqFlagged;
   const duplicateReasonReady = !duplicateFlagged || duplicateJustification.trim().length >= 10;
   const matchLatest = duplicateState === "match" && duplicateCheck?.signature === duplicateSignature ? duplicateCheck?.latest ?? null : null;
-  const fieldsLeft = Math.max(0, requiredFieldCount - completedRequiredFieldCount);
   const progressPercent = requiredFieldCount === 0 ? null : Math.round((completedRequiredFieldCount / requiredFieldCount) * 100);
   const canSubmit = Boolean(
     partnerStatus === "active" &&
@@ -953,7 +968,10 @@ export function PartnerLeadForm({
       const first = sections.findIndex((section) =>
         section.fields.some((item) => errors[item.field_key]),
       );
-      if (first >= 0) setSectionIndex(first);
+      if (first >= 0) {
+        setReviewStep(false);
+        setSectionIndex(first);
+      }
       setFieldErrors(errors);
       setSubmitError("Complete the highlighted fields before submitting");
       setStatus("Complete the highlighted fields");
@@ -1086,6 +1104,8 @@ export function PartnerLeadForm({
         (field.is_required || item.is_required)
       );
     });
+  const requiredLeft = (section: typeof activeSection) =>
+    visibleRequired(section).filter((item) => validateField(item.field_key, values)).length;
   // Green only when genuinely satisfied: a section nobody has touched is not complete, even when it
   // has no required fields.
   const sectionComplete = (section: typeof activeSection) =>
@@ -1104,20 +1124,21 @@ export function PartnerLeadForm({
     ...sections.map((section, index) => ({
       key: section.section_key,
       label: section.label,
-      left: formOpened ? visibleRequired(section).filter((item) => requiredErrors[item.field_key]).length : 0,
-      current: formOpened && index === sectionIndex,
-      complete: formOpened && index !== sectionIndex && sectionComplete(section),
-      select: () => setSectionIndex(index),
+      left: formOpened ? requiredLeft(section) : 0,
+      current: formOpened && !reviewStep && index === sectionIndex,
+      complete: formOpened && (reviewStep || index !== sectionIndex) && sectionComplete(section),
+      select: () => { setReviewStep(false); setSectionIndex(index); },
     })),
     {
-      key: "consent",
-      label: "Consent",
+      key: "review-consent",
+      label: "Review & consent",
       left: 0,
-      current: false,
+      current: formOpened && reviewStep,
       complete: consentGiven,
-      select: () => document.getElementById(`partner-consent-${productCode}`)?.focus(),
+      select: () => setReviewStep(true),
     },
   ];
+  const compactStepNavigation = steps.length > 5;
   const phoneHint = screeningBusy
     ? "Screening this number…"
     : screening
@@ -1130,7 +1151,7 @@ export function PartnerLeadForm({
               : "Internal warning noted"
             : "DNC/TCPA clear"
         }${screenedAt ? ` — checked ${agoLabel(screenedAt, now)}` : ""}.`
-      : "Screened on blur. Leave this field to check the number.";
+      : "Screening starts when you leave this field.";
   const phoneTone: ChipTone =
     screeningBusy || !screening
       ? "neutral"
@@ -1268,49 +1289,84 @@ export function PartnerLeadForm({
   };
   return (
     <>
-      <ol
-        className="portal-partner-submit-panel portal-partner-submit-stepper"
-        aria-label="Form progress"
-      >
-        {steps.map((step, index) => (
-          <Fragment key={step.key}>
-            {index > 0 && (
-              <li
-                aria-hidden="true"
-                className={`portal-partner-submit-step-line${steps[index - 1].complete ? " is-complete" : ""}`}
-              />
-            )}
-            <li>
-              <button
-                type="button"
-                className={
-                  step.current
-                    ? "is-current"
-                    : step.complete
-                      ? "is-complete"
-                      : undefined
-                }
-                aria-current={step.current ? "step" : undefined}
-                disabled={!formOpened}
-                onClick={step.select}
-              >
-                <span className="portal-partner-submit-step-dot">
-                  {step.complete ? (
-                    <Check aria-hidden="true" strokeWidth={3} />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <span>
-                  {step.label}
-                  {step.left > 0 && <small className="block text-xs font-normal text-[var(--warning-ink)]">{step.left} left</small>}
-                </span>
-                {step.complete && <span className="sr-only"> (complete)</span>}
-              </button>
-            </li>
-          </Fragment>
-        ))}
-      </ol>
+      {!formOpened ? (
+        <ol className="portal-partner-submit-gate" aria-label="Lead submission steps">
+          <li aria-current="step">
+            <span className="portal-partner-submit-step-dot">1</span>
+            <span><strong>Screen the phone</strong><small>Check the number before the form opens</small></span>
+          </li>
+          <li aria-hidden="true" className="portal-partner-submit-gate-line" />
+          <li>
+            <span className="portal-partner-submit-step-dot">2</span>
+            <span><strong>Complete the lead</strong><small>Enter the details and confirm consent</small></span>
+          </li>
+        </ol>
+      ) : (
+        <>
+          <ol
+            className={`portal-partner-submit-stepper${compactStepNavigation ? " is-many" : ""}`}
+            aria-label="Form progress"
+          >
+            {steps.map((step, index) => (
+              <Fragment key={step.key}>
+                {index > 0 && (
+                  <li
+                    aria-hidden="true"
+                    className={`portal-partner-submit-step-line${steps[index - 1].complete ? " is-complete" : ""}`}
+                  />
+                )}
+                <li>
+                  <button
+                    type="button"
+                    className={
+                      step.current
+                        ? "is-current"
+                        : step.complete
+                          ? "is-complete"
+                          : undefined
+                    }
+                    aria-current={step.current ? "step" : undefined}
+                    onClick={step.select}
+                  >
+                    <span className="portal-partner-submit-step-dot">
+                      {step.complete ? <Check aria-hidden="true" strokeWidth={3} /> : index + 1}
+                    </span>
+                    <span>
+                      {step.label}
+                    </span>
+                    {step.complete && <span className="sr-only"> (complete)</span>}
+                  </button>
+                </li>
+              </Fragment>
+            ))}
+          </ol>
+          {sections.length > 0 && (
+            <div className="portal-partner-submit-stepper-compact" role="group" aria-label="Form section navigation">
+              <div className="portal-partner-submit-stepper-current">
+                <span>Step {reviewStep ? sections.length + 1 : sectionIndex + 1} of {steps.length}</span>
+                <strong>{reviewStep ? "Review & consent" : activeSection?.label}</strong>
+                {!reviewStep && activeSection && requiredLeft(activeSection) > 0 && (
+                  <small>{requiredLeft(activeSection)} required {requiredLeft(activeSection) === 1 ? "field" : "fields"} left</small>
+                )}
+              </div>
+              <label className="portal-partner-submit-stepper-select">
+                <span className="sr-only">Go to a form section</span>
+                <select
+                  value={reviewStep ? sections.length : sectionIndex}
+                  onChange={(event) => steps[Number(event.target.value)]?.select()}
+                  aria-label="Go to a form step"
+                >
+                  {steps.map((step, index) => (
+                    <option key={step.key} value={index}>
+                      {step.label}{step.complete ? " · Complete" : step.left ? ` · ${step.left} required left` : " · In progress"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+        </>
+      )}
       <div className="portal-partner-submit-body">
         <form
           className="portal-partner-submit-main"
@@ -1320,38 +1376,42 @@ export function PartnerLeadForm({
             {status}
           </p>
           {!formOpened ? (
-            <section className="portal-partner-submit-panel is-roomy">
+          <section className="portal-partner-submit-phone-gate">
               <div className="portal-partner-submit-panel-head">
-                <h2>Phone screening</h2>
+                <h2>Screen the customer’s phone</h2>
                 <p>
-                  The number is checked against DNC and TCPA lists before the
-                  rest of the form opens. Screening starts when you leave a
-                  valid number.
+                  We check the number against DNC and TCPA lists first. Once it
+                  clears screening, the lead form opens.
                 </p>
               </div>
-              <div className="portal-partner-submit-fields">
-                <div className="portal-partner-submit-field">
-                  <label htmlFor={`screen-phone-${productCode}`}>
-                    {phoneField.label}
-                    <span className="portal-partner-submit-required"> *</span>
-                  </label>
-                  <PartnerField
-                    id={`screen-phone-${productCode}`}
-                    field={phoneField}
-                    value={values[phoneField.field_key]}
-                    error={fieldErrors[phoneField.field_key]}
-                    onChange={(value) => updateValue(phoneField.field_key, value)}
-                    onBlur={() => {
-                      void runScreening();
-                    }}
-                  />
-                  <small>{phoneHint}</small>
-                  {fieldErrors[phoneField.field_key] && (
-                    <p className="portal-partner-submit-error" role="alert">
-                      {fieldErrors[phoneField.field_key]}
-                    </p>
-                  )}
+              <div className="portal-partner-submit-fields portal-partner-submit-phone-fields">
+                <div className="portal-partner-submit-phone-row">
+                  <div className="portal-partner-submit-field">
+                    <label htmlFor={`screen-phone-${productCode}`}>
+                      {phoneField.label}
+                      <span className="portal-partner-submit-required"> *</span>
+                    </label>
+                    <PartnerField
+                      id={`screen-phone-${productCode}`}
+                      field={phoneField}
+                      value={values[phoneField.field_key]}
+                      error={fieldErrors[phoneField.field_key]}
+                      onChange={(value) => updateValue(phoneField.field_key, value)}
+                      onBlur={() => {
+                        void runScreening();
+                      }}
+                    />
+                  </div>
+                  <Button type="submit" disabled={screeningBusy}>
+                    {screeningBusy ? "Screening…" : "Screen phone number"}
+                  </Button>
                 </div>
+                <small>{phoneHint}</small>
+                {fieldErrors[phoneField.field_key] && (
+                  <p className="portal-partner-submit-error" role="alert">
+                    {fieldErrors[phoneField.field_key]}
+                  </p>
+                )}
               </div>
               {screeningError && (
                 <p className="portal-partner-submit-error" role="alert">
@@ -1360,26 +1420,112 @@ export function PartnerLeadForm({
               )}
               {rejectionBlock}
               {warningBlock}
-              <div>
-                <Button type="submit" variant="outline" disabled={screeningBusy}>
-                  {screeningBusy ? "Screening…" : "Screen phone number"}
-                </Button>
+            </section>
+          ) : reviewStep ? (
+            <section
+              className="portal-partner-submit-review"
+              aria-labelledby={`partner-review-${productCode}`}
+            >
+              <div className="portal-partner-submit-panel-head">
+                <h2 id={`partner-review-${productCode}`} tabIndex={-1}>Review & consent</h2>
+                <p>Check the details below, then confirm the customer’s consent to submit.</p>
               </div>
+              <section className={`${cardSurface} portal-partner-submit-review-summary`} aria-label="Application details">
+                <div className="portal-partner-submit-review-summary-head">
+                  <div>
+                    <span>Application</span>
+                    <strong>{productName}</strong>
+                  </div>
+                  <StatusChip>Form v{template.assignment.definition_version}</StatusChip>
+                </div>
+                <dl className="portal-partner-submit-review-context">
+                  <div><dt>Carrier</dt><dd>{market.carrier_name}</dd></div>
+                  <div><dt>State</dt><dd>{market.state}{US_STATE_NAME_BY_CODE[market.state.toUpperCase()] ? ` – ${US_STATE_NAME_BY_CODE[market.state.toUpperCase()]}` : ""}</dd></div>
+                  <div><dt>Customer phone</dt><dd>{isEmpty(values[phoneField.field_key]) ? "Not entered" : String(values[phoneField.field_key])}</dd></div>
+                </dl>
+              </section>
+              <div className="portal-partner-submit-review-answers">
+                <div className="portal-partner-submit-review-answers-head">
+                  <h3>Your answers</h3>
+                  <span>{sections.length} {sections.length === 1 ? "section" : "sections"}</span>
+                </div>
+                <div className="portal-partner-submit-review-sections">
+                {sections.map((section, index) => {
+                  const answers = section.fields.flatMap((item) => {
+                    const field = fields.get(item.field_key);
+                    const value = values[item.field_key];
+                    if (!field || !templateFormFieldVisible(item, values) || isEmpty(value)) return [];
+                    const sensitive = /(account|routing|social|tax.?id|password|secret)/i.test(`${field.field_key} ${field.label}`);
+                    const display = sensitive
+                      ? `•••• ${String(value).slice(-4)}`
+                      : Array.isArray(value)
+                        ? value.join(", ")
+                        : typeof value === "boolean"
+                          ? value ? "Yes" : "No"
+                          : String(value);
+                    return [{ label: field.label, value: display }];
+                  });
+                  return (
+                    <section key={section.section_key} className={`${cardSurface} portal-partner-submit-review-section`}>
+                      <div className="portal-partner-submit-review-section-head">
+                        <div>
+                          <h4>{section.label}</h4>
+                          <span>{answers.length} {answers.length === 1 ? "answer" : "answers"}</span>
+                        </div>
+                        <Button type="button" variant="ghost" aria-label={`Edit ${section.label} answers`} onClick={() => { setReviewStep(false); setSectionIndex(index); }}>Edit</Button>
+                      </div>
+                      {answers.length ? (
+                        <dl>{answers.map((answer) => <div key={answer.label}><dt>{answer.label}</dt><dd>{answer.value}</dd></div>)}</dl>
+                      ) : <p className="portal-partner-submit-muted">No answers in this section.</p>}
+                    </section>
+                  );
+                })}
+                </div>
+              </div>
+              <section
+                className={`${cardSurface} portal-partner-submit-consent portal-partner-submit-review-consent`}
+                aria-labelledby={`partner-consent-heading-${productCode}`}
+              >
+                <div className="portal-partner-submit-review-consent-head">
+                  <div>
+                    <h3 id={`partner-consent-heading-${productCode}`}>Customer consent</h3>
+                    <p>Required before this lead can be submitted.</p>
+                  </div>
+                  <StatusChip tone={consentGiven ? "good" : "warning"}>{consentGiven ? "Confirmed" : "Required"}</StatusChip>
+                </div>
+                <label>
+                  <input
+                    ref={consentRef}
+                    id={`partner-consent-${productCode}`}
+                    type="checkbox"
+                    checked={consentGiven}
+                    onChange={(event) => setConsentGiven(event.target.checked)}
+                  />
+                  <span>
+                    The customer gave express written consent to be contacted by a
+                    licensed agent at the number above, by phone and by SMS, about
+                    insurance products. I hold documentation of that consent and
+                    understand every submission is audit logged.
+                  </span>
+                </label>
+                <p>Consent is never pre-selected. We record the confirmation time with the lead.</p>
+              </section>
             </section>
           ) : (
             activeSection && (
               <section
-                className="portal-partner-submit-panel is-roomy"
+                className="portal-partner-submit-active-section"
                 aria-labelledby={`partner-section-${productCode}`}
               >
                 <div className="portal-partner-submit-panel-head">
-                  <h2 id={`partner-section-${productCode}`}>
+                  <h2 id={`partner-section-${productCode}`} tabIndex={-1}>
                     {activeSection.label}
                   </h2>
                   <p>
                     {(() => {
-                      const left = visibleRequired(activeSection).filter((item) => requiredErrors[item.field_key]).length;
-                      return left ? `${left} required ${left === 1 ? "field" : "fields"} left in this section. Required fields are marked *.` : "Every required field in this section is filled.";
+                      const total = visibleRequired(activeSection).length;
+                      const left = requiredLeft(activeSection);
+                      return total === 0 ? "No required fields in this section." : left ? `${left} required ${left === 1 ? "field" : "fields"} left in this section. Required fields are marked *.` : "Required fields complete.";
                     })()}
                   </p>
                 </div>
@@ -1396,7 +1542,7 @@ export function PartnerLeadForm({
               </section>
             )
           )}
-          {formOpened && duplicateFlagged && (
+          {formOpened && reviewStep && duplicateFlagged && (
             <div className="portal-partner-submit-callout is-warning">
               <p className="font-medium">
                 {matchLatest
@@ -1429,42 +1575,39 @@ export function PartnerLeadForm({
               </p>
             </div>
           )}
-          <section className="portal-partner-submit-panel is-roomy portal-partner-submit-consent">
-            <label>
-              <input
-                ref={consentRef}
-                id={`partner-consent-${productCode}`}
-                type="checkbox"
-                checked={consentGiven}
-                onChange={(event) => setConsentGiven(event.target.checked)}
-              />
-              <span>
-                The customer gave express written consent to be contacted by a
-                licensed agent at the number above, by phone and by SMS, about
-                insurance products. I hold documentation of that consent and
-                understand every submission is audit logged.
-              </span>
-            </label>
-            <p>
-              Consent is never pre-ticked, and the timestamp is recorded with
-              the lead.
-            </p>
-          </section>
           {submitError && (
             <p className="portal-partner-submit-error" role="alert">
               {submitError}
             </p>
           )}
           <div className="portal-partner-submit-actions">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!formOpened || sectionIndex === 0}
-              onClick={() => setSectionIndex((index) => Math.max(0, index - 1))}
-            >
-              Previous
-            </Button>
+            {formOpened && (sectionIndex > 0 || reviewStep) && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (reviewStep) setReviewStep(false);
+                  else setSectionIndex((index) => Math.max(0, index - 1));
+                }}
+              >
+                Back
+              </Button>
+            )}
             <span>
+              {formOpened && !reviewStep && sectionIndex < sections.length - 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSectionIndex((index) => Math.min(sections.length - 1, index + 1))}
+                >
+                  Continue
+                </Button>
+              )}
+              {formOpened && !reviewStep && sectionIndex === sections.length - 1 && (
+                <Button type="button" onClick={() => setReviewStep(true)}>
+                  Review & consent
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -1473,23 +1616,25 @@ export function PartnerLeadForm({
               >
                 Save draft
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={saving || !formOpened}
-                onClick={() => void saveAndClose()}
-              >
-                Save and close
-              </Button>
-              <Button
-                type="submit"
-                disabled={saving || !canSubmit}
-                aria-describedby={formOpened && !canSubmit && outstanding.length ? `partner-outstanding-${productCode}` : undefined}
-              >
-                {formOpened && fieldsLeft > 0
-                  ? `Submit · ${fieldsLeft} ${fieldsLeft === 1 ? "field" : "fields"} left`
-                  : "Submit lead"}
-              </Button>
+              {formOpened && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => void saveAndClose()}
+                >
+                  Save and close
+                </Button>
+              )}
+              {formOpened && reviewStep && (
+                <Button
+                  type="submit"
+                  disabled={saving || !canSubmit}
+                  aria-describedby={!canSubmit && outstanding.length ? `partner-outstanding-${productCode}` : undefined}
+                >
+                  Submit lead
+                </Button>
+              )}
             </span>
           </div>
           {formOpened && !canSubmit && outstanding.length > 0 && (
@@ -1499,32 +1644,39 @@ export function PartnerLeadForm({
           )}
         </form>
         <aside
-          className="portal-partner-submit-panel portal-partner-submit-readiness"
-          aria-label="Submission readiness"
+          className="portal-partner-submit-readiness"
+          aria-label="Submission checks"
         >
           <div className="portal-partner-submit-panel-head">
-            <h2>Submission readiness</h2>
-            <p>Each check turns green once it is actually done.</p>
+            <h2>Submission checks</h2>
+            <p>Here’s what still needs attention.</p>
+          </div>
+          <div className="portal-partner-submit-progress">
+            <div><span>{formOpened ? "Form progress" : "Current step"}</span><strong>{formOpened ? `Step ${reviewStep ? sections.length + 1 : sectionIndex + 1} of ${steps.length} · ${progressPercent == null ? "—" : `${progressPercent}%`}` : "Phone screening · 1 of 2"}</strong></div>
+            {formOpened && (
+              <div
+                className="portal-partner-submit-progress-track"
+                role="progressbar"
+                aria-label="Required form fields completed"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent ?? 0}
+              >
+                <span style={{ width: `${progressPercent ?? 0}%` }} />
+              </div>
+            )}
           </div>
           <dl className="portal-partner-submit-checks">
             <div>
-              <dt>Progress</dt>
-              <dd>
-                <ReadinessChip tone={progressPercent === 100 ? "success" : progressPercent ? "warning" : "neutral"}>
-                  {progressPercent == null ? "No required fields" : `${progressPercent}%`}
-                </ReadinessChip>
-              </dd>
-            </div>
-            <div>
               <dt>Phone screened</dt>
               <dd>
-                <ReadinessChip tone={phoneTone}>{phoneLabel}</ReadinessChip>
+                <ReadinessValue tone={phoneTone}>{phoneLabel}</ReadinessValue>
               </dd>
             </div>
             <div>
               <dt>Required fields</dt>
               <dd>
-                <ReadinessChip
+                <ReadinessValue
                   tone={
                     requiredFieldCount === 0 || completedRequiredFieldCount === 0
                       ? "neutral"
@@ -1533,24 +1685,26 @@ export function PartnerLeadForm({
                         : "warning"
                   }
                 >
-                  {requiredFieldCount === 0
+                  {!formOpened
+                    ? "After screening"
+                    : requiredFieldCount === 0
                     ? "None required"
                     : `${completedRequiredFieldCount} of ${requiredFieldCount}`}
-                </ReadinessChip>
+                </ReadinessValue>
               </dd>
             </div>
             <div>
               <dt>Duplicate check</dt>
               <dd>
-                <ReadinessChip tone={duplicateTone}>{duplicateLabel}</ReadinessChip>
+                <ReadinessValue tone={duplicateTone}>{duplicateLabel}</ReadinessValue>
               </dd>
             </div>
             <div>
               <dt>Consent captured</dt>
               <dd>
-                <ReadinessChip tone={consentGiven ? "success" : "neutral"}>
+                <ReadinessValue tone={consentGiven ? "success" : "neutral"}>
                   {consentGiven ? "Yes" : "Not yet"}
-                </ReadinessChip>
+                </ReadinessValue>
               </dd>
             </div>
           </dl>
@@ -1592,27 +1746,14 @@ type PartnerDraftRow = {
   updated_at: string;
 };
 
-/** A readiness check as the shared chip (foundation v3), in this page's tone names. */
-function ReadinessChip({ tone, children }: { tone: ChipTone; children: ReactNode }) {
-  return <StatusChip tone={tone === "success" ? "good" : tone}>{children}</StatusChip>;
-}
-
-/** "Term life also available." — the other products the agent approved, in one line. */
-function alsoAvailable(products: ApprovedProduct[], selected: string) {
-  const others = products
-    .filter((product) => product.code !== selected)
-    .map((product, index) => {
-      const label = productLineLabel(product.code);
-      return index > 0 && /^[A-Z][a-z]/.test(label)
-        ? label[0].toLowerCase() + label.slice(1)
-        : label;
-    });
-  if (!others.length) return null;
-  const list =
-    others.length === 1
-      ? others[0]
-      : `${others.slice(0, -1).join(", ")} and ${others.at(-1)}`;
-  return `${list} also available.`;
+/** Plain status text with one restrained signal dot; the wording carries the meaning. */
+function ReadinessValue({ tone, children }: { tone: ChipTone; children: ReactNode }) {
+  return (
+    <span className={`portal-partner-submit-readiness-value is-${tone}`}>
+      <span aria-hidden="true" />
+      {children}
+    </span>
+  );
 }
 
 export type PartnerPortalSection =
@@ -1648,6 +1789,8 @@ function LegacyPartnerPortalWorkspace({
   const [draftsLoadedAt, setDraftsLoadedAt] = useState(0);
   const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [formHasAnswers, setFormHasAnswers] = useState(false);
   const [formNonce, setFormNonce] = useState(0);
   const loadDrafts = useCallback(() => {
     void fetch("/api/partner/drafts", { cache: "no-store" })
@@ -1666,12 +1809,26 @@ function LegacyPartnerPortalWorkspace({
     setActiveDraftId(id);
     loadDrafts();
   }, [loadDrafts]);
-  function startNewForm() {
+  async function confirmLeadReset() {
+    if (!formHasAnswers) return true;
+    return confirmAction({
+      title: "Change this lead setup?",
+      description: "Changing the product, carrier, or state clears answers from this form. Saved drafts remain available in View drafts.",
+      confirmLabel: "Clear answers",
+      cancelLabel: "Keep answers",
+    });
+  }
+  async function startNewForm() {
+    if (!(await confirmLeadReset())) return;
+    setDraftsOpen(false);
+    setFormHasAnswers(false);
     setResumeDraftId(null);
     setActiveDraftId(null);
     setFormNonce((value) => value + 1);
   }
-  function resumeDraft(draft: PartnerDraftRow) {
+  async function resumeDraft(draft: PartnerDraftRow) {
+    if (!(await confirmLeadReset())) return;
+    setFormHasAnswers(false);
     const market = markets.find((item) => item.carrier_id === draft.carrier_id && item.state === draft.carrier_state);
     setSelectedProduct(draft.product_code);
     setFormVersion(null);
@@ -1682,15 +1839,29 @@ function LegacyPartnerPortalWorkspace({
     setResumeDraftId(draft.id);
     setActiveDraftId(draft.id);
     setFormNonce((value) => value + 1);
+    setDraftsOpen(false);
   }
   async function discardDraft(draft: PartnerDraftRow) {
+    const confirmed = await confirmAction({
+      title: "Discard this draft?",
+      description: "This saved lead and its answers will be permanently deleted.",
+      confirmLabel: "Discard draft",
+      cancelLabel: "Keep draft",
+    });
+    if (!confirmed) return;
     const response = await fetch(`/api/partner/drafts?draft_id=${encodeURIComponent(draft.id)}`, { method: "DELETE" }).catch(() => null);
     if (!response?.ok) {
       notify.fail("That draft could not be discarded");
       return;
     }
     notify.win("Draft discarded");
-    if (draft.id === activeDraftId) startNewForm();
+    if (draft.id === activeDraftId) {
+      setFormHasAnswers(false);
+      setDraftsOpen(false);
+      setResumeDraftId(null);
+      setActiveDraftId(null);
+      setFormNonce((value) => value + 1);
+    }
     loadDrafts();
   }
 
@@ -1754,8 +1925,10 @@ function LegacyPartnerPortalWorkspace({
         <section id="overview" className="scroll-mt-6">
           {/* The one page header (UI-CONSISTENCY §2): no eyebrow, the 24px title. */}
           <PageHeader
-            title="Partner operations"
-            description="Submit leads, follow their progress, and manage the people who work them."
+            title="Overview"
+            description="Submit leads, follow their progress, and manage your team."
+            visible
+            infoDescription
             actions={
               <Button asChild>
                 <a href="#submit">
@@ -1819,51 +1992,104 @@ function LegacyPartnerPortalWorkspace({
       {section === "submit" && (
         <section id="submit" className="portal-partner-submit-shell scroll-mt-6">
           {/* A paused or draft partner is told once, by the portal layout's banner. */}
-          <PageHeader title="Submit a lead" />
+          <PageHeader
+            title="Submit a lead"
+            description="Start a new application for your customer."
+            visible
+            infoDescription
+          />
           {!productsLoaded ? (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <SectionLoading rows={3} columns={3} label="Loading approved products" />
             </div>
           ) : approvedProducts.length > 0 ? (
             <>
-              <div className="portal-partner-submit-panel portal-partner-submit-product-bar">
-                <div className="portal-partner-submit-product-row">
-                  <label className="portal-partner-submit-select">
+              <div className={`${cardSurface} portal-partner-submit-workspace`}>
+              {drafts.length > 0 && (
+                <div className="portal-partner-submit-drafts-summary">
+                  <FileText aria-hidden="true" className="size-5 shrink-0 text-[var(--accent-ink)]" />
+                  <strong>{drafts.length} saved {drafts.length === 1 ? "draft" : "drafts"}</strong>
+                  <span aria-hidden="true" className="portal-partner-submit-drafts-divider" />
+                  <span className="portal-partner-submit-drafts-latest">
+                    {(() => {
+                      const draft = drafts.find((item) => item.id === activeDraftId) ?? drafts[0];
+                      return `${productLineLabel(draft.product_code)}${draft.carrier_state ? ` · ${draft.carrier_state}` : ""} · saved ${agoLabel(Date.parse(draft.updated_at), draftsLoadedAt)}`;
+                    })()}
+                  </span>
+                  <Button type="button" variant="outline" onClick={() => setDraftsOpen(true)}>
+                    View drafts <ChevronRight aria-hidden="true" />
+                  </Button>
+                </div>
+              )}
+              {draftsOpen && (
+                <Sheet
+                  title="Saved drafts"
+                  subtitle="Resume a lead where you left off."
+                  onClose={() => setDraftsOpen(false)}
+                  footer={<Button type="button" onClick={() => void startNewForm()}>Start a new form</Button>}
+                >
+                  {drafts.length ? (
+                    <ul className="portal-partner-submit-draft-list">
+                      {drafts.map((draft) => (
+                        <li key={draft.id} className="portal-partner-submit-draft-item">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-[var(--ink)]">{draft.label ?? "Customer name not entered yet"}</p>
+                          <p className="portal-partner-submit-muted">
+                            {productLineLabel(draft.product_code)}
+                            {draft.carrier_state ? ` · ${draft.carrier_state}` : ""}
+                            {draft.phone_last4 ? ` · phone ending ${draft.phone_last4}` : ""}
+                            {` · ${draft.answered} ${draft.answered === 1 ? "answer" : "answers"} · saved ${agoLabel(Date.parse(draft.updated_at), draftsLoadedAt)}`}
+                          </p>
+                        </div>
+                        <span className="portal-partner-submit-draft-actions">
+                          {draft.id === activeDraftId ? (
+                            <StatusChip tone="good">Open below</StatusChip>
+                          ) : (
+                            <Button type="button" variant="outline" onClick={() => void resumeDraft(draft)}>Resume</Button>
+                          )}
+                          <Button type="button" variant="outline" onClick={() => void discardDraft(draft)}>Discard</Button>
+                        </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className="portal-partner-submit-muted">No saved drafts.</p>}
+                </Sheet>
+              )}
+              <div className="portal-partner-submit-product-bar" role="group" aria-labelledby="partner-lead-details-label">
+                <h2 id="partner-lead-details-label" className="sr-only">Lead details</h2>
+                <div className={`portal-partner-submit-product-row ${markets.length > 1 ? "has-markets" : "product-only"}`}>
+                  <div className="portal-partner-submit-select">
                     <span>Product</span>
-                    <select
+                    <SelectMenu
+                      label="Product"
                       value={selectedProduct}
-                      onChange={(event) => {
-                        setSelectedProduct(event.target.value);
+                      onChange={async (productCode) => {
+                        if (!(await confirmLeadReset())) return;
+                        setFormHasAnswers(false);
+                        setSelectedProduct(productCode);
                         setFormVersion(null);
                         setResumeDraftId(null);
                         setActiveDraftId(null);
                       }}
-                    >
-                      {approvedProducts.map((product) => (
-                        <option key={product.code} value={product.code}>
-                          {productLineLabel(product.code)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {formVersion !== null && (
-                    <StatusChip>Form v{formVersion}</StatusChip>
-                  )}
-                  {alsoAvailable(approvedProducts, selectedProduct) && (
-                    <p>
-                      {alsoAvailable(approvedProducts, selectedProduct)}{" "}
-                      <strong>Switching products clears entered answers.</strong>
-                    </p>
-                  )}
-                </div>
-                {markets.length > 1 && (
-                  <div className="portal-partner-submit-product-row">
-                    <label className="portal-partner-submit-select">
+                      searchPlaceholder="Search products"
+                      className="w-full"
+                      panelClassName="w-[var(--radix-popover-trigger-width)]"
+                      options={approvedProducts.map((product) => ({
+                        value: product.code,
+                        label: productLineLabel(product.code),
+                      }))}
+                    />
+                  </div>
+                  {markets.length > 1 && (
+                    <>
+                    <div className="portal-partner-submit-select">
                       <span>Carrier</span>
-                      <select
+                      <SelectMenu
+                        label="Carrier"
                         value={selectedCarrierId}
-                        onChange={(event) => {
-                          const carrierId = event.target.value;
+                        onChange={async (carrierId) => {
+                          if (!(await confirmLeadReset())) return;
+                          setFormHasAnswers(false);
                           setSelectedCarrierId(carrierId);
                           setResumeDraftId(null);
                           setActiveDraftId(null);
@@ -1873,122 +2099,65 @@ function LegacyPartnerPortalWorkspace({
                             )?.state ?? "",
                           );
                         }}
-                      >
-                        <option value="" disabled>
-                          Select carrier
-                        </option>
-                        {Array.from(
-                          new Map(
-                            markets.map((market) => [
-                              market.carrier_id,
-                              market.carrier_name,
-                            ]),
-                          ).entries(),
-                        ).map(([carrierId, carrierName]) => (
-                          <option key={carrierId} value={carrierId}>
-                            {carrierName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="portal-partner-submit-select is-narrow">
+                        searchPlaceholder="Search carriers"
+                        className="w-full"
+                        panelClassName="w-[var(--radix-popover-trigger-width)]"
+                        options={[
+                          { value: "", label: "Select carrier", disabled: true },
+                          ...Array.from(
+                            new Map(
+                              markets.map((market) => [
+                                market.carrier_id,
+                                market.carrier_name,
+                              ]),
+                            ).entries(),
+                          ).map(([carrierId, carrierName]) => ({
+                            value: carrierId,
+                            label: carrierName,
+                          })),
+                        ]}
+                      />
+                    </div>
+                    <div className="portal-partner-submit-select is-narrow">
                       <span>Carrier state</span>
-                      <select
+                      <SelectMenu
+                        label="Carrier state"
                         value={selectedState}
-                        onChange={(event) => {
-                          setSelectedState(event.target.value);
+                        onChange={async (state) => {
+                          if (!(await confirmLeadReset())) return;
+                          setFormHasAnswers(false);
+                          setSelectedState(state);
                           setResumeDraftId(null);
                           setActiveDraftId(null);
                         }}
                         disabled={!selectedCarrierId}
-                      >
-                        <option value="" disabled>
-                          Select state
-                        </option>
-                        {markets
-                          .filter(
+                        searchPlaceholder="Search states"
+                        className="w-full"
+                        panelClassName="w-56"
+                        panelAlign="start"
+                        options={[
+                          { value: "", label: "Select state", disabled: true },
+                          ...markets.filter(
                             (market) => market.carrier_id === selectedCarrierId,
-                          )
-                          .map((market) => (
-                            <option
-                              key={`${market.carrier_id}:${market.state}`}
-                              value={market.state}
-                            >
-                              {market.state}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <p>
-                      The carrier and state this lead is written for, from the
-                      markets your agent opened to you.{" "}
-                      <strong>Changing either clears entered answers.</strong>
-                    </p>
-                  </div>
-                )}
+                          ).map((market) => ({
+                            value: market.state,
+                            label: market.state,
+                            description: US_STATES.find(([code]) => code === market.state)?.[1] ?? market.state,
+                          })),
+                        ]}
+                      />
+                    </div>
+                    </>
+                  )}
+                  {formVersion !== null && (
+                    <StatusChip className="portal-partner-submit-form-version">
+                      Form v{formVersion}
+                    </StatusChip>
+                  )}
+                </div>
               </div>
-              {drafts.length > 0 && (
-                <section
-                  className="portal-partner-submit-panel is-roomy"
-                  aria-labelledby="partner-drafts-heading"
-                >
-                  <div className="portal-partner-submit-panel-head">
-                    <h2 id="partner-drafts-heading">Your drafts</h2>
-                    <p>
-                      Every form you have started and not submitted. Resume any
-                      of them where you left off.
-                    </p>
-                  </div>
-                  <ul className="divide-y divide-[var(--border)]">
-                    {drafts.map((draft) => (
-                      <li
-                        key={draft.id}
-                        className="flex flex-wrap items-center justify-between gap-3 py-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[var(--ink)]">
-                            {draft.label ?? "Customer name not entered yet"}
-                          </p>
-                          <p className="portal-partner-submit-muted">
-                            {productLineLabel(draft.product_code)}
-                            {draft.carrier_state ? ` · ${draft.carrier_state}` : ""}
-                            {draft.phone_last4 ? ` · phone ending ${draft.phone_last4}` : ""}
-                            {` · ${draft.answered} ${draft.answered === 1 ? "answer" : "answers"} · saved ${agoLabel(Date.parse(draft.updated_at), draftsLoadedAt)}`}
-                          </p>
-                        </div>
-                        <span className="flex flex-wrap gap-2">
-                          {draft.id === activeDraftId ? (
-                            <StatusChip tone="good">Open below</StatusChip>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => resumeDraft(draft)}
-                            >
-                              Resume
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void discardDraft(draft)}
-                          >
-                            Discard
-                          </Button>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div>
-                    <Button type="button" variant="outline" size="sm" onClick={startNewForm}>
-                      Start a new form
-                    </Button>
-                  </div>
-                </section>
-              )}
               {selectedProduct && selectedCarrierId && selectedState && (
+                <div className="portal-partner-submit-flow">
                 <PartnerLeadForm
                   key={`${selectedProduct}:${selectedCarrierId}:${selectedState}:${resumeDraftId ?? "new"}:${formNonce}`}
                   draftId={resumeDraftId}
@@ -1999,15 +2168,17 @@ function LegacyPartnerPortalWorkspace({
                   partnerName={partnerName}
                   agencyName={agencyName}
                   onFormVersion={setFormVersion}
+                  onHasAnswersChange={setFormHasAnswers}
                   market={markets.find(
                     (market) =>
                       market.carrier_id === selectedCarrierId &&
                       market.state === selectedState,
                   )!}
                 />
+                </div>
               )}
               {!markets.length && (
-                <div className="portal-partner-submit-panel is-roomy portal-partner-submit-empty" role="status">
+                <div className="portal-partner-submit-empty" role="status">
                   <h2>No markets are open yet</h2>
                   <p>
                     Your agent has not enabled any carrier and state
@@ -2019,6 +2190,7 @@ function LegacyPartnerPortalWorkspace({
                   </Button>
                 </div>
               )}
+              </div>
             </>
           ) : (
             <div className="portal-partner-submit-panel is-roomy portal-partner-submit-empty" role="status">
