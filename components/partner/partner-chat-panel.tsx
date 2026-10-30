@@ -16,6 +16,7 @@ import { control, Field } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
 import { Sheet } from "@/components/ui/sheet";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Segmented } from "@/components/ui/view-tabs";
 import { clockTime, viewerTimeZone } from "@/lib/format/dates";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -38,9 +39,9 @@ import { cn } from "@/lib/utils";
 /** Below this the frame stops shrinking and the page scrolls instead — a laptop in a short window. */
 const MIN_FRAME_PX = 416;
 
-type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string };
+type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string; othersReadAt?: string | null };
 type DirectoryUser = { id: string; name: string; email: string; label: string; scope: "agent" | "partner"; role?: string; partnerName?: string };
-type ChatResponse = { viewerId?: string | null; channel?: { id: string; name: string; partner_id: string | null; channel_type: Channel["channel_type"]; status: string }; messages?: PartnerMessage[]; unreadCount?: number; realtimeTopic?: string; channels?: Array<{ channel: Channel; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string }>; directory?: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> } };
+type ChatResponse = { viewerId?: string | null; channel?: { id: string; name: string; partner_id: string | null; channel_type: Channel["channel_type"]; status: string }; messages?: PartnerMessage[]; unreadCount?: number; realtimeTopic?: string; channels?: Array<{ channel: { id: string; name: string; partner_id: string | null; channel_type: Channel["channel_type"]; status: string }; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string; othersReadAt?: string | null }>; directory?: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> } };
 
 function channelTypeLabel(channel: Channel) { return channel.channel_type === "partner" ? "Agent channel" : channel.channel_type === "direct" ? "Direct message" : "Partner team channel"; }
 function channelPreview(channel: Channel) { return channel.messages.at(-1)?.message ?? "No messages yet"; }
@@ -62,15 +63,15 @@ function ChannelIcon({ channel, large = false }: { channel: Channel; large?: boo
 function Pair({ label, value, unset }: { label: string; value: string | null; unset?: string }) {
   if (!value && !unset) return null;
   return (
-    <>
-      <dt className="min-w-0 text-muted-foreground">{label}</dt>
-      <dd className={cn("m-0 min-w-0 break-words", value ? "font-medium text-foreground" : "text-muted-foreground")}>{value ?? unset}</dd>
-    </>
+    <div className="flex items-start justify-between gap-4 py-3 text-sm">
+      <dt className="min-w-0 shrink-0 text-muted-foreground">{label}</dt>
+      <dd className={cn("m-0 min-w-0 break-words text-right", value ? "font-medium text-foreground" : "text-muted-foreground")}>{value ?? unset}</dd>
+    </div>
   );
 }
 
 function normalize(body: ChatResponse) {
-  const channels = body.channels?.map((item) => ({ ...item.channel, messages: item.messages, unreadCount: item.unreadCount, realtimeTopic: item.realtimeTopic })) ?? (body.channel ? [{ ...body.channel, messages: body.messages ?? [], unreadCount: body.unreadCount ?? 0, realtimeTopic: body.realtimeTopic ?? `partner-chat:${body.channel.id}` }] : []);
+  const channels = body.channels?.map((item) => ({ ...item.channel, messages: item.messages, unreadCount: item.unreadCount, realtimeTopic: item.realtimeTopic, othersReadAt: item.othersReadAt ?? null })) ?? (body.channel ? [{ ...body.channel, messages: body.messages ?? [], unreadCount: body.unreadCount ?? 0, realtimeTopic: body.realtimeTopic ?? `partner-chat:${body.channel.id}`, othersReadAt: null }] : []);
   const tenantUsers = (body.directory?.tenantUsers ?? []).map((item) => ({ id: item.users.id, name: item.users.name, email: item.users.email, label: `${item.users.name} · Licensed agent`, scope: "agent" as const, role: item.role }));
   const partnerUsers = (body.directory?.partnerUsers ?? []).map((item) => ({ id: item.users.id, name: item.users.name, email: item.users.email, label: `${item.users.name} · Partner team`, scope: "partner" as const, role: item.role, partnerName: item.partners.name }));
   return { channels, directory: [...tenantUsers, ...partnerUsers].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index) };
@@ -103,6 +104,7 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
   const [agencyName, setAgencyName] = useState<string | null>(sample?.agencyName ?? null);
   const [agencySupport, setAgencySupport] = useState<SupportContact | null>(sample?.agencySupport ?? null);
   const [error, setError] = useState<string | null>(null);
+  const lastReadMark = useRef("");
 
   // One boolean, so the effects below read as "the preview does nothing" rather than repeating the prop.
   const sampled = Boolean(sample);
@@ -129,7 +131,38 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
   const selectedTopic = data.channels.find((channel) => channel.id === selectedId)?.realtimeTopic ?? null;
   const selectedLatestId = data.channels.find((channel) => channel.id === selectedId)?.messages.at(-1)?.id ?? null;
   useEffect(() => { if (sampled || !selectedTopic) return; const supabase = getSupabaseBrowserClient(); let channel: RealtimeChannel | null = null; if (supabase) channel = supabase.channel(selectedTopic).on("broadcast", { event: "message" }, () => { void load(); }).subscribe(); return () => { if (channel && supabase) void supabase.removeChannel(channel); }; }, [load, sampled, selectedTopic]);
-  useEffect(() => { if (sampled || !selectedId || !selectedTopic) return; void fetch("/api/partner/chat", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel_id: selectedId }) }); }, [sampled, selectedId, selectedTopic, selectedLatestId]);
+  useEffect(() => {
+    if (sampled || !selectedId || !selectedTopic) return;
+    const markRead = () => {
+      const threadVisible = window.matchMedia("(min-width: 768px)").matches || threadOnPhone;
+      if (document.visibilityState !== "visible" || !threadVisible) return;
+      const key = `${selectedId}:${selectedLatestId ?? ""}`;
+      if (lastReadMark.current === key) return;
+      lastReadMark.current = key;
+      void fetch("/api/partner/chat", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: selectedId }),
+      }).then((response) => {
+        if (!response.ok && lastReadMark.current === key) {
+          lastReadMark.current = "";
+          void load();
+        }
+      }).catch(() => {
+        if (lastReadMark.current === key) {
+          lastReadMark.current = "";
+          void load();
+        }
+      });
+    };
+    markRead();
+    window.addEventListener("resize", markRead);
+    document.addEventListener("visibilitychange", markRead);
+    return () => {
+      window.removeEventListener("resize", markRead);
+      document.removeEventListener("visibilitychange", markRead);
+    };
+  }, [load, sampled, selectedId, selectedLatestId, selectedTopic, threadOnPhone]);
   // Attachment-only messages need a valid editable body for the shared message contract.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (files.length > 0 && !draft.trim()) setDraft(files.length === 1 ? "Shared an attachment" : `Shared ${files.length} attachments`); }, [files.length, draft]);
@@ -171,7 +204,17 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
     return () => { window.removeEventListener("resize", fit); observer.disconnect(); };
   }, []);
 
-  function openConversation(id: string) { setSelectedId(id); setThreadOnPhone(true); setDetailsOpen(false); }
+  function openConversation(id: string) {
+    setSelectedId(id);
+    setThreadOnPhone(true);
+    setDetailsOpen(false);
+    setData((current) => ({
+      ...current,
+      channels: current.channels.map((channel) =>
+        channel.id === id ? { ...channel, unreadCount: 0 } : channel,
+      ),
+    }));
+  }
 
   async function createChannel() {
     setBusy(true); setError(null);
@@ -280,7 +323,7 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
                     <span className="truncate">{channelTypeLabel(selected)}</span>
                     <span aria-hidden="true">·</span>
                     <span className="inline-flex shrink-0 items-center gap-1">
-                      <CircleDot className="size-3 text-[var(--success-ink)]" aria-hidden="true" />
+                      <CircleDot className={cn("size-3", selected.status === "active" ? "text-[var(--success-ink)]" : "text-muted-foreground")} aria-hidden="true" />
                       {selected.status === "active" ? "Connected" : "Archived"}
                     </span>
                   </p>
@@ -291,7 +334,7 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
                 </Button>
               </header>
 
-              <ChatThread messages={selected.messages} viewerId={viewerId} nameOf={nameOf} zone={zone} />
+              <ChatThread messages={selected.messages} viewerId={viewerId} nameOf={nameOf} zone={zone} othersReadAt={selected.othersReadAt} />
 
               <ChatComposer
                 value={draft}
@@ -324,29 +367,46 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
           id="partner-chat-details"
           title="Conversation details"
           subtitle={selected.name}
+          status={<StatusChip tone={selected.status === "active" ? "good" : "neutral"}>{selected.status === "active" ? "Active" : "Archived"}</StatusChip>}
           onClose={() => setDetailsOpen(false)}
           closeLabel="Close conversation details"
           footer={<Button asChild variant="secondary" className="w-full"><Link href="/partner/pipeline">Open pipeline</Link></Button>}
         >
-          <dl className="m-0 grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
-            <Pair label="Channel" value={channelTypeLabel(selected)} />
-            <Pair label="Status" value={selected.status === "active" ? "Active" : "Archived"} />
-            <Pair label="Your agency" value={agencyName} />
-            {agencySupport?.schemaReady && (
-              <>
-                <Pair label="Support email" value={agencySupport.email} unset="Not set by your agency" />
-                <Pair label="Support phone" value={agencySupport.phone ? formatSupportPhone(agencySupport.phone) : null} unset="Not set by your agency" />
-              </>
-            )}
-            <Pair label="Related leads" value={String(relatedLeadCount)} />
-          </dl>
+          <div className="space-y-5">
+            <section aria-labelledby="partner-chat-details-conversation">
+              <h3 id="partner-chat-details-conversation" className="m-0 text-card-title font-semibold text-foreground">Conversation</h3>
+              <dl className="m-0 mt-2 divide-y divide-border rounded-lg border border-border px-3">
+                <Pair label="Channel" value={channelTypeLabel(selected)} />
+                <Pair label="Your agency" value={agencyName} />
+                <Pair label="Related leads" value={String(relatedLeadCount)} />
+              </dl>
+            </section>
 
-          <section className="min-w-0 border-t border-border pt-4">
-            <h3 className="m-0 text-card-title font-semibold text-foreground">Shared files ({sharedAttachments.length})</h3>
+            {agencySupport?.schemaReady && (
+              <section aria-labelledby="partner-chat-details-support">
+                <h3 id="partner-chat-details-support" className="m-0 text-card-title font-semibold text-foreground">Agency support</h3>
+                {agencySupport.email || agencySupport.phone ? (
+                  <dl className="m-0 mt-2 divide-y divide-border rounded-lg border border-border px-3">
+                    <Pair label="Email" value={agencySupport.email} />
+                    <Pair label="Phone" value={agencySupport.phone ? formatSupportPhone(agencySupport.phone) : null} />
+                  </dl>
+                ) : (
+                  <p className="m-0 mt-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
+                    Your agency hasn&rsquo;t added support contact details yet.
+                  </p>
+                )}
+              </section>
+            )}
+
+            <section className="min-w-0" aria-labelledby="partner-chat-details-files">
+              <div className="flex items-center justify-between gap-3">
+                <h3 id="partner-chat-details-files" className="m-0 text-card-title font-semibold text-foreground">Shared files</h3>
+                <StatusChip tone="neutral" dot={false}>{sharedAttachments.length}</StatusChip>
+              </div>
             {sharedAttachments.length > 0 ? (
               <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
                 {sharedAttachments.slice(0, 8).map((attachment) => (
-                  <li key={attachment.id} className="flex min-w-0 items-center gap-2 text-sm">
+                  <li key={attachment.id} className="flex min-w-0 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
                     <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="min-w-0 truncate text-foreground">{attachment.fileName}</span>
                     <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">{Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB</span>
@@ -354,9 +414,16 @@ export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?:
                 ))}
               </ul>
             ) : (
-              <p className="m-0 mt-2 text-sm text-muted-foreground">No files shared yet.</p>
+              <div className="mt-2 flex items-start gap-3 rounded-lg border border-dashed border-border px-3 py-3">
+                <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <div>
+                  <p className="m-0 text-sm font-medium text-foreground">No shared files yet</p>
+                  <p className="m-0 mt-0.5 text-xs leading-relaxed text-muted-foreground">Files attached to messages in this conversation will appear here.</p>
+                </div>
+              </div>
             )}
-          </section>
+            </section>
+          </div>
         </Sheet>
       )}
 

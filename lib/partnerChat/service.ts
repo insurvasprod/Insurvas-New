@@ -406,8 +406,11 @@ export async function getPartnerChatChannels(tenantId: string, partnerId: string
   const seats = await membersOf(supabase, tenantId, candidates);
   const memberIds = new Set(candidates.filter((channel) => seats.get(channel.id)?.some((member) => member.userId === userId)).map((channel) => channel.id));
   const visible = (channels.data ?? []).filter((channel) => channel.channel_type === "partner" ? channel.partner_id === partnerId : memberIds.has(channel.id)) as ChatChannel[];
+  const othersRead = await othersReadAtByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id));
   const results = await Promise.all(visible.map((channel) => chatForLoadedChannel(supabase, channel, userId, true).catch(() => null)));
-  return results.filter((result): result is NonNullable<typeof result> => Boolean(result));
+  return results
+    .filter((result): result is NonNullable<typeof result> => Boolean(result))
+    .map((result) => ({ ...result, othersReadAt: othersRead.get(result.channel.id) ?? null }));
 }
 
 /** Directory used by Partner chat. It never includes users from another partner organization. */

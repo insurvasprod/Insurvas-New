@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CheckCheck, FileText, MessageCircle } from "lucide-react";
+import { Check, CheckCheck, FileText, Info, MessageCircle } from "lucide-react";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { clockTime } from "@/lib/format/dates";
@@ -56,7 +56,8 @@ function MessageAttachments({ message }: { message: PartnerMessage }) {
 /**
  * An automatic update. It keeps every fact it carried — a partner relies on these to know what the
  * agency did with a lead — but it is no longer a full-width tinted panel competing with the
- * conversation: centred, narrower, and unfilled, so it reads as a notice between turns of speech.
+ * conversation: left aligned with the other incoming content, so its system origin is clear without
+ * making it look like a message written by the agent or partner.
  */
 function SystemNotice({ message, zone }: { message: PartnerMessage; zone: string }) {
   const payload = message.cardPayload;
@@ -73,21 +74,27 @@ function SystemNotice({ message, zone }: { message: PartnerMessage; zone: string
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
 
   return (
-    <article className="mx-auto w-full max-w-[34rem] rounded-lg border border-border px-3 py-2.5" aria-label="Automatic update">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusChip tone="info">Automatic update</StatusChip>
-        <span className="text-xs text-muted-foreground">{clockTime(message.createdAt, zone, "12h")} · cannot be edited</span>
+    <article className="mr-auto flex w-full max-w-[34rem] gap-3 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-alt)] px-3 py-2.5 sm:px-4" aria-label="Automatic update">
+      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[var(--info-surface)] text-[var(--info-ink)]" aria-hidden="true">
+        <Info className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusChip tone="info">Automatic update</StatusChip>
+          <span className="text-xs text-muted-foreground">{clockTime(message.createdAt, zone, "12h")}</span>
+        </div>
+        <p className="sr-only">This update was created by the system and cannot be edited.</p>
+        {fields.length > 0 && (
+          <dl className="m-0 mt-2 grid grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+            {fields.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="min-w-0 text-xs leading-5 text-muted-foreground">{label}</dt>
+                <dd className="m-0 min-w-0 break-words leading-5 text-foreground">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
-      {fields.length > 0 && (
-        <dl className="m-0 mt-2 grid grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
-          {fields.map(([label, value]) => (
-            <div key={label} className="contents">
-              <dt className="min-w-0 text-xs leading-5 text-muted-foreground">{label}</dt>
-              <dd className="m-0 min-w-0 break-words leading-5 text-foreground">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
     </article>
   );
 }
@@ -100,7 +107,7 @@ function DaySeparator({ label }: { label: string }) {
   );
 }
 
-function MessageGroup({ group, name, zone }: { group: Extract<ThreadItem, { kind: "group" }>; name: string; zone: string }) {
+function MessageGroup({ group, name, zone, othersReadAt }: { group: Extract<ThreadItem, { kind: "group" }>; name: string; zone: string; othersReadAt: string | null }) {
   const mine = group.side === "mine";
   const first = group.messages[0]!;
   return (
@@ -111,6 +118,12 @@ function MessageGroup({ group, name, zone }: { group: Extract<ThreadItem, { kind
       </p>
       {group.messages.map((message, index) => {
         const last = index === group.messages.length - 1;
+        const seen = Boolean(
+          mine &&
+          last &&
+          othersReadAt &&
+          new Date(othersReadAt).getTime() >= new Date(message.createdAt).getTime(),
+        );
         return (
           <div
             key={message.id}
@@ -124,10 +137,13 @@ function MessageGroup({ group, name, zone }: { group: Extract<ThreadItem, { kind
             <p className="m-0 whitespace-pre-wrap break-words">{message.message}</p>
             <MessageAttachments message={message} />
             {mine && last && (
-              <span className="mt-1 flex items-center justify-end gap-1 text-[var(--success-ink)]">
-                <CheckCheck className="size-3.5" aria-hidden="true" />
-                {/* Only on your own messages: a delivered tick on someone else's message says nothing. */}
-                <span className="sr-only">Sent</span>
+              <span
+                className={cn("mt-1 flex items-center justify-end gap-1 text-xs", seen ? "text-[var(--info-ink)]" : "text-muted-foreground")}
+                title={seen ? `Seen by a conversation member ${clockTime(othersReadAt as string, zone, "12h")}` : "Sent · waiting to be seen"}
+                aria-label={seen ? "Seen by a conversation member" : "Sent, not seen yet"}
+              >
+                {seen ? <CheckCheck className="size-3.5" aria-hidden="true" /> : <Check className="size-3.5" aria-hidden="true" />}
+                {seen ? "Seen" : "Sent"}
               </span>
             )}
           </div>
@@ -142,6 +158,7 @@ export function ChatThread({
   viewerId,
   nameOf,
   zone = "UTC",
+  othersReadAt = null,
   className,
 }: {
   messages: readonly PartnerMessage[];
@@ -149,6 +166,8 @@ export function ChatThread({
   viewerId: string | null;
   nameOf: (userId: string | null) => string;
   zone?: string;
+  /** Latest read cursor from another member of this conversation. */
+  othersReadAt?: string | null;
   className?: string;
 }) {
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -199,7 +218,7 @@ export function ChatThread({
       ) : items.map((item) => {
         if (item.kind === "day") return <DaySeparator key={item.key} label={item.label} />;
         if (item.kind === "notice") return <SystemNotice key={item.key} message={item.message} zone={zone} />;
-        return <MessageGroup key={item.key} group={item} name={nameOf(item.authorId)} zone={zone} />;
+        return <MessageGroup key={item.key} group={item} name={nameOf(item.authorId)} zone={zone} othersReadAt={othersReadAt} />;
       })}
     </div>
   );
