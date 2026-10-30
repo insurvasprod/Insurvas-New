@@ -361,3 +361,118 @@ icon rule for the age tones comes from UI-CONSISTENCY §12, not from these sourc
   verification.
 - **Not measured:** contrast ratios against the glass surface, keyboard order through the board, and
   animation frame stability. Deferred to Task 12 with the preview route in place.
+
+---
+
+# Round 2 — the portal's controls, the phone, and the lead record
+
+**Raised by the owner, 30 Oct**, with round 1 shipped (5 commits on `redesign/partner-pipeline`).
+Three things, in the owner's words: the dropdowns should be "the design that we did that was good
+and had the search at the top"; the portal should "be used with any type of mobile and work
+perfectly"; and "when you press at the lead the way it shows up I don't like it".
+
+Tasks 13–21 in [`todo.md`](todo.md).
+
+## A · The dropdowns
+
+The filter panel ships **10 native `<select>`s** across the partner portal, and the screenshot shows
+exactly why that reads badly: an open Product menu drawn by Windows, blue system highlight, nothing
+to do with the app around it.
+
+The component the owner means already exists. `components/ui/select-menu.tsx` — `SelectMenu` — was
+built on 2026-10-29 and its own docstring records why: *"the native dropdowns were 'so plain', and a
+long list needs a search at the top"*. It gives a 36px trigger that takes the brand tint while
+filtered, and a panel with a search box at the top, titled groups, optional colour dots and counts,
+a tick on the chosen option, and arrow-key navigation.
+
+Four partner screens already use it (`partner-portal-workspace.tsx`). The Pipeline page does not —
+it was built before, and round 1 kept its native selects while changing everything around them.
+
+| File | Native selects |
+|---|---|
+| `partner-lead-pipeline.tsx` | 5 — Where it is, Product, Agency stage, Submitted by, Outcome |
+| `partner-chat-panel.tsx` | 2 — conversation type, participants |
+| `partner-notification-preferences.tsx` | 1 |
+| `partner-portal-workspace.tsx` | 1 |
+| `partner-team-workspace.tsx` | 1 |
+
+**A rule has to change with it.** UI-CONSISTENCY §5b still says *"Dropdowns. Native `<select>` with
+`toolbarControl` or `control`."* That predates `SelectMenu` and now contradicts both the owner's
+decision and four shipped screens. §5b gets rewritten rather than quietly ignored, or the next
+person rebuilds a native select and is right to.
+
+**The two date fields stay native for now.** They are not dropdowns, and the kit's `DateTimePicker`
+picks a date *and a time* — pointing it at a date-only filter would need a date-only mode added to a
+shared component. Listed as task 21, after the rest, so it can be dropped without blocking anything.
+
+## B · The phone
+
+Measured on the real page at 375×812. The page does not overflow sideways, and the sidebar already
+has a drawer — the shell is sound. What is wrong is everything inside it.
+
+| Finding | Evidence |
+|---|---|
+| **The leads are 1.9 screens down** | the list card starts at y=1536 on an 812-tall screen: four full-width stat cards, stacked, come first |
+| **The board is unusable** | five 220px columns, each a fixed 420px tall and mostly empty, scrolled sideways on a 375px screen |
+| **The top bar is clipped** | the search box squeezes to "Search t" and the account chip is cut off at the right edge |
+| **The toolbar is three rows** | search, then Filters, then Board/Table/Export, then Refresh |
+| **Two targets under 24px** | the `InfoTip` (i) buttons render 16×16 and 20×20; WCAG 2.2 AA 2.5.8 wants 24×24 unless an exception applies |
+
+**The board becomes one grouped list on a phone** (owner's pick). The five columns become stacked
+sections in a single vertical scroll — New, then Claimed, then On a call — each heading carrying its
+count and sticking as it scrolls past. No sideways scrolling, no mode to learn, every lead reachable
+in one gesture. The board stays a board from `md` up.
+
+**The stat cards go two-up on a phone** rather than four full-width blocks, so the leads are above
+the fold or just under it. This is a judgment call, not an owner decision: four cards at 2×2 is
+roughly 300px instead of roughly 1,200px.
+
+**The top bar is shared with the agent app** (`TopBarShell` in `components/app/app-top-bar.tsx`), so
+fixing it fixes both — and risks both. It gets its own task and its own regression check.
+
+## C · The lead record — its own page
+
+**Owner's pick.** Pressing a lead opens `/partner/pipeline/<leadId>`: a real page with a back link,
+a shareable URL and a working browser back button. No overlay, nothing resizes, and on a phone it is
+simply the next screen rather than a sheet over a board that is already cramped.
+
+What that replaces: the `DetailPanel mode="split"` from round 1, which took 30% of the row and
+squeezed the board from five columns to four as it opened — the behaviour the owner does not like.
+
+The parts carry over unchanged: the progress strip, the grouped and formatted submission, the
+timeline, the read-only lock line. They stop being panel sections and become page sections.
+
+`/api/partner/leads/[id]` already exists and `getPartnerLeadDetail` already enforces that a
+`partner_user` cannot open a colleague's lead — the page reads through the same service, so the
+isolation proved in round 1 holds without a second implementation.
+
+**The `?lead=<id>` deep link keeps working**: it redirects to the record page, so links already sent
+to partners do not break.
+
+## Architecture decisions
+
+| Decision | Rationale |
+|---|---|
+| A record page, not a sheet | The owner picked it, and it is the only option that is equally right on a phone and a laptop: no overlay, a real back button, a URL a partner can send to their agent |
+| Server-rendered record | The data read already exists server-side (`getPartnerLeadDetail`); a client fetch would re-add a loading state the page does not need |
+| Grouped list on phone, board from `md` | One component, two layouts, driven by a container query like the agent home — not a second screen to keep in step |
+| `SelectMenu` everywhere, and §5b rewritten | A rule nobody follows is worse than no rule; four screens and the owner already disagree with it |
+| Dates left native, for now | `DateTimePicker` is date+time; a date-only mode is a shared-component change that this round does not need |
+
+## Risks and mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| The shared top bar regresses the agent app | **High** | Its own task; check `/app/dashboard` and `/design/home` at the same widths before and after |
+| `SelectMenu` in a `FilterPanel` grid behaves differently from a native select (width, overflow, the popover clipping) | Med | Convert the Pipeline's five first and check the panel at every width before touching the other five |
+| Losing the panel loses "glance without leaving the board" | Med | The board keeps the card's own summary — name, product, age, stage — so the page is for detail, not for orientation |
+| A record page needs its own loading, error and not-found states | Med | `loading.tsx` beside the route; a lead that is not the partner's already throws "Lead not found" |
+| Round 1's `/design/pipeline` does not cover phones | Low | Task 20 adds a phone frame to the preview so every state is checkable at 375 without a device |
+
+## Open questions
+
+1. **The (i) buttons at 16–20px.** Below WCAG 2.2's 24×24, but they may fall under the "inline"
+   exception, and `InfoTip` is shared with the whole app. Worth an owner decision: grow them
+   everywhere, or record the exception.
+2. **Which phone widths count.** The plan tests 320, 360, 375, 390 and 430. If the partners who
+   matter are all on one device, that list can shrink.

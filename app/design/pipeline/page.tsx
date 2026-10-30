@@ -4,8 +4,7 @@ import { notFound } from "next/navigation";
 import { PartnerLeadPipeline } from "@/components/partner/partner-lead-pipeline";
 import { PartnerSidebar } from "@/components/partner/partner-sidebar";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
-import { SAMPLE_PAYOUTS, SAMPLE_ROLES, SAMPLE_STATES, sampleDetail, samplePipeline, type SamplePayout, type SampleRole, type SampleState } from "@/lib/partnerLeads/fixtures";
-import type { PartnerLeadDetail } from "@/lib/partnerLeads/types";
+import { SAMPLE_PAYOUTS, SAMPLE_ROLES, SAMPLE_STATES, samplePipeline, type SamplePayout, type SampleRole, type SampleState } from "@/lib/partnerLeads/fixtures";
 
 export const metadata = { title: "Pipeline · Insurvas design system" };
 
@@ -27,8 +26,6 @@ export default async function PipelineDesignPage({ searchParams }: { searchParam
   const payout = (SAMPLE_PAYOUTS as readonly string[]).includes(one("payout") ?? "") ? (one("payout") as SamplePayout) : "per_sale";
 
   const data = state === "error" ? null : samplePipeline({ state, role, payout });
-  const details: Record<string, PartnerLeadDetail> = {};
-  for (const row of data?.rows ?? []) details[row.id] = sampleDetail(row);
 
   const href = (next: Partial<{ state: string; role: string; payout: string }>) =>
     `/design/pipeline?state=${next.state ?? state}&role=${next.role ?? role}&payout=${next.payout ?? payout}`;
@@ -61,7 +58,7 @@ export default async function PipelineDesignPage({ searchParams }: { searchParam
                 role={role}
                 partnerStatus="active"
                 partnerName="Sample Publishing Co."
-                preview={{ data, error: state === "error" ? "Could not load your lead pipeline" : undefined, details }}
+                preview={{ data, error: state === "error" ? "Could not load your lead pipeline" : undefined }}
               />
             </Suspense>
           </DashboardStage>

@@ -604,3 +604,276 @@ they agree. The card reads `test test · Final expense · 2 hr (amber) · New le
 
 Final: 3408 pass / 20 fail (the same pre-existing 20, unrelated SQL-text assertions on CRLF);
 design rules 71/71; lint and types clean.
+
+---
+
+# Round 2 — tasks 13–21
+
+Plan and decisions: [`plan.md`](plan.md) → *Round 2*. Same standing bar as round 1
+(`npm run typecheck`, `npm run lint`, `npm test`, no new offender in `uiOffenders.json`, the
+`PageHeader` treatment unchanged).
+
+**Phone widths for this round:** 320, 360, 375, 390 and 430 wide. Desktop stays 1536×826 and
+1366×657.
+
+## Phase 6 — The lead record becomes a page
+
+### Task 13: The record page
+
+**Description:** A real page at `/partner/pipeline/<leadId>`, server-rendered through the same
+service the API uses, carrying over round 1's progress strip, grouped submission and timeline.
+
+**Acceptance criteria:**
+- [x] `/partner/pipeline/<leadId>` renders the record: back link, customer name, product label,
+      stage chip, progress strip, Submission / Timeline, the read-only lock line
+- [x] It reads through `getPartnerLeadDetail`, so a `partner_user` opening a colleague's lead gets
+      the same "Lead not found" the API gives — no second access path
+- [x] A lead id that is not a UUID, or not this partner's, is a 404, not an error page
+- [x] `loading.tsx` beside the route; the back link returns to the board with its view preserved
+- [x] The footer action stays "Message your agent about this lead"
+
+**Verification:**
+- [x] Open from the board and from the table; browser back returns to the list
+- [x] A made-up UUID gives the not-found page
+- [x] 1536×826 and 375: no horizontal overflow, nothing clipped
+
+**Dependencies:** None
+**Files:** `app/partner/(portal)/pipeline/[leadId]/page.tsx`, `.../loading.tsx`,
+`components/partner/partner-lead-record.tsx`, `components/partner/partner-lead-pipeline.tsx`
+**Scope:** Medium
+
+---
+
+### Task 14: The list links to the page, and the panel goes
+
+**Description:** Cards and rows become links; the split panel, its selected-row state and the
+`?lead=` fetch come out.
+
+**Acceptance criteria:**
+- [x] A board card and a table row's action navigate to the record page (real links — middle-click
+      and ⌘-click open a tab)
+- [x] `DetailPanel`, `selectedId`, the detail fetch and the `preview.details` seam are gone from
+      `partner-lead-pipeline.tsx`
+- [x] `?lead=<id>` on the list redirects to the record page, so links already sent still work
+- [x] The board no longer resizes when a lead is opened — there is nothing left to resize it
+
+**Verification:**
+- [x] ⌘-click a card opens the record in a new tab; plain click navigates
+- [x] `/partner/pipeline?lead=<id>` lands on the record page
+- [x] `grep -c "DetailPanel" components/partner/partner-lead-pipeline.tsx` is 0
+
+**Dependencies:** Task 13
+**Files:** `components/partner/partner-lead-pipeline.tsx`, `app/design/pipeline/page.tsx`
+**Scope:** Medium
+
+---
+
+### ✅ Checkpoint: the record
+- [x] Opening a lead changes nothing about the board's layout
+- [x] `npm test`, typecheck, lint green; `/design/pipeline` still renders every state
+
+---
+
+## Phase 7 — The dropdowns
+
+### Task 15: The Pipeline's five filters become `SelectMenu`
+
+**Description:** The filter panel's native selects become the kit's searchable select — the one the
+owner approved on 2026-10-29.
+
+**Acceptance criteria:**
+- [ ] Where it is, Product, Agency stage, Submitted by and Outcome are `SelectMenu`
+- [ ] Each shows a search box at the top, a tick on the chosen option, and takes the brand tint when
+      it holds anything but its default
+- [ ] Agency stage groups by pipeline name when the partner's leads sit in more than one
+- [ ] Options carry counts where the page already knows them (the lane filter does)
+- [ ] The panel is still the §6a labelled grid; `ActiveFilters` chips unchanged
+
+**Verification:**
+- [ ] No native menu appears at any width; the panel opens unclipped inside the `TableCard`
+- [ ] Keyboard: arrows move, Enter picks, Escape closes, focus returns to the trigger
+- [ ] 375 wide: the panel is one column and each menu fits the screen
+
+**Dependencies:** None
+**Files:** `components/partner/partner-lead-pipeline.tsx`
+**Scope:** Small
+
+---
+
+### Task 16: The portal's other five selects
+
+**Description:** The same swap across the rest of the partner portal, so no screen is the odd one
+out.
+
+**Acceptance criteria:**
+- [ ] `partner-chat-panel.tsx` (conversation type, participants), `partner-notification-preferences.tsx`,
+      `partner-portal-workspace.tsx` and `partner-team-workspace.tsx` use `SelectMenu`
+- [ ] The participants control is multi-select today — it keeps multi-select, through
+      `components/app/multi-picker.tsx` (§13's "dropdown with checkboxes"), not a one-of `SelectMenu`
+- [ ] `grep -o "<select" components/partner/*.tsx` returns nothing
+
+**Verification:**
+- [ ] Each screen's form still saves what it saved before
+- [ ] 375 wide: every menu opens on screen and is dismissible
+
+**Dependencies:** Task 15
+**Files:** the four components above
+**Scope:** Medium
+
+---
+
+### Task 17: Settle the rule §5b contradicts
+
+**Description:** UI-CONSISTENCY §5b still says dropdowns are native `<select>`s. Four shipped
+screens, the owner and this round all disagree.
+
+**Acceptance criteria:**
+- [ ] §5b says `SelectMenu` is the dropdown, and names the exception if one survives (a two-option
+      choice is a `Segmented`, per §15)
+- [ ] The `radix-select` ratchet's wording is checked against the new rule
+- [ ] `components/partner/README.md` records that the portal has no native selects left
+
+**Verification:**
+- [ ] `npm test` — `designDocs.test.mjs` passes
+
+**Dependencies:** Task 16
+**Files:** `docs/design/UI-CONSISTENCY.md`, `components/partner/README.md`
+**Scope:** Small
+
+---
+
+## Phase 8 — The phone
+
+### Task 18: The board becomes one grouped list on a phone
+
+**Description:** Below `md`, the five columns stack into a single vertical scroll with sticky lane
+headings. The board stays a board from `md` up.
+
+**Acceptance criteria:**
+- [ ] Under `md`: stacked sections, each heading carrying its lane name and count, sticking while
+      its own leads scroll past
+- [ ] No horizontal scrolling at 320 wide; no fixed 420px column heights
+- [ ] An empty lane is one quiet line, not 420px of nothing
+- [ ] Cards keep name, product, toned age and agency stage; the whole card is the link
+- [ ] From `md` up the board is unchanged — same columns, same counts
+
+**Verification:**
+- [ ] 320, 360, 375, 390, 430: one column, no sideways scroll, headings stick
+- [ ] 768 and 1536: the board is exactly as it was
+
+**Dependencies:** Task 14
+**Files:** `components/partner/partner-lead-pipeline.tsx`
+**Scope:** Medium
+
+---
+
+### Task 19: The figures and the toolbar stop filling the screen
+
+**Description:** On a phone the four stat cards occupy roughly 1,200px before the first lead. Two-up
+and a compact toolbar bring the list up to where a thumb can reach it.
+
+**Acceptance criteria:**
+- [ ] Stat cards are 2×2 under `sm`, 4 across from `lg` — the same four figures, no content dropped
+- [ ] The toolbar is at most two rows at 375: search, then Filters with the view toggle and the
+      actions
+- [ ] Export CSV and Refresh may collapse to icon buttons under `sm`, with accessible names
+- [ ] The list card starts within the first screen and a half at 375 (was y=1536 of 812)
+
+**Verification:**
+- [ ] Measure the list card's offset at 375 before and after; record both
+- [ ] The needs-you row, when present, is still the first thing under the figures
+
+**Dependencies:** Task 18
+**Files:** `components/partner/partner-lead-pipeline.tsx`
+**Scope:** Small
+
+---
+
+### Task 20: The top bar fits a phone — carefully
+
+**Description:** The search box squeezes to "Search t" and the account chip is cut off. `TopBarShell`
+is **shared with the agent app**, so this is the one task that can break a screen nobody asked about.
+
+**Acceptance criteria:**
+- [ ] At 320–430 the bar shows: menu, logo, a search **icon** that opens the search, the alert
+      icons, and the account chip — nothing clipped
+- [ ] The agent app's bar is unchanged from `md` up
+- [ ] ⌘K still opens search at every width
+
+**Verification:**
+- [ ] `/partner/pipeline` **and** `/app/dashboard` at 320, 375, 430, 768, 1366, 1536 — screenshot
+      both before and after
+- [ ] `/design/home` and `/design/shell` still render
+
+**Dependencies:** None
+**Files:** `components/app/app-top-bar.tsx`
+**Scope:** Small
+
+---
+
+### ✅ Checkpoint: the phone
+- [ ] `/partner/pipeline` usable end to end at 320 wide: find a lead, filter, open it, come back
+- [ ] The agent app shows no regression at any width
+- [ ] `npm test`, typecheck, lint green
+
+---
+
+## Phase 9 — Prove and finish
+
+### Task 21: Phone frame on `/design/pipeline`, final pass, and the date fields
+
+**Description:** Make the phone layouts checkable without a device, sweep the round, and decide the
+two native date inputs.
+
+**Acceptance criteria:**
+- [ ] `/design/pipeline?width=phone` frames the page at 375 so every state can be checked there
+- [ ] Contrast re-measured against the real surface for anything this round changed
+- [ ] Touch targets: the `InfoTip` (i) finding (16×16 and 20×20) is either fixed in the shared
+      component or recorded as an accepted exception with its reason — not left unsaid
+- [ ] **Dates:** either a date-only mode on `DateTimePicker` and the two filters moved to it, or a
+      one-line note in the plan saying they stay native and why. Droppable without blocking
+- [ ] `components/partner/README.md` and UI-CONSISTENCY updated for the record page and the phone layout
+
+**Verification:**
+- [ ] Every state at 375 and 1536 from the preview, plus the live page
+- [ ] `npm test`, typecheck, lint green; `uiOffenders.json` no higher than it was
+
+**Dependencies:** Tasks 13–20
+**Files:** `app/design/pipeline/page.tsx`, `components/ui/date-time-picker.tsx`,
+`components/partner/README.md`, `docs/design/UI-CONSISTENCY.md`
+**Scope:** Medium
+
+---
+
+### ✅ Checkpoint: round 2 complete
+- [ ] No native dropdown anywhere in the partner portal
+- [ ] The portal works at 320 wide, and opening a lead moves nothing
+- [ ] Owner has seen it on a phone
+
+---
+
+## Phase 6 — done 30 Oct
+
+The lead opens as a page. `/partner/pipeline/<leadId>`, server-rendered through
+`getPartnerLeadDetail` — the same service the API uses, so round 1's proven scoping holds here
+without a second access path.
+
+| Checked | |
+|---|---|
+| The record page | ✅ breadcrumb, title, stage chip, progress strip with real timestamps, Submission / Timeline, the lock line |
+| Opening a lead | ✅ board cards and table rows are real links — ⌘-click opens a tab |
+| The board moving | ✅ it cannot any more: there is no panel left to resize it |
+| `?lead=<id>` | ✅ redirects to the record page, so links already sent still work |
+| A lead that is not yours | ✅ "There is no page here" — a record you may not see and one that does not exist look the same from outside |
+| 375 wide | ✅ no overflow; the progress strip wraps 2×2 and still reads |
+
+**Moved, not rewritten:** `when` / `stageLabel` / `stageTone` to `components/partner/lead-format.ts`
+(the list and the record both say them, so one home); `Progress` / `Submission` / `Timeline` to
+`components/partner/partner-lead-record.tsx`. `DetailPanel`, `selectedId`, the detail fetch and the
+preview's `details` seam are gone from the list.
+
+Still outstanding from the round-2 plan and visible on the phone screenshot: the top bar is clipped
+("Search 1", the account chip cut off) — that is task 20, deliberately its own task because
+`TopBarShell` is shared with the agent app.
+
+3408 pass / 20 fail (the same pre-existing 20); design rules 71/71; lint and types clean.

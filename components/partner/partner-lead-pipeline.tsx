@@ -2,29 +2,28 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Download, Hand, Inbox, Lock, Send } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Download, Hand, Inbox, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Field } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/view-tabs";
 import { LiveStamp, useClockSeconds } from "@/components/ui/live-stamp";
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
-import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import type { PartnerLeadDetail, PartnerLeadRow, PartnerPipelinePayload } from "@/lib/partnerLeads/types";
+import type { PartnerLeadRow, PartnerPipelinePayload } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
 import { productLineLabel } from "@/lib/format/productLine";
-import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { oldestOpenLabel } from "@/lib/format/age";
 import { expectedEarningsFact, termLabel } from "@/lib/partners/payout";
-import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, progressSteps, snapshotFields, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
+import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
 import { NOBODY_CLAIMED_LABEL, type PartnerLane } from "@/lib/partnerLeads/lanes";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +35,7 @@ type PipelineResponse = PartnerPipelinePayload;
  * drawn and checked. The dev database holds one lead; without this seam "verified" would only ever
  * mean "the happy path with a single card".
  */
-export type PipelinePreview = { data: PartnerPipelinePayload | null; error?: string; details?: Record<string, PartnerLeadDetail> };
+export type PipelinePreview = { data: PartnerPipelinePayload | null; error?: string };
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
 const PAGE_SIZE = 10;
@@ -55,16 +54,6 @@ const AGE_TONE_BADGE: Record<AgeTone, string | null> = {
   danger: "bg-[var(--error-surface)] text-[var(--error-ink)]",
 };
 
-/** "30 Oct, 1:50 am" — the house format (§15), not the browser's raw locale string. */
-function when(value: string) { return dateTime(value, viewerTimeZone(), { clock: "12h" }); }
-function stageLabel(row: PartnerLeadRow | PartnerLeadDetail) { return row.stageName || row.outcome || "Submitted"; }
-function stageTone(row: PartnerLeadRow | PartnerLeadDetail): StatusTone {
-  if (row.stageName === NOBODY_CLAIMED_LABEL) return "warning";
-  if (row.stageType === "won") return "good";
-  if (row.stageType === "lost") return "danger";
-  return "neutral";
-}
-
 /** The age, with the words that go with its colour: never colour alone (UI-CONSISTENCY §12). */
 function Age({ row, now, thresholds, className }: { row: PartnerLeadRow; now: number | null; thresholds?: AgeThresholds; className?: string }) {
   if (now === null) return <span className={cn("text-muted-foreground", className)}>—</span>;
@@ -80,16 +69,11 @@ function Age({ row, now, thresholds, className }: { row: PartnerLeadRow; now: nu
   </span>;
 }
 
-function LeadCard({ row, selected, onSelect, now, thresholds }: { row: PartnerLeadRow; selected: boolean; onSelect: () => void; now: number | null; thresholds?: AgeThresholds }) {
+function LeadCard({ row, href, now, thresholds }: { row: PartnerLeadRow; href: string; now: number | null; thresholds?: AgeThresholds }) {
   const flagged = nobodyClaimedRow(row);
-  return <button
-    type="button"
-    aria-pressed={selected}
-    onClick={onSelect}
-    className={cn(
-      "block w-full rounded-md border bg-card p-3 text-left transition-colors hover:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-      selected ? "border-[var(--primary)]" : "border-border"
-    )}
+  return <Link
+    href={href}
+    className="block w-full rounded-md border border-border bg-card p-3 text-left no-underline transition-colors hover:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
   >
     <span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-foreground">{row.customer}</span><ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></span>
     <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -103,113 +87,13 @@ function LeadCard({ row, selected, onSelect, now, thresholds }: { row: PartnerLe
         ? <StatusChip tone="warning">{NOBODY_CLAIMED_LABEL}</StatusChip>
         : <span className="truncate text-xs text-muted-foreground">{row.stageName}</span>}
     </span>
-  </button>;
-}
-
-/** The strip at the top of the panel: what has happened, what it is waiting on, what is ahead. */
-function Progress({ detail }: { detail: PartnerLeadDetail }) {
-  const steps = progressSteps(laneOf(detail));
-  const dated = (event: string | null) => event ? detail.timeline.find((item) => item.type === event)?.at ?? null : null;
-  return <ol aria-label="Progress" className="flex min-w-0 list-none flex-wrap gap-x-1 gap-y-2 p-0">
-    {steps.map((step, index) => {
-      const at = dated(step.event);
-      return <li key={step.key} className="flex min-w-0 flex-1 basis-[7rem] flex-col gap-1.5">
-        <span className="flex items-center gap-1" aria-hidden="true">
-          <span className={cn(
-            "size-2 shrink-0 rounded-full",
-            step.state === "done" ? "bg-[var(--primary)]" : step.state === "current" ? "bg-[var(--warning)]" : "bg-[var(--border)]",
-          )} />
-          {index < steps.length - 1 && <span className={cn("h-px min-w-0 flex-1", step.state === "done" ? "bg-[var(--primary)]" : "bg-[var(--border)]")} />}
-        </span>
-        <span className="min-w-0">
-          <span className={cn("block truncate text-xs font-medium", step.state === "upcoming" ? "text-muted-foreground" : "text-foreground")}>
-            {step.label}
-            {step.state === "current" && <span className="sr-only"> — where it is now</span>}
-          </span>
-          {/* Only where the records can date it: "On a call" has no event of its own. */}
-          <span className="block truncate text-[0.6875rem] text-muted-foreground">{at ? when(at) : "\u00a0"}</span>
-        </span>
-      </li>;
-    })}
-  </ol>;
-}
-
-/** The form as it was sent: grouped, ordered and formatted (lib/partnerLeads/view.ts). */
-function Submission({ detail }: { detail: PartnerLeadDetail }) {
-  const groups = snapshotFields(detail.values);
-  return <div className="flex min-w-0 flex-col gap-4">
-    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <Lock className="size-3.5 shrink-0" aria-hidden="true" />
-      Form as submitted — cannot be edited in the partner portal
-    </p>
-    {groups.map((group) => <section key={group.key} className="min-w-0">
-      <h3 className="mb-1.5 text-label text-muted-foreground">{group.label}</h3>
-      <dl className="m-0 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-x-3 gap-y-1.5 text-sm">
-        {group.fields.map((field) => <Fragment key={field.key}>
-          <dt className="min-w-0 truncate text-muted-foreground">{field.label}</dt>
-          <dd className="m-0 min-w-0 break-words font-medium text-foreground">{field.value}</dd>
-        </Fragment>)}
-      </dl>
-    </section>)}
-    {!groups.length && <p className="text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
-    <section className="min-w-0 border-t border-border pt-3">
-      <h3 className="mb-1.5 text-label text-muted-foreground">Submission</h3>
-      <dl className="m-0 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-x-3 gap-y-1.5 text-sm">
-        <dt className="text-muted-foreground">Submitted</dt><dd className="m-0 font-medium text-foreground">{when(detail.submittedAt)}</dd>
-        <dt className="text-muted-foreground">Submitted by</dt><dd className="m-0 font-medium text-foreground">{detail.submittedBy.name}</dd>
-        <dt className="text-muted-foreground">Last update</dt><dd className="m-0 font-medium text-foreground">{when(detail.updatedAt)}</dd>
-        <dt className="text-muted-foreground">Outcome</dt><dd className="m-0 font-medium text-foreground">{detail.outcome ?? "Awaiting update"}</dd>
-      </dl>
-    </section>
-  </div>;
-}
-
-function Timeline({ detail }: { detail: PartnerLeadDetail }) {
-  if (!detail.timeline.length) return <p className="text-sm text-muted-foreground">No timeline events yet.</p>;
-  return <ol className="m-0 flex list-none flex-col gap-3 p-0">
-    {detail.timeline.map((event, index) => <li key={`${event.at}-${event.type}-${index}`} className="flex min-w-0 gap-2.5">
-      <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[var(--primary)]" aria-hidden="true" />
-      <div className="min-w-0">
-        <p className="m-0 text-sm font-medium text-foreground">{event.label}</p>
-        {event.detail && <p className="m-0 text-sm text-muted-foreground">{event.detail}</p>}
-        <time className="text-xs text-muted-foreground">{when(event.at)}</time>
-      </div>
-    </li>)}
-  </ol>;
-}
-
-/**
- * A lead's record beside the list.
- *
- * `DetailPanel`, not a hand-built <aside> (UI-CONSISTENCY §8 names this exact case): it owns the
- * header, the close button, Escape, focus return and the slide-in, and becomes an overlay at narrow
- * widths. The local copy had none of those.
- */
-function Preview({ detail, loading, onClose }: { detail: PartnerLeadDetail | null; loading: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState<"submission" | "timeline">("submission");
-  return <DetailPanel
-    mode="split"
-    id="partner-lead-detail"
-    title={detail?.customer ?? "Lead details"}
-    subtitle={detail ? `${productLineLabel(detail.product)} · ${detail.submittedBy.name}` : "Partner submission"}
-    status={detail ? <StatusChip tone={stageTone(detail)}>{stageLabel(detail)}</StatusChip> : null}
-    onClose={onClose}
-    closeLabel="Close lead preview"
-    footer={<Button asChild variant="outline" size="sm"><Link href="/partner/messages">Message your agent about this lead</Link></Button>}
-  >
-    {loading || !detail
-      ? <SectionLoading rows={6} columns={2} label="Loading lead details" />
-      : <>
-          <Progress detail={detail} />
-          <Segmented label="Lead detail" options={[{ key: "submission", label: "Submission" }, { key: "timeline", label: "Timeline" }]} value={tab} onChange={setTab} />
-          {tab === "submission" ? <Submission detail={detail} /> : <Timeline detail={detail} />}
-        </>}
-  </DetailPanel>;
+  </Link>;
 }
 
 /**
  * The filters a link opened the page with (LA-4.20: the partner home's figures open the rows behind
- * them), e.g. /partner/pipeline?stage_id=…&view=table or ?lead=<id>. The page renders PageLoading
+ * them), e.g. /partner/pipeline?stage_id=…&view=table or ?lane=new. A ?lead=<id> is handled by
+ * the route, which redirects to that lead's own page. The page renders PageLoading
  * until its first read, so the server's empty state and this one draw the same markup.
  */
 function linkedState() {
@@ -217,14 +101,12 @@ function linkedState() {
   const filters = { ...EMPTY_FILTERS };
   for (const key of Object.keys(EMPTY_FILTERS) as Array<keyof Filters>) filters[key] = params.get(key)?.slice(0, 64) ?? "";
   const view: "board" | "table" = params.get("view") === "table" ? "table" : "board";
-  const lead = params.get("lead");
   const lane = params.get("lane");
   const LANES = ["new", "claimed", "verification", "converted", "closed"];
   return {
     filters,
     view,
     lane: (lane && LANES.includes(lane) ? lane : "") as PartnerLane | "",
-    lead: lead && /^[0-9a-f-]{36}$/i.test(lead) ? lead : null,
   };
 }
 
@@ -235,14 +117,11 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"board" | "table">(linked.view);
   const [moreFilters, setMoreFilters] = useState(() => Boolean(linked.filters.stage_id || linked.filters.closer_id || linked.filters.outcome || linked.filters.date_from || linked.filters.date_to));
-  const [selectedId, setSelectedId] = useState<string | null>(linked.lead);
   /** Narrowing the page does client-side: the server's filters speak stages, not lanes. */
   const [lane, setLane] = useState<PartnerLane | "">(linked.lane);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   /** Age and Submitted are the same instant read two ways, so one direction serves both columns. */
   const [sort, setSort] = useState<{ key: "age" | "submitted"; dir: "asc" | "desc" }>({ key: "submitted", dir: "desc" });
-  const [detail, setDetail] = useState<PartnerLeadDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(!preview);
   // The first read draws the page skeleton; later reads (a filter change) keep the page and toolbar.
   const [firstLoad, setFirstLoad] = useState(!preview);
@@ -275,21 +154,6 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   }, [query, preview]);
   // Polls only while the tab is visible, catches up on return, and never stacks a tick on a slow one.
   useEffect(() => { if (preview) return; loadedLimitRef.current = 250; let polling = false; const poll = () => { if (document.visibilityState !== "visible" || polling) return; polling = true; void load(0).finally(() => { polling = false; }); }; const kickoff = window.setTimeout(() => { setData(null); setLoading(true); void load(); }, 0); const timer = window.setInterval(poll, 5000); document.addEventListener("visibilitychange", poll); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); }; }, [load, preview]);
-  useEffect(() => {
-    if (!selectedId) return;
-    if (preview) return; // the sample record is derived during render, not fetched
-    let cancelled = false;
-    const kickoff = window.setTimeout(() => {
-      setDetail(null); setDetailLoading(true);
-      void fetch(`/api/partner/leads/${selectedId}`, { cache: "no-store" }).then(async (response) => ({ response, body: await response.json().catch(() => null) })).then(({ response, body }) => { if (cancelled) return; if (!response.ok) throw new Error(body?.error ?? "Could not load lead detail"); setDetail(body); }).catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Could not load lead detail"); }).finally(() => { if (!cancelled) setDetailLoading(false); });
-    }, 0);
-    return () => { cancelled = true; window.clearTimeout(kickoff); };
-  }, [selectedId, preview]);
-
-  // A sample record needs no fetch and no state: it is already in hand.
-  const shownDetail = preview ? (selectedId ? preview.details?.[selectedId] ?? null : null) : detail;
-  const shownDetailLoading = preview ? false : detailLoading;
-
   const allRows = useMemo(() => data?.rows ?? [], [data]);
   /** The submissions the SLA ladder has already told this partner nobody claimed. */
   const flaggedRows = useMemo(() => allRows.filter(nobodyClaimedRow), [allRows]);
@@ -345,12 +209,13 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
     ? flaggedRows.reduce((oldest, row) => (row.submittedAt < oldest ? row.submittedAt : oldest), flaggedRows[0].submittedAt)
     : null;
 
+  /** Where a lead's record lives, carrying the view so Back returns to the list as it was. */
+  const recordHref = (id: string) => `/partner/pipeline/${id}${view === "table" ? "?view=table" : ""}`;
   const stageById = new Map((data?.stages ?? []).map((stage) => [stage.id, stage]));
   const manyPipelines = new Set((data?.stages ?? []).map((stage) => stage.pipelineId)).size > 1;
   const filterCount = [filters.stage_id, filters.closer_id, filters.outcome, filters.product, lane, onlyFlagged || null, filters.date_from || filters.date_to].filter(Boolean).length;
   const exportHref = `/api/partner/leads/export${query ? `?${query}` : ""}`;
   const hasFilters = Object.values(filters).some(Boolean) || Boolean(lane) || onlyFlagged;
-  const selectLead = (id: string) => { setSelectedId((current) => current === id ? null : id); };
   const setFilter = (key: keyof Filters, value: string) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
   const narrowTo = (next: PartnerLane | "") => { setLane(next); setOnlyFlagged(false); setPage(1); };
   const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setLane(""); setOnlyFlagged(false); setPage(1); };
@@ -450,7 +315,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
           <span className="tabular-nums">{total.toLocaleString()}</span>
         </header>
         <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto p-2">
-          {rows.map((row) => <LeadCard key={row.id} row={row} selected={selectedId === row.id} onSelect={() => selectLead(row.id)} now={now} thresholds={data?.ageThresholds} />)}
+          {rows.map((row) => <LeadCard key={row.id} row={row} href={recordHref(row.id)} now={now} thresholds={data?.ageThresholds} />)}
           {!rows.length && <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nothing here right now</p>}
           {/* The count is every lead on the lane; the cards are the page that has been read. Say so
               where the gap shows, with the action, instead of sending the reader off to find it. */}
@@ -478,14 +343,14 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
       <TableHead className="text-right"><span className="sr-only">Action</span></TableHead>
     </TableRow></TableHeader>
     <TableBody>
-      {tablePage.rows.map((row) => <TableRow key={row.id} data-state={selectedId === row.id ? "selected" : undefined}>
+      {tablePage.rows.map((row) => <TableRow key={row.id}>
         <TableCell className="font-medium">{row.customer}</TableCell>
         <TableCell className="text-muted-foreground">{productLineLabel(row.product)}</TableCell>
         <TableCell><StatusChip tone={stageTone(row)}>{stageLabel(row)}</StatusChip></TableCell>
         {role === "partner_admin" && <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>}
         <TableCell><Age row={row} now={now} thresholds={data?.ageThresholds} /></TableCell>
         <TableCell className="tabular-nums text-muted-foreground">{when(row.submittedAt)}</TableCell>
-        <TableCell className="text-right"><Button type="button" variant="outline" size="sm" aria-expanded={selectedId === row.id} onClick={() => selectLead(row.id)}>{selectedId === row.id ? "Close" : "View"}</Button></TableCell>
+        <TableCell className="text-right"><Button asChild variant="outline" size="sm"><Link href={recordHref(row.id)}>View</Link></Button></TableCell>
       </TableRow>)}
     </TableBody>
   </Table>;
@@ -565,9 +430,6 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
       </span>
       <span className="shrink-0 font-semibold">Show {flaggedRows.length === 1 ? "it" : "them"}<ArrowUpRight className="ml-1 inline size-3.5" aria-hidden="true" /></span>
     </button>}
-    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-stretch">
-      <TableCard className="min-w-0 flex-1" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
-      {selectedId && <Preview detail={shownDetail} loading={shownDetailLoading} onClose={() => setSelectedId(null)} />}
-    </div>
+    <TableCard className="min-w-0" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
   </div>;
 }
