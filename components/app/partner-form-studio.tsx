@@ -1,19 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   ChevronDown,
   ChevronUp,
   Edit3,
+  MoreHorizontal,
   Plus,
+  RotateCcw,
   Save,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, cardInset } from "@/components/ui/card";
 import { InfoTip } from "@/components/ui/info-tip";
 import {
   Dialog,
@@ -26,13 +35,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { checkboxControl } from "@/components/ui/field";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { DraftActions } from "@/components/app/settings/primitives";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { SelectMenu } from "@/components/ui/select-menu";
+import {
   TEMPLATE_FIELD_TYPES,
   TEMPLATE_FIELD_TYPE_LABELS,
   type TemplateField,
   type TemplateFieldType,
 } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
-import { PartnerMarketAccessPanel } from "@/components/app/partner-market-access-panel";
 
 type Choice = { field_key: string; is_required: boolean; sort_order: number };
 type Product = {
@@ -148,6 +170,7 @@ export function PartnerFormStudio({
   readOnly = false,
   compact = false,
   embedded = false,
+  availableProducts,
 }: {
   partnerId: string;
   target?: {
@@ -157,8 +180,10 @@ export function PartnerFormStudio({
   };
   readOnly?: boolean;
   compact?: boolean;
+  /** Approved agency products from the publisher workspace, kept current as access changes. */
+  availableProducts?: Array<{ code: string; name: string }>;
   /**
-   * Drawn inside a tab that already has its own card and name (the publisher record's Forms tab).
+   * Drawn inside the publisher record's combined Products & forms workspace.
    * Drops this component's own card chrome and its title line, which otherwise read as a second
    * page nested in the first (owner, 2026-10-29). Unlike `compact` it hides no controls.
    */
@@ -185,14 +210,20 @@ export function PartnerFormStudio({
   const [editFieldKey, setEditFieldKey] = useState<string | null>(null);
   const [editField, setEditField] = useState<FieldDraft>(emptyFieldDraft);
   const [sourcePreset, setSourcePreset] = useState<Preset | null>(null);
+  const hasReceivedAvailableProducts = useRef(false);
+  const hasLoadedInitialProducts = useRef(false);
+  const formScope = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
-    async (code: string) => {
+    async (
+      code: string,
+      { showLoading = true }: { showLoading?: boolean } = {},
+    ) => {
       if (!code) {
         setLoading(false);
         return;
       }
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const [profileResponse, presetResponse] = await Promise.all([
         fetch(`${base}?product_code=${encodeURIComponent(code)}`, {
           cache: "no-store",
@@ -220,12 +251,17 @@ export function PartnerFormStudio({
       }
       if (presetResponse.ok) setPresets(presetBody?.presets ?? []);
       else notify.fail(presetBody?.error ?? "Could not load form templates");
-      setLoading(false);
+      if (showLoading) setLoading(false);
     },
     [base, partnerId],
   );
 
   useEffect(() => {
+    if (
+      availableProducts !== undefined ||
+      hasReceivedAvailableProducts.current ||
+      hasLoadedInitialProducts.current
+    ) return;
     let cancelled = false;
     void (async () => {
       const response = await fetch(`/api/app/partners/${partnerId}/products`, {
@@ -246,6 +282,7 @@ export function PartnerFormStudio({
         }))
         .filter((item: { code: string }) => item.code);
       if (cancelled) return;
+      hasLoadedInitialProducts.current = true;
       setProducts(next);
       const code = next[0]?.code ?? "";
       setProductCode(code);
@@ -254,13 +291,71 @@ export function PartnerFormStudio({
     return () => {
       cancelled = true;
     };
-  }, [load, partnerId]);
+  }, [availableProducts, load, partnerId]);
 
   const catalog = useMemo(() => profile?.catalog ?? [], [profile?.catalog]);
   const fieldByKey = useMemo(
     () => new Map(catalog.map((field) => [field.field_key, field])),
     [catalog],
   );
+  const dirty = useMemo(
+    () => Boolean(profile) && (
+      JSON.stringify(sorted(fields)) !== JSON.stringify(sorted(profile?.effective.fields ?? [])) ||
+      JSON.stringify(sorted(verification)) !== JSON.stringify(sorted(profile?.effective.verification_fields ?? [])) ||
+      sourcePreset !== null
+    ),
+    [fields, profile, sourcePreset, verification],
+  );
+  const formProducts = availableProducts ?? products;
+  useEffect(() => {
+    if (availableProducts === undefined) return;
+    hasReceivedAvailableProducts.current = true;
+    const next = availableProducts.filter((product) => product.code);
+    // Retain names for a product that loses approval during an active editing session.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- preserve labels while the controlled product list changes
+    setProducts((current) => {
+      const byCode = new Map(current.map((product) => [product.code, product]));
+      let changed = false;
+      for (const product of next) {
+        if (byCode.get(product.code)?.name !== product.name) changed = true;
+        byCode.set(product.code, product);
+      }
+      return changed ? [...byCode.values()] : current;
+    });
+    const activeIsApproved = next.some((product) => product.code === productCode);
+    if (activeIsApproved) return;
+
+    // Keep an edited form visible if approval is removed mid-session. The user can finish or
+    // discard that draft, and the picker explains the access change without silently switching it.
+    if (dirty && productCode) return;
+
+    const nextCode = next[0]?.code ?? "";
+    if (!nextCode) {
+      if (productCode) {
+        // The controlled approvals now have no selectable products; keep the editor draft intact.
+        setProductCode("");
+      }
+      setLoading(false);
+      return;
+    }
+    if (nextCode === productCode) return;
+    setProductCode(nextCode);
+    void load(nextCode);
+  }, [availableProducts, dirty, load, productCode]);
+  const activeProductName =
+    formProducts.find((product) => product.code === productCode)?.name ??
+    products.find((product) => product.code === productCode)?.name ??
+    productCode;
+  const productAccessRemoved =
+    availableProducts !== undefined &&
+    Boolean(productCode) &&
+    !availableProducts.some((product) => product.code === productCode);
+  const productOptions = useMemo(() => [
+    ...(productAccessRemoved
+      ? [{ value: productCode, label: activeProductName, description: "Approval removed · draft kept" }]
+      : []),
+    ...formProducts.map((product) => ({ value: product.code, label: product.name })),
+  ], [activeProductName, formProducts, productAccessRemoved, productCode]);
   const hasPhone = (items: Choice[]) =>
     items.some((item) => fieldByKey.get(item.field_key)?.type === "phone");
   const change = (
@@ -313,7 +408,7 @@ export function PartnerFormStudio({
       [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
       return sorted(next);
     });
-  const contactOnly = () => {
+  const contactOnly = async () => {
     const phone = catalog.find((field) => field.type === "phone");
     const email = catalog.find((field) => field.type === "email");
     const name =
@@ -322,6 +417,15 @@ export function PartnerFormStudio({
       catalog.find((field) => field.type === "text");
     if (!phone)
       return notify.block("This product needs a phone field for screening");
+    if (dirty) {
+      const confirmed = await confirmAction({
+        title: "Replace the current lead form?",
+        description: `This replaces the ${activeProductName} lead fields with contact-only fields. The verification checklist stays as it is.`,
+        confirmLabel: "Use contact-only fields",
+        cancelLabel: "Keep current fields",
+      });
+      if (!confirmed) return;
+    }
     setFields(
       [name, email, phone]
         .filter((field): field is TemplateField => Boolean(field))
@@ -338,78 +442,156 @@ export function PartnerFormStudio({
     );
     setSourcePreset(null);
   };
-  const applyPreset = (preset: Preset) => {
+  const applyPreset = async (preset: Preset) => {
+    if (dirty) {
+      const confirmed = await confirmAction({
+        title: "Replace unpublished form changes?",
+        description: `${preset.name} replaces both the partner lead form and the agent verification checklist for ${activeProductName}.`,
+        confirmLabel: "Apply template",
+        cancelLabel: "Keep editing",
+      });
+      if (!confirmed) return;
+    }
     setFields(sorted(preset.fields));
     setVerification(sorted(preset.verification_fields));
     setSourcePreset(preset);
     notify.done(`${preset.name} loaded — publish to apply it`);
   };
 
-  async function publish() {
-    if (!productCode || !hasPhone(fields))
-      return notify.block("Phone is required for screening");
+  async function publish(): Promise<boolean> {
+    if (!productCode || !hasPhone(fields)) {
+      notify.block("Phone is required for screening");
+      return false;
+    }
     setSaving(true);
-    const response = await fetch(base, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        product_code: productCode,
-        fields,
-        verification_fields: verification,
-        source_preset_id: sourcePreset?.id,
-        source_preset_revision: sourcePreset?.current_revision,
-      }),
-    });
-    const body = await response.json().catch(() => null);
-    setSaving(false);
-    if (!response.ok)
-      return notify.block(body?.error ?? "Could not publish form configuration");
-    notify.done(
-      `Published revision ${body.revision}. New partner forms use it immediately.`,
-    );
-    await load(productCode);
+    try {
+      const response = await fetch(base, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          product_code: productCode,
+          fields,
+          verification_fields: verification,
+          source_preset_id: sourcePreset?.id,
+          source_preset_revision: sourcePreset?.current_revision,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        notify.block(body?.error ?? "Could not publish form configuration");
+        return false;
+      }
+      notify.done(
+        `Published revision ${body.revision}. New partner forms use it immediately.`,
+      );
+      setSourcePreset(null);
+      await load(productCode, { showLoading: false });
+      return true;
+    } catch {
+      notify.block("Could not publish form configuration");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+  function discardDraft() {
+    if (!profile) return;
+    setFields(sorted(profile.effective.fields));
+    setVerification(sorted(profile.effective.verification_fields));
+    setSourcePreset(null);
+  }
+  async function changeProduct(nextCode: string) {
+    if (!nextCode || nextCode === productCode) return;
+    if (dirty) {
+      const confirmed = await confirmAction({
+        title: "Discard unpublished form changes?",
+        description: `Changes to ${activeProductName || "this product"} will be lost if you switch products now.`,
+        confirmLabel: "Discard and switch",
+        cancelLabel: "Keep editing",
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
+    setSourcePreset(null);
+    setProductCode(nextCode);
+    void load(nextCode);
   }
   async function restoreInherited() {
     if (!target || !profile?.profile) return;
+    const confirmed = await confirmAction({
+      title: "Restore inherited defaults?",
+      description: "This removes the custom form setup and returns this user to the partner defaults. Any unpublished edits will be discarded.",
+      confirmLabel: "Restore defaults",
+      cancelLabel: "Keep editing",
+      destructive: true,
+    });
+    if (!confirmed) return;
     setSaving(true);
-    const response = await fetch(
-      `${base}?product_code=${encodeURIComponent(productCode)}`,
-      { method: "DELETE" },
-    );
-    const body = await response.json().catch(() => null);
-    setSaving(false);
-    if (!response.ok)
-      return notify.block(
-        body?.error ?? "Could not restore inherited defaults",
+    try {
+      const response = await fetch(
+        `${base}?product_code=${encodeURIComponent(productCode)}`,
+        { method: "DELETE" },
       );
-    notify.done("Inherited defaults restored");
-    await load(productCode);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        notify.block(body?.error ?? "Could not restore inherited defaults");
+        return;
+      }
+      notify.done("Inherited defaults restored");
+      setSourcePreset(null);
+      await load(productCode);
+    } catch {
+      notify.block("Could not restore inherited defaults");
+    } finally {
+      setSaving(false);
+    }
   }
   async function savePreset() {
     if (!presetName.trim() || !productCode || !hasPhone(fields))
       return notify.block("Enter a name and keep phone in the lead form");
     setSaving(true);
-    const response = await fetch(
-      `/api/app/partners/${partnerId}/form-presets`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          product_code: productCode,
-          name: presetName,
-          fields,
-          verification_fields: verification,
-        }),
-      },
-    );
-    const body = await response.json().catch(() => null);
-    setSaving(false);
-    if (!response.ok)
-      return notify.block(body?.error ?? "Could not save preset");
-    setPresetOpen(false);
-    setPresetName("");
-    notify.done("Reusable template saved");
-    await load(productCode);
+    try {
+      const response = await fetch(
+        `/api/app/partners/${partnerId}/form-presets`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            product_code: productCode,
+            name: presetName,
+            fields,
+            verification_fields: verification,
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok)
+        return notify.block(body?.error ?? "Could not save template");
+      setPresetOpen(false);
+      setPresetName("");
+      notify.done("Template saved");
+      try {
+        const refreshed = await fetch(
+          `/api/app/partners/${partnerId}/form-presets?product_code=${encodeURIComponent(productCode)}`,
+          { cache: "no-store" },
+        );
+        const refreshedBody = (await refreshed.json().catch(() => null)) as {
+          presets?: Preset[];
+          error?: string;
+        } | null;
+        if (refreshed.ok) setPresets(refreshedBody?.presets ?? []);
+        else
+          notify.fail(
+            refreshedBody?.error ?? "Template saved, but the list could not be refreshed",
+          );
+      } catch {
+        notify.fail("Template saved, but the list could not be refreshed");
+      }
+    } catch {
+      notify.block("Could not save template. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   }
   async function addField() {
     const key = newField.field_key || slug(newField.label);
@@ -419,42 +601,47 @@ export function PartnerFormStudio({
     if (validation === null)
       return notify.block("Enter a valid document number length");
     setSaving(true);
-    const response = await fetch(
-      `/api/app/partners/${partnerId}/form-catalog`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          product_code: productCode,
-          field: {
-            ...newField,
-            field_key: key,
-            options: newField.options
-              .split(",")
-              .map((item) => item.trim())
-              .filter(Boolean),
-            validation,
-          },
-        }),
-      },
-    );
-    const body = await response.json().catch(() => null);
-    setSaving(false);
-    if (!response.ok) return notify.block(body?.error ?? "Could not add field");
-    setFieldOpen(false);
-    setNewField(emptyFieldDraft());
-    await load(productCode);
-    setFields((current) => [
-      ...current,
-      {
-        field_key: body.field.field_key,
-        is_required: false,
-        sort_order: current.length,
-      },
-    ]);
-    notify.done(
-      "Shared field added. Publish this form to show it to this target only.",
-    );
+    try {
+      const response = await fetch(
+        `/api/app/partners/${partnerId}/form-catalog`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            product_code: productCode,
+            field: {
+              ...newField,
+              field_key: key,
+              options: newField.options
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean),
+              validation,
+            },
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok) return notify.block(body?.error ?? "Could not add field");
+      setFieldOpen(false);
+      setNewField(emptyFieldDraft());
+      setProfile((current) => current
+        ? { ...current, catalog: [...current.catalog, body.field as TemplateField] }
+        : current);
+      setFields((current) => [
+        ...current,
+        {
+          field_key: body.field.field_key,
+          is_required: false,
+          sort_order: current.length,
+        },
+      ]);
+      notify.done("Field added to the catalog and this draft");
+    } catch {
+      notify.block("Could not add field. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function openEditField(field: TemplateField) {
@@ -470,33 +657,45 @@ export function PartnerFormStudio({
     if (validation === null)
       return notify.block("Enter a valid document number length");
     setSaving(true);
-    const response = await fetch(
-      `/api/app/partners/${partnerId}/form-catalog?product_code=${encodeURIComponent(productCode)}&field_key=${encodeURIComponent(editFieldKey)}`,
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          field: {
-            label: editField.label,
-            type: editField.type,
-            is_required: editField.is_required,
-            options: editField.options
-              .split(",")
-              .map((item) => item.trim())
-              .filter(Boolean),
-            help_text: editField.help_text,
-            validation,
-          },
-        }),
-      },
-    );
-    const body = await response.json().catch(() => null);
-    setSaving(false);
-    if (!response.ok)
-      return notify.block(body?.error ?? "Could not update form field");
-    setEditFieldOpen(false);
-    notify.done("Field updated");
-    await load(productCode);
+    try {
+      const response = await fetch(
+        `/api/app/partners/${partnerId}/form-catalog?product_code=${encodeURIComponent(productCode)}&field_key=${encodeURIComponent(editFieldKey)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            field: {
+              label: editField.label,
+              type: editField.type,
+              is_required: editField.is_required,
+              options: editField.options
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean),
+              help_text: editField.help_text,
+              validation,
+            },
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok)
+        return notify.block(body?.error ?? "Could not update form field");
+      setEditFieldOpen(false);
+      notify.done("Catalog field updated");
+      setProfile((current) => current
+        ? {
+            ...current,
+            catalog: current.catalog.map((field) =>
+              field.field_key === editFieldKey ? body.field as TemplateField : field,
+            ),
+          }
+        : current);
+    } catch {
+      notify.block("Could not update field. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function deleteField(fieldKey: string) {
@@ -506,182 +705,195 @@ export function PartnerFormStudio({
       return notify.block(
         "Phone is required for screening and cannot be deleted",
       );
+    const confirmed = await confirmAction({
+      title: "Delete this catalog field?",
+      description: `${field?.label ?? "This field"} will be removed from the shared catalog for ${activeProductName} and from this form. Existing lead records stay unchanged.`,
+      confirmLabel: "Delete field",
+      cancelLabel: "Keep field",
+      destructive: true,
+    });
+    if (!confirmed) return;
     setSaving(true);
-    const response = await fetch(
-      `/api/app/partners/${partnerId}/form-catalog?product_code=${encodeURIComponent(productCode)}&field_key=${encodeURIComponent(fieldKey)}`,
-      { method: "DELETE" },
-    );
-    const body = await response.json().catch(() => null);
-    setSaving(false);
-    if (!response.ok)
-      return notify.block(body?.error ?? "Could not delete form field");
-    setFields((current) => current.filter((item) => item.field_key !== fieldKey));
-    setVerification((current) =>
-      current.filter((item) => item.field_key !== fieldKey),
-    );
-    setEditFieldOpen(false);
-    notify.done("Field deleted from the shared catalog");
-    await load(productCode);
-    setFields((current) => current.filter((item) => item.field_key !== fieldKey));
-    setVerification((current) =>
-      current.filter((item) => item.field_key !== fieldKey),
-    );
+    try {
+      const response = await fetch(
+        `/api/app/partners/${partnerId}/form-catalog?product_code=${encodeURIComponent(productCode)}&field_key=${encodeURIComponent(fieldKey)}`,
+        { method: "DELETE" },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok)
+        return notify.block(body?.error ?? "Could not delete form field");
+      setProfile((current) => current
+        ? {
+            ...current,
+            catalog: current.catalog.filter((item) => item.field_key !== fieldKey),
+            effective: {
+              ...current.effective,
+              fields: current.effective.fields.filter((item) => item.field_key !== fieldKey),
+              verification_fields: current.effective.verification_fields.filter((item) => item.field_key !== fieldKey),
+            },
+          }
+        : current);
+      setFields((current) => current.filter((item) => item.field_key !== fieldKey));
+      setVerification((current) => current.filter((item) => item.field_key !== fieldKey));
+      setEditFieldOpen(false);
+      notify.done("Field deleted from the shared catalog");
+    } catch {
+      notify.block("Could not delete field. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading)
     return (
-      <Card>
-        <CardContent className="py-8 text-sm text-muted-foreground">
-          Loading form workspace…
-        </CardContent>
-      </Card>
+      <SectionLoading rows={4} columns={3} label="Loading form setup" />
+    );
+  if (!formProducts.length && !productCode)
+    return (
+      <EmptyState
+        title="No approved products to configure"
+        hint="Approve at least one agency product above. Its form settings will appear here."
+      />
     );
   return (
     <>
-      <Card className={cn("overflow-hidden", (compact || embedded) && "border-0 shadow-none")}>
+      <div ref={formScope}>
+      <Card
+        className={cn(
+          "overflow-hidden",
+          (compact || embedded) && "border-0 shadow-none",
+          embedded && "bg-transparent",
+        )}
+      >
         <CardHeader
           className={cn(
-            "gap-4 border-b bg-muted/10",
+            "gap-3 border-b bg-muted/10",
             compact && "px-0 pb-3 pt-0",
             // Only `embedded` loses the rule and the tint: the tab's own card already supplies both,
             // and `compact` (the per-user panel) is left exactly as it was.
             embedded && "border-b-0 bg-transparent px-0 pb-3 pt-0",
           )}
         >
-          <div className={cn("flex flex-wrap items-start gap-3", embedded ? "justify-end" : "justify-between")}>
-            {!embedded && (
-            <div>
-              <CardTitle className="text-base">
-                {target
-                  ? `Form setup · ${target.name}`
-                  : "Publisher form defaults"}
-              </CardTitle>
-              <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-                {target
-                  ? <>Changes here override the admin&rsquo;s defaults.<InfoTip label="About overrides">Users who inherit update automatically when their admin&rsquo;s default changes.</InfoTip></>
-                  : "Admins and users can override these."}
-              </p>
+          {!embedded && (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">
+                  {target ? `Form setup · ${target.name}` : "Publisher form defaults"}
+                </CardTitle>
+                <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                  {target
+                    ? <>Changes here override the admin&rsquo;s defaults.<InfoTip label="About overrides">Users who inherit update automatically when their admin&rsquo;s default changes.</InfoTip></>
+                    : "Admins and users can override these."}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusChip tone={profile?.profile ? "info" : "neutral"}>
+                  {profile?.profile ? "Custom configuration" : "Using tenant defaults"}
+                </StatusChip>
+                {dirty && <StatusChip tone="warning">Unpublished changes</StatusChip>}
+                {target && profile?.profile && !readOnly && (
+                  <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void restoreInherited()}>
+                    Restore inherited defaults
+                  </Button>
+                )}
+              </div>
             </div>
-            )}
-            <StatusChip tone={profile?.profile ? "info" : "neutral"}>
-              {profile?.profile
-                ? "Custom configuration"
-                : "Using tenant defaults"}
-            </StatusChip>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <select
-              aria-label="Product"
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={productCode}
-              onChange={(event) => {
-                setProductCode(event.target.value);
-                void load(event.target.value);
-              }}
-            >
-              {products.map((product) => (
-                <option key={product.code} value={product.code}>
-                  {product.name}
-                </option>
-              ))}
-            </select>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={readOnly}
-              onClick={contactOnly}
-            >
-                Contact only
-            </Button>
-            {!compact && (
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {productOptions.length === 1 ? (
+                <StatusChip tone="info" className="h-9 px-3">{productOptions[0].label}</StatusChip>
+              ) : (
+                <SelectMenu
+                  label="Select product form"
+                  value={productCode}
+                  options={productOptions}
+                  onChange={(value) => void changeProduct(value)}
+                  disabled={saving}
+                  searchPlaceholder="Search products"
+                  className="w-64 max-w-full"
+                  panelClassName="w-64 max-w-[calc(100vw-2rem)]"
+                  panelAlign="start"
+                />
+              )}
+              <Button type="button" size="sm" variant="outline" disabled={readOnly || saving} onClick={() => void contactOnly()}>
+                Use contact-only fields
+              </Button>
+              {!compact && (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={readOnly}
+                disabled={readOnly || saving}
                 onClick={() => setFieldOpen(true)}
               >
                 <Plus className="mr-1 size-3.5" />
                 Add field
               </Button>
-            )}
-            {!compact && (
+              )}
+              {!compact && (
               <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={readOnly}
-              onClick={() => setPresetOpen(true)}
-            >
-              <Save className="mr-1 size-3.5" />
-              Save as template
-              </Button>
-            )}
-          </div>
-          {compact ? (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="shrink-0 font-medium">Preset</span>
-              <select
-                aria-label="Apply template"
-                className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs"
-                value={sourcePreset?.id ?? ""}
-                disabled={readOnly || !presets.length}
-                onChange={(event) => {
-                  const preset = presets.find(
-                    (item) => item.id === event.target.value,
-                  );
-                  if (preset) applyPreset(preset);
-                }}
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={readOnly || saving}
+                onClick={() => setPresetOpen(true)}
               >
-                <option value="">
-                  {presets.length ? "Choose a saved preset…" : "No saved presets"}
-                </option>
-                {presets.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              <span className="self-center text-xs font-medium text-muted-foreground">
-                Templates
-              </span>
-              {presets.map((preset) => (
-                <Button
-                  key={preset.id}
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  disabled={readOnly}
-                  onClick={() => applyPreset(preset)}
-                >
-                  <Sparkles className="mr-1 size-3.5" />
-                  {preset.name}
-                </Button>
-              ))}
-              {!presets.length && (
-                <span className="self-center text-xs text-muted-foreground">
-                  Save the current setup to create a reusable template.
-                </span>
+                <Save className="mr-1 size-3.5" />
+                Save as template
+              </Button>
               )}
             </div>
-          )}
+            {embedded && (
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusChip tone={profile?.profile ? "info" : "neutral"}>
+                  {profile?.profile ? "Custom configuration" : "Using tenant defaults"}
+                </StatusChip>
+                {productAccessRemoved && <StatusChip tone="warning">Approval removed · draft kept</StatusChip>}
+                {dirty && <StatusChip tone="warning">Unpublished changes</StatusChip>}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Editing {activeProductName || "this product"}. Publishing updates new partner submissions.
+            </p>
+            {presets.length ? (
+              <SelectMenu
+                label="Saved templates"
+                value={sourcePreset?.id ?? ""}
+                defaultValue=""
+                options={[
+                  { value: "", label: "Choose a template" },
+                  ...presets.map((preset) => ({ value: preset.id, label: preset.name })),
+                ]}
+                onChange={(value) => {
+                  const preset = presets.find((item) => item.id === value);
+                  if (preset) void applyPreset(preset);
+                }}
+                disabled={readOnly || saving}
+                searchPlaceholder="Search saved templates"
+                className="w-auto min-w-48 max-w-full"
+                panelAlign="start"
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground">No saved templates yet</span>
+            )}
+          </div>
         </CardHeader>
         <CardContent
           className={cn(
-            "grid gap-6 p-4 xl:grid-cols-[minmax(0,1fr)_320px]",
+            "grid gap-6 p-4",
             (compact || embedded) && "gap-4 p-0",
           )}
         >
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <FieldList
               title="Partner lead form"
+              description="Included fields appear to partners in this order."
               catalog={catalog}
               choices={fields}
-              disabled={readOnly}
+              disabled={readOnly || saving}
               onChange={(key, checked) => change(key, checked, "lead")}
               onRequired={(key, checked) => required(key, checked, "lead")}
               onMove={(key, direction) => move(key, direction, "lead")}
@@ -692,9 +904,10 @@ export function PartnerFormStudio({
             />
             <FieldList
               title="Agent verification checklist"
+              description="Internal fields agents use to verify a submitted lead."
               catalog={catalog}
               choices={verification}
-              disabled={readOnly}
+              disabled={readOnly || saving}
               onChange={(key, checked) => change(key, checked, "verification")}
               onRequired={(key, checked) =>
                 required(key, checked, "verification")
@@ -704,42 +917,39 @@ export function PartnerFormStudio({
               onDelete={(key) => void deleteField(key)}
               locked={() => false}
               compact={compact}
-            />
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              {target && profile?.profile ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={saving || readOnly}
-                  onClick={() => void restoreInherited()}
-                >
-                  Restore inherited
-                </Button>
-              ) : (
-                <span />
-              )}
-              <Button
-                type="button"
-                disabled={saving || readOnly}
-                onClick={() => void publish()}
-              >
-                {saving ? "Publishing…" : "Publish changes"}
-              </Button>
-            </div>
-          </div>
-          <Preview catalog={catalog} choices={fields} compact={compact} />
-          <div className="xl:col-span-2">
-            <PartnerMarketAccessPanel
-              partnerId={partnerId}
-              target={target}
-              readOnly={readOnly}
-              compact={compact}
+              collapsible
             />
           </div>
+          <Preview
+            key={productCode}
+            catalog={catalog}
+            choices={fields}
+            productName={activeProductName}
+            compact={compact}
+          />
         </CardContent>
       </Card>
-      <Dialog open={presetOpen} onOpenChange={setPresetOpen}>
+      <SettingsSaveBar
+        visible={dirty && !readOnly}
+        note="Unpublished form changes · publishing updates new partner submissions"
+      >
+        <DraftActions
+          dirty={dirty}
+          saving={saving}
+          onDiscard={discardDraft}
+          onSave={() => void publish()}
+          saveLabel="Publish changes"
+        />
+      </SettingsSaveBar>
+      </div>
+      <LeaveGuard
+        dirty={dirty && !readOnly}
+        scope={formScope}
+        onSave={publish}
+        onDiscard={discardDraft}
+        what="this partner form"
+      />
+      <Dialog open={presetOpen} onOpenChange={(open) => { if (!saving) setPresetOpen(open); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Save reusable template</DialogTitle>
@@ -754,6 +964,7 @@ export function PartnerFormStudio({
               id="preset-name"
               value={presetName}
               maxLength={120}
+              autoFocus
               placeholder="Full intake"
               onChange={(event) => setPresetName(event.target.value)}
             />
@@ -762,13 +973,14 @@ export function PartnerFormStudio({
             <Button
               type="button"
               variant="outline"
+              disabled={saving}
               onClick={() => setPresetOpen(false)}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              disabled={saving}
+              disabled={saving || !presetName.trim() || !hasPhone(fields)}
               onClick={() => void savePreset()}
             >
               Save template
@@ -776,31 +988,32 @@ export function PartnerFormStudio({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={fieldOpen} onOpenChange={setFieldOpen}>
+      <Dialog open={fieldOpen} onOpenChange={(open) => { if (!saving) setFieldOpen(open); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add shared field</DialogTitle>
             <DialogDescription>
-              This adds a governed field to this product catalog. It will not
-              appear for other partners until their configuration selects it.
+              Add a reusable field to this product&rsquo;s catalog. It appears in this form now, and other partners can add it to theirs.
             </DialogDescription>
           </DialogHeader>
           <FieldEditorFields
             draft={newField}
             setDraft={setNewField}
             editing={false}
+            disabled={saving}
           />
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
+              disabled={saving}
               onClick={() => setFieldOpen(false)}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              disabled={saving}
+              disabled={saving || !newField.label.trim()}
               onClick={() => void addField()}
             >
               Add field
@@ -808,47 +1021,27 @@ export function PartnerFormStudio({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={editFieldOpen} onOpenChange={setEditFieldOpen}>
+      <Dialog open={editFieldOpen} onOpenChange={(open) => { if (!saving) setEditFieldOpen(open); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Edit field</DialogTitle>
             <DialogDescription>
-              Update this governed catalog field. Existing lead data keeps its
-              stable field key.
+              Changes update the shared catalog for this product. Existing lead records keep their stored data.
             </DialogDescription>
           </DialogHeader>
           <FieldEditorFields
             draft={editField}
             setDraft={setEditField}
             editing
+            disabled={saving}
           />
-          <DialogFooter className="sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              className="text-muted-foreground"
-              disabled={saving || !editFieldKey}
-              onClick={() => editFieldKey && void deleteField(editFieldKey)}
-            >
-              <Trash2 className="size-4" />
-              Delete field
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={saving} onClick={() => setEditFieldOpen(false)}>
+              Cancel
             </Button>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditFieldOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                disabled={saving}
-                onClick={() => void updateField()}
-              >
-                {saving ? "Saving…" : "Save changes"}
-              </Button>
-            </div>
+            <Button type="button" disabled={saving} onClick={() => void updateField()}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -860,17 +1053,19 @@ function FieldEditorFields({
   draft,
   setDraft,
   editing,
+  disabled = false,
 }: {
   draft: FieldDraft;
   setDraft: Dispatch<SetStateAction<FieldDraft>>;
   editing: boolean;
+  disabled?: boolean;
 }) {
   const update = (patch: Partial<FieldDraft>) =>
     setDraft((current) => ({ ...current, ...patch }));
   const isSelect =
     draft.type === "single_select" || draft.type === "multi_select";
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1.5 sm:col-span-2">
         <Label htmlFor={`${editing ? "edit" : "new"}-field-label`}>Label</Label>
         <Input
@@ -904,20 +1099,17 @@ function FieldEditorFields({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={`${editing ? "edit" : "new"}-field-type`}>Type</Label>
-        <select
+        <SelectMenu
           id={`${editing ? "edit" : "new"}-field-type`}
-          className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+          label="Field type"
           value={draft.type}
-          onChange={(event) =>
-            update({ type: event.target.value as TemplateFieldType })
-          }
-        >
-          {TEMPLATE_FIELD_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {displayFieldType(type)}
-            </option>
-          ))}
-        </select>
+          options={TEMPLATE_FIELD_TYPES.map((type) => ({ value: type, label: displayFieldType(type) }))}
+          onChange={(type) => update({ type })}
+          disabled={disabled}
+          searchPlaceholder="Search field types"
+          className="w-full"
+          panelAlign="start"
+        />
       </div>
       {draft.type === "ssn" && (
         <>
@@ -986,17 +1178,19 @@ function FieldEditorFields({
       <label className="flex items-center gap-2 text-sm sm:col-span-2">
         <input
           type="checkbox"
+          className={checkboxControl}
           checked={draft.is_required}
           onChange={(event) => update({ is_required: event.target.checked })}
         />
         Required by default
       </label>
-    </div>
+    </fieldset>
   );
 }
 
 function FieldList({
   title,
+  description,
   catalog,
   choices,
   disabled,
@@ -1007,8 +1201,10 @@ function FieldList({
   onDelete,
   locked,
   compact = false,
+  collapsible = false,
 }: {
   title: string;
+  description: string;
   catalog: TemplateField[];
   choices: Choice[];
   disabled: boolean;
@@ -1019,40 +1215,37 @@ function FieldList({
   onDelete: (key: string) => void;
   locked: (key: string) => boolean;
   compact?: boolean;
+  collapsible?: boolean;
 }) {
   const selected = new Map(choices.map((choice) => [choice.field_key, choice]));
-  return (
-    <section>
-      <div className="mb-2">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="text-xs text-muted-foreground">
-          Select, require, and order governed fields.
-        </p>
-      </div>
-      <div className="divide-y overflow-hidden rounded-lg border">
-        {catalog.map((field) => {
+  const selectedFields = sorted(choices)
+    .map((choice) => catalog.find((field) => field.field_key === choice.field_key))
+    .filter((field): field is TemplateField => Boolean(field));
+  const availableFields = catalog.filter((field) => !selected.has(field.field_key));
+  const [expanded, setExpanded] = useState(!collapsible);
+  const rows = (items: TemplateField[]) => (
+      <div className={cn("grid gap-2", !compact && "lg:grid-cols-2")}>
+        {items.map((field) => {
           const choice = selected.get(field.field_key);
           const isLocked = locked(field.field_key);
           return (
             <div
               key={field.field_key}
-              className={cn(
-                "flex flex-wrap items-center gap-3 p-3",
-                compact && "gap-2 p-2.5",
-              )}
+              className={cn(cardInset, "flex min-h-12 min-w-0 items-center gap-2 px-2.5 py-1.5")}
             >
-              <input
-                aria-label={`Include ${field.label} in ${title}`}
-                type="checkbox"
-                checked={Boolean(choice)}
-                disabled={disabled || isLocked}
-                onChange={(event) =>
-                  onChange(field.field_key, event.target.checked)
-                }
-              />
-              <div className={cn("min-w-36 flex-1", compact && "min-w-0")}>
-                <p className="text-sm font-medium">{field.label}</p>
-                <p className="text-xs text-muted-foreground">
+              {choice && (
+                <input
+                  aria-label={`Include ${field.label} in ${title}`}
+                  type="checkbox"
+                  className={checkboxControl}
+                  checked
+                  disabled={disabled || isLocked}
+                  onChange={(event) => onChange(field.field_key, event.target.checked)}
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{field.label}</p>
+                <p className="truncate text-xs text-muted-foreground">
                   {displayFieldType(field.type)}
                   {field.type === "ssn" && field.validation?.digit_length
                     ? ` · ${field.validation.digit_length} digits`
@@ -1060,11 +1253,13 @@ function FieldList({
                   {isLocked ? " · required for screening" : ""}
                 </p>
               </div>
-              {choice && (
+              {choice ? (
                 <>
-                  <label className="flex items-center gap-1 text-xs">
+                  <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
                     <input
+                      aria-label={`Require ${field.label} in ${title}`}
                       type="checkbox"
+                      className={checkboxControl}
                       checked={choice.is_required}
                       disabled={disabled || isLocked}
                       onChange={(event) =>
@@ -1073,56 +1268,102 @@ function FieldList({
                     />
                     Required
                   </label>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    className="text-muted-foreground"
-                    disabled={disabled}
-                    aria-label={`Edit ${field.label}`}
-                    onClick={() => onEdit(field)}
-                  >
-                    <Edit3 className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    disabled={disabled || choice.sort_order === 0}
-                    aria-label={`Move ${field.label} up`}
-                    onClick={() => onMove(field.field_key, -1)}
-                  >
-                    <ChevronUp className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    disabled={
-                      disabled || choice.sort_order === choices.length - 1
-                    }
-                    aria-label={`Move ${field.label} down`}
-                    onClick={() => onMove(field.field_key, 1)}
-                  >
-                    <ChevronDown className="size-3.5" />
-                  </Button>
-                  <span className="mx-0.5 h-5 w-px bg-border" aria-hidden="true" />
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-destructive"
-                    disabled={disabled || isLocked}
-                    aria-label={`Delete ${field.label}`}
-                    onClick={() => onDelete(field.field_key)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" size="icon-xs" variant="ghost" disabled={disabled} aria-label={`Actions for ${field.label}`}>
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => onEdit(field)}>
+                        <Edit3 aria-hidden="true" /> Edit field
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled={disabled || choice.sort_order === 0} onSelect={() => onMove(field.field_key, -1)}>
+                        <ChevronUp aria-hidden="true" /> Move up
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled={disabled || choice.sort_order === choices.length - 1} onSelect={() => onMove(field.field_key, 1)}>
+                        <ChevronDown aria-hidden="true" /> Move down
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" disabled={disabled || isLocked} onSelect={() => onDelete(field.field_key)}>
+                        <Trash2 aria-hidden="true" /> Delete from catalog
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>
+              ) : (
+                <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => onChange(field.field_key, true)}>
+                  <Plus aria-hidden="true" /> Add
+                </Button>
               )}
             </div>
           );
         })}
+      </div>
+  );
+  const heading = (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <span className="text-xs text-muted-foreground">
+          {choices.length ? `${choices.length} included` : "None included"}
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+    </div>
+  );
+
+  if (collapsible) {
+    return (
+      <section>
+        <details
+          open={expanded}
+          onToggle={(event) => setExpanded(event.currentTarget.open)}
+          className="group"
+        >
+          <summary className="mb-2 flex cursor-pointer list-none items-center justify-between gap-3 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {heading}
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="space-y-3">
+            {selectedFields.length ? rows(selectedFields) : (
+              <p className="py-2 text-sm text-muted-foreground">No verification fields included yet.</p>
+            )}
+            {availableFields.length > 0 && (
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-2 text-sm font-medium text-[var(--accent-ink)] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <Plus className="size-4" aria-hidden="true" />
+                  Add fields
+                  <span className="text-xs font-normal text-muted-foreground">{availableFields.length} available</span>
+                  <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="pt-1">{rows(availableFields)}</div>
+              </details>
+            )}
+          </div>
+        </details>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <div className="mb-2">{heading}</div>
+      <div className="space-y-3">
+        {selectedFields.length ? rows(selectedFields) : (
+          <p className="py-2 text-sm text-muted-foreground">No fields included yet.</p>
+        )}
+        {availableFields.length > 0 && (
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-2 text-sm font-medium text-[var(--accent-ink)] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Plus className="size-4" aria-hidden="true" />
+              Add fields
+              <span className="text-xs font-normal text-muted-foreground">{availableFields.length} available</span>
+              <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="pt-1">{rows(availableFields)}</div>
+          </details>
+        )}
       </div>
     </section>
   );
@@ -1131,105 +1372,204 @@ function FieldList({
 function Preview({
   catalog,
   choices,
+  productName,
   compact = false,
 }: {
   catalog: TemplateField[];
   choices: Choice[];
+  productName: string;
   compact?: boolean;
 }) {
+  const [showAll, setShowAll] = useState(true);
+  const [sampleValues, setSampleValues] = useState<Record<string, string | string[]>>({});
   const fieldMap = new Map(catalog.map((field) => [field.field_key, field]));
+  const orderedChoices = sorted(choices);
+  const visibleChoices = showAll ? orderedChoices : orderedChoices.slice(0, 6);
   return (
-    <aside
+    <section
+      aria-label={`${productName || "Lead form"} partner preview`}
       className={cn(
-        "h-fit rounded-lg border bg-muted/10 p-4",
-        compact && "p-3",
+        cardInset,
+        "overflow-hidden border-[var(--border-strong)] bg-[var(--surface)]",
       )}
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Partner preview
-      </p>
-      <h3 className="mt-1 text-sm font-semibold">Lead form</h3>
-      <div className="mt-4 space-y-3">
-        <div className="rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
-          Product, Carrier, and State are required before the partner can
-          continue.
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent-ink)]">
+            Interactive partner preview
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-[var(--ink)]">
+            What partners will see
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {productName ? `${productName} lead form` : "Lead form"}. Try the fields here; sample entries stay in this preview and are never saved.
+          </p>
         </div>
-        {(["Product", "Carrier", "State"] as const).map((label) => (
-          <div key={label}>
-            <Label>
-              {label}<span className="text-destructive"> *</span>
-            </Label>
-            <select
-              disabled
-              aria-label={label}
-              className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm text-muted-foreground"
-              defaultValue=""
-            >
-              <option value="">Select {label.toLowerCase()}</option>
-            </select>
-          </div>
-        ))}
-        <div className="border-t pt-3" />
-        {sorted(choices).map((choice) => {
-          const field = fieldMap.get(choice.field_key);
-          return field ? (
-            <div key={field.field_key}>
-              <Label>
-                {field.label}
-                {choice.is_required && (
-                  <span className="text-destructive"> *</span>
-                )}
-              </Label>
-              <PreviewControl field={field} />
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="rounded-full border border-border bg-muted/30 px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--ink)]">
+            {choices.length} {choices.length === 1 ? "field" : "fields"}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setSampleValues({})}
+            disabled={!Object.keys(sampleValues).length}
+          >
+            <RotateCcw aria-hidden="true" />
+            Reset preview
+          </Button>
+        </div>
+      </header>
+
+      <div className={cn("p-4 sm:p-5", compact && "p-3 sm:p-4")}>
+        {orderedChoices.length ? (
+          <>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-[var(--ink)]">Lead details</h4>
+              <p className="text-xs text-muted-foreground">
+                <span className="text-destructive">*</span> Required to submit
+              </p>
             </div>
-          ) : null;
-        })}
+            <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+              {visibleChoices.map((choice) => {
+                const field = fieldMap.get(choice.field_key);
+                if (!field) return null;
+                const fullWidth = field.type === "long_text" || field.type === "multi_select";
+                return (
+                  <div
+                    key={field.field_key}
+                    className={cn("min-w-0", fullWidth && "sm:col-span-2")}
+                  >
+                    <Label className="text-[var(--ink)]">
+                      {field.label}
+                      {choice.is_required && (
+                        <span className="text-destructive"> *</span>
+                      )}
+                    </Label>
+                    <PreviewControl
+                      field={field}
+                      value={sampleValues[field.field_key]}
+                      onChange={(value) => setSampleValues((current) => ({
+                        ...current,
+                        [field.field_key]: value,
+                      }))}
+                    />
+                    {field.help_text && (
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {field.help_text}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {orderedChoices.length > 6 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-5"
+                onClick={() => setShowAll((current) => !current)}
+              >
+                {showAll ? "Show fewer fields" : `Show all ${orderedChoices.length} fields`}
+              </Button>
+            )}
+          </>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-[var(--ink)]">No fields in this partner form yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add fields above to see how the form will look to partners.
+            </p>
+          </div>
+        )}
       </div>
-    </aside>
+    </section>
   );
 }
 
-/**
- * One disabled control per field type, matching what `PartnerField` renders in the portal.
- *
- * LA-1.4 criterion 6 is "the preview matches the partner's view exactly", and the preview used to
- * render **every** field as a disabled text box — so a single-select looked identical to a phone
- * number, and Ray could not tell from the preview whether he had picked the right field type. It
- * said "The Partner Portal will show exactly these fields" while showing something else.
- *
- * The durable fix is to share `PartnerField` itself. It is a clean presentational function and
- * belongs in a module both sides import; it is not extracted here only because
- * `partner-portal-workspace.tsx` was being edited by another session at the time. Until then,
- * `partnerFormStudioPreviewTypes` below lists what this preview handles and a test asserts it stays
- * equal to the full field-type set, so a new type cannot be added without this being updated.
- */
-function PreviewControl({ field }: { field: TemplateField }) {
-  const shared = "mt-1 w-full rounded-md border bg-background px-3 text-sm text-muted-foreground";
+/** Interactive sample controls are local to the preview and never submit or persist values. */
+function PreviewControl({
+  field,
+  value,
+  onChange,
+}: {
+  field: TemplateField;
+  value: string | string[] | undefined;
+  onChange: (value: string | string[]) => void;
+}) {
+  const shared = "mt-1 w-full rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)]";
 
-  if (field.type === "boolean" || field.type === "single_select" || field.type === "multi_select") {
-    const options =
-      field.type === "boolean" ? ["Yes", "No"] : (field.options ?? []).map(String);
+  if (field.type === "multi_select") {
+    const options = (field.options ?? []).map(String);
+    const selected = Array.isArray(value) ? value : [];
     return (
-      <select disabled aria-label={field.label} className={cn(shared, "h-9")} defaultValue="">
-        <option value="">
-          {field.type === "multi_select" ? "Select one or more" : "Select an option"}
-        </option>
-        {options.map((option) => (
-          <option key={option} value={option}>{option}</option>
-        ))}
-      </select>
+      <div
+        aria-label={field.label}
+        role="group"
+        className="mt-1 flex min-h-9 flex-wrap gap-x-4 gap-y-2 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2"
+      >
+        {options.length ? options.map((option) => (
+          <label key={option} className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              className={checkboxControl}
+              checked={selected.includes(option)}
+              onChange={(event) => onChange(
+                event.target.checked
+                  ? [...selected, option]
+                  : selected.filter((item) => item !== option),
+              )}
+            />
+            {option}
+          </label>
+        )) : (
+          <span className="text-sm text-muted-foreground">No options configured</span>
+        )}
+      </div>
+    );
+  }
+
+  if (field.type === "boolean" || field.type === "single_select") {
+    const options = field.type === "boolean" ? ["Yes", "No"] : (field.options ?? []).map(String);
+    return (
+      <SelectMenu
+        label={field.label}
+        value={typeof value === "string" ? value : ""}
+        defaultValue=""
+        options={[
+          { value: "", label: field.type === "boolean" ? "Choose…" : "Select an option" },
+          ...options.map((option) => ({ value: option, label: option })),
+        ]}
+        onChange={onChange}
+        searchPlaceholder={`Search ${field.label.toLowerCase()}`}
+        className="mt-1 w-full"
+        panelAlign="start"
+      />
     );
   }
 
   if (field.type === "long_text") {
-    return <textarea disabled aria-label={field.label} rows={3} className={cn(shared, "py-2")} />;
+    return (
+      <textarea
+        aria-label={field.label}
+        value={typeof value === "string" ? value : ""}
+        onChange={(event) => onChange(event.target.value)}
+        rows={3}
+        className={cn(shared, "resize-y py-2 placeholder:text-muted-foreground")}
+        placeholder={field.validation?.placeholder ?? field.label}
+      />
+    );
   }
 
   return (
     <Input
-      disabled
-      className="mt-1"
-      type={field.type === "date" ? "date" : "text"}
+      aria-label={field.label}
+      value={typeof value === "string" ? value : ""}
+      onChange={(event) => onChange(event.target.value)}
+      className="mt-1 border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-muted-foreground shadow-none"
+      type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
       placeholder={
         field.type === "phone"
           ? "(555) 123-4567"

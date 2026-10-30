@@ -6,37 +6,33 @@ import { useEffect, useMemo, useState, useTransition, type FormEvent } from "rea
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatTile } from "@/components/ui/stat";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
 import { ITEM_LABELS, RUN_STATUS_LABELS, type RunDispute, type RunHeader, type RunItem, type RunStatus, type StatementLine, type PartnerStatement } from "@/lib/accounting/payoutsCore";
+import { defaultPayoutPeriod, periodHasTerms } from "@/lib/accounting/payoutPeriod";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
 /**
  * LA-7.4 · what each partner is owed, itemised, from the terms on file. The agency reviews a draft —
  * disputing any item it disagrees with — then publishes it, and the partner reads the same statement
  * in its portal. Nothing here moves money: the agency pays as it does today and records it.
  */
-type Partner = { id: string; name: string; status: string };
+type Partner = { id: string; name: string; status: string; firstTermDate: string | null };
 type RunRow = RunHeader & { partnerName: string };
 type RunDetail = RunHeader & { partnerName: string; paidMethod: string | null; paymentReference: string | null; voidReason: string | null; terms: { id: string; payout_model: string; rate_cents: number | null; rate_pct_bp: number | null; effective_from: string }[]; lines: StatementLine[]; items: RunItem[]; disputes: RunDispute[]; partnerView: PartnerStatement | null };
 
 const TONE: Record<RunStatus, StatusTone> = { draft: "warning", published: "info", paid: "good", void: "neutral" };
 const money = (c: number) => formatCentsAsCurrency(c);
 const MODEL: Record<string, string> = { per_transfer: "per transfer", per_lead: "per lead", per_sale: "per sale", per_issued_policy: "per issued policy", revenue_share: "revenue share" };
-const lastMonth = () => {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
-  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
-};
+const dateLabel = (date: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
 
 async function send(url: string, init: RequestInit) {
   const res = await fetch(url, init);
@@ -46,9 +42,21 @@ async function send(url: string, init: RequestInit) {
 }
 
 function NewRun({ partners, onClose, onSaved }: { partners: Partner[]; onClose: () => void; onSaved: (id: string) => void }) {
-  const [f, setF] = useState(() => ({ partner: partners[0]?.id ?? "", ...lastMonth() }));
+  const [f, setF] = useState(() => ({ partner: partners[0]?.id ?? "", ...defaultPayoutPeriod(partners[0]?.firstTermDate ?? null) }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedPartner = partners.find((partner) => partner.id === f.partner);
+  const periodIsPriced = periodHasTerms(selectedPartner?.firstTermDate ?? null, f.from, f.to);
+  const periodHint = !selectedPartner?.firstTermDate
+    ? "Add payout terms on this partner before creating a draft."
+    : !periodIsPriced
+      ? `Start the period on or after ${dateLabel(selectedPartner.firstTermDate)} so every item can use a saved rate.`
+      : `Rates are applied by their effective date. This partner’s first rate began ${dateLabel(selectedPartner.firstTermDate)}.`;
+  const changePartner = (partnerId: string) => {
+    const nextPartner = partners.find((partner) => partner.id === partnerId);
+    setF({ partner: partnerId, ...defaultPayoutPeriod(nextPartner?.firstTermDate ?? null) });
+    setError(null);
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -71,15 +79,16 @@ function NewRun({ partners, onClose, onSaved }: { partners: Partner[]; onClose: 
             <DialogTitle>Draft a payout run</DialogTitle>
             <DialogDescription>Priced from the partner&apos;s terms, each item by the rate in force on its own date. Only you see a draft.</DialogDescription>
           </DialogHeader>
-          <label className="flex flex-col gap-1 text-sm">Partner<select className={toolbarControl} required value={f.partner} onChange={(e) => setF({ ...f, partner: e.target.value })}>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+          <label className="flex flex-col gap-1 text-sm">Partner<select className={toolbarControl} required value={f.partner} onChange={(e) => changePartner(e.target.value)}>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-sm">From<input type="date" className={toolbarControl} required value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
-            <label className="flex flex-col gap-1 text-sm">To<input type="date" className={toolbarControl} required value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
+            <label className="flex flex-col gap-1 text-sm">From<input type="date" className={toolbarControl} min={selectedPartner?.firstTermDate ?? undefined} required value={f.from} onChange={(e) => setF({ ...f, from: e.target.value, to: f.to < e.target.value ? e.target.value : f.to })} /></label>
+            <label className="flex flex-col gap-1 text-sm">To<input type="date" className={toolbarControl} min={f.from} required value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
           </div>
+          <p className={cn("-mt-2 text-xs", periodIsPriced ? "text-muted-foreground" : "text-[var(--warning-ink)]")} role={periodIsPriced ? undefined : "alert"}>{periodHint}</p>
           {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={busy || !f.partner}>{busy ? "Building…" : "Build draft"}</Button>
+            <Button type="submit" disabled={busy || !f.partner || !periodIsPriced}>{busy ? "Building…" : "Build draft"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -87,7 +96,7 @@ function NewRun({ partners, onClose, onSaved }: { partners: Partner[]; onClose: 
   );
 }
 
-function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: string; readOnly: boolean; docked?: boolean; onClose: () => void; onChanged: () => void }) {
+function RunPanel({ id, readOnly, onClose, onChanged }: { id: string; readOnly: boolean; onClose: () => void; onChanged: () => void }) {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,25 +135,42 @@ function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: st
   };
   const section = "flex flex-col gap-2 border-t border-border pt-4";
   const disputedItem = (itemId: string) => run?.disputes.find((d) => d.itemId === itemId);
+  const missingTradingName = error?.toLowerCase().includes("trading name") ?? false;
+  const missingBusinessAddress = error?.toLowerCase().includes("business address") ?? false;
+  const businessIdentityBlocked = missingTradingName || missingBusinessAddress;
   return (
-    <DetailPanel
-      mode={docked ? "split" : "overlay"}
-      splitFrom="xl"
-      title={run ? `${run.partnerName} · ${run.periodStart} to ${run.periodEnd}` : "Payout run"}
-      subtitle={run ? `Net payable ${money(run.netCents)}` : undefined}
-      status={run ? <StatusChip tone={TONE[run.status]}>{RUN_STATUS_LABELS[run.status]}{run.paidOn ? ` ${run.paidOn}` : ""}</StatusChip> : undefined}
-      onClose={onClose}
-      footer={run && !readOnly ? (
-        <div className="flex flex-wrap gap-2">
-          {run.status === "draft" ? <Button disabled={busy} onClick={() => void act({ action: "publish" }, "Published: the partner can now see it, and the cost is booked")}>Publish to the partner</Button> : null}
-          {run.status === "published" ? <Button disabled={busy} onClick={() => setPaying({ on: new Date().toISOString().slice(0, 10), method: "ach", reference: "" })}>Mark paid</Button> : null}
-          {run.status !== "void" ? <Button variant="outline" disabled={busy} onClick={() => setVoiding("")}>Void</Button> : null}
-          {run.status !== "void" ? <a className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm" href={`/api/app/accounting/payouts/${run.id}/statement`}>Download statement</a> : null}
-        </div>
-      ) : undefined}
-    >
-      {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
-      {!run ? null : (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent size="2xl" className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border px-6 py-5 pr-14 text-left">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <DialogTitle>{run ? `${run.partnerName} payout run` : "Payout run"}</DialogTitle>
+              <DialogDescription className="mt-1">
+                {run ? `${dateLabel(run.periodStart)} – ${dateLabel(run.periodEnd)} · ${money(run.netCents)} net payable` : "Review the statement, included items, and terms used."}
+              </DialogDescription>
+            </div>
+            {run && <StatusChip tone={TONE[run.status]}>{RUN_STATUS_LABELS[run.status]}{run.paidOn ? ` · paid ${dateLabel(run.paidOn)}` : ""}</StatusChip>}
+          </div>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {error ? businessIdentityBlocked ? (
+            <section role="alert" className="space-y-3 rounded-lg border border-[var(--warning)] bg-[var(--warning-surface)] p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--warning-ink)]">Add business details before publishing</h3>
+                <p className="mt-1 text-sm text-[var(--body)]">The partner statement needs to show who sent it. Add the missing details in Business identity settings:</p>
+              </div>
+              <ul className="m-0 list-disc space-y-1 pl-5 text-sm text-[var(--body)]">
+                {missingTradingName && <li><strong>Trading name:</strong> the name your agency does business under.</li>}
+                {missingBusinessAddress && <li><strong>Business address:</strong> street, city, state, and ZIP code.</li>}
+              </ul>
+              <div className="flex flex-wrap gap-2">
+                {missingTradingName && <Button asChild size="sm" variant="outline"><Link href="/app/settings#business-identity/identity-trading-name">Add trading name</Link></Button>}
+                {missingBusinessAddress && <Button asChild size="sm" variant="outline"><Link href="/app/settings#business-identity/identity-address-line1">Add business address</Link></Button>}
+              </div>
+              <p className="m-0 text-xs text-muted-foreground">Your partner will see these details on the payout statement. After saving, return here and publish the draft.</p>
+            </section>
+          ) : <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p> : null}
+          {!run ? (error ? null : <SectionLoading rows={4} columns={2} label="Loading payout run" />) : (
         <>
           {paying ? (
             <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-3">
@@ -162,9 +188,18 @@ function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: st
           ) : null}
           {run.status === "draft" ? <p className="rounded-md border border-[var(--warning)] bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">A draft. The partner sees nothing until you publish it.</p> : null}
 
+          <StatStrip label="Payout summary">
+            <StatTile label="Gross" value={money(run.grossCents)} reserveFootnote />
+            <StatTile label="Deductions" value={money(run.deductionsCents)} reserveFootnote />
+            <StatTile label="Disputed" value={money(run.disputedCents)} reserveFootnote />
+            <StatTile label="Net payable" value={money(run.netCents)} reserveFootnote />
+          </StatStrip>
+
           <div className={section}>
-            <h3 className="text-sm font-semibold">Statement</h3>
-            <table className="w-full text-left text-sm">
+            <h3 className="text-base font-semibold">Statement</h3>
+            <div className="overflow-x-auto">
+            <table className="portal-lead-table w-full min-w-[560px] text-left text-sm">
+              <thead><tr className="text-xs uppercase tracking-wide text-muted-foreground"><th className="py-2">Activity</th><th className="text-right">Count</th><th className="text-right">Rate</th><th className="text-right">Amount</th></tr></thead>
               <tbody>
                 {run.lines.filter((l) => l.itemType !== "rejected" && l.itemType !== "credit").map((l) => (
                   <tr key={`${l.itemType}-${l.rateCents}`} className="border-t border-border">
@@ -182,11 +217,12 @@ function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: st
                 <tr className="border-t-2 border-border font-semibold"><td className="pt-2">Net payable</td><td /><td /><td className="pt-2 text-right tabular-nums">{money(run.netCents)}</td></tr>
               </tbody>
             </table>
-            <p className="text-xs text-muted-foreground">The partner sees transfers rejected at the compliance gate as a count only, and never a commission figure.</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Compliance rejections appear as a count only. No commission details are shown to the partner.</p>
           </div>
 
           <div className={section}>
-            <h3 className="text-sm font-semibold">Disputes</h3>
+            <h3 className="text-base font-semibold">Disputes</h3>
             {run.disputes.length === 0 ? <p className="text-sm text-muted-foreground">None.</p> : run.disputes.map((d) => (
               <div key={d.id} className="flex flex-col gap-1 rounded-md border border-border p-2 text-sm">
                 <div className="flex justify-between gap-2"><span>{d.side === "partner" ? "Raised by the partner" : "Raised by you"}: {d.reason}</span><span className="tabular-nums">{money(d.claimCents)}</span></div>
@@ -204,9 +240,10 @@ function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: st
           </div>
 
           <div className={section}>
-            <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Items ({run.items.length})</h3><Button size="sm" variant="ghost" onClick={() => setShowItems((v) => !v)}>{showItems ? "Hide" : "Show"}</Button></div>
+            <div className="flex items-center justify-between"><div><h3 className="text-base font-semibold">Run items</h3><p className="mt-1 text-xs text-muted-foreground">{run.items.length} {run.items.length === 1 ? "item" : "items"} included in this statement.</p></div><Button size="sm" variant="outline" aria-expanded={showItems} onClick={() => setShowItems((v) => !v)}>{showItems ? "Hide items" : "View items"}</Button></div>
             {showItems ? (
-              <table className="w-full text-left text-sm">
+              <div className="overflow-x-auto">
+              <table className="portal-lead-table w-full min-w-[560px] text-left text-sm">
                 <tbody>
                   {run.items.map((i) => {
                     const d = disputedItem(i.id);
@@ -226,22 +263,35 @@ function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: st
                   })}
                 </tbody>
               </table>
+              </div>
             ) : null}
           </div>
 
           <div className={section}>
-            <h3 className="text-sm font-semibold">Terms applied</h3>
-            <ul className="text-sm">{run.terms.map((t) => <li key={t.id}>From {t.effective_from}: {t.payout_model === "revenue_share" ? `${(t.rate_pct_bp ?? 0) / 100}% revenue share` : `${money(t.rate_cents ?? 0)} ${MODEL[t.payout_model] ?? t.payout_model}`}</li>)}</ul>
-            <p className="text-xs text-muted-foreground">Frozen when the run was built: changing the partner&apos;s terms later does not change this run.</p>
+            <h3 className="text-base font-semibold">Terms used</h3>
+            <ul className="m-0 list-none divide-y divide-border rounded-lg border border-border p-0 text-sm">{run.terms.map((t) => <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"><span className="font-medium">{t.payout_model === "revenue_share" ? `${(t.rate_pct_bp ?? 0) / 100}% revenue share` : `${money(t.rate_cents ?? 0)} ${MODEL[t.payout_model] ?? t.payout_model}`}</span><span className="text-muted-foreground">Effective {dateLabel(t.effective_from)}</span></li>)}</ul>
+            <p className="text-xs text-muted-foreground">These rates are saved with the draft. Later term changes will not alter this run.</p>
           </div>
         </>
       )}
-    </DetailPanel>
+        </div>
+        {run && !readOnly ? (
+          <DialogFooter className="shrink-0 justify-between border-t border-border bg-card px-6 py-4 sm:justify-between">
+            <a className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm" href={`/api/app/accounting/payouts/${run.id}/statement`}>Download statement</a>
+            <div className="flex flex-wrap justify-end gap-2">
+              {run.status === "draft" ? <Button disabled={busy} onClick={() => void act({ action: "publish" }, "Published: the partner can now see it, and the cost is booked")}>Publish to partner</Button> : null}
+              {run.status === "published" ? <Button disabled={busy} onClick={() => setPaying({ on: new Date().toISOString().slice(0, 10), method: "ach", reference: "" })}>Mark paid</Button> : null}
+              {run.status !== "void" ? <Button variant="outline" disabled={busy} onClick={() => setVoiding("")}>Void run</Button> : null}
+            </div>
+          </DialogFooter>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 
-/** `partnerFixed`: the Payouts tab of one partner's record (2026-10-25) — its runs only, no partner picker. */
-/** `recordLinks`: the partner's name opens its record on the Payouts tab (2026-10-25). */
+/** `partnerFixed`: one partner's Commercial terms section — its runs only, no partner picker. */
+/** `recordLinks`: payout partner names open the record's Commercial terms tab. */
 export function PayoutsBoard({ runs, partners, readOnly, openId, partnerFixed = false, recordLinks = false }: { runs: RunRow[]; partners: Partner[]; readOnly: boolean; openId: string | null; partnerFixed?: boolean; recordLinks?: boolean }) {
   const router = useRouter();
   const [partner, setPartner] = useState(partnerFixed ? partners[0]?.id ?? "" : "");
@@ -299,7 +349,7 @@ export function PayoutsBoard({ runs, partners, readOnly, openId, partnerFixed = 
           </table>
         )}
       </TableCard>
-      {open ? <RunPanel key={open} id={open} readOnly={readOnly} docked={!partnerFixed} onClose={() => setOpen(null)} onChanged={refresh} /> : null}
+      {open ? <RunPanel key={open} id={open} readOnly={readOnly} onClose={() => setOpen(null)} onChanged={refresh} /> : null}
       </div>
       {creating ? <NewRun partners={partners.filter((p) => p.status !== "offboarded")} onClose={() => setCreating(false)} onSaved={(id) => { setCreating(false); setOpen(id); refresh(); }} /> : null}
     </>

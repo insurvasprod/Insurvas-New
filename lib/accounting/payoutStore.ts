@@ -45,8 +45,26 @@ const toDispute = (d: Loose): RunDispute => ({ id: d.id, itemId: d.item_id, side
 const RUN_COLUMNS = "id, partner_id, period_start, period_end, status, gross_cents, deductions_cents, disputed_cents, net_cents, paid_on, paid_method, payment_reference, published_at, statement_footer, void_reason, terms_snapshot_json, created_at";
 
 async function partnerNames(tenantId: string) {
-  const { data } = await db().from("partners").select("id, name, status").eq("tenant_id", tenantId).order("name");
-  return ((data ?? []) as Loose[]).map((p) => ({ id: p.id as string, name: p.name as string, status: p.status as string }));
+  const { data, error } = await db().from("partners").select("id, name, status").eq("tenant_id", tenantId).order("name");
+  if (error) fail(error);
+  const rows = (data ?? []) as Loose[];
+  if (rows.length === 0) return [];
+  const { data: terms, error: termsError } = await db()
+    .from("partner_terms")
+    .select("partner_id, effective_from")
+    .in("partner_id", rows.map((partner) => partner.id))
+    .order("effective_from", { ascending: true });
+  if (termsError) fail(termsError);
+  const firstTermByPartner = new Map<string, string>();
+  for (const term of (terms ?? []) as Loose[]) {
+    if (!firstTermByPartner.has(term.partner_id)) firstTermByPartner.set(term.partner_id, term.effective_from);
+  }
+  return rows.map((p) => ({
+    id: p.id as string,
+    name: p.name as string,
+    status: p.status as string,
+    firstTermDate: firstTermByPartner.get(p.id) ?? null,
+  }));
 }
 
 export async function listRuns(tenantId: string) {

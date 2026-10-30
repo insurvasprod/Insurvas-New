@@ -366,6 +366,7 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 | Task | Component | Size |
 |---|---|---|
 | Short edit that keeps context | `Dialog` (`components/ui/dialog.tsx`), `size="md"` (the default); `lg` 560 and `xl` 720 for two-column forms | 440px |
+| Review a detailed record with a statement or item table | `Dialog`, `size="2xl"` | 960px |
 | A step that loses something (cancel, delete) | `ConfirmDialog`, or `await confirmAction({…})` in a handler (`components/ui/confirm-dialog.tsx`) | 400px |
 | Read or work on a record beside a list | `DetailPanel` (§8); over the page, `Sheet` (`components/ui/sheet.tsx`) | 420px |
 | A picker or a short form anchored to a control | `Popover` (`components/ui/popover.tsx`) | — |
