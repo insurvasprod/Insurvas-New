@@ -269,22 +269,22 @@ partner should read first — and only when there is something to read.
 take its CSS out of `globals.css` (§9).
 
 **Acceptance criteria:**
-- [ ] `DetailPanel mode="split"` with the panel's own title, subtitle, status, close and footer
+- [x] `DetailPanel mode="split"` with the panel's own title, subtitle, status, close and footer
       slots; the local header, close button and footer markup are deleted
-- [ ] Tabs (Submission / Timeline) use `Segmented`, not hand-made buttons
-- [ ] Subtitle shows `productLineLabel(product)` — not the raw `final_expense`
-- [ ] Escape closes, focus returns to the row or card that opened it, focus is trapped while the
+- [x] Tabs (Submission / Timeline) use `Segmented`, not hand-made buttons
+- [x] Subtitle shows `productLineLabel(product)` — not the raw `final_expense`
+- [x] Escape closes, focus returns to the row or card that opened it, focus is trapped while the
       panel is an overlay at narrow widths
-- [ ] `.lead-preview-*` and `.partner-lead-preview` rules removed from `app/globals.css`, and no
+- [x] `.lead-preview-*` and `.partner-lead-preview` rules removed from `app/globals.css`, and no
       other page still uses them
-- [ ] Footer action is **Message your agent about this lead** → `/partner/messages`; the
+- [x] Footer action is **Message your agent about this lead** → `/partner/messages`; the
       "Back to partner pipeline" self-link is gone
 
 **Verification:**
-- [ ] Open from a board card and from a table row: Escape closes both, focus returns to the opener
-- [ ] 375 wide: the panel is an overlay, traps focus, and the page under it does not scroll
-- [ ] `grep -r "lead-preview" app/ components/` returns nothing
-- [ ] `npm test` — `local-surface` and `hand-tablist` ratchets unchanged
+- [x] Open from a board card and from a table row: Escape closes both, focus returns to the opener
+- [x] 375 wide: the panel is an overlay, traps focus, and the page under it does not scroll
+- [x] `grep -r "lead-preview" app/ components/` returns nothing
+- [x] `npm test` — `local-surface` and `hand-tablist` ratchets unchanged
 
 **Dependencies:** Task 6
 **Files:** `components/partner/partner-lead-pipeline.tsx`, `app/globals.css`
@@ -298,20 +298,20 @@ take its CSS out of `globals.css` (§9).
 the database.
 
 **Acceptance criteria:**
-- [ ] A compact progress strip at the top: Submitted → Claimed → On a call → Converted, reached
+- [x] A compact progress strip at the top: Submitted → Claimed → On a call → Converted, reached
       steps filled, current marked, elapsed time under each, built from `detail.timeline` + `lane`
-- [ ] A lane that ended without converting is shown as ended, not as a half-finished strip
-- [ ] The snapshot renders through `snapshotFields()` (Task 1): grouped, ordered, formatted —
+- [x] A lane that ended without converting is shown as ended, not as a half-finished strip
+- [x] The snapshot renders through `snapshotFields()` (Task 1): grouped, ordered, formatted —
       `true` → Yes, `2008-02-27` → 27 Feb 2008, `55000` → $55,000.00, phone formatted
-- [ ] First/last name do not repeat the panel title
-- [ ] The read-only lock line stays, verbatim
-- [ ] Timeline tab keeps every event; empty stays "No timeline events yet."
+- [x] First/last name do not repeat the panel title
+- [x] The read-only lock line stays, verbatim
+- [x] Timeline tab keeps every event; empty stays "No timeline events yet."
 
 **Verification:**
-- [ ] Each fixture lane renders the correct strip position; a closed-not-converted lead reads
+- [x] Each fixture lane renders the correct strip position; a closed-not-converted lead reads
       correctly
-- [ ] The real lead on `/partner/pipeline` shows no raw `true`, no ISO date, no unformatted phone
-- [ ] Screen reader: the strip announces the current step, not just a row of icons
+- [x] The real lead on `/partner/pipeline` shows no raw `true`, no ISO date, no unformatted phone
+- [x] Screen reader: the strip announces the current step, not just a row of icons
 
 **Dependencies:** Task 1, Task 9
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -320,9 +320,9 @@ the database.
 ---
 
 ### ✅ Checkpoint: The record
-- [ ] Panel opens, closes, returns focus and reads cleanly in both views at all three sizes
-- [ ] No raw database values anywhere on screen
-- [ ] `npm test` green; `globals.css` smaller than it started
+- [x] Panel opens, closes, returns focus and reads cleanly in both views at all three sizes
+- [x] No raw database values anywhere on screen
+- [x] `npm test` green; `globals.css` smaller than it started
 
 ---
 
@@ -511,3 +511,43 @@ organising principle.
 **Noted:** on the preview route the page server-renders with data, so ages show "—" for the frame
 before hydration gives the clock a value. Not visible on the live page, where `PageLoading` holds
 until the first read lands. The dash is the honest null state, not a bug to paper over.
+
+---
+
+## Phase 4 — done 30 Oct
+
+The hand-built `<aside>` is a `DetailPanel`, and the submission reads like a form rather than a
+database row.
+
+| Was | Is |
+|---|---|
+| `DATE OF BIRTH 2008-02-27` | Date of birth · **11 Apr 1968** |
+| `TOBACCO true` | Tobacco · **No** |
+| `PHONE 4724521313` | Phone · **(555) 014-2317** |
+| `COVERAGE AMOUNT 55000` | Coverage amount · **$25,000** |
+| `FIRST NAME test` / `LAST NAME test` under a title saying the same | dropped — the title already says it |
+| `final_expense` in the subtitle | **Final expense** |
+| whatever order the object serialised in | Person · Contact · Coverage · Notes · Other details |
+
+**What the panel gained by not being hand-built:** Escape closes it **and returns focus to the exact
+card that opened it** (verified: `document.activeElement` is the Marisol Vandenberg button). At 375
+it becomes a fixed overlay with a backdrop rather than a squeezed column. The local copy had none
+of that.
+
+**The progress strip** answers "where is this?" before the form the partner already knows:
+Submitted → Claimed → On a call → Converted, with real timestamps where the records can supply
+them. A closed submission reads **Submitted → Closed**, not three steps that are never coming.
+
+**"On a call" is never dated.** `service.ts` records `submitted`, `claimed` and `outcome` events
+only; there is no verification event. The step shows without a time rather than borrowing one that
+means something else.
+
+**CSS:** 15 lines gone from `app/globals.css`, and only the 7 selectors nothing else uses
+(`lead-preview-panel`, `-header`, `-close`, `-tabs`, `-lock`, `-footer`, `partner-lead-preview`).
+The agent's own lead workspace (`components/app/lead-workspace.tsx`) still draws with
+`lead-preview-scroll`, `-banner`, `-section`, `lead-form-snapshot`, `lead-snapshot-row`,
+`lead-detail-list`, `lead-section-heading`, `lead-timeline*`, `lead-full-link` and
+`lead-preview-state`, so those stay. Task 9's criterion said to remove them "and no other page still
+uses them" — another page does. Cleaning them is agent-side work, not this change.
+
+Tests 3400 pass / 20 fail (the same pre-existing 20); design rules 34/34.

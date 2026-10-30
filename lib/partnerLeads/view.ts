@@ -142,6 +142,53 @@ export function oldestOpenIsStuck(
   return Number.isFinite(seconds) && seconds >= thresholds.dangerSeconds;
 }
 
+/* ── Where a submission has got to ───────────────────────────────────────────────────────────── */
+
+export type ProgressStepKey = "submitted" | "claimed" | "verification" | "converted" | "closed";
+export type ProgressStep = {
+  key: ProgressStepKey;
+  label: string;
+  /** done: reached. current: what the submission is waiting on now. upcoming: still ahead. */
+  state: "done" | "current" | "upcoming";
+  /**
+   * The `timeline` event type that dates this step, where one exists. "On a call" has no event of
+   * its own (service.ts records submitted, claimed and outcome), so that step is never dated —
+   * better undated than stamped with a time that means something else.
+   */
+  event: string | null;
+};
+
+const JOURNEY: ReadonlyArray<{ key: ProgressStepKey; label: string; event: string | null }> = [
+  { key: "submitted", label: "Submitted", event: "submitted" },
+  { key: "claimed", label: "Claimed", event: "claimed" },
+  { key: "verification", label: "On a call", event: null },
+  { key: "converted", label: "Converted", event: "outcome" },
+];
+
+/**
+ * The strip at the top of a lead's panel: what has happened, what is happening, what is still
+ * ahead. It answers the question a partner opens the panel with — "where is this?" — before the
+ * form they already know the contents of.
+ *
+ * A submission that ended without a sale does not show the three steps it never reached as
+ * "upcoming", because they are not coming: it reads Submitted, then Closed.
+ */
+export function progressSteps(lane: PartnerLane): ProgressStep[] {
+  if (lane === "closed") {
+    return [
+      { key: "submitted", label: "Submitted", state: "done", event: "submitted" },
+      { key: "closed", label: "Closed", state: "current", event: "outcome" },
+    ];
+  }
+  const reached = JOURNEY.findIndex((step) => step.key === lane);
+  // An unrecognised lane is treated as newly arrived, as laneOf does.
+  const at = reached === -1 ? 0 : reached;
+  return JOURNEY.map((step, index) => ({
+    ...step,
+    state: index <= at ? "done" : index === at + 1 ? "current" : "upcoming",
+  }));
+}
+
 /* ── The submitted form, as a person reads it ────────────────────────────────────────────────── */
 
 export type SnapshotField = { key: string; label: string; value: string };

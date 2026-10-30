@@ -2451,15 +2451,6 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .lead-stage-won { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success-ink); }
 .lead-stage-lost { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error-ink); }
 .lead-stage-neutral { background: var(--surface-alt); color: var(--accent-ink); }
-.lead-preview-panel { position: sticky; top: calc(var(--top-bar-h) + 1rem); display: flex; min-height: 32rem; max-height: calc(100vh - var(--top-bar-h) - 2rem); flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: none; }
-.lead-preview-header { display: flex; justify-content: space-between; gap: .75rem; border-bottom: 1px solid var(--border); padding: 1rem; }
-.lead-preview-header h2 { margin-top: .25rem; overflow: hidden; font-size: 1.1rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.lead-preview-header p { margin-top: .15rem; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.lead-preview-close { align-self: flex-start; border-radius: 6px; padding: .25rem; color: var(--muted); }
-.lead-preview-close:hover { background: var(--primary-soft); color: var(--accent-ink); }
-.lead-preview-tabs { display: flex; gap: 1.1rem; border-bottom: 1px solid var(--border); padding: 0 1rem; }
-.lead-preview-tabs button { border-bottom: 2px solid transparent; padding: .65rem 0 .55rem; color: var(--muted); font-size: 14px; font-weight: 600; }
-.lead-preview-tabs button.is-active { border-color: var(--primary); color: var(--ink); }
 .lead-preview-scroll { flex: 1; overflow: auto; padding: .9rem; }
 .lead-preview-banner { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: 1rem; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .lead-preview-section + .lead-preview-section { margin-top: 1rem; }
@@ -2482,11 +2473,9 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .lead-timeline-item strong { color: var(--ink); font-size: 14px; font-weight: 600; }
 .lead-timeline-item p, .lead-timeline-item time { display: block; margin-top: .15rem; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .lead-preview-state { display: grid; flex: 1; min-height: 12rem; place-items: center; padding: 1rem; color: var(--muted); font-size: 14px; text-align: center; }
-.lead-preview-footer { border-top: 1px solid var(--border); padding: .8rem 1rem; }
 .lead-full-link { display: flex; align-items: center; justify-content: center; gap: .35rem; width: 100%; border-radius: 8px; background: var(--accent-ink); padding: .6rem .8rem; color: var(--on-primary); font-size: .75rem; font-weight: 600; }
 .lead-full-link:hover { background: var(--accent-ink); }
 .lead-form-control { width: 100%; min-height: 2.25rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 0 .65rem; color: var(--accent-ink); font-size: .82rem; }
-@media (max-width: 760px) { .lead-preview-panel { position: relative; top: auto; max-height: none; }   }
 
 /* Settings is a focused workspace: one configuration surface is visible at a time. */
 .portal-settings-panel { min-width: 0; animation: portal-settings-panel-in 180ms ease both; }
@@ -2951,10 +2940,6 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .partner-lane[data-lane="converted"] .partner-lane-header { background: var(--success-surface); }
 .partner-lane[data-lane="converted"] .partner-lane-header :is(h3, span) { color: var(--success-ink); }
 /* The partner preview's form as submitted: a grey panel, label over value in two columns. */
-.partner-lead-preview .lead-form-snapshot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; padding: 14px; border: 0; border-radius: 8px; background: var(--surface-alt); }
-.partner-lead-preview .lead-snapshot-row { display: block; padding: 0; border: 0; }
-.partner-lead-preview .lead-snapshot-row strong { display: block; margin-top: 4px; }
-.partner-lead-preview .lead-preview-lock { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; }
 
 /* Status pills (the context strip they were drawn for is gone; the pills are used on their own). */
 .portal-status-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 9999px; background: var(--surface-alt); color: var(--body); font-size: 12px; line-height: 1.5; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }

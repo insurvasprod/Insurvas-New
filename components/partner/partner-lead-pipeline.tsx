@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Download, ExternalLink, Hand, Inbox, Lock, Send, X } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Download, Hand, Inbox, Lock, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Field } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/view-tabs";
 import { LiveStamp, useClockSeconds } from "@/components/ui/live-stamp";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -23,7 +24,7 @@ import { productLineLabel } from "@/lib/format/productLine";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { oldestOpenLabel } from "@/lib/format/age";
 import { expectedEarningsFact, termLabel } from "@/lib/partners/payout";
-import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
+import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, progressSteps, snapshotFields, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
 import { NOBODY_CLAIMED_LABEL, type PartnerLane } from "@/lib/partnerLeads/lanes";
 import { cn } from "@/lib/utils";
 
@@ -105,14 +106,105 @@ function LeadCard({ row, selected, onSelect, now, thresholds }: { row: PartnerLe
   </button>;
 }
 
+/** The strip at the top of the panel: what has happened, what it is waiting on, what is ahead. */
+function Progress({ detail }: { detail: PartnerLeadDetail }) {
+  const steps = progressSteps(laneOf(detail));
+  const dated = (event: string | null) => event ? detail.timeline.find((item) => item.type === event)?.at ?? null : null;
+  return <ol aria-label="Progress" className="flex min-w-0 list-none flex-wrap gap-x-1 gap-y-2 p-0">
+    {steps.map((step, index) => {
+      const at = dated(step.event);
+      return <li key={step.key} className="flex min-w-0 flex-1 basis-[7rem] flex-col gap-1.5">
+        <span className="flex items-center gap-1" aria-hidden="true">
+          <span className={cn(
+            "size-2 shrink-0 rounded-full",
+            step.state === "done" ? "bg-[var(--primary)]" : step.state === "current" ? "bg-[var(--warning)]" : "bg-[var(--border)]",
+          )} />
+          {index < steps.length - 1 && <span className={cn("h-px min-w-0 flex-1", step.state === "done" ? "bg-[var(--primary)]" : "bg-[var(--border)]")} />}
+        </span>
+        <span className="min-w-0">
+          <span className={cn("block truncate text-xs font-medium", step.state === "upcoming" ? "text-muted-foreground" : "text-foreground")}>
+            {step.label}
+            {step.state === "current" && <span className="sr-only"> — where it is now</span>}
+          </span>
+          {/* Only where the records can date it: "On a call" has no event of its own. */}
+          <span className="block truncate text-[0.6875rem] text-muted-foreground">{at ? when(at) : "\u00a0"}</span>
+        </span>
+      </li>;
+    })}
+  </ol>;
+}
+
+/** The form as it was sent: grouped, ordered and formatted (lib/partnerLeads/view.ts). */
+function Submission({ detail }: { detail: PartnerLeadDetail }) {
+  const groups = snapshotFields(detail.values);
+  return <div className="flex min-w-0 flex-col gap-4">
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Lock className="size-3.5 shrink-0" aria-hidden="true" />
+      Form as submitted — cannot be edited in the partner portal
+    </p>
+    {groups.map((group) => <section key={group.key} className="min-w-0">
+      <h3 className="mb-1.5 text-label text-muted-foreground">{group.label}</h3>
+      <dl className="m-0 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-x-3 gap-y-1.5 text-sm">
+        {group.fields.map((field) => <Fragment key={field.key}>
+          <dt className="min-w-0 truncate text-muted-foreground">{field.label}</dt>
+          <dd className="m-0 min-w-0 break-words font-medium text-foreground">{field.value}</dd>
+        </Fragment>)}
+      </dl>
+    </section>)}
+    {!groups.length && <p className="text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
+    <section className="min-w-0 border-t border-border pt-3">
+      <h3 className="mb-1.5 text-label text-muted-foreground">Submission</h3>
+      <dl className="m-0 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-x-3 gap-y-1.5 text-sm">
+        <dt className="text-muted-foreground">Submitted</dt><dd className="m-0 font-medium text-foreground">{when(detail.submittedAt)}</dd>
+        <dt className="text-muted-foreground">Submitted by</dt><dd className="m-0 font-medium text-foreground">{detail.submittedBy.name}</dd>
+        <dt className="text-muted-foreground">Last update</dt><dd className="m-0 font-medium text-foreground">{when(detail.updatedAt)}</dd>
+        <dt className="text-muted-foreground">Outcome</dt><dd className="m-0 font-medium text-foreground">{detail.outcome ?? "Awaiting update"}</dd>
+      </dl>
+    </section>
+  </div>;
+}
+
+function Timeline({ detail }: { detail: PartnerLeadDetail }) {
+  if (!detail.timeline.length) return <p className="text-sm text-muted-foreground">No timeline events yet.</p>;
+  return <ol className="m-0 flex list-none flex-col gap-3 p-0">
+    {detail.timeline.map((event, index) => <li key={`${event.at}-${event.type}-${index}`} className="flex min-w-0 gap-2.5">
+      <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[var(--primary)]" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="m-0 text-sm font-medium text-foreground">{event.label}</p>
+        {event.detail && <p className="m-0 text-sm text-muted-foreground">{event.detail}</p>}
+        <time className="text-xs text-muted-foreground">{when(event.at)}</time>
+      </div>
+    </li>)}
+  </ol>;
+}
+
+/**
+ * A lead's record beside the list.
+ *
+ * `DetailPanel`, not a hand-built <aside> (UI-CONSISTENCY §8 names this exact case): it owns the
+ * header, the close button, Escape, focus return and the slide-in, and becomes an overlay at narrow
+ * widths. The local copy had none of those.
+ */
 function Preview({ detail, loading, onClose }: { detail: PartnerLeadDetail | null; loading: boolean; onClose: () => void }) {
   const [tab, setTab] = useState<"submission" | "timeline">("submission");
-  return <aside className="lead-preview-panel partner-lead-preview">
-    <div className="lead-preview-header"><div><h2>{detail?.customer ?? "Lead details"}</h2><p>{detail ? `${detail.product} · ${detail.submittedBy.name}` : "Partner submission"}</p></div><button type="button" className="lead-preview-close" aria-label="Close lead preview" onClick={onClose}><X className="size-5" /></button></div>
-    <div className="lead-preview-tabs"><button type="button" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>
-    {loading || !detail ? <SectionLoading rows={6} columns={2} label="Loading lead details" /> : tab === "submission" ? <div className="lead-preview-scroll"><div className="lead-preview-banner"><StatusChip tone={stageTone(detail)}>{stageLabel(detail)}</StatusChip><span>{detail.outcome ?? "Awaiting update"}</span></div><div className="lead-preview-section"><div className="lead-preview-lock"><Lock className="size-3.5" aria-hidden="true" />Form as submitted — cannot be edited in the partner portal</div><div className="lead-form-snapshot">{Object.entries(detail.values).map(([key, value]) => <div className="lead-snapshot-row" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(detail.submittedAt)}</dd></div><div><dt>Submitted by</dt><dd>{detail.submittedBy.name}</dd></div><div><dt>Last updated</dt><dd>{when(detail.updatedAt)}</dd></div><div><dt>Outcome</dt><dd>{detail.outcome ?? "Awaiting update"}</dd></div></dl></div></div> : <div className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{detail.timeline.length ? detail.timeline.map((event, index) => <div className="lead-timeline-item" key={`${event.at}-${event.type}-${index}`}><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? "Partner-visible update"}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}
-    <div className="lead-preview-footer"><Link href="/partner/pipeline" className="lead-full-link">Back to partner pipeline <ExternalLink className="size-4" /></Link></div>
-  </aside>;
+  return <DetailPanel
+    mode="split"
+    id="partner-lead-detail"
+    title={detail?.customer ?? "Lead details"}
+    subtitle={detail ? `${productLineLabel(detail.product)} · ${detail.submittedBy.name}` : "Partner submission"}
+    status={detail ? <StatusChip tone={stageTone(detail)}>{stageLabel(detail)}</StatusChip> : null}
+    onClose={onClose}
+    closeLabel="Close lead preview"
+    footer={<Button asChild variant="outline" size="sm"><Link href="/partner/messages">Message your agent about this lead</Link></Button>}
+  >
+    {loading || !detail
+      ? <SectionLoading rows={6} columns={2} label="Loading lead details" />
+      : <>
+          <Progress detail={detail} />
+          <Segmented label="Lead detail" options={[{ key: "submission", label: "Submission" }, { key: "timeline", label: "Timeline" }]} value={tab} onChange={setTab} />
+          {tab === "submission" ? <Submission detail={detail} /> : <Timeline detail={detail} />}
+        </>}
+  </DetailPanel>;
 }
 
 /**
@@ -470,8 +562,8 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
       </span>
       <span className="shrink-0 font-semibold">Show {flaggedRows.length === 1 ? "it" : "them"}<ArrowUpRight className="ml-1 inline size-3.5" aria-hidden="true" /></span>
     </button>}
-    <div className={cn("grid items-start gap-4", selectedId && "lg:grid-cols-[minmax(0,1fr)_minmax(300px,34%)]")}>
-      <TableCard className="min-w-0" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
+    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-stretch">
+      <TableCard className="min-w-0 flex-1" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
       {selectedId && <Preview detail={shownDetail} loading={shownDetailLoading} onClose={() => setSelectedId(null)} />}
     </div>
   </div>;
