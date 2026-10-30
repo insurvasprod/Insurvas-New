@@ -10,6 +10,8 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { RebookButton } from "@/components/app/appointment-rebook";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { cn } from "@/lib/utils";
@@ -136,6 +138,9 @@ function SetterPanel({ setter, onClose }: { setter: Setter; onClose: () => void 
 
 export function SetterRanking({ setters, target, scope }: { setters: Setter[]; target: number; scope: SettersOverview["scorecardScope"] }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 57);
+  const paged = paginate(setters, page, pageSize);
   const open = setters.find((row) => row.userId === openId) ?? null;
   const exportCsv = () => downloadCsv("setters-30-days.csv",
     ["Setter", "Location", "Dials", "Contacts", "Booked", "Shown", "No-show", "Show rate %", "Sold", "Verdict"],
@@ -148,6 +153,7 @@ export function SetterRanking({ setters, target, scope }: { setters: Setter[]; t
         title="Who books appointments that show"
         description={`Last 30 days · ${scope === "calendar" ? "setters who booked into your calendar" : "every setter in the agency"} · line = ${target}% target`}
         action={<Button type="button" variant="outline" size="sm" disabled={setters.length === 0} onClick={exportCsv}><Download aria-hidden="true" />Export</Button>}
+        footer={setters.length ? <Pager page={paged.current} total={setters.length} noun={setters.length === 1 ? "setter" : "setters"} pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         {setters.length === 0 ? <EmptyState title="No setter activity" hint="No dials or bookings in the last 30 days." /> : (
           <div className="overflow-x-auto">
@@ -163,7 +169,7 @@ export function SetterRanking({ setters, target, scope }: { setters: Setter[]; t
                 <th scope="col" className={th}><span className="inline-flex items-center gap-1">Verdict<InfoTip label="About the verdict" side="left">Booking noise: a show rate under {NOISE_BELOW_PCT}% over at least {VERDICT_MIN_CLOSED} closed-out appointments. Appointments waiting to be closed out never count against a setter.</InfoTip></span></th>
               </tr></thead>
               <tbody>
-                {setters.map((row) => {
+                {paged.rows.map((row) => {
                   const on = row.userId === openId;
                   return (
                     <tr key={row.userId} onClick={() => setOpenId(on ? null : row.userId)} className={cn("m-row cursor-pointer border-b border-border last:border-b-0", on && "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]")}>

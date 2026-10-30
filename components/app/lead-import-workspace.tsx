@@ -5,23 +5,24 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Ban, Bookmark, Check, ChevronDown, CircleAlert, DollarSign, Flag, Megaphone, Package, Rows3, Sparkles, Store, Upload, UserCheck, X, type LucideIcon } from "lucide-react";
+import { ArrowRight, Ban, BookUser, Bookmark, Check, ChevronDown, CircleAlert, Flag, Plus, Sparkles, Store, Upload, UserCheck, X, type LucideIcon } from "lucide-react";
 import { notify } from "@/lib/notify";
+import { isOwnBookVendor, OWN_BOOK_CAMPAIGN_NAME, OWN_BOOK_VENDOR_NAME } from "@/lib/campaigns/ownBook";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { inputControl } from "@/components/ui/field";
 import { InfoTip } from "@/components/ui/info-tip";
-import { LeadsInSlot } from "@/components/app/lead-sources/leads-in-slot";
+import { NextUp, type NextUpTone } from "@/components/app/lead-sources/next-up";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
-import { Callout, DashedCard, Field, control, st } from "@/components/app/settings/primitives";
+import { Callout, DashedCard, st } from "@/components/app/settings/primitives";
 import { columnMappingStatus, type MappingRow } from "@/components/app/column-mapping-dialog";
 import { EMPTY_DATE_SCAN, inferredImportDateOrder, isImportDateOrder, parseCsv, previewLeadCsv, slashDateReadings, suggestLeadCsvMappings, type ImportDateOrder } from "@/lib/agentTemplates/csv";
-import { formatCents, IMPORT_CSV_KEY, parseDollarsToCents, parseRecordCount } from "@/lib/agentTemplates/importReviewModel";
+import { IMPORT_CSV_KEY, parseDollarsToCents, parseRecordCount } from "@/lib/agentTemplates/importReviewModel";
 import { isXlsxFile, readXlsxAsCsv, XLSX_TYPES } from "@/lib/agentTemplates/xlsx";
 import { TEMPLATE_FIELD_TYPE_LABELS, type TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
@@ -147,6 +148,10 @@ function columnStatus(row: MappingRow, status: { label: string; detail: string; 
 const STATUS_TONE = { warn: "text-[var(--warning-ink)]", ok: "text-[var(--accent-ink)]", muted: "text-[var(--muted)]" } as const;
 /** The two section titles on this step share one, stronger style (owner 2026-10-28). */
 const SECTION_TITLE = "text-card-title font-semibold text-[var(--ink)]";
+/** The small-caps label at the start of each row of the import card (board LirI1: Into, Product, Paid). */
+const ROW_LABEL = "w-20 shrink-0 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--body)]";
+/** One row of the import card: its label, then its controls, wrapping on a narrow screen. */
+const ROW = "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2";
 /** One mapping row: their column and its sample | arrow | your field | status icon. */
 const MAP_ROW = "grid min-w-0 grid-cols-[minmax(0,1fr)_1rem_minmax(0,1fr)_1.25rem] items-center gap-2 border-b border-[var(--border)] py-1 text-sm";
 
@@ -250,10 +255,8 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   const [noProducts, setNoProducts] = useState<string | null>(null);
   /** The product's lead record, on demand rather than as a table under the form. */
   const [fieldsOpen, setFieldsOpen] = useState(false);
-  /** Board C: the source line opened by Change. */
-  const [sourceOpen, setSourceOpen] = useState(false);
-  /** Focus is inside the source fields: the section stays open while the person is still in it. */
-  const [sourceFocus, setSourceFocus] = useState(false);
+  /** "Your own book (no vendor)" is finding or creating its campaign. */
+  const [ownBookBusy, setOwnBookBusy] = useState(false);
   /** The vendor (and campaign) were picked from the file's column names. */
   const [recognised, setRecognised] = useState(false);
   const router = useRouter();
@@ -290,9 +293,17 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   const currentKey = `${mappingKey}|${dateOrderToSend ?? ""}`;
 
   const campaigns = info?.campaigns ?? [];
-  const activeVendors = info?.vendors.filter((vendor) => vendor.status === "active") ?? [];
   const campaign = campaigns.find((item) => item.id === campaignId) ?? null;
-  const visibleCampaigns = vendorId ? campaigns.filter((item) => item.vendor_id === vendorId) : campaigns;
+  const vendorNameOf = (id: string) => info?.vendors.find((vendor) => vendor.id === id)?.name ?? "";
+  // One picker, "Campaign · Vendor" (board LirI1): the vendor follows the campaign. A vendor picked
+  // from the file's column names (or a campaign link) brings its own campaigns to the top.
+  const visibleCampaigns = vendorId ? [...campaigns.filter((item) => item.vendor_id === vendorId), ...campaigns.filter((item) => item.vendor_id !== vendorId)] : campaigns;
+  const campaignLabel = (item: { name: string; vendor_id: string; status: string }) => {
+    const vendor = vendorNameOf(item.vendor_id);
+    return `${item.name} · ${isOwnBookVendor(vendor) ? "No vendor" : vendor || "Vendor"}${STATUS_SUFFIX[item.status] ?? ""}`;
+  };
+  /** This tenant's own-book campaign, once it exists (lib/campaigns/ownBook.ts). */
+  const ownBookCampaign = campaigns.find((item) => item.name === OWN_BOOK_CAMPAIGN_NAME && isOwnBookVendor(vendorNameOf(item.vendor_id))) ?? null;
   const requiredKeys = (info?.fields ?? []).filter((field) => field.required).map((field) => field.key);
   const mappedValues = new Set(Object.values(effectiveMapping).filter(Boolean));
   const requiredMapped = requiredKeys.filter((key) => mappedValues.has(key)).length;
@@ -305,16 +316,22 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   // A hard cap already reached (leads this month, DNC lookups): the scrub would be refused, so it is said first.
   const usedUp = info?.limits.find((item) => ["monthly_leads_imported", "dnc_scrub_lookups"].includes(item.key) && !item.allowed) ?? null;
 
-  // What the page itself still needs, apart from the mapping — said on the dialog before Continue.
-  const pageReason =
-    readOnly ? "Your plan is read-only."
-      : usedUp ? `Your plan's ${usedUp.label} are used up.`
-    : campaigns.length === 0 ? "Create a campaign first."
-      : !campaign ? "Choose the campaign this list belongs to."
-        : cost === "invalid" ? "Enter the batch cost as dollars and cents, up to $1,000,000."
-          : records === "invalid" ? "Enter rows purchased as a whole number."
-            : !storageOk ? "This browser will not hold the file between pages."
-              : null;
+  // What stops the import whatever the person does here: said first, on the Next up line (2026-10-30).
+  const hardBlock =
+    readOnly ? "Your plan is read-only. Importing is paused until it is active again."
+      : usedUp ? `Your plan's ${usedUp.label} are used up (${usedUp.usage.toLocaleString()} of ${(usedUp.limit ?? 0).toLocaleString()}).`
+        : !storageOk ? "This browser will not hold the file between pages. Enable site data for this site to continue."
+          : null;
+  // Owner 2026-10-30: the campaign is the first thing asked, so the grey Continue never waits on it silently.
+  const ownBookOffered = Boolean(info?.canCreateCampaigns || campaigns.some((item) => item.name === OWN_BOOK_CAMPAIGN_NAME));
+  const campaignReason =
+    campaign ? null
+      : campaigns.length === 0 && !ownBookOffered ? "Every import goes into a campaign. Ask an owner or producer to create one."
+        : "Choose where these leads go: a campaign, or your own book.";
+  const paidReason =
+    cost === "invalid" ? "Enter what you paid as dollars and cents, up to $1,000,000."
+      : records === "invalid" ? "Enter rows bought as a whole number."
+        : null;
 
   // `product`: the product the list is for (Settings › Products, 2026-10-28). Unnamed, the server picks
   // Term Life when the agency sells it, else the first product it sells.
@@ -449,7 +466,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   // Replace opens the picker straight away; Remove (×) just drops the file (2026-10-29 clean-up).
   const replaceInput = useRef<HTMLInputElement>(null);
   function reset() {
-    setRecognised(false); setSourceOpen(false);
+    setRecognised(false);
     setCsv(""); setFile(null); setMapping({}); setErrorsOpen(false); setRecordsText(null); setSheetNote(null);
     setConfirmedKey(null); setPickedDateOrder(null); setSaveNote(null);
   }
@@ -464,9 +481,38 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
     if (next && next.vendor_id !== vendorId) setVendorId(next.vendor_id);
   }
 
-  function chooseVendor(value: string) {
-    setVendorId(value);
-    if (campaign && value && campaign.vendor_id !== value) setCampaignId("");
+  /**
+   * "Your own book (no vendor)" (board LirI1): the agency's own list goes into its own-book campaign.
+   * Chosen at once when it exists; otherwise made by POST /api/app/campaigns/own-book (owners and
+   * producers, as New campaign is) and added to the lists here, so nothing is read again.
+   */
+  async function chooseOwnBook() {
+    if (ownBookCampaign) { chooseCampaign(ownBookCampaign.id); return; }
+    if (!info?.canCreateCampaigns || readOnly) return;
+    setOwnBookBusy(true);
+    try {
+      const response = await fetch("/api/app/campaigns/own-book", { method: "POST" });
+      const body = await response.json().catch(() => null) as { campaign?: { id: string; vendor_id: string; name: string; status: string }; created?: boolean; error?: string } | null;
+      const made = body?.campaign;
+      if (!response.ok || !made) { notify.block("Could not set up your own book", { detail: body?.error ?? "The server refused it." }); return; }
+      // The import lists drafts, active and paused campaigns; an exhausted one cannot take a list.
+      if (made.status === "exhausted") { notify.block(`${made.name} is marked exhausted`, { detail: "Reopen it on Lead sources › Source, then import into it." }); return; }
+      infoCache.clear();
+      setInfo((current) => current ? {
+        ...current,
+        vendors: current.vendors.some((vendor) => vendor.id === made.vendor_id)
+          ? current.vendors.map((vendor) => vendor.id === made.vendor_id ? { ...vendor, status: "active" } : vendor)
+          : [...current.vendors, { id: made.vendor_id, name: OWN_BOOK_VENDOR_NAME, lead_type: "list", status: "active" }],
+        campaigns: current.campaigns.some((item) => item.id === made.id) ? current.campaigns : [...current.campaigns, made],
+      } : current);
+      setCampaignId(made.id);
+      setVendorId(made.vendor_id);
+      setRecognised(false);
+    } catch {
+      notify.fail("Could not set up your own book", { detail: "Try again." });
+    } finally {
+      setOwnBookBusy(false);
+    }
   }
 
   /** Saves this map as the vendor's. `quiet` is the Continue path: a failure is a note, not a stop. */
@@ -584,14 +630,23 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   // Two columns on one field is the map's to fix, not the file's: the columns card says it, so the
   // parser's whole-file error for it is not repeated as "correct the file".
   const fileError = preview.error ?? (validation?.error && !(mappingSummary.blockedReason && /same field/i.test(validation.error)) ? validation.error : null);
-  const blockedReason =
-    !csv ? "Choose a CSV or Excel file first."
-      : !info ? "Loading the import settings…"
-        : fileError ? fileErrorText(fileError, info.maxRows)
-          : mappingSummary.blockedReason ? mappingSummary.blockedReason
-          : !mapConfirmed ? "Check the columns first."
-            : (validation?.validRows ?? 0) === 0 ? "Fix the file: no row can be imported as it is."
-              : pageReason;
+  // In the owner's order (2026-10-30): what blocks everything, where the leads go, the file, its
+  // columns, then what was paid. The first one found is the Next up line and the grey button's reason.
+  const columnsToCheck = mappingSummary.needsDecision;
+  type Step = { tone: NextUpTone; reason: string };
+  const nextStep: Step | null =
+    !info ? { tone: "action", reason: "Loading the import settings…" }
+      : hardBlock ? { tone: "danger", reason: hardBlock }
+        : campaignReason ? { tone: campaigns.length === 0 && !ownBookOffered ? "warning" : "action", reason: campaignReason }
+          : reading ? { tone: "action", reason: "Reading the workbook…" }
+            : !csv ? { tone: "action", reason: vendorName && isOwnBookVendor(vendorName) ?"Drop your list, as a CSV or Excel file." : "Drop the vendor’s file, as it arrived." }
+              : fileError ? { tone: "danger", reason: fileErrorText(fileError, info.maxRows) }
+                : mappingSummary.blockedReason ? { tone: "warning", reason: mappingSummary.blockedReason }
+                  : !mapConfirmed ? { tone: "action", reason: columnsToCheck > 0 ? `Check the ${columnsToCheck.toLocaleString()} column${columnsToCheck === 1 ? "" : "s"} we couldn't match, then press Looks right.` : "Check the columns, then press Looks right." }
+                    : (validation?.validRows ?? 0) === 0 ? { tone: "danger", reason: "Fix the file: no row can be imported as it is." }
+                      : paidReason ? { tone: "action", reason: paidReason }
+                        : null;
+  const blockedReason = nextStep?.reason ?? null;
 
   if (noProducts) {
     return (
@@ -602,21 +657,11 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   }
   if (!info && !loadFailed) return <PageLoading rows={6} />;
 
-  // Board C, "Drop first" (owner pick 2026-10-28, canvas M2 · List import): before a file, one big drop
-  // target and nothing else to fill in; after it, the file, where it came from (recognised from the
-  // column names when this vendor's map is saved), the columns (asking only when one needs a person),
-  // and one button at the foot that checks the file. Nothing is written until the review's Import.
-  // Where it came from folds to one line once the campaign is picked and nothing in it is wrong, and
-  // the person has left its fields (owner 2026-10-28); a click on that line opens it again.
-  const sourceComplete = Boolean(campaign) && cost !== "invalid" && records !== "invalid";
-  const sourceFolded = sourceComplete && !sourceOpen && !sourceFocus;
-  const sourceItems: Array<{ Icon: LucideIcon; label: string; text: string }> = [
-    { Icon: Package, label: "Product", text: info?.product.name ?? "" },
-    ...(vendorName ? [{ Icon: Store, label: "Lead source", text: vendorName }] : []),
-    ...(campaign ? [{ Icon: Megaphone, label: "Campaign", text: `${campaign.name}${STATUS_SUFFIX[campaign.status] ?? ""}` }] : []),
-    ...(typeof cost === "number" ? [{ Icon: DollarSign, label: "What you paid", text: formatCents(cost).replace(/^\$/, "") }] : []),
-    ...(typeof records === "number" ? [{ Icon: Rows3, label: "Rows bought", text: records.toLocaleString() }] : []),
-  ];
+  // Board LirI1 (owner pick 2026-10-29, Leads in round 3): one card, Into (the campaign, or your own
+  // book, or a new campaign), Product, then the drop zone, which holds the file once it is dropped.
+  // The columns follow (asking only when one needs a person), and the frame's corner holds the one
+  // way on, Continue to Review. Nothing is written until the review's Import.
+  const ownBookLabel = vendorName && isOwnBookVendor(vendorName);
   const columnsNeedYou = canMap && !mapConfirmed;
   // Looks right has been pressed for this exact map, or the vendor's saved map already is it and
   // nothing needs a person: either way the button has become its answer (board LinB2).
@@ -632,162 +677,157 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
     </span>
   </InfoTip>;
 
-  // The step's one way on, in the frame's corner (owner 2026-10-28). It is the form's submit through
-  // `form=`, so it checks the file and opens the review exactly as it did at the foot of the sheet.
-  const continueNote = `${csv ? `Check ${fileRows.toLocaleString()} rows, then review.` : "Nothing is saved until you import."} ${blockedReason ?? "Do Not Call, litigators, duplicates and phone numbers. Nothing is written yet."}`;
-  const continueControl = <span className="inline-flex items-center gap-1.5" title={continueNote}>
+  // The step's one way on (owner 2026-10-30): the Next up line's button, the page's only primary. It
+  // is the form's submit through `form=`, so it checks the file and opens the review as it always did.
+  // Grey, it carries its reason: the sentence beside it says it, and so do its title and description.
+  const continueNote = blockedReason
+    ? `Continue to Review is waiting: ${blockedReason}`
+    : `Checks Do Not Call, litigators, duplicates and phone numbers for ${(validation?.validRows ?? fileRows).toLocaleString()} rows, then opens the review. Nothing is written yet.`;
+  const continueControl = <span className="inline-flex items-center" title={continueNote}>
     <span id="import-continue-note" className="sr-only">{continueNote}</span>
-    {csv && blockedReason && <CircleAlert className="size-4 shrink-0 text-[var(--warning-ink)]" aria-hidden />}
-    {/* The reason is read, not only hovered: the button is grey for this one thing. */}
-    {csv && blockedReason && <span aria-hidden className="hidden max-w-[22rem] truncate text-xs text-[var(--warning-ink)] md:inline">{blockedReason}</span>}
     <Button type="submit" form="lead-import-form" disabled={Boolean(blockedReason) || saving} aria-describedby="import-continue-note">
-      {saving ? "Checking…" : "Continue to review"}
+      {saving ? "Checking…" : <>Continue to Review<ArrowRight aria-hidden /></>}
     </Button>
   </span>;
+  const readyRows = validation?.validRows ?? 0;
+  const leftOut = validation?.rejectedRows ?? 0;
+  // Used up: the way on is the plan, not the review, so that is the line's one button.
+  const nextUp = info && (nextStep
+    ? <NextUp
+        tone={nextStep.tone}
+        action={!readOnly && usedUp ? <Button asChild><Link href="/app/settings#billing">See plans</Link></Button> : continueControl}
+      >
+        {nextStep.reason}
+      </NextUp>
+    : <NextUp tone="action" action={continueControl}>
+        <strong>{readyRows.toLocaleString()}</strong> row{readyRows === 1 ? "" : "s"} ready{leftOut > 0 ? `, ${leftOut.toLocaleString()} left out` : ""}. Continue to Review.
+      </NextUp>);
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
     {!embedded && <PageHeader title="Import leads" />}
-    {embedded ? <LeadsInSlot slot="continue">{continueControl}</LeadsInSlot> : null}
+    {nextUp}
 
     {loadFailed && !info && <p role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
       The import settings could not be loaded.
       <Button type="button" variant="outline" onClick={() => loadInfo()}>Try again</Button>
     </p>}
 
-    {readOnly && <Callout tone="warning" title="Your plan is read-only. You can look at everything here; importing is paused until it is active again." />}
-    {!readOnly && usedUp && <Callout tone="warning" title={`Your plan's ${usedUp.label} are used up (${usedUp.usage.toLocaleString()} of ${(usedUp.limit ?? 0).toLocaleString()}).`}>
-      <Link href="/app/settings#billing" className="font-semibold text-[var(--accent-ink)] hover:underline">See plans</Link>
-    </Callout>}
-
-    {info && campaigns.length === 0 && <DashedCard
-      icon={<Store className="size-4" aria-hidden />}
-      title="Create a campaign to continue"
-      action={info.canCreateCampaigns ? <Button asChild variant="outline"><Link href="/app/campaigns?guide=campaign">Create campaign</Link></Button> : undefined}
-    >
-      {info.canCreateCampaigns
-        ? "Every import is attributed to a campaign."
-        : "Every import is attributed to a campaign. Ask an owner or producer to create one."}
-    </DashedCard>}
-
     <form id="lead-import-form" onSubmit={importFile} className="flex min-w-0 flex-col gap-4">
-      {file
-        ? <Card className="min-w-0 gap-2 px-4 py-3">
-            <span className="flex min-w-0 items-center gap-3.5">
-              <span aria-hidden className="inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--primary-soft)] text-xs font-extrabold text-[var(--accent-ink)]">{fileKind(file.name)}</span>
-              <span className="min-w-0 flex-1">
-                <strong className="block truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{file.name}</strong>
-                <span className="flex min-w-0 items-center gap-1 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)] tabular-nums">
-                  <span className="truncate" title={`${preview.headers.length} columns · ${formatBytes(file.size)}`}>
-                    {fileRows.toLocaleString()} rows · {saved ? `${vendorName}'s saved column map fits ${savedFits.toLocaleString()} of ${preview.headers.length.toLocaleString()} headers` : `${preview.headers.length} columns · ${formatBytes(file.size)}`}
+      {/* Board LirI1: one card. Into, Product, then the drop zone that holds the file. */}
+      <Card role="region" aria-label="The list" className="min-w-0 gap-3.5 p-4.5">
+        <div className={ROW}>
+          <label htmlFor="lead-campaign" className={ROW_LABEL}>Into</label>
+          <select id="lead-campaign" className={cn(inputControl, "w-auto min-w-0 flex-1 sm:max-w-[420px]")} required value={campaignId} disabled={campaigns.length === 0} onChange={(event) => chooseCampaign(event.target.value)}>
+            <option value="">{campaigns.length === 0 ? "No campaign yet" : "Choose a campaign"}</option>
+            {visibleCampaigns.map((item) => <option key={item.id} value={item.id}>{campaignLabel(item)}</option>)}
+          </select>
+          {/* An assistant cannot make the own-book campaign, but can choose it once it exists. */}
+          {(ownBookCampaign || info?.canCreateCampaigns) && <>
+            <span className="text-xs text-[var(--body)]">or</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-pressed={Boolean(ownBookLabel)}
+              disabled={ownBookBusy || (!ownBookCampaign && readOnly)}
+              title={!ownBookCampaign && readOnly ? "Your plan is read-only." : "For your own clients, old leads or referrals: a list with no vendor."}
+              onClick={() => void chooseOwnBook()}
+            >
+              <BookUser aria-hidden />{ownBookBusy ? "Setting up…" : "Your own book (no vendor)"}
+            </Button>
+          </>}
+          {info?.canCreateCampaigns && <Button asChild variant="outline" size="sm">
+            <Link href="/app/campaigns?guide=campaign"><Plus aria-hidden />New campaign</Link>
+          </Button>}
+        </div>
+        {/* What the Into row still needs said, under the picker. */}
+        {info && (campaigns.length === 0 || recognised || (campaign && campaign.status !== "active")) && <p className="m-0 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-[1.5] text-[var(--body)] sm:pl-23">
+          {campaigns.length === 0 && <span role="status">
+            {info.canCreateCampaigns
+              ? "Create a campaign to continue, or import your own book. Every import goes into a campaign."
+              : "Every import goes into a campaign. Ask an owner or producer to create one."}
+          </span>}
+          {recognised && vendorName && <span className="inline-flex items-center gap-1.5"><Sparkles className="size-3.5 text-[var(--accent-ink)]" aria-hidden />Recognised as {ownBookLabel ? "your own book" : `${vendorName}'s file`} from its column names</span>}
+          {campaign && campaign.status !== "active" && <span className="text-[var(--warning-ink)]">Activate it to dial these leads — it is {campaign.status}.</span>}
+        </p>}
+
+        {/* Settings › Products (2026-10-28): the list is for one product the agency sells; its form decides the columns. */}
+        <div className={ROW}>
+          <label htmlFor="lead-product" className={ROW_LABEL}>Product</label>
+          <select id="lead-product" className={cn(inputControl, "w-auto min-w-0 flex-1 sm:max-w-[240px]")} required value={info?.productCode ?? ""} disabled={(info?.products?.length ?? 0) < 2} onChange={(event) => chooseProduct(event.target.value)}>
+            {(info?.products ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
+          </select>
+        </div>
+
+        {/* The drop zone. Before a file: the target. After it: the file, and a drop here replaces it. */}
+        <div
+          className={cn("flex min-h-[220px] min-w-0 flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed px-6 py-8 text-center transition-colors", dragging ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_4%,transparent)]")}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => { event.preventDefault(); setDragging(false); void takeFile(event.dataTransfer.files?.[0]); }}
+        >
+          <input id="lead-csv" ref={replaceInput} className="peer sr-only" type="file" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => { void takeFile(event.target.files?.[0]); event.target.value = ""; }} />
+          {file
+            ? <>
+                <span className="flex min-w-0 max-w-full items-center gap-2.5 motion-safe:animate-[m-rise_.3s_cubic-bezier(.2,.8,.2,1)_both]">
+                  <span aria-hidden className="inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--primary-soft)] text-xs font-extrabold text-[var(--accent-ink)]">{fileKind(file.name)}</span>
+                  <strong className="min-w-0 truncate text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{file.name}</strong>
+                </span>
+                <span className="flex min-w-0 max-w-full items-center gap-1 text-sm leading-[1.5] text-[var(--ink)] tabular-nums">
+                  <span className="truncate" title={`${preview.headers.length} columns · ${formatBytes(file.size)}${saved ? ` · the saved map fits ${savedFits.toLocaleString()} of ${preview.headers.length.toLocaleString()} headers` : ""}`}>
+                    {reading ? "Reading the workbook…" : <>{fileRows.toLocaleString()} rows · {saved
+                      ? `${savedFits < preview.headers.length ? `${savedFits.toLocaleString()} of ${preview.headers.length.toLocaleString()} ` : ""}columns matched from the saved ${ownBookLabel ? "own-book" : vendorName} map`
+                      : `${preview.headers.length} columns · ${formatBytes(file.size)}`}</>}
                   </span>
                   {usageTip}
                 </span>
-                {sheetNote && <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)]">{sheetNote}</span>}
-              </span>
-              <input ref={replaceInput} className="sr-only" type="file" tabIndex={-1} aria-hidden="true" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => { void takeFile(event.target.files?.[0]); event.target.value = ""; }} />
-              <Button type="button" variant="outline" disabled={reading} onClick={() => replaceInput.current?.click()}>Replace file</Button>
-              <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${file.name}`} title="Remove file" disabled={reading} onClick={reset}><X aria-hidden="true" /></Button>
-            </span>
-            {/* What the browser could already read from the file; the scrub's answer comes on the review. */}
-            {fileError
-              ? <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{fileErrorText(fileError, info?.maxRows ?? 20000)}</p>
-              : validation && validation.rejectedRows > 0 && <span className="flex flex-wrap items-center gap-2 text-xs text-[var(--body)]">
-                  <StatusChip tone="warning" dot>{validation.rejectedRows.toLocaleString()} row{validation.rejectedRows === 1 ? " needs" : "s need"} attention · left out</StatusChip>
-                  {validation.rowErrors.length > 0 && <Button type="button" variant="ghost" size="sm" aria-expanded={errorsOpen} onClick={() => setErrorsOpen((open) => !open)}>
-                    {errorsOpen ? "Hide" : "See which"}<ChevronDown className={cn("size-4 transition-transform", errorsOpen && "rotate-180")} aria-hidden />
-                  </Button>}
-                </span>}
-            {!fileError && looksHeaderless(preview.headers) && <p role="alert" className="m-0 text-sm text-[var(--warning-ink)]">Row 1 looks like a lead, not column names, so it would be lost. Add a header row and choose the file again.</p>}
-            {errorsOpen && validation && validation.rowErrors.length > 0 && <ul className="m-0 flex list-none flex-col gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-3 text-sm leading-[1.5] text-[var(--body)]">
-              {validation.rowErrors.map((item) => <li key={item.rowNumber}>{item.message}</li>)}
-              {validation.moreRowErrors > 0 && <li>and {validation.moreRowErrors.toLocaleString()} more row{validation.moreRowErrors === 1 ? "" : "s"} with problems</li>}
-            </ul>}
-          </Card>
-        : <div
-            className={cn("flex min-h-[300px] min-w-0 flex-col items-center justify-center gap-2.5 rounded-[20px] border-2 border-dashed px-6 py-10 text-center transition-colors", dragging ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_4%,transparent)]")}
-            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(event) => { event.preventDefault(); setDragging(false); void takeFile(event.dataTransfer.files?.[0]); }}
-          >
-            <Upload className="size-11 text-[var(--accent-ink)]" strokeWidth={1.6} aria-hidden />
-            <p className="m-0 text-xl font-semibold tracking-[-0.02em] text-[var(--ink)]">Drop the vendor&apos;s file here</p>
-            <p className="m-0 flex max-w-[520px] items-center gap-1 text-sm leading-[1.5] text-[var(--body)]">{reading ? "Reading the workbook…" : `CSV or Excel, as it arrived. No editing first. Up to ${(info?.maxRows ?? 20000).toLocaleString()} rows.`}{usageTip}</p>
-            <input id="lead-csv" className="peer sr-only" type="file" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => void takeFile(event.target.files?.[0])} />
-            <Button data-guide="lead-import-upload" asChild className="mt-1.5 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
-              <label htmlFor="lead-csv">Choose a file</label>
-            </Button>
-            {info && info.fields.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => setFieldsOpen(true)}>Which columns we read</Button>}
-          </div>}
-
-      {file && campaigns.length > 0 && <Card role="region" aria-label="Where it came from" className="min-w-0 gap-0 px-4 py-3">
-        <span className="flex min-h-[2.25rem] min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5">
-          <strong className={cn(SECTION_TITLE, "shrink-0")}>Where did this list come from?</strong>
-          {sourceFolded && <ul className="m-0 flex min-w-0 flex-1 list-none flex-wrap items-center gap-x-3.5 gap-y-1 p-0 text-sm text-[var(--ink)] motion-safe:animate-[m-rise_.3s_cubic-bezier(.2,.8,.2,1)_both]">
-            {sourceItems.map(({ Icon, label, text }) => <li key={label} className="inline-flex min-w-0 items-center gap-1.5" title={label}>
-              <Icon className="size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden />
-              <span className="sr-only">{label}: </span>
-              <span className="truncate tabular-nums">{text}</span>
-            </li>)}
-            {recognised && <li className="inline-flex items-center" title="Recognised from the column names">
-              <Sparkles className="size-4 text-[var(--accent-ink)]" aria-hidden />
-              <span className="sr-only">Recognised from the column names</span>
-            </li>}
-          </ul>}
-          {sourceComplete && <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            aria-expanded={!sourceFolded}
-            aria-controls="lead-source-fields"
-            onClick={() => { setSourceFocus(false); setSourceOpen(sourceFolded); }}
-          >
-            {sourceFolded ? "Edit" : "Done"}<ChevronDown className={cn("size-4 transition-transform duration-300", !sourceFolded && "rotate-180")} aria-hidden />
-          </Button>}
-        </span>
-        {/* The fields fold away smoothly (grid rows 1fr → 0fr) and are inert while folded. */}
-        <div
-          id="lead-source-fields"
-          inert={sourceFolded}
-          className={cn("grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none", sourceFolded ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100")}
-        >
-          <div className="min-h-0 overflow-hidden">
-            <div
-              className="grid min-w-0 gap-3 px-0.5 pt-2.5 pb-1 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,0.7fr)_minmax(0,0.7fr)]"
-              onFocus={() => setSourceFocus(true)}
-              onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSourceFocus(false); }}
-            >
-              {/* Settings › Products (2026-10-28): the list is for one product the agency sells; its form decides the columns. */}
-              <Field label={<span className="inline-flex items-center gap-1.5"><Package className="size-3.5 text-[var(--accent-ink)]" aria-hidden />Product</span>} htmlFor="lead-product" required>
-                <select id="lead-product" className={control} required value={info?.productCode ?? ""} disabled={(info?.products?.length ?? 0) < 2} onChange={(event) => chooseProduct(event.target.value)}>
-                  {(info?.products ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
-                </select>
-              </Field>
-              <Field label={<span className="inline-flex items-center gap-1.5"><Store className="size-3.5 text-[var(--accent-ink)]" aria-hidden />Lead source</span>} htmlFor="lead-vendor">
-                <select id="lead-vendor" className={control} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
-                  <option value="">Any lead source</option>
-                  {activeVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
-                </select>
-              </Field>
-              <Field label={<span className="inline-flex items-center gap-1.5"><Megaphone className="size-3.5 text-[var(--accent-ink)]" aria-hidden />Campaign</span>} htmlFor="lead-campaign" required hint={campaign && campaign.status !== "active" ? `Activate it to dial these leads — it is ${campaign.status}.` : undefined}>
-                <select id="lead-campaign" className={control} required value={campaignId} onChange={(event) => chooseCampaign(event.target.value)}>
-                  <option value="">Choose a campaign</option>
-                  {visibleCampaigns.map((item) => <option key={item.id} value={item.id}>{item.name}{STATUS_SUFFIX[item.status] ?? ""}</option>)}
-                </select>
-              </Field>
-              <Field label={<span className="inline-flex items-center gap-1.5"><DollarSign className="size-3.5 text-[var(--accent-ink)]" aria-hidden />What you paid</span>} htmlFor="lead-cost" error={cost === "invalid" ? "Like 4,500.00, up to $1,000,000." : undefined}>
-                <span className="relative block">
-                  <span aria-hidden className="pointer-events-none absolute top-[calc(50%+3px)] left-3 -translate-y-1/2 text-base text-[var(--body)]">$</span>
-                  <input id="lead-cost" className={cn(control, "pl-7 tabular-nums")} inputMode="decimal" autoComplete="off" placeholder="Optional" value={costText} onChange={(event) => setCostText(event.target.value)} aria-invalid={cost === "invalid" || undefined} />
+                {sheetNote && <span className="text-xs leading-[1.5] text-[var(--body)]">{sheetNote}</span>}
+                <span className="flex flex-wrap items-center justify-center gap-2">
+                  <Button type="button" variant="outline" size="sm" disabled={reading} onClick={() => replaceInput.current?.click()}>Replace file</Button>
+                  <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${file.name}`} title="Remove file" disabled={reading} onClick={reset}><X aria-hidden="true" />Remove</Button>
                 </span>
-              </Field>
-              <Field label={<span className="inline-flex items-center gap-1.5"><Rows3 className="size-3.5 text-[var(--accent-ink)]" aria-hidden />Rows bought</span>} htmlFor="lead-records" error={records === "invalid" ? "A whole number." : undefined}>
-                <input id="lead-records" className={cn(control, "tabular-nums")} inputMode="numeric" autoComplete="off" placeholder={fileRows ? fileRows.toLocaleString() : undefined} value={recordsValue} onChange={(event) => setRecordsText(event.target.value)} aria-invalid={records === "invalid" || undefined} />
-              </Field>
-            </div>
-          </div>
+                {/* What the browser could already read from the file; the scrub's answer comes on the review. */}
+                {fileError
+                  ? <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{fileErrorText(fileError, info?.maxRows ?? 20000)}</p>
+                  : validation && validation.rejectedRows > 0 && <span className="flex flex-wrap items-center justify-center gap-2 text-xs text-[var(--body)]">
+                      <StatusChip tone="warning" dot>{validation.rejectedRows.toLocaleString()} row{validation.rejectedRows === 1 ? " needs" : "s need"} attention · left out</StatusChip>
+                      {validation.rowErrors.length > 0 && <Button type="button" variant="ghost" size="sm" aria-expanded={errorsOpen} onClick={() => setErrorsOpen((open) => !open)}>
+                        {errorsOpen ? "Hide" : "See which"}<ChevronDown className={cn("size-4 transition-transform", errorsOpen && "rotate-180")} aria-hidden />
+                      </Button>}
+                    </span>}
+                {!fileError && looksHeaderless(preview.headers) && <p role="alert" className="m-0 text-sm text-[var(--warning-ink)]">Row 1 looks like a lead, not column names, so it would be lost. Add a header row and choose the file again.</p>}
+                {errorsOpen && validation && validation.rowErrors.length > 0 && <ul className="m-0 flex w-full max-w-2xl list-none flex-col gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-3 text-left text-sm leading-[1.5] text-[var(--ink)]">
+                  {validation.rowErrors.map((item) => <li key={item.rowNumber}>{item.message}</li>)}
+                  {validation.moreRowErrors > 0 && <li>and {validation.moreRowErrors.toLocaleString()} more row{validation.moreRowErrors === 1 ? "" : "s"} with problems</li>}
+                </ul>}
+              </>
+            : <>
+                <Upload className="size-10 text-[var(--accent-ink)]" strokeWidth={1.6} aria-hidden />
+                <p className="m-0 text-base font-semibold tracking-[-0.02em] text-[var(--ink)]">{ownBookLabel ? "Drop your list here" : "Drop the vendor’s file here"}</p>
+                <p className="m-0 flex max-w-[520px] items-center gap-1 text-sm leading-[1.5] text-[var(--ink)]">{reading ? "Reading the workbook…" : `CSV or Excel, as it arrived. No editing first. Up to ${(info?.maxRows ?? 20000).toLocaleString()} rows.`}{usageTip}</p>
+                <span className="flex flex-wrap items-center justify-center gap-2">
+                  <Button data-guide="lead-import-upload" asChild variant="outline" size="sm" className="cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
+                    <label htmlFor="lead-csv">Choose a file</label>
+                  </Button>
+                  {info && info.fields.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => setFieldsOpen(true)}>Which columns we read</Button>}
+                </span>
+              </>}
         </div>
-      </Card>}
+
+        {/* What the list cost, once there is a list: "Paid $4,500.00 for 1,000 rows bought". Both optional. */}
+        {file && <div className={ROW}>
+          <label htmlFor="lead-cost" className={ROW_LABEL}>Paid</label>
+          <span className="relative block w-40">
+            <span aria-hidden className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-[var(--body)]">$</span>
+            <input id="lead-cost" className={cn(inputControl, "pl-7 tabular-nums", cost === "invalid" && "border-[var(--error)]")} inputMode="decimal" autoComplete="off" placeholder="Optional" value={costText} onChange={(event) => setCostText(event.target.value)} aria-invalid={cost === "invalid" || undefined} aria-describedby={cost === "invalid" ? "lead-cost-error" : undefined} />
+          </span>
+          <label htmlFor="lead-records" className="text-sm text-[var(--ink)]">for</label>
+          <input id="lead-records" className={cn(inputControl, "w-28 tabular-nums", records === "invalid" && "border-[var(--error)]")} inputMode="numeric" autoComplete="off" placeholder={fileRows ? fileRows.toLocaleString() : undefined} value={recordsValue} onChange={(event) => setRecordsText(event.target.value)} aria-invalid={records === "invalid" || undefined} aria-describedby={records === "invalid" ? "lead-records-error" : undefined} />
+          <span className="text-sm text-[var(--ink)]">rows bought</span>
+          {cost === "invalid" && <span id="lead-cost-error" role="alert" className="text-xs text-[var(--error-ink)]">What you paid: like 4,500.00, up to $1,000,000.</span>}
+          {records === "invalid" && <span id="lead-records-error" role="alert" className="text-xs text-[var(--error-ink)]">Rows bought: a whole number.</span>}
+        </div>}
+      </Card>
 
       {/* Board LinB2, compact (owner 2026-10-28): every column theirs → yours, two to a line on a wide
           screen, each destination still changeable, its state an icon with the reason on hover. */}
@@ -797,10 +837,10 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
           <span className={cn("min-w-0 flex-1 truncate text-xs leading-[1.5] tabular-nums", columnsNeedYou || mappingSummary.blockedReason ? "text-[var(--warning-ink)]" : "text-[var(--body)]")}>
             {mappingSummary.blockedReason ?? (columnsNeedYou ? `${mappingSummary.needsDecision.toLocaleString()} to check before checking phone numbers` : `${mappingSummary.mapped.toLocaleString()} of ${mappingRows.length.toLocaleString()} placed · ${requiredMapped} of ${requiredKeys.length} required${dateOrderToSend ? ` · dates ${dateOrderToSend === "dmy" ? "day first" : "month first"}` : ""}`)}
           </span>
-          {!vendorId && <InfoTip label="About keeping this map">Choose a vendor above to keep this map for their next file.</InfoTip>}
+          {!vendorId && <InfoTip label="About keeping this map">Choose the campaign above to keep this map for its vendor’s next file.</InfoTip>}
           {columnsSettled
             ? <span role="status" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--accent-ink)]"><Check className="size-4" aria-hidden />{vendorId && mapUnchanged ? `Saved for ${vendorName}'s next file` : "Columns checked"}</span>
-            : <Button type="button" disabled={Boolean(mappingSummary.blockedReason)} onClick={() => void confirmColumns()}>Looks right</Button>}
+            : <Button type="button" variant="outline" disabled={Boolean(mappingSummary.blockedReason)} title={mappingSummary.blockedReason ?? undefined} onClick={() => void confirmColumns()}>Looks right</Button>}
         </span>
         <ul className="m-0 grid min-w-0 list-none gap-x-6 p-0 xl:grid-cols-2">
           {mappingRows.map((row) => {
@@ -851,12 +891,8 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
         {saveNote && <p role="status" className="m-0 text-xs leading-[1.5] text-[var(--body)]">{saveNote}</p>}
       </Card>}
 
-      {!storageOk && <Callout tone="warning" title="This browser will not hold the file between pages">
-        Enable site data for this site to continue to review.
-      </Callout>}
-
-      {/* Outside the Lead sources frame there is no corner, so the way on sits at the foot. */}
-      {!embedded && <div className="flex justify-end">{continueControl}</div>}
+      {/* Read-only, used up and a browser that will not hold the file are said once, on the Next up
+          line at the top; Continue to Review lives there too, in and out of the Lead sources frame. */}
     </form>
 
     {info && info.fields.length > 0 && <Dialog open={fieldsOpen} onOpenChange={setFieldsOpen}>

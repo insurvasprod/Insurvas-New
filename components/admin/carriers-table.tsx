@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { st, pillTone, Switch } from "@/components/app/settings/primitives";
 import {
   DropdownMenu,
@@ -33,7 +34,6 @@ import { cn } from "@/lib/utils";
 import { CarrierDialog } from "./carrier-dialog";
 import { CarrierDeactivateDialog } from "./carrier-deactivate-dialog";
 
-const PAGE_SIZE = 10;
 const MENU_ITEM = "text-sm tracking-[-0.02em] text-[var(--ink)]";
 
 type StateFilter = "all" | "active" | "inactive";
@@ -70,6 +70,7 @@ export function CarriersTable({
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [usageFilter, setUsageFilter] = useState<UsageFilter>("any");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CarrierRow | null>(null);
   const [blocked, setBlocked] = useState<{ carrier: CarrierRow; usage: CarrierBlockingUsage | null } | null>(null);
@@ -144,9 +145,7 @@ export function CarriersTable({
       }),
     [carriers, stateFilter, usageFilter, usage, term],
   );
-  const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const current = Math.min(page, pages);
-  const rows = visible.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const { current, rows } = paginate(visible, page, pageSize);
 
   function clearAll() {
     setSearch("");
@@ -205,6 +204,7 @@ export function CarriersTable({
       </BoardStatGrid>
 
       <TableCard
+        footer={<Pager page={current} pageSize={pageSize} total={visible.length} noun={visible.length === 1 ? "carrier" : "carriers"} suffix="by sort order, then name" onPage={setPage} />}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />}>
             <ToolbarSearch
@@ -342,14 +342,6 @@ export function CarriersTable({
             </tbody>
           </table>
         </div>
-        <BoardTableFooter
-          page={current}
-          pageSize={PAGE_SIZE}
-          total={visible.length}
-          itemLabel={visible.length === 1 ? "carrier" : "carriers"}
-          order="by sort order, then name"
-          onPageChange={setPage}
-        />
       </TableCard>
 
       <CarrierDialog open={creating} onClose={() => setCreating(false)} onSaved={refresh} />

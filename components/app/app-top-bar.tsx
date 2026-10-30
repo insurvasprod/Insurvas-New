@@ -23,7 +23,7 @@ import { notify } from "@/lib/notify";
 import { OPEN_WORKSPACES_EVENT } from "@/lib/menu/navEvents";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import type { MenuSection } from "@/lib/menu/definition";
-import { TopBarCrumb, TopBarNew } from "@/components/app/nav/top-bar-nav";
+import { TopBarNew } from "@/components/app/nav/top-bar-nav";
 
 /**
  * The top bar.
@@ -229,11 +229,17 @@ export function TopBarShell({
   accountHostId,
   accountExtra,
   leading,
+  spacer = false,
   actions,
   inbox = false,
 }: {
   /** Drawn before the search: the agent shell's breadcrumb (Navigation A). */
   leading?: ReactNode;
+  /**
+   * An empty slot before the search, so the search sits where the agent shell's does (the partner
+   * portal, 2026-10-30). It names nothing: the page names itself (PageHeader), never the bar.
+   */
+  spacer?: boolean;
   /** Drawn first on the right: the agent shell's Inbound pill and New menu. */
   actions?: ReactNode;
   /**
@@ -560,7 +566,7 @@ export function TopBarShell({
 
   return (
     <div ref={rootRef} className="portal-top-bar" data-open={menu ?? undefined} data-inbox={inbox || undefined}>
-      {leading}
+      {leading ?? (spacer ? <span className="portal-top-crumb" aria-hidden="true" /> : null)}
       {/* ---------------------------------------------------------- search */}
       <form role="search" className="portal-top-search" onSubmit={(event) => event.preventDefault()}>
         <Search className="portal-top-search-icon size-[15px]" aria-hidden="true" />
@@ -1053,7 +1059,6 @@ export function AppTopBar({ user, userId, plan, menu }: {
       workspacesEndpoint="/api/app/auth/workspaces"
       switchWorkspaceEndpoint="/api/app/auth/switch-workspace"
       accountExtra={plan ? <PlanLine plan={plan} /> : undefined}
-      leading={menu ? <TopBarCrumb menu={menu} /> : undefined}
       actions={menu ? <TopBarNew menu={menu} /> : undefined}
       inbox
     />

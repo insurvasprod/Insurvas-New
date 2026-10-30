@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Callout } from "@/components/app/settings/primitives";
@@ -196,11 +195,9 @@ export function PlanVersionEditor({
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div>
-        <Link href="/admin/plans" className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)] no-underline hover:text-[var(--ink)]">
-          <ArrowLeft className="size-3.5" aria-hidden />Back to plans
-        </Link>
         <PageHeader
           title={`${planName} — version ${planVersion}`}
+          breadcrumbs={[{ label: "Catalog" }, { label: "Plans", href: "/admin/plans" }, { label: `${planName} — version ${planVersion}` }]}
           actions={saveButton}
         />
         <div className="mt-3 flex flex-wrap gap-2">

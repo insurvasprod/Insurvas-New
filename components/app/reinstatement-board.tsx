@@ -12,6 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import { CASE_STATUS_LABELS, DECLINES, FORWARD, canMove, type CaseStatus, type Urgency } from "@/lib/retention/reinstatement";
 import type { CaseRow, Reinstatement } from "@/lib/retention/reinstatementStore";
@@ -50,7 +51,8 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
   const [page, setPage] = useState(1);
   const [working, setWorking] = useState<CaseRow | null>(null);
   const rows = view === "open" ? data.open : data.closed;
-  const shown = paginate(rows, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(rows, page, pageSize);
   const { counts } = data;
   const advance = money(counts.advanceOpenCents);
   const pinned = useMemo(() => data.open.filter((r) => r.urgency === "pinned"), [data.open]);
@@ -80,7 +82,7 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
             </select>
           </DataToolbar>
         }
-        footer={rows.length > 10 ? <Pager page={shown.current} pageSize={10} total={rows.length} noun="cases" onPage={setPage} /> : undefined}
+        footer={rows.length ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="cases" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title={view === "open" ? "Nothing to reinstate" : "Nothing closed lately"} hint={view === "open" ? "A case opens when a carrier file shows a lapse the carrier will still take back. Set each carrier's reinstatement window in Carrier rules." : "Reinstated, declined and expired cases show here for 90 days."} />

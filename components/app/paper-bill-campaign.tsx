@@ -12,6 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import { CONVERSION_OUTCOME_LABELS, LOGGABLE_OUTCOMES, STATE_LABELS, type CampaignState } from "@/lib/retention/campaign";
 import type { Campaign, CampaignRow } from "@/lib/retention/campaignStore";
@@ -45,7 +46,8 @@ export function PaperBillCampaign({ campaign, isOwner, readOnly }: { campaign: C
   const [talk, setTalk] = useState(false);
   const { totals, rows } = campaign;
   const visible = useMemo(() => rows.filter((r) => view === "all" || (view === "resting" ? r.state === "declined" || r.state === "no_bank_account" : r.state === view)), [rows, view]);
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(visible, page, pageSize);
 
   return (
     <>
@@ -71,7 +73,7 @@ export function PaperBillCampaign({ campaign, isOwner, readOnly }: { campaign: C
             <span className="text-sm text-muted-foreground">Biggest premium first</span>
           </DataToolbar>
         }
-        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title="No paper-bill policies" hint="Every in-force policy pays by draft or card. Policies the carrier files show as mailed bill appear here." />

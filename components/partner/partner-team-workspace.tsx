@@ -18,10 +18,10 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { activityLabel, dayMonth, dayMonthTime, expiresInLabel } from "@/lib/format/ago";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 
-const PAGE_SIZE = 10;
 
 type PartnerUser = {
   id: string;
@@ -46,6 +46,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
   // The first read draws the page skeleton; a reload after an invite keeps the page and its form.
   const [loaded, setLoaded] = useState(false);
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -201,7 +202,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
     .sort((a, b) => a - b)[0];
   const needle = search.trim().toLowerCase();
   const shown = users.filter((user) => !needle || `${user.name} ${user.email}`.toLowerCase().includes(needle));
-  const visible = paginate(shown, page, PAGE_SIZE);
+  const visible = paginate(shown, page, pageSize);
 
   function lastActivity(user: PartnerUser) {
     if (user.status !== "active") return user.deactivated_at ? dayMonth(new Date(user.deactivated_at), new Date(now)) : "—";
@@ -250,7 +251,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search members" label="Search members by name or email" />
           </DataToolbar>
         }
-        footer={users.length ? <Pager page={visible.current} total={shown.length} noun="members" pageSize={PAGE_SIZE} onPage={setPage} /> : undefined}
+        footer={users.length ? <Pager page={visible.current} total={shown.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         {users.length === 0 ? <EmptyState title="No team members yet" hint="Invite the first teammate to start working leads together." action={<Button type="button" variant="outline" onClick={() => setInviteOpen(true)}>Invite teammate</Button>} />
           : shown.length === 0 ? <NoMatches noun="members" onClear={() => setSearch("")} />

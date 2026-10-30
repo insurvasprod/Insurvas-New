@@ -30,7 +30,7 @@ import {
   type ReturnCandidateRow,
   type VendorReturnsPageData,
 } from "@/lib/vendorScorecard/returnModel";
-import { Pager } from "@/components/ui/pager";
+import { Pager, paginate } from "@/components/ui/pager";
 import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ViewTabs } from "@/components/ui/view-tabs";
@@ -246,6 +246,8 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "open" | "resolved">("");
   const [page, setPage] = useState(0);
+  const [campaignPage, setCampaignPage] = useState(1);
+  const [vendorPage, setVendorPage] = useState(1);
   const [view, setView] = useState<View>("claims");
   // Header, strip, view row, toolbar, column heads and pager around the claim rows.
   const pageSize = useFittingRows(470, 41);
@@ -276,7 +278,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
 
   /** The vendor filter lives in the URL too, so the view can be linked and survives a reload. */
   function chooseVendor(next: string) {
-    setVendorId(next); setPage(0);
+    setVendorId(next); setPage(0); setCampaignPage(1); setVendorPage(1);
     try {
       const url = new URL(window.location.href);
       if (next) url.searchParams.set("vendor", next); else url.searchParams.delete("vendor");
@@ -380,7 +382,9 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const shown = rows.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
-  const sum = (list: VendorReturnClaim[], pick: (claim: VendorReturnClaim) => number) => list.reduce((total, claim) => total + pick(claim), 0);
+  const campaignsPaged = paginate(campaigns, campaignPage, pageSize);
+  const undialablePaged = paginate(undialable ?? [], vendorPage, pageSize);
+  const sum =(list: VendorReturnClaim[], pick: (claim: VendorReturnClaim) => number) => list.reduce((total, claim) => total + pick(claim), 0);
 
   // The four figures, over every claim — the filters narrow the table, not the ledger.
   const draftCount = claims.filter((claim) => claim.status === "draft").length;
@@ -405,7 +409,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
     <option value="">All vendors</option>
     {vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
   </select>;
-  const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`;
+  const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-362px)]`;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     {!embedded && <PageHeader title="Vendor returns" description="Return claims, and what each vendor credited." />}
@@ -512,6 +516,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
           {vendorSelect}
         </DataToolbar>
       }
+      footer={campaigns.length ? <Pager page={campaignsPaged.current} total={campaigns.length} pageSize={pageSize} noun={campaigns.length === 1 ? "campaign" : "campaigns"} onPage={setCampaignPage} /> : undefined}
     >
       {report?.summaryFallback && <p className="flex items-center gap-1 border-b border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground">Claim rows removed at import from the lead list for now.<InfoTip label="Why they are missing">They are listed here once a pending database update is applied.</InfoTip></p>}
       {campaigns.length === 0
@@ -529,7 +534,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
             <th scope="col" className={th}>Closes</th>
             <th scope="col" className={`${th} text-right`}><span className="sr-only">Actions</span></th>
           </tr></thead>
-          <tbody>{campaigns.map((entry) => {
+          <tbody>{campaignsPaged.rows.map((entry) => {
             const previewing = previewCampaign === entry.campaign_id;
             const waiting = reasonTotals(entry.reasons).filter((row) => row.rows > 0).map((row) => `${count(row.rows)} ${REASON_LABEL[row.reason]}`).join(" · ");
             return <tr key={entry.campaign_id} id={`returns-campaign-${entry.campaign_id}`} className={`m-row ${previewing || openCampaign === entry.campaign_id ? "bg-[var(--primary-soft)]" : ""}`}>
@@ -558,6 +563,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
       : <TableCard
         className={fill}
         toolbar={<DataToolbar actions={<>{vendorId && <ClearFiltersButton onClick={() => chooseVendor("")} />}<RefreshButton onClick={() => void refresh()} refreshing={refreshing} /></>}>{vendorSelect}</DataToolbar>}
+        footer={undialable.length ? <Pager page={undialablePaged.current} total={undialable.length} pageSize={pageSize} noun={undialable.length === 1 ? "vendor" : "vendors"} onPage={setVendorPage} /> : undefined}
       >
         {undialable.length === 0 ? <EmptyState title="No undialable records" hint="Every record bought in scope could be dialed." />
           : <table className="w-full min-w-[900px] border-collapse text-left">
@@ -570,7 +576,7 @@ export function VendorReturnsWorkspace({ initialVendorId, embedded = false }: { 
             <th scope="col" className={`${th} text-right`}><span className="inline-flex items-center gap-1">Undialable<InfoTip label="About undialable share" side="bottom">Share of every record bought that could never be dialed.</InfoTip></span></th>
             <th scope="col" className={`${th} text-right`}>Undialable spend</th>
           </tr></thead>
-          <tbody>{undialable.map((row) => <tr key={row.vendor_id} className="m-row">
+          <tbody>{undialablePaged.rows.map((row) => <tr key={row.vendor_id} className="m-row">
             <td className={`${td} font-semibold text-foreground`}>{row.vendor_name}</td>
             <td className={`${td} text-right tabular-nums`}>{count(row.records_purchased)}</td>
             <td className={`${td} text-right tabular-nums`}>{count(row.removed_at_import)}</td>

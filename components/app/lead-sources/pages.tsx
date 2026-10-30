@@ -60,9 +60,9 @@ export async function LeadSourcesPage({ guards }: {
   if (!canLists) {
     // Somebody who may see vendors but not lists starts on the step they can open.
     if (canCampaigns) redirect("/app/campaigns");
-    if (!lists.entitled) return <FeatureGateNotice guard={lists} featureLabel="Lead sources" description="Your lead vendors, what each list cost, and what is still untouched." />;
-    if (agencyNarrow) return <RoleGateNotice reason="agency" featureLabel="Lead sources" detail="In an agency, the owner and admins handle vendors, lists and lead spend." />;
-    return <RoleGateNotice featureLabel="Lead sources" detail="Only owners, producers and assistants can see lead lists; only owners and producers see vendors and spend." />;
+    if (!lists.entitled) return <FeatureGateNotice guard={lists} featureLabel="Lead flow" description="Your lead vendors, what each list cost, and what is still untouched." />;
+    if (agencyNarrow) return <RoleGateNotice reason="agency" featureLabel="Lead flow" detail="In an agency, the owner and admins handle vendors, lists and lead spend." />;
+    return <RoleGateNotice featureLabel="Lead flow" detail="Only owners, producers and assistants can see lead lists; only owners and producers see vendors and spend." />;
   }
 
   const readOnly = lists.entitlement.access === "read_only";

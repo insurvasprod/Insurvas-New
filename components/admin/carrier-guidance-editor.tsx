@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { Guidance } from "@/lib/ingestion/bookImport";
 import { notify } from "@/lib/notify";
 
@@ -28,7 +29,8 @@ export function CarrierGuidanceEditor({ rows }: { rows: Row[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const visible = rows.filter((r) => (!query.trim() || r.carrierName.toLowerCase().includes(query.trim().toLowerCase())) && (!missingOnly || !r.guidance));
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(420, 57);
+  const shown = paginate(visible, page, pageSize);
   // A new search or filter starts from the first page.
   const search = (value: string) => { setQuery(value); setPage(1); };
   const filterMissing = (value: boolean) => { setMissingOnly(value); setPage(1); };
@@ -54,7 +56,7 @@ export function CarrierGuidanceEditor({ rows }: { rows: Row[] }) {
   return (
     <TableCard
       toolbar={<DataToolbar><ToolbarSearch value={query} onChange={search} placeholder="Search carriers" /><ToolbarCheckbox checked={missingOnly} onChange={filterMissing} label="Only carriers with no guidance" /></DataToolbar>}
-      footer={visible.length > 0 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
+      footer={visible.length > 0 ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
     >
       {visible.length === 0 ? <NoMatches noun="carriers" onClear={() => { setQuery(""); setMissingOnly(false); setPage(1); }} /> : (
         <table className="portal-lead-table w-full min-w-[1100px] text-left text-sm">

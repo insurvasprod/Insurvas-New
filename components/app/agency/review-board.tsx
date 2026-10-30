@@ -6,6 +6,8 @@ import { notify } from "@/lib/notify";
 import { PageHeader } from "@/components/ui/page-header";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
@@ -43,17 +45,20 @@ export function ReviewBoard({ canSetRates }: { canSetRates: boolean }) {
   const reviewed = reviews.filter((r) => r.status !== "queued");
   const tally = useMemo(() => errorTally(reviewed), [reviewed]);
   const rows = tab === "queue" ? queue : reviewed;
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
+  const shown = paginate(rows, page, pageSize);
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="Application review" description="A sample of each producer's submitted paperwork, read against the same checks the submission used." />
-      <ViewTabs label="Application review" value={tab} onChange={setTab} idPrefix="review-tab" tabs={[
+      <ViewTabs label="Application review" value={tab} onChange={(next) => { setTab(next); setPage(1); }} idPrefix="review-tab" tabs={[
         { key: "queue", label: "To review", count: queue.length },
         { key: "tally", label: "By producer" },
         { key: "reviewed", label: "Reviewed", count: reviewed.length },
       ]} />
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row lg:items-stretch">
-        <TableCard className="min-w-0 flex-1" toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />}>
+        <TableCard className="min-w-0 flex-1" toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />} footer={data && tab !== "tally" && rows.length ? <Pager page={shown.current} total={rows.length} noun="applications" pageSize={pageSize} onPage={setPage} /> : undefined}>
           {error ? <ErrorState detail={error} /> : loading || !data ? <SectionLoading rows={4} columns={5} label="Loading reviews" /> : tab === "tally" ? (
             <TallyTable producers={roster.data?.rows ?? []} reviews={reviews} tally={tally} canSetRates={canSetRates} onSaved={reload} />
           ) : rows.length === 0 ? (
@@ -64,7 +69,7 @@ export function ReviewBoard({ canSetRates }: { canSetRates: boolean }) {
                 <TableRow><TableHead>Producer</TableHead><TableHead>Carrier</TableHead><TableHead>Sampled</TableHead><TableHead>Status</TableHead><TableHead>Errors</TableHead><TableHead className="text-right"><span className="sr-only">Open</span></TableHead></TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
+                {shown.rows.map((r) => (
                   <TableRow key={r.id} className={open?.id === r.id ? "cursor-pointer bg-[var(--primary-soft)]" : "cursor-pointer"} onClick={() => setOpen(r)}>
                     <TableCell className="font-medium">{name.get(r.producerUserId) ?? "Producer"}</TableCell>
                     <TableCell>{r.carrierName ?? "—"}</TableCell>

@@ -3,7 +3,7 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronLeft, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -29,7 +29,7 @@ import { notify } from "@/lib/notify";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { claimedMessage, isWithAgent, releaseDialog, SCREENING_FILTER_OPTIONS, screeningSignal, type InboxSummary, type ScreeningSignal } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
-import { Pager } from "@/components/ui/pager";
+import { Pager, paginate } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ToggleChip } from "@/components/ui/toggle-chip";
@@ -111,7 +111,6 @@ const DEFAULT_FILTERS: Filters = { status: "all", partnerId: "", productLine: ""
 /** "Clear filters" removes every chip: that is All transfers. */
 const CLEARED_FILTERS: Filters = DEFAULT_FILTERS;
 const STATUS_LABEL: Record<Status, string> = { unclaimed: "waiting", claimed: "claimed", all: "all" };
-const PARTNER_PAGE = 10;
 
 /**
  * Rows per page: as many as fit the screen under the header, strip and toolbar, so the pager sits
@@ -396,9 +395,9 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   // today with its filters, Today by partner and lost-transfer recovery. Agents take callers on Inbound.
   const header = (
     <div className="flex flex-col gap-3">
-      <Link href="/app/inbound" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground hover:text-foreground"><ChevronLeft className="size-4" aria-hidden="true" />Inbound</Link>
       <PageHeader
         title="Team"
+        breadcrumbs={[{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: "Team" }]}
         actions={<Button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Taking…" : "Take the next caller"}</Button>}
       />
       <TeamViews current="all" />
@@ -690,9 +689,8 @@ function TodayByPartner({ extras, search, onSearch, page, onPage, onRefresh, can
   const totals = partners.reduce((sum, partner) => ({ sent: sum.sent + partner.sent, completed: sum.completed + partner.completed, dropped: sum.dropped + partner.dropped, flagged: sum.flagged + partner.flagged }), { sent: 0, completed: 0, dropped: 0, flagged: 0 });
   const active = partners.filter((partner) => partner.sent > 0).length;
   const rate = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "—");
-  const pages = Math.max(1, Math.ceil(rows.length / PARTNER_PAGE));
-  const current = Math.min(Math.max(1, page), pages);
-  const shown = rows.slice((current - 1) * PARTNER_PAGE, current * PARTNER_PAGE);
+  const pageSize = useFittingPageSize(520, 45);
+  const { current, rows: shown } = paginate(rows, page, pageSize);
   return (
     <>
       <StatStrip label="Today's transfers by partner">
@@ -707,7 +705,7 @@ function TodayByPartner({ extras, search, onSearch, page, onPage, onRefresh, can
             <ToolbarSearch value={search} onChange={onSearch} placeholder="Search partners" />
           </DataToolbar>
         }
-        footer={<Pager page={current} total={rows.length} pageSize={PARTNER_PAGE} noun="partners" suffix="busiest first" onPage={onPage} />}
+        footer={<Pager page={current} total={rows.length} pageSize={pageSize} noun="partners" suffix="busiest first" onPage={onPage} />}
       >
         {!extras ? <SectionLoading rows={5} columns={5} label="Loading today by partner" />
           : rows.length === 0 ? (term ? <NoMatches noun="partners" onClear={() => onSearch("")} /> : <EmptyState title="No partners yet" hint="Add a partner to start receiving transfers." action={canManagePartners ? <Button asChild variant="outline"><Link href="/app/publishers">Open Partners</Link></Button> : undefined} />)

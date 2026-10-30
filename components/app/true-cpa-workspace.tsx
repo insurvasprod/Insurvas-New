@@ -17,6 +17,7 @@ import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import type { ScorecardStage, VendorScorecardLeadResult, VendorScorecardReport, VendorScorecardRow, VendorScorecardVendorRow } from "@/lib/vendorScorecard/types";
 import { CampaignComparisonWorkspace } from "./campaign-comparison-workspace";
 import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
@@ -373,9 +374,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           actions={<RefreshButton onClick={refresh} refreshing={loading} />}
         >
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search vendor, campaign" />
-          <div role="radiogroup" aria-label="Rows" className="inline-flex h-9 gap-0.5 rounded-md border border-input bg-background p-0.5">
+          <div role="radiogroup" aria-label="Rows" className="flex flex-wrap items-center gap-2">
             {([["vendor", "By vendor"], ["campaign", "By campaign"]] as const).map(([key, text]) => (
-              <button key={key} type="button" role="radio" aria-checked={effectiveGrain === key} disabled={key === "vendor" && Boolean(report) && !upgraded} onClick={() => { setGrain(key); setPage(0); }} className={cn("inline-flex h-7 items-center rounded px-2.5 text-sm font-semibold disabled:opacity-50", effectiveGrain === key ? "bg-[var(--primary-soft)] text-foreground" : "text-muted-foreground hover:text-foreground")}>{text}</button>
+              <ToggleChip key={key} role="radio" selected={effectiveGrain === key} disabled={key === "vendor" && Boolean(report) && !upgraded} onClick={() => { setGrain(key); setPage(0); }}>{text}</ToggleChip>
             ))}
           </div>
           <select aria-label="Sort" className={toolbarControl} value={sort} onChange={(event) => { setSort(event.target.value as Sort); setPage(0); }}>

@@ -15,7 +15,7 @@ import { DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, t
 import { TableCard } from "@/components/ui/table-card";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { st } from "@/components/app/settings/primitives";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager } from "@/components/ui/pager";
 import { AUDIT_ACTIONS, AUDIT_ACTION_LABELS } from "@/lib/audit/actions";
 import {
   activeFilterCount,
@@ -201,6 +201,7 @@ export function AuditLogTable({
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <TableCard
+        footer={failed ? undefined : <Pager page={page} pageSize={pageSize} total={total} noun="entries" suffix="newest first · server-side paging" approximate={approximate} onPage={setPage} disabled={busy} />}
         toolbar={
           <>
             <DataToolbar actions={<RefreshButton onClick={() => setReloadNonce((n) => n + 1)} refreshing={busy} />}>
@@ -372,18 +373,6 @@ export function AuditLogTable({
               </tbody>
             </table>
           </div>
-        )}
-        {!failed && (
-          <BoardTableFooter
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            itemLabel="entries"
-            order="newest first · server-side paging"
-            approximate={approximate}
-            onPageChange={setPage}
-            busy={busy}
-          />
         )}
       </TableCard>
 

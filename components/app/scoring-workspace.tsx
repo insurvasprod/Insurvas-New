@@ -13,7 +13,7 @@ import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-sta
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { Segmented } from "@/components/app/view-tabs";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { cn } from "@/lib/utils";
 import { compareHoldout, pts, VERDICT_CHIP } from "@/lib/scoring/holdout";
 import { breakdownLine, heldBackSentence, leadLine, scoreShare, shareLabel, type QueuePreview } from "@/lib/scoring/preview";
@@ -119,15 +119,10 @@ function QueuePreviewCard({ onClose }: { onClose?: () => void }) {
               {(data?.agents ?? []).map((agent) => <option key={agent.userId} value={agent.userId}>{agent.name} · {ROLE_LABEL[agent.role] ?? agent.role}</option>)}
             </select>
             {preview && data?.available && (
-              <Segmented
-                label="Which leads"
-                value={list}
-                onChange={setList}
-                options={[
-                  { key: "next", label: "Next up", count: preview.rows.length },
-                  { key: "held", label: "Held back by the calling window", count: preview.heldBackCount },
-                ]}
-              />
+              <div role="radiogroup" aria-label="Which leads" className="flex flex-wrap items-center gap-2">
+                <ToggleChip role="radio" selected={list === "next"} count={preview.rows.length} onClick={() => setList("next")}>Next up</ToggleChip>
+                <ToggleChip role="radio" selected={list === "held"} count={preview.heldBackCount} onClick={() => setList("held")}>Held back by the calling window</ToggleChip>
+              </div>
             )}
           </DataToolbar>
         }

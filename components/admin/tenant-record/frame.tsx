@@ -1,6 +1,5 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
 import { subscriptionTone, type StatusTone } from "@/components/admin/status-chip";
 import { type PillTone, pillTone } from "@/lib/ui/pillTone";
@@ -71,15 +70,9 @@ export function TenantRecordFrame({
   return (
     <>
       <div>
-        <Link
-          href="/admin/tenants"
-          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-        >
-          <ArrowLeft className="size-[13px] stroke-[2.4]" aria-hidden="true" />
-          Back to tenants
-        </Link>
         <PageHeader
           title={tenant.name}
+          breadcrumbs={[{ label: "Customers" }, { label: "Tenants", href: "/admin/tenants" }, { label: tenant.name }]}
           actions={
             <>
               <span role="group" className="flex flex-wrap items-center gap-2" aria-label="Agency state">

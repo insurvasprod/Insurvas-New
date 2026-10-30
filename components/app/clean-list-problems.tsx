@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { RefreshButton, DataToolbar } from "@/components/ui/data-toolbar";
 import { LeadListScrub } from "@/components/app/lead-list-scrub";
 
@@ -71,6 +73,9 @@ export function CleanListProblems({ lists, error, loading, access, onReload }: {
   const [open, setOpen] = useState<string | null>(null);
   const [probes, setProbes] = useState<Record<string, Probe>>({});
   const problems = listProblemsOf(lists ?? []);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 73);
+  const shown = paginate(problems, page, pageSize);
 
   // The screening service's read-only check (no vendor called, nothing billed): the Source step's "Check again".
   async function checkAgain(campaignId: string) {
@@ -158,6 +163,7 @@ export function CleanListProblems({ lists, error, loading, access, onReload }: {
     <TableCard
       className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1 [&>.overflow-x-auto]:flex-1 lg:[&>.overflow-x-auto]:min-h-0 lg:[&>.overflow-x-auto]:overflow-y-auto"
       toolbar={<DataToolbar actions={<RefreshButton onClick={onReload} refreshing={loading} />} />}
+      footer={!error && lists && problems.length ? <Pager page={shown.current} total={problems.length} noun={problems.length === 1 ? "problem" : "problems"} pageSize={pageSize} onPage={setPage} /> : undefined}
     >
       {error ? (
         <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={onReload}>Try again</Button>} />
@@ -175,7 +181,7 @@ export function CleanListProblems({ lists, error, loading, access, onReload }: {
             </tr>
           </thead>
           <tbody className="m-seq">
-            {problems.map((problem) => (
+            {shown.rows.map((problem) => (
               <Fragment key={problem.key}>
                 <tr className="m-row">
                   <td className="max-w-[280px]">

@@ -6,6 +6,8 @@ import { notify } from "@/lib/notify";
 import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/view-tabs";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, ToolbarCheckbox } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
@@ -41,6 +43,9 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
   const name = useMemo(() => new Map((roster.data?.rows ?? []).map((p) => [p.userId, p.displayName])), [roster.data]);
   const openFor = (producer: string) => (data?.reviews ?? []).filter((r) => r.producerUserId === producer && r.status === "open");
   const rows = (data?.rows ?? []).filter((r) => !overOnly || openFor(r.producerUserId).length > 0);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 57);
+  const shown = paginate(rows, page, pageSize);
 
   async function markReviewed(item: Review) {
     const text = (document.getElementById(`note-${item.id}`) as HTMLInputElement | null)?.value ?? "";
@@ -55,9 +60,9 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
       <PageHeader title="Producer reconciliation" description="Expected, reported and received, per producer — never blended." actions={<Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "last", label: "Last month" }, { key: "this", label: "This month" }]} />} />
       <TableCard toolbar={
         <DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />}>
-          <ToolbarCheckbox checked={overOnly} onChange={setOverOnly} label="Over the threshold only" />
+          <ToolbarCheckbox checked={overOnly} onChange={(value) => { setOverOnly(value); setPage(1); }} label="Over the threshold only" />
         </DataToolbar>
-      }>
+      } footer={data && rows.length ? <Pager page={shown.current} total={rows.length} noun="producers" pageSize={pageSize} onPage={setPage} /> : undefined}>
         {error ? <ErrorState detail={error} /> : loading || !data ? <SectionLoading rows={4} columns={6} label="Reconciling" /> : rows.length === 0 ? (
           <EmptyState title={overOnly ? "Nothing over the threshold" : "No producers yet"} hint="Each producer's three numbers appear once statements are posted." />
         ) : (
@@ -74,7 +79,7 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => {
+              {shown.rows.map((r) => {
                 const items = openFor(r.producerUserId);
                 return (
                   <TableRow key={r.producerUserId} className={items.length ? "bg-[var(--warning-surface)] align-top" : "align-top"}>

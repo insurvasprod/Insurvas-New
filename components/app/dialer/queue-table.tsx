@@ -142,7 +142,8 @@ export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDial
   } else if (allRows.length === 0) {
     content = served && panel ? <p className={cn(small, "m-0 px-4 py-3")} role="status">Nothing else is servable to you right now.</p>
       : queueFilter === "all"
-        ? <p className={cn(small, "m-0 px-4 py-6 text-center")} role="status">{queue?.available ? queue.emptyReason ?? "Nothing else is servable to you right now." : null}</p>
+        // No paragraph on why the queue is empty (owner 2026-10-30); the pager's "No leads" says it.
+        ? null
         : <EmptyState title="Nothing in this priority is servable to you right now" hint="Other priorities may still have leads." action={<Button type="button" variant="outline" onClick={() => setQueueFilter("all")}>Show every priority</Button>} />;
   } else if (rows.length === 0) {
     content = campaign !== ALL

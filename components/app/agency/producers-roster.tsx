@@ -8,6 +8,7 @@ import { notify } from "@/lib/notify";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -57,7 +58,8 @@ export function ProducersRoster({ isAccountOwner, canManage, needsUpgrade }: { i
   const filtered = rows.filter((r) =>
     (status === "all" || (status === "current" ? r.status !== "offboarded" : r.status === status)) &&
     (!search.trim() || `${r.displayName} ${r.email ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())));
-  const { rows: pageRows, current } = paginate(filtered, page, 12);
+  const pageSize = useFittingPageSize(480, 45);
+  const { rows: pageRows, current } = paginate(filtered, page, pageSize);
   const active = rows.filter((r) => r.status === "active").length;
   const invited = rows.filter((r) => r.status === "invited").length;
   const blocked = rows.filter((r) => (r.status === "active" || r.status === "onboarding") && !r.canSubmit).length;
@@ -100,7 +102,7 @@ export function ProducersRoster({ isAccountOwner, canManage, needsUpgrade }: { i
             </select>
           </DataToolbar>
         }
-        footer={filtered.length > 12 ? <Pager page={current} total={filtered.length} noun="producers" onPage={setPage} pageSize={12} /> : undefined}
+        footer={filtered.length ? <Pager page={current} total={filtered.length} noun="producers" onPage={setPage} pageSize={pageSize} /> : undefined}
       >
         {roster.error ? <ErrorState detail={roster.error} /> : roster.loading ? <SectionLoading rows={5} columns={8} label="Loading producers" /> : roster.data?.schemaPending ? (
           <EmptyState title="Not switched on yet" hint="Producers appear once the agency database update is applied." />

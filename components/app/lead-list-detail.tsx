@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight, ChevronLeft, Columns3, Download, ShieldCheck } from "lucide-react";
+import { ArrowRight, Columns3, Download, ShieldCheck } from "lucide-react";
 
 import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadListClaimButton } from "@/components/app/lead-list-claim-button";
@@ -608,7 +608,13 @@ export function LeadListDetailView({
   timeZone,
   assign = { manager: false, blocked: null },
   claimBlocked = null,
+  inCampaign = false,
 }: {
+  /**
+   * Shown on its campaign's page (Source › a campaign, 2026-10-29): the campaign already names itself
+   * and says where it came from, so no back link and no title; its actions keep a row of their own.
+   */
+  inCampaign?: boolean;
   detail: LeadListDetail;
   money: boolean;
   timeZone: string | null;
@@ -638,17 +644,7 @@ export function LeadListDetailView({
     // 2026-10-26: a list's page on the moving ribbon, like Lead sources it opens from.
     <>
     <div className="m-stagger flex flex-col gap-6">
-      <Link
-        href="/app/lead-sources"
-        className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ChevronLeft className="size-4" aria-hidden="true" />
-        Lead sources
-      </Link>
-      <PageHeader
-        title={d.campaignName}
-        description={listSubtitle(d, timeZone, assign.manager)}
-        actions={
+      {(() => { const actions = (
           <>
             {canSeeMoney && d.claims.supported && d.claims.unclaimedRows > 0 && (
               <LeadListClaimButton campaignId={d.campaignId} rows={d.claims.unclaimedRows} amount={money(d.claims.unclaimedCents)} blocked={claimBlocked} />
@@ -661,7 +657,8 @@ export function LeadListDetailView({
             {/* Owners and producers assign the whole pool remainder at once in the drawer. Everyone
                 else — and any list whose unassigned leads are not in the pool — keeps the per-lead
                 view, which the index opens from the hash (lead-list-workspace). */}
-            {assign.manager && d.assignable > 0 && !assign.blocked && (
+            {/* On its campaign's page the assign is the next-up line's button, not a second primary. */}
+            {!inCampaign && assign.manager && d.assignable > 0 && !assign.blocked && (
               <LeadListAssignDrawer campaignId={d.campaignId} listName={d.campaignName} assignable={d.assignable} />
             )}
             {assign.manager && d.assignable > 0 && assign.blocked && (
@@ -669,12 +666,15 @@ export function LeadListDetailView({
             )}
             {(!assign.manager || d.assignable === 0) && unassigned > 0 && (
               <Button asChild type="button" variant="outline">
-                <Link href={`/app/lead-lists#${d.campaignId}`}>See the {count(unassigned)} unassigned</Link>
+                <Link href={`/app/campaigns/${d.campaignId}#lists`}>See the {count(unassigned)} unassigned</Link>
               </Button>
             )}
           </>
-        }
-      />
+        );
+        return inCampaign
+          ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
+          : <PageHeader title={d.campaignName} breadcrumbs={[{ label: "Leads" }, { label: "Lead flow", href: "/app/campaigns" }, { label: d.campaignName }]} description={listSubtitle(d, timeZone, assign.manager)} actions={actions} />;
+      })()}
 
       {assign.manager && d.assignable > 0 && assign.blocked && (
         <p id="assign-blocked" role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">{assign.blocked}</p>
@@ -682,7 +682,7 @@ export function LeadListDetailView({
 
       <ListEconomics detail={d} money={canSeeMoney} spend={assign.manager} />
 
-      {nextStep && (
+      {nextStep && !inCampaign && (
         <section aria-label="Next step" className="m-glass flex flex-wrap items-center gap-4 rounded-xl border border-border px-4 py-3">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-[var(--accent-ink)]"><ArrowRight className="size-4" aria-hidden="true" /></span>
           <span className="min-w-0 flex-1 text-sm text-[var(--body)]"><span className="block text-xs font-semibold text-[var(--accent-ink)]">Next step</span>{nextStep.text}</span>

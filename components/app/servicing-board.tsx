@@ -12,6 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import {
   CARRIER_METHOD_LABELS, CARRIER_METHODS, NEXT_STEPS, OPEN_STATUSES, REQUEST_LABELS, REQUEST_TYPES, STATUS_LABELS, WAITING_STATUSES,
@@ -54,7 +55,8 @@ export function ServicingBoard({ rows, carriers, verifiedLast30, initialStatus, 
     if (view === "verified") return r.status === "verified_in_file";
     return true;
   }), [rows, view, type]);
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(visible, page, pageSize);
   const waiting = rows.filter((r) => WAITING_STATUSES.includes(r.status));
   const unprovable = waiting.filter((r) => r.unprovable.length > 0).length;
   const failed = rows.filter((r) => r.status === "failed").length;
@@ -89,7 +91,7 @@ export function ServicingBoard({ rows, carriers, verifiedLast30, initialStatus, 
             </select>
           </DataToolbar>
         }
-        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="requests" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="requests" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title="No servicing requests yet" hint="Start one from a Save queue card, or with New request." />

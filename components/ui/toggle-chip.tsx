@@ -9,7 +9,8 @@ import { titleCaseNode } from "@/components/ui/title-case";
 /**
  * The chip a person presses (foundation v3, 2026-10-27): pick one of a few choices, switch a choice
  * on or off, or remove an applied value. `StatusChip` shows a state and cannot be pressed; this can.
- * Same shape as the badge (6px corners), 28px tall so it is a fair target.
+ * One size everywhere (owner 2026-10-30, the Source tabs): 36px tall like every control beside it, 14px
+ * semibold text, 6px corners. `count` draws the number after the label in its own small badge.
  *
  *   selected   the choice is on: the soft green ground and a tick.
  *   onRemove   draws an × after the label and makes the whole chip remove the value.
@@ -23,9 +24,15 @@ export function ToggleChip({
   onRemove,
   disabled = false,
   role,
+  count,
+  countTone,
   children,
   className,
 }: {
+  /** How many rows the choice holds, drawn after the label ("Live 22"). */
+  count?: number | string;
+  /** The count in a state colour when the number itself is the warning ("Overdue 4"). */
+  countTone?: "danger" | "warning";
   selected?: boolean;
   onClick?: () => void;
   /** A removable value: the chip removes it when pressed. */
@@ -48,7 +55,7 @@ export function ToggleChip({
       disabled={disabled}
       onClick={removable ? onRemove : onClick}
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-badge border px-2.5 text-xs font-medium tracking-[-0.01em] transition-colors",
+        "inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-md border px-3 text-sm font-semibold tracking-[-0.01em] transition-colors",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
         selected
           ? "border-transparent bg-[var(--primary-soft)] text-[var(--accent-ink)]"
@@ -58,6 +65,12 @@ export function ToggleChip({
     >
       {selected && !removable && <Check className="size-3.5" aria-hidden="true" />}
       {titleCaseNode(children)}
+      {count !== undefined && (
+        <span className={cn(
+          "rounded-badge px-1.5 text-xs tabular-nums",
+          countTone === "danger" ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : countTone === "warning" ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--surface-alt)] text-[var(--ink)]",
+        )}>{count}</span>
+      )}
       {removable && <X className="size-3.5 opacity-70" aria-hidden="true" />}
     </button>
   );

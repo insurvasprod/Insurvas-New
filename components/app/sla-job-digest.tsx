@@ -53,7 +53,7 @@ export function SlaDigestCard({ ready, days }: { ready: boolean; days: SlaDigest
   return (
     <TableCard
       // The alert centre's third tab: like the other two, the card reaches the bottom of the window.
-      className="flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(2)]:flex-1"
+      className="flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>*:nth-child(2)]:flex-1"
       toolbar={ready ? <DataToolbar actions={<PageRefreshButton />} /> : undefined}
       footer={ready && days.length > 0 ? <span>Days run midnight to midnight, {zones}</span> : undefined}
     >

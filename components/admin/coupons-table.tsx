@@ -4,7 +4,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,6 @@ import {
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
 
 type StatusFilter = "all" | CouponStatus;
 type TypeFilter = "any" | "percent" | "fixed";
@@ -81,6 +81,7 @@ export function CouponsTable({
   const [expiry, setExpiry] = useState<ExpiryFilter>("any");
   const [type, setType] = useState<TypeFilter>("any");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const [pending, setPending] = useState<CouponRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
@@ -96,9 +97,7 @@ export function CouponsTable({
     });
   }, [sorted, status, type, expiry, search, now]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(Math.max(page, 1), pages);
-  const shown = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const { current, rows: shown } = paginate(filtered, page, pageSize);
   const anyFilter = status !== "all" || expiry !== "any" || type !== "any" || search.trim() !== "";
 
   function clearAll() {
@@ -135,6 +134,7 @@ export function CouponsTable({
     <>
       <TableCard
         className="min-w-0"
+        footer={<Pager page={current} pageSize={pageSize} total={filtered.length} noun={filtered.length === 1 ? "coupon" : "coupons"} suffix="active first, then newest" onPage={setPage} />}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
             <ToolbarSearch
@@ -286,14 +286,6 @@ export function CouponsTable({
             })}
           </tbody>
         </table>
-        <BoardTableFooter
-          page={current}
-          pageSize={PAGE_SIZE}
-          total={filtered.length}
-          itemLabel={filtered.length === 1 ? "coupon" : "coupons"}
-          order="active first, then newest"
-          onPageChange={setPage}
-        />
       </TableCard>
 
       <Dialog open={pending !== null} onOpenChange={(value) => !value && closeDialog()}>

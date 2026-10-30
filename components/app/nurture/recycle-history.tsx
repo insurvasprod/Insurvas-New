@@ -8,15 +8,16 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { Sheet } from "@/components/ui/sheet";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { Segmented } from "@/components/ui/view-tabs";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import type { NurtureReport, RotationSlot } from "@/lib/nurture/report";
 import type { RecycleBatch } from "@/lib/nurture/contract";
 import { cn } from "@/lib/utils";
 import { count, label, money, percent, plural, stamp } from "@/components/app/nurture/format";
 
 /**
- * The Recycle step's history and cadence (redesign 2026-10-29): the compact past-batches table and
- * a batch's sheet; fresh against recycled (the Compare dialog); the retry cadence and slot rotation
+ * The Recycle step's history and cadence (redesign 2026-10-29): one campaign's batches in its panel
+ * (BatchList), every campaign's in the Past batches dialog (BatchTable) and a batch's sheet; fresh
+ * against recycled (the Compare dialog); the retry cadence and slot rotation
  * (the Cadence dialog, opened from the top row).
  */
 
@@ -63,7 +64,8 @@ const PAGE_SIZE = 5;
 export function BatchTable({ batches, baseline, campaignId, onOpen, onCompare }: {
   batches: RecycleBatch[];
   baseline: number | null;
-  campaignId: string;
+  /** The campaign whose batches show first; null shows every campaign's, with no switch. */
+  campaignId: string | null;
   onOpen: (batch: RecycleBatch) => void;
   /** Fresh against recycled in full; omitted when there is nothing to compare. */
   onCompare?: () => void;
@@ -80,7 +82,12 @@ export function BatchTable({ batches, baseline, campaignId, onOpen, onCompare }:
       description={baseline == null ? undefined : `Contact rate against ${percent(baseline)} for fresh leads over the same span`}
       action={
         <>
-          <Segmented label="Which batches" value={scope} onChange={(next) => { setScope(next); setPage(1); }} options={[{ key: "campaign", label: "This campaign", count: mine.length }, { key: "all", label: "All", count: batches.length }]} />
+          {campaignId && (
+            <div role="radiogroup" aria-label="Which batches" className="flex flex-wrap items-center gap-2">
+              <ToggleChip role="radio" selected={scope === "campaign"} count={mine.length} onClick={() => { setScope("campaign"); setPage(1); }}>This campaign</ToggleChip>
+              <ToggleChip role="radio" selected={scope === "all"} count={batches.length} onClick={() => { setScope("all"); setPage(1); }}>All</ToggleChip>
+            </div>
+          )}
           {onCompare && <Button type="button" variant="outline" onClick={onCompare}>Fresh vs recycled</Button>}
         </>
       }
@@ -123,8 +130,58 @@ export function BatchTable({ batches, baseline, campaignId, onOpen, onCompare }:
   );
 }
 
+/**
+ * One campaign's past batches inside its panel (2026-10-29): five a page, each opening its figures in
+ * place. Every campaign's batches are a click away in the "Past batches" dialog (BatchTable).
+ */
+export function BatchList({ batches, baseline, campaignId }: { batches: RecycleBatch[]; baseline: number | null; campaignId: string }) {
+  const mine = batches.filter((batch) => batch.campaignId === campaignId);
+  const [page, setPage] = useState(1);
+  const [open, setOpen] = useState<string | null>(null);
+  const { current, rows } = paginate(mine, page, PAGE_SIZE);
+  if (!mine.length) return <p className="m-0 text-sm text-[var(--body)]">No batch for this campaign yet.</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      <ul className="m-0 flex list-none flex-col p-0">
+        {rows.map((batch) => {
+          const better = batch.contactRate != null && baseline != null ? batch.contactRate >= baseline : null;
+          const expanded = open === batch.id;
+          return (
+            <li key={batch.id} className="border-b border-[var(--surface-alt)] last:border-b-0">
+              <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : batch.id)} className="flex w-full items-center gap-3 py-2.5 text-left text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold text-[var(--ink)]" title={batch.angle}>{batch.angle}</span>
+                  <span className="block text-xs text-[var(--body)]">{batch.status === "screening" ? (batch.stalled ? "Stalled" : "Screening") : stamp(batch.createdAt)} · {count(batch.cleared)} cleared · {plural(batch.policies, "policy", "policies")}</span>
+                </span>
+                <span className={cn("font-semibold tabular-nums text-[var(--ink)]", better === true && "text-[var(--success-ink)]", better === false && "text-[var(--error-ink)]")} title={baseline == null ? "Contact rate" : `Contact rate · fresh ${percent(baseline)}`}>{percent(batch.contactRate)}</span>
+              </button>
+              {expanded && <div className="pb-3"><BatchFacts batch={batch} baseline={baseline} /></div>}
+            </li>
+          );
+        })}
+      </ul>
+      {mine.length > PAGE_SIZE && <Pager page={current} total={mine.length} noun="batches" pageSize={PAGE_SIZE} onPage={setPage} />}
+    </div>
+  );
+}
+
 /** One batch, every figure the report holds, in a sheet. */
 export function BatchSheet({ batch, baseline, onClose }: { batch: RecycleBatch; baseline: number | null; onClose: () => void }) {
+  return (
+    <Sheet
+      title={batch.angle}
+      subtitle={batch.campaignName}
+      status={<StatusChip tone={batch.status === "screening" ? "warning" : "good"}>{batch.status === "screening" ? (batch.stalled ? "Stalled" : "Screening") : "Complete"}</StatusChip>}
+      onClose={onClose}
+      closeLabel="Close the batch"
+    >
+      <BatchFacts batch={batch} baseline={baseline} />
+    </Sheet>
+  );
+}
+
+/** Every figure the report holds for one batch, and its script. */
+function BatchFacts({ batch, baseline }: { batch: RecycleBatch; baseline: number | null }) {
   const facts: Array<[string, string]> = [
     ["Started by", batch.createdByName ?? "A teammate"],
     ["Started", stamp(batch.createdAt)],
@@ -145,13 +202,7 @@ export function BatchSheet({ batch, baseline, onClose }: { batch: RecycleBatch; 
     ["New spend", money(batch.costCents)],
   ];
   return (
-    <Sheet
-      title={batch.angle}
-      subtitle={batch.campaignName}
-      status={<StatusChip tone={batch.status === "screening" ? "warning" : "good"}>{batch.status === "screening" ? (batch.stalled ? "Stalled" : "Screening") : "Complete"}</StatusChip>}
-      onClose={onClose}
-      closeLabel="Close the batch"
-    >
+    <div className="flex flex-col gap-4">
       <dl className="m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 text-sm">
         {facts.map(([name, value]) => (
           <div key={name} className="contents">
@@ -166,7 +217,7 @@ export function BatchSheet({ batch, baseline, onClose }: { batch: RecycleBatch; 
           <p className="m-0 whitespace-pre-wrap text-sm text-[var(--ink)]">{batch.script}</p>
         </div>
       )}
-    </Sheet>
+    </div>
   );
 }
 

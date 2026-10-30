@@ -12,11 +12,15 @@ export function PageLoading({ strip = true, rows = 8 }: { strip?: boolean; rows?
   return (
     <div role="status" aria-live="polite" className="space-y-6">
       <span className="sr-only">Loading</span>
-      {/* No title placeholder: pages draw no visible title (owner 2026-10-28), only their actions. */}
-      <div aria-hidden="true" className="flex flex-wrap items-end justify-end gap-4">
-        <div className="hidden gap-2 sm:flex">
-          <div className="h-9 w-24 m-skel rounded-md" />
-          <div className="h-9 w-28 m-skel rounded-md" />
+      {/* The header's shape (owner 2026-10-30): the trail, then the title with the actions on its line. */}
+      <div aria-hidden="true" className="flex flex-col gap-1.5">
+        <div className="flex min-h-6 items-center"><div className="h-3 w-32 m-skel rounded-full" /></div>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <div className="h-7 w-48 max-w-[60%] m-skel rounded-md" />
+          <div className="hidden gap-2 sm:flex">
+            <div className="h-9 w-24 m-skel rounded-md" />
+            <div className="h-9 w-28 m-skel rounded-md" />
+          </div>
         </div>
       </div>
       {strip && (

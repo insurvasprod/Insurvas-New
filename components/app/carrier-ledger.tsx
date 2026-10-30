@@ -11,6 +11,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { centsText, ENTRY_LABELS, ENTRY_TYPES, rollup, type EntryType } from "@/lib/ingestion/commissionLedger";
 import { fileDay } from "@/lib/ingestion/constants";
 import { toCsv } from "@/lib/ingestion/policyBook";
@@ -46,7 +47,8 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
   }, [entries, query, carrier, type, source]);
   // A line whose statement doesn't add up is held out of every total, here as on the policy page.
   const sum = useMemo(() => rollup(visible.filter((row) => !row.heldByStatement).map((row) => ({ entry_type: row.type, corrects_type: row.correctsType, amount_cents: row.amountCents }))), [visible]);
-  const { current, rows } = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows } = paginate(visible, page, pageSize);
   const filtered = Boolean(query.trim() || carrier || type || source);
   // Most carriers never say who a line was paid to; the column shows only when one does.
   const anyPayee = entries.some((row) => row.payeeLevel);
@@ -102,7 +104,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
             )}
           </DataToolbar>
         }
-        footer={entries.length ? <Pager page={current} pageSize={10} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "line" : "lines"} suffix="newest statement first" /> : undefined}
+        footer={entries.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "line" : "lines"} suffix="newest statement first" /> : undefined}
       >
         {entries.length === 0 ? (
           <EmptyState title={scoped ? "No commission lines credited to you yet" : "No commission file has been read yet"} hint="Upload a carrier's commission file in Carrier files. Once its layout is set up, every line lands here with the file and row it came from." />

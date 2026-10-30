@@ -74,7 +74,7 @@ export function UnmatchedLinesTable({ lines, leftUnmatchedCount = 0, canWrite, w
       {notice && <p role="status" className="rounded-md bg-[var(--success-surface)] px-3 py-2 text-sm text-[var(--success-ink)]">{notice}</p>}
       {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
       <TableCard
-        className="flex min-h-[calc(100dvh-var(--top-bar-h)-300px)] flex-col [&>.overflow-x-auto]:flex-1"
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-332px)] flex-col [&>.overflow-x-auto]:flex-1"
         toolbar={
           <DataToolbar
             actions={<>

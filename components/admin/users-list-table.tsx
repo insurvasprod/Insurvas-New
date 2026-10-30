@@ -9,7 +9,7 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { st, pillTone } from "@/components/app/settings/primitives";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager } from "@/components/ui/pager";
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -257,6 +257,7 @@ export function UsersListTable({
       </BoardStatGrid>
 
       <TableCard
+        footer={<Pager page={page} pageSize={USERS_PAGE_SIZE} total={total} noun="users" suffix={`${orderLabel(sort, dir)} · server-side paging`} onPage={setPage} disabled={loading} />}
         toolbar={
           <>
             <DataToolbar
@@ -555,15 +556,6 @@ export function UsersListTable({
             </tbody>
           </table>
         </div>
-        <BoardTableFooter
-          page={page}
-          pageSize={USERS_PAGE_SIZE}
-          total={total}
-          itemLabel="users"
-          order={`${orderLabel(sort, dir)} · server-side paging`}
-          onPageChange={setPage}
-          busy={loading}
-        />
       </TableCard>
 
       {canManage && (

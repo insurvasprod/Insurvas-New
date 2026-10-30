@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { Callout, control, LockIcon, SettingsCard, SettingsSectionHeader, SettingsStack, st, Switch } from "@/components/app/settings/primitives";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { NOTIFICATION_GROUPS, type DigestCadence } from "@/lib/notifications/events";
@@ -164,19 +165,22 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
 
       <TableCard
         toolbar={
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")} className={CHIP(filter === "all")}>All<span className="tabular-nums opacity-70">{view.events.length}</span></button>
-            {groups.map((group) => (
-              <button key={group} type="button" aria-pressed={filter === group} onClick={() => setFilter(group)} className={CHIP(filter === group)}>
-                {group}<span className="tabular-nums opacity-70">{view.events.filter((e) => e.group === group).length}</span>
-              </button>
-            ))}
-            {locked.length ? (
-              <button id="notify-protected" type="button" aria-pressed={filter === "locked"} onClick={() => setFilter("locked")} className={CHIP(filter === "locked")}
-                title="Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too.">
-                <LockIcon />Always on<span className="tabular-nums opacity-70">{locked.length}</span>
-              </button>
-            ) : null}
+          <div className="flex w-full flex-wrap items-center gap-2">
+            <div role="radiogroup" aria-label="Which alerts" className="flex flex-wrap items-center gap-2">
+              <ToggleChip role="radio" selected={filter === "all"} count={view.events.length} onClick={() => setFilter("all")}>All</ToggleChip>
+              {groups.map((group) => (
+                <ToggleChip key={group} role="radio" selected={filter === group} count={view.events.filter((e) => e.group === group).length} onClick={() => setFilter(group)}>
+                  {group}
+                </ToggleChip>
+              ))}
+              {locked.length ? (
+                <span id="notify-protected" className="inline-flex" title="Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too.">
+                  <ToggleChip role="radio" selected={filter === "locked"} count={locked.length} onClick={() => setFilter("locked")}>
+                    <LockIcon />Always on
+                  </ToggleChip>
+                </span>
+              ) : null}
+            </div>
             {switchedOff ? <span className="ml-auto text-xs text-[var(--warning-ink)]">{switchedOff} switched off</span> : null}
           </div>
         }

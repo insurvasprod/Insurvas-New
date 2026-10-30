@@ -16,6 +16,7 @@ import { BarSeries } from "@/components/ui/chart";
 import { HomePanel } from "@/components/app/home/home-panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { activityLabel, dayMonth } from "@/lib/format/ago";
 import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { HELD_STATUSES, SALE_DISPOSITIONS } from "@/lib/partnerLeads/lanes";
@@ -45,7 +46,6 @@ function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: Select
 
 /** Below this many leads a member's conversion rate is noise, and showing it would rank people on it. */
 const MIN_CONVERSION_SAMPLE = 10;
-const PAGE_SIZE = 10;
 
 function isSold(row: PartnerLeadRow) {
   return row.status === "completed" && row.disposition !== null && (SALE_DISPOSITIONS as readonly string[]).includes(row.disposition);
@@ -117,6 +117,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
   // The first read draws the page skeleton; a new range keeps the page and its date controls.
   const [loaded, setLoaded] = useState(sampled);
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -186,7 +187,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
 
   const conversionChange = metrics.conversion !== null && previous?.conversion !== null && previous?.conversion !== undefined ? metrics.conversion - previous.conversion : null;
   const reload = () => { setError(null); setLoading(true); setRetryToken((value) => value + 1); };
-  const visible = paginate(memberStats, page, PAGE_SIZE);
+  const visible = paginate(memberStats, page, pageSize);
 
   if (!loaded) return <PageLoading />;
 
@@ -266,7 +267,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     <TableCard
       title="Partner performance"
       action={<RefreshButton onClick={reload} refreshing={loading} />}
-      footer={!loading && memberStats.length ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={PAGE_SIZE} onPage={setPage} /> : undefined}
+      footer={!loading && memberStats.length ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
     >
       {loading ? <SectionLoading rows={5} columns={6} />
         : !memberStats.length ? <EmptyState title="No partner users yet" hint="Invite teammates from Team access." action={<Button asChild variant="outline"><Link href="/partner/team">Team access</Link></Button>} />

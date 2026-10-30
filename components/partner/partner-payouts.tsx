@@ -10,8 +10,10 @@ import { Sheet } from "@/components/ui/sheet";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerStatement } from "@/lib/accounting/payoutsCore";
 import { dayMonth, dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
@@ -127,6 +129,10 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [loading, setLoading] = useState(!sample);
+  const [page, setPage] = useState(1);
+  // main's rule (30 Oct): the pager takes as many rows as the window has room for.
+  const pageSize = useFittingPageSize(380, 45);
+  const paged = paginate(runs ?? [], page, pageSize);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,7 +182,10 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
         />
       </StatRow>
 
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />} />}>
+      <TableCard
+        toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />} />}
+        footer={runs?.length ? <Pager page={paged.current} total={runs.length} noun={runs.length === 1 ? "statement" : "statements"} pageSize={pageSize} onPage={setPage} /> : undefined}
+      >
         {error ? <EmptyState title="Statements are not available" hint={error} /> : runs === null ? <SectionLoading rows={4} columns={4} /> : runs.length === 0 ? (
           <EmptyState title="No statements yet" hint="When the agency publishes a payout statement for you, it appears here." />
         ) : (
@@ -190,7 +199,7 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {runs.map((r) => (
+              {paged.rows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium text-foreground">{period(r.periodStart, r.periodEnd)}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.netCents)}</TableCell>

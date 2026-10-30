@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/view-tabs";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
@@ -49,6 +51,11 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
   const [which, setWhich] = useState<"this" | "last">("this");
   const range = useMemo(() => monthRange(which === "this" ? 0 : -1), [which]);
   const { data, error, loading, refreshing, reload } = useAgencyData<Dashboard>(`/api/app/agency/dashboard?from=${range.from}&to=${range.to}`);
+  const [producerPage, setProducerPage] = useState(1);
+  const [alertPage, setAlertPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
+  const producers = paginate(data?.producers ?? [], producerPage, pageSize);
+  const alerts = paginate(data?.alerts ?? [], alertPage, pageSize);
   const mostAtRisk = data?.producers.reduce<Row | null>((top, r) => (r.advanceAtRiskCents > (top?.advanceAtRiskCents ?? 0) ? r : top), null) ?? null;
 
   return (
@@ -73,6 +80,7 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
           <TableCard
             title="Producers"
             toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />}
+            footer={data.producers.length ? <Pager page={producers.current} total={data.producers.length} noun="producers" pageSize={pageSize} onPage={setProducerPage} /> : undefined}
           >
             {data.producers.length === 0 ? (
               <EmptyState title="No producers yet" hint="Invite your first producer; their production shows here from their first submission." action={scoped ? undefined : <Button asChild><Link href="/app/producers?invite=1">Invite producer</Link></Button>} />
@@ -90,7 +98,7 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.producers.map((r) => (
+                  {producers.rows.map((r) => (
                     <TableRow key={r.producerUserId} className={mostAtRisk?.producerUserId === r.producerUserId && r.advanceAtRiskCents > 0 ? "bg-[var(--warning-surface)]" : undefined}>
                       <TableCell className="font-medium">{r.name}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.submitted}</TableCell>
@@ -106,7 +114,7 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
             )}
           </TableCard>
 
-          <TableCard title="Expiring inside 60 days" description="Licences and appointments. An expiry stops that producer from submitting.">
+          <TableCard title="Expiring inside 60 days" description="Licences and appointments. An expiry stops that producer from submitting." footer={data.alerts.length ? <Pager page={alerts.current} total={data.alerts.length} noun="expiries" pageSize={pageSize} onPage={setAlertPage} /> : undefined}>
             {data.alerts.length === 0 ? (
               <EmptyState title="Nothing expires in the next 60 days" hint="Licences and appointments appear here two months before they lapse." />
             ) : (
@@ -115,7 +123,7 @@ export function AgencyDashboard({ agencyName, scoped }: { agencyName: string; sc
                   <TableRow><TableHead>Producer</TableHead><TableHead>Item</TableHead><TableHead>Detail</TableHead><TableHead className="text-right">Expires</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.alerts.map((a, i) => (
+                  {alerts.rows.map((a, i) => (
                     <TableRow key={`${a.producerUserId}-${a.item}-${i}`}>
                       <TableCell className="font-medium">{a.name}</TableCell>
                       <TableCell>{a.item}</TableCell>

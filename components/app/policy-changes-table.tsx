@@ -52,7 +52,7 @@ export function PolicyChangesTable({ changes, emptyTitle, emptyHint }: { changes
 
   return (
     <TableCard
-      className="flex min-h-[calc(100dvh-var(--top-bar-h)-300px)] flex-col [&>.overflow-x-auto]:flex-1"
+      className="flex min-h-[calc(100dvh-var(--top-bar-h)-332px)] flex-col [&>.overflow-x-auto]:flex-1"
       toolbar={
         <DataToolbar actions={<>
           {filtered && <ClearFiltersButton onClick={clear} />}

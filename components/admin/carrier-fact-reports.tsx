@@ -21,6 +21,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { FACT_REPORT_LABEL, isFixable, type FactReportQueueRow } from "@/lib/carriers/factReportConstants";
 import { notify } from "@/lib/notify";
 
@@ -96,8 +97,9 @@ export function CarrierFactReports({ initialReports, notice }: { initialReports:
   const [closedPage, setClosedPage] = useState(1);
   const waiting = reports.filter((r) => r.status === "open");
   const closed = reports.filter((r) => r.status !== "open");
-  const shown = paginate(waiting, page, 10);
-  const shownClosed = paginate(closed, closedPage, 10);
+  const pageSize = useFittingPageSize(420, 45);
+  const shown = paginate(waiting, page, pageSize);
+  const shownClosed = paginate(closed, closedPage, pageSize);
   const agencies = new Set(waiting.map((r) => r.tenantId)).size;
   const carriers = new Set(waiting.map((r) => r.carrierId)).size;
   const oldest = waiting[0]?.createdAt ?? null;
@@ -119,7 +121,7 @@ export function CarrierFactReports({ initialReports, notice }: { initialReports:
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
 
-      <TableCard title="Waiting" description="Oldest first." footer={waiting.length > 10 ? <Pager page={shown.current} pageSize={10} total={waiting.length} noun="reports" onPage={setPage} /> : undefined}>
+      <TableCard title="Waiting" description="Oldest first." footer={waiting.length ? <Pager page={shown.current} pageSize={pageSize} total={waiting.length} noun="reports" onPage={setPage} /> : undefined}>
         {waiting.length === 0 ? (
           <EmptyState title="No report is waiting" hint="When an agency tells us a carrier fact is wrong, it shows here." />
         ) : (
@@ -152,7 +154,7 @@ export function CarrierFactReports({ initialReports, notice }: { initialReports:
         )}
       </TableCard>
 
-      <TableCard title="Closed" description="What each report came to. The agency sees the same on its carrier card for 30 days." footer={closed.length > 10 ? <Pager page={shownClosed.current} pageSize={10} total={closed.length} noun="reports" onPage={setClosedPage} /> : undefined}>
+      <TableCard title="Closed" description="What each report came to. The agency sees the same on its carrier card for 30 days." footer={closed.length ? <Pager page={shownClosed.current} pageSize={pageSize} total={closed.length} noun="reports" onPage={setClosedPage} /> : undefined}>
         {closed.length === 0 ? (
           <EmptyState title="Nothing closed yet" hint="Fixed and declined reports are listed here." />
         ) : (

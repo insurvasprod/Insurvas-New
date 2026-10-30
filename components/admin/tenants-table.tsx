@@ -5,7 +5,8 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { TenantsListDate } from "@/components/admin/tenants-list-date";
 import { st, pillTone } from "@/components/app/settings/primitives";
@@ -24,7 +25,6 @@ import {
 } from "@/lib/tenantsList/present";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
 const NO_PLAN = "__none__";
 
 type StatusFilter = "all" | ListStatus;
@@ -73,9 +73,8 @@ export function TenantsTable({ rows }: { rows: TenantListRow[] }) {
     [rows, status, onboarding, plan, search],
   );
 
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(Math.max(page, 1), pages);
-  const shown = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(filtered, page, pageSize);
 
   function clearAll() {
     setSearch("");
@@ -87,6 +86,7 @@ export function TenantsTable({ rows }: { rows: TenantListRow[] }) {
 
   return (
     <TableCard
+      footer={<Pager page={current} pageSize={pageSize} total={filtered.length} noun="tenants" suffix="newest first" onPage={setPage} />}
       toolbar={
         <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
           <ToolbarSearch
@@ -214,14 +214,6 @@ export function TenantsTable({ rows }: { rows: TenantListRow[] }) {
           </tbody>
         </table>
       </div>
-      <BoardTableFooter
-        page={current}
-        pageSize={PAGE_SIZE}
-        total={filtered.length}
-        itemLabel="tenants"
-        order="newest first"
-        onPageChange={setPage}
-      />
     </TableCard>
   );
 }

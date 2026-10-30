@@ -20,6 +20,7 @@ import { getTenantTemplateForProductVersion, validateImportValues } from "@/lib/
 import { friendlyImportCommitError } from "@/lib/agentTemplates/errors";
 import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents, type ImportItem, type ScrubRejection } from "@/lib/agentTemplates/importCommit";
 import { existingLeadsByPhone } from "@/lib/agentTemplates/existingLeadPhones";
+import { queueLeadDuplicates, type QueuedLeadDuplicate } from "@/lib/leadDuplicates/service";
 import { importScrubDecision } from "@/lib/campaigns/importScrubMark";
 
 type DbError = { message: string; code?: string };
@@ -925,6 +926,8 @@ export type CommitSummary = {
   certificatesFiled: number;
   /** New leads imported with no state: never served until a state is added (LA-2.4-8). */
   noState: number;
+  /** Rows attached to a lead with the same number and put on Clean to confirm (owner 2026-10-29). */
+  sentToClean: number;
   /** Something after the leads could not be written (before 20260925709610 only). */
   warning: string | null;
 };
@@ -995,11 +998,13 @@ export async function commitImport(input: {
   const summary: CommitSummary = {
     imported: 0, attachedToExisting: 0, skippedDuplicates: 0, suppressed: 0, excluded: 0, rejectionsRecorded: 0,
     campaignId, servable: false, campaignStatus: null, spendAddedCents: 0, recordsAdded: 0,
-    certificatesFiled: 0, noState: 0, warning: null,
+    certificatesFiled: 0, noState: 0, sentToClean: 0, warning: null,
   };
   const items: ImportItem[] = [];
   const rejections: ScrubRejection[] = [];
   const suppressions: Array<{ phone: string; reason: string }> = [];
+  /** Rows attached to a lead with the same number: asked about on Clean after the commit. */
+  const sameNumber: QueuedLeadDuplicate[] = [];
   const seenInFile = new Set<string>();
   /** How many times each number has appeared so far in this file, for the ledger's occurrence. */
   const appearances = new Map<string, number>();
@@ -1035,32 +1040,8 @@ export async function commitImport(input: {
       summary.suppressed += 1;
     }
 
-    const existingId = existingByPhone.get(phone);
-    if (existingId) {
-      if (input.decisions.existingLeads === "skip") { summary.skippedDuplicates += 1; continue; }
-      // One lead, many campaign sources — LA-2.20's answer to "same person, new campaign". The
-      // import function adds the source but does not put a lead with queue history back in the
-      // dialer (20260924330100). This vendor's certificate for the person is filed as well.
-      items.push({ lead_id: existingId, campaign_id: campaignId, source_key: `csv:${row.rowNumber}`, consent: row.consent ?? null });
-      summary.attachedToExisting += 1;
-      continue;
-    }
-    if (seenInFile.has(phone)) {
-      summary.skippedDuplicates += 1;
-      // User decision (Pool audit, 2026-09-25): a number repeated inside one file is a row the
-      // vendor billed twice — not usable, and claimable. The second appearance is occurrence 2, the
-      // third 3, so a number sold three times is two ledger rows (20260925703100). A duplicate of a
-      // lead the agency already had is attached above and is neither.
-      const occurrence = (appearances.get(phone) ?? 1) + 1;
-      appearances.set(phone, occurrence);
-      rejections.push({ phone_digits: phone, outcome: "duplicate_in_file", detail: "Repeated inside this file", source_key: `csv:${row.rowNumber}`, occurrence });
-      continue;
-    }
-    seenInFile.add(phone);
-
     const stage = stageById.get(row.stageId);
-    if (!stage?.pipeline_id) { summary.excluded += 1; continue; }
-    items.push({
+    const asNewLead = (): ImportItem | null => stage?.pipeline_id ? {
       tenant_id: input.tenantId,
       tenant_template_id: template.tenant_template_id,
       template_id: template.assignment.template_id,
@@ -1080,7 +1061,39 @@ export async function commitImport(input: {
       source_key: `csv:${row.rowNumber}`,
       dial_timezone: row.dialTimezone ?? null,
       consent: row.consent ?? null,
-    });
+    } : null;
+
+    const existingId = existingByPhone.get(phone);
+    if (existingId) {
+      if (input.decisions.existingLeads === "skip") { summary.skippedDuplicates += 1; continue; }
+      // One lead, many campaign sources — LA-2.20's answer to "same person, new campaign". The
+      // import function adds the source but does not put a lead with queue history back in the
+      // dialer (20260924330100). This vendor's certificate for the person is filed as well.
+      items.push({ lead_id: existingId, campaign_id: campaignId, source_key: `csv:${row.rowNumber}`, consent: row.consent ?? null });
+      summary.attachedToExisting += 1;
+      // Owner 2026-10-29: attached is not the end of it. Each one is asked on Clean ("is this the
+      // same person?"), with the row kept as it would have been added, so "different people" can
+      // still make it a lead of its own.
+      const incoming = asNewLead();
+      if (incoming) sameNumber.push({ leadId: existingId, phone, incoming, campaignId, batchId: input.batchId, sourceKey: `csv:${row.rowNumber}` });
+      continue;
+    }
+    if (seenInFile.has(phone)) {
+      summary.skippedDuplicates += 1;
+      // User decision (Pool audit, 2026-09-25): a number repeated inside one file is a row the
+      // vendor billed twice — not usable, and claimable. The second appearance is occurrence 2, the
+      // third 3, so a number sold three times is two ledger rows (20260925703100). A duplicate of a
+      // lead the agency already had is attached above and is neither.
+      const occurrence = (appearances.get(phone) ?? 1) + 1;
+      appearances.set(phone, occurrence);
+      rejections.push({ phone_digits: phone, outcome: "duplicate_in_file", detail: "Repeated inside this file", source_key: `csv:${row.rowNumber}`, occurrence });
+      continue;
+    }
+    seenInFile.add(phone);
+
+    const item = asNewLead();
+    if (!item) { summary.excluded += 1; continue; }
+    items.push(item);
     summary.imported += 1;
     if (!row.values.state) summary.noState += 1;
   }
@@ -1168,6 +1181,8 @@ export async function commitImport(input: {
     // effort: never throws, never creates a contact, and does nothing before 20260924326100. The
     // batch returns one lead id per item, in order.
     await linkLeadsToContacts(input.tenantId, committed.ids.flatMap((id, at) => (items[at]?.values ? [{ id, values: items[at].values as Record<string, unknown> }] : [])));
+    // Same-number rows onto Clean. Best effort, never throws; nothing before 20261029600000.
+    summary.sentToClean = await queueLeadDuplicates(input.tenantId, sameNumber);
 
     // LA-2.3-9: each number's preflight check is linked to the lead it became (or was attached to).
     // Best effort: never throws, so a committed import is never reported as failed over it.

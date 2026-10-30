@@ -32,7 +32,7 @@ const SCENES = [
     eyebrow: "Lead to policy",
     title: "See which leads turn into policies.",
     benefit: "Lead cost is traced to issued premium, so you know which source to buy more of.",
-    crumb: "Lead sources",
+    crumb: "Lead flow",
     Screen: AttributionScreen,
   },
   {

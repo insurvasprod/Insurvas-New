@@ -42,6 +42,7 @@ import {
 import { isRequiredLeadImportField, parseLeadCsv, sanitizeImportMapping, US_STATE_CODES, type ImportDateOrder, type LeadImportRow } from "./csv";
 import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents } from "./importCommit";
 import { existingLeadsByPhone } from "./existingLeadPhones";
+import { queueLeadDuplicates, type QueuedLeadDuplicate } from "@/lib/leadDuplicates/service";
 import { chooseProductTemplate, newerVersionOfCopy, type TemplateCandidate } from "./templateChoice";
 import { isMissingSchema } from "@/lib/pipelines/schemaGap";
 import { importScrubDecision } from "@/lib/campaigns/importScrubMark";
@@ -1721,6 +1722,7 @@ export async function importAgentLeads(
     created: boolean;
   }> = [];
   const pendingPhone = new Map<string, number>();
+  const sameNumber: QueuedLeadDuplicate[] = [];
   for (let index = 0; index < rows.length; index++) {
     // A rejected row is not committed and gets no `rowRefs` entry, so it cannot appear in the
     // returned import result. It exists only in the rejection ledger.
@@ -1734,6 +1736,8 @@ export async function importAgentLeads(
       matchedId = undefined;
     }
     if (matchedId) {
+      // Owner 2026-10-29: asked about on Clean after the commit, with the row as it would have been added.
+      sameNumber.push({ leadId: matchedId, phone: getUsPhone10Digits(rawPhone), incoming: inserts[index], campaignId: campaignId ?? null, batchId: null, sourceKey: `csv:${row.rowNumber}` });
       const pendingIndex =
         pending.push({
           rowNumber: row.rowNumber,
@@ -1804,6 +1808,8 @@ export async function importAgentLeads(
   );
   const leadIds = committed.ids;
   if (committed.warning) console.error(`[import] direct import: ${committed.warning}`);
+  // Never throws; nothing before 20261029600000.
+  await queueLeadDuplicates(tenantId, sameNumber);
 
   // Mark the campaign scrubbed, because this import just scrubbed it.
   //

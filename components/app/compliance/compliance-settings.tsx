@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { METHOD_LABELS, VERIFICATION_METHODS } from "@/lib/compliance/dataSubject";
 import { TILE_KEYS, TILE_LABELS } from "@/lib/compliance/dashboardCore";
@@ -98,6 +100,8 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
   const [busy, setBusy] = useState(false);
 
   const [reloads, setReloads] = useState(0);
+  const [changePage, setChangePage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const load = useCallback(() => setReloads((n) => n + 1), []);
   useEffect(() => {
     let live = true;
@@ -132,6 +136,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
   if (error) return <ErrorState detail={error} action={<Button variant="outline" onClick={() => { setError(null); load(); }}>Try again</Button>} />;
   if (!data) return <TableCard><SectionLoading rows={6} columns={3} /></TableCard>;
   const s = data.settings;
+  const changes = paginate(data.changes, changePage, pageSize);
   const disabled = readOnly || busy;
   // A number only where something needs you: states with no deadline, holds still in force.
   const openHolds = data.holds.filter((h) => !h.releasedAt).length;
@@ -222,12 +227,12 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
         <details className="group">
         <summary className="cursor-pointer list-none py-1 text-sm font-medium text-[var(--body)] hover:text-[var(--ink)] [&::-webkit-details-marker]:hidden">Change log <span className="text-xs font-normal text-muted-foreground">· every change made here, with what it was before</span></summary>
         <div className="mt-3">
-        <TableCard title="Change log" info="Every change: who, what, from, to, when.">
+        <TableCard title="Change log" info="Every change: who, what, from, to, when." footer={data.changes.length ? <Pager page={changes.current} total={data.changes.length} noun="changes" pageSize={pageSize} onPage={setChangePage} /> : undefined}>
           {data.changes.length === 0 ? <EmptyState title="No changes yet" hint="Every change made here is listed, with what it was before." /> : (
             <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
               <thead><tr><th className="w-[160px]">When</th><th className="w-[170px]">Section</th><th>Setting</th><th>From → to</th><th className="w-[160px]">By</th></tr></thead>
               <tbody>
-                {data.changes.map((c) => (
+                {changes.rows.map((c) => (
                   <tr key={`${c.at}-${c.setting}`}>
                     <td>{c.at.slice(0, 16).replace("T", " ")}</td>
                     <td>{c.section.replace(/_/g, " ")}</td>
@@ -355,6 +360,9 @@ function Retention({ data, disabled, post }: { data: Bundle; disabled: boolean; 
 function Purge({ data, disabled, save, post }: { data: Bundle; disabled: boolean; save: Save; post: Post }) {
   const [confirm, setConfirm] = useState(false);
   const [now] = useState(() => Date.now());
+  const [runPage, setRunPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
+  const runs = paginate(data.runs, runPage, pageSize);
   const p = data.settings.purge;
   const lastDry = data.runs.find((r) => r.mode === "dry_run" && r.finishedAt);
   const dryFresh = lastDry && now - Date.parse(lastDry.finishedAt!) < p.windowDays * 86_400_000;
@@ -369,11 +377,11 @@ function Purge({ data, disabled, save, post }: { data: Bundle; disabled: boolean
           <Recipients team={data.team} value={p.recipients} disabled={disabled} onChange={(ids) => void save({ "purge.recipients": ids })} empty="The agency owners" />
         </div>
       </TableCard>
-      <TableCard title="Runs" info="Matched, held and purged, per record type.">
+      <TableCard title="Runs" info="Matched, held and purged, per record type." footer={data.runs.length ? <Pager page={runs.current} total={data.runs.length} noun="runs" pageSize={pageSize} onPage={setRunPage} /> : undefined}>
         {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Start with a dry run: it deletes nothing and shows what a live run would." /> : (
           <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
             <thead><tr><th className="w-[160px]">When</th><th className="w-[110px]">Mode</th><th>Per record type (matched / held / purged)</th><th className="w-[120px]">Unruled</th></tr></thead>
-            <tbody>{data.runs.map((r) => (
+            <tbody>{runs.rows.map((r) => (
               <tr key={r.id}>
                 <td>{r.startedAt.slice(0, 16).replace("T", " ")}</td>
                 <td><StatusChip tone={r.mode === "live" ? "danger" : "info"}>{r.mode === "live" ? "Live" : "Dry run"}</StatusChip></td>
@@ -401,6 +409,9 @@ function Holds({ data, disabled, post }: { data: Bundle; disabled: boolean; post
   const [releasing, setReleasing] = useState<Hold | null>(null);
   const [why, setWhy] = useState("");
   const active = data.holds.filter((h) => !h.releasedAt);
+  const [holdPage, setHoldPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
+  const holds = paginate(active, holdPage, pageSize);
   return (
     <>
       <TableCard title="Legal holds" description="Nothing under a hold is purged — by retention or a deletion request. Complaint and dispute holds come from their source and stay until it closes."
@@ -413,11 +424,12 @@ function Holds({ data, disabled, post }: { data: Bundle; disabled: boolean; post
             <Button type="submit">Place hold</Button>
           </form>
         ) : undefined}
+        footer={active.length ? <Pager page={holds.current} total={active.length} noun="holds" pageSize={pageSize} onPage={setHoldPage} /> : undefined}
       >
         {active.length === 0 ? <EmptyState title="No active holds" hint="A complaint or a commission dispute places one automatically; place one by hand for litigation." /> : (
           <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
             <thead><tr><th>Covers</th><th className="w-[180px]">Why</th><th className="w-[140px]">Placed</th><th>Note</th><th className="w-[120px] text-right" /></tr></thead>
-            <tbody>{active.map((h) => (
+            <tbody>{holds.rows.map((h) => (
               <tr key={h.id}>
                 <td>{HOLD_SCOPE_LABELS[h.scope]}{h.scopeValue ? `: ${h.scopeValue}` : ""}</td>
                 <td>{HOLD_REASON_LABELS[h.reason]}{h.automatic ? <div className="text-xs text-muted-foreground">from its {h.reason === "complaint" ? "complaint" : "dispute"}</div> : null}</td>

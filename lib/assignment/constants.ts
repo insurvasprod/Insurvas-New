@@ -126,6 +126,19 @@ export type AssignmentWorkspace = {
   since: string;
 };
 
+/** The Route step's figures (lib/assignment/routeStats.ts); null where a read failed. */
+export type RouteStats = {
+  /** Unclaimed pool leads with no owner. */
+  waiting: number | null;
+  /** When the oldest of them was queued. */
+  oldestAt: string | null;
+  /** Leads assigned or pulled to someone since 00:00 UTC. */
+  handedOutToday: number | null;
+  /** State → count over the next `sampleSize` pool leads, oldest first; "" is a lead with no state. */
+  sampleStates: Record<string, number> | null;
+  sampleSize: number;
+};
+
 export type PreviewRow = {
   work_item_id: string;
   lead_id: string;

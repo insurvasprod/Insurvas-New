@@ -5,7 +5,8 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState, useTransition, t
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,6 @@ import type { SubscriptionStatus } from "@/lib/subscriptions/access";
 import { LIST_ORDER, LIST_STATUS, LIST_STATUS_ORDER, type QueuedKind, type SubscriptionListRow } from "@/lib/subscriptionsList/model";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
 
 type StatusFilter = "all" | "current" | SubscriptionStatus;
 type QueuedFilter = "any" | "plan" | "ends" | "trial" | "none";
@@ -73,9 +73,8 @@ export function SubscriptionsList({
     });
   }, [rows, search, plan, status, cycle, queued]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const current = Math.min(Math.max(page, 1), pages);
-  const shown = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(filtered, page, pageSize);
   const anyFilter = status !== "all" || cycle !== "any" || queued !== "any" || plan !== "all" || search.trim() !== "";
 
   function clearAll() {
@@ -90,6 +89,7 @@ export function SubscriptionsList({
   return (
     <TableCard
       className="min-w-0"
+      footer={<Pager page={current} pageSize={pageSize} total={filtered.length} noun="subscriptions" suffix={LIST_ORDER} onPage={setPage} />}
       toolbar={
         <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
           <ToolbarSearch
@@ -266,14 +266,6 @@ export function SubscriptionsList({
               })}
             </tbody>
           </table>
-        <BoardTableFooter
-          page={current}
-          pageSize={PAGE_SIZE}
-          total={filtered.length}
-          itemLabel="subscriptions"
-          order={LIST_ORDER}
-          onPageChange={setPage}
-        />
     </TableCard>
   );
 }

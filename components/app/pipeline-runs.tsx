@@ -9,6 +9,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { AGENT_INFO, AGENTS, type AgentName } from "@/lib/ingestion/agents";
 import { FILE_STAGES, STAGE_LABELS } from "@/lib/ingestion/dailyRun";
 import type { FindingRow, RunRow, StageRow } from "@/lib/ingestion/dailyRunStore";
@@ -48,7 +49,8 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(runs[0]?.id ?? null);
   const [page, setPage] = useState(1);
-  const shown = paginate(runs, page, 10);
+  const pageSize = useFittingPageSize(420, 45);
+  const shown = paginate(runs, page, pageSize);
 
   async function runNow() {
     setBusy(true);
@@ -73,7 +75,7 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
           <span className="text-sm text-muted-foreground">Each file goes through {FILE_STAGES.map((s) => STAGE_LABELS[s]).join(", ")}, then the day is analysed</span>
         </DataToolbar>
       }
-      footer={available && runs.length > 10 ? <Pager page={shown.current} pageSize={10} total={runs.length} noun="runs" onPage={setPage} /> : undefined}
+      footer={available && runs.length ? <Pager page={shown.current} pageSize={pageSize} total={runs.length} noun="runs" onPage={setPage} /> : undefined}
     >
       {!available ? <EmptyState title="Run history isn't available yet" hint="It appears once the database update (20261008280000) is applied." />
         : runs.length === 0 ? <EmptyState title="No run yet" hint="A run starts when a file arrives, every five minutes for anything waiting, or with Run now." />
@@ -123,7 +125,8 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const visible = useMemo(() => findings.filter((f) => (!agent || f.agent === agent) && (!status || f.status === status)), [findings, agent, status]);
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(420, 45);
+  const shown = paginate(visible, page, pageSize);
 
   async function review(id: string, verdict: "approved" | "rejected") {
     setBusy(id);
@@ -154,7 +157,7 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
             </select>
           </DataToolbar>
         }
-        footer={available && visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="findings" onPage={setPage} /> : undefined}
+        footer={available && visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="findings" onPage={setPage} /> : undefined}
       >
         {!available ? <EmptyState title="Findings aren't available yet" hint="They appear once the database update (20261008280000) is applied." />
           : findings.length === 0 ? <EmptyState title="No findings yet" hint="Agents note what they see in each run: a missing file, an unknown column, a status nobody has mapped." />

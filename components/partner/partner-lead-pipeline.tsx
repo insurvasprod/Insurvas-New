@@ -18,6 +18,7 @@ import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerLeadRow, PartnerPipelinePayload } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
@@ -39,7 +40,6 @@ type PipelineResponse = PartnerPipelinePayload;
 export type PipelinePreview = { data: PartnerPipelinePayload | null; error?: string };
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
-const PAGE_SIZE = 10;
 /** How many cards a lane shows before it offers the rest: a busy agency can put hundreds in one. */
 const LANE_PAGE = 20;
 
@@ -139,6 +139,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(preview?.error ?? "");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
   const loadedLimitRef = useRef(250);
 
   const query = useMemo(() => new URLSearchParams(Object.entries(filters).filter(([, value]) => Boolean(value))).toString(), [filters]);
@@ -230,7 +231,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const setFilter = (key: keyof Filters, value: string) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
   const narrowTo = (next: PartnerLane | "") => { setLane(next); setOnlyFlagged(false); setPage(1); };
   const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setLane(""); setOnlyFlagged(false); setPage(1); };
-  const tablePage = paginate(sortedRows, page, PAGE_SIZE);
+  const tablePage = paginate(sortedRows, page, pageSize);
   const canLoadMore = Boolean(data && data.rows.length < data.total);
 
   /** Every narrowing in force, as removable chips under the panel (UI-CONSISTENCY §6a). */
@@ -454,8 +455,14 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
     ? (error ? <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} /> : <SectionLoading rows={8} columns={5} />)
     : view === "board" ? board : table;
 
+  // The table pages through what is loaded and fetches the next batch as the last loaded page opens,
+  // so it never needs a Load more button (owner 2026-10-30: every table pages like Source campaigns).
+  const turnTablePage = (next: number) => {
+    setPage(next);
+    if (data && canLoadMore && !loadingMore && data.nextOffset != null && next >= Math.ceil(sortedRows.length / pageSize)) void load(data.nextOffset, true);
+  };
   const footer = !data ? undefined : view === "table"
-    ? <><Pager page={tablePage.current} total={sortedRows.length} noun="leads" pageSize={PAGE_SIZE} onPage={setPage} suffix={canLoadMore ? `${data.rows.length.toLocaleString()} of ${data.total.toLocaleString()} loaded` : undefined} />{loadMore}</>
+    ? <Pager page={tablePage.current} total={sortedRows.length} noun="leads" pageSize={pageSize} onPage={turnTablePage} disabled={loadingMore} suffix={canLoadMore ? `${data.rows.length.toLocaleString()} of ${data.total.toLocaleString()} loaded` : undefined} />
     : canLoadMore ? <><span>Showing {data.rows.length.toLocaleString()} of {data.total.toLocaleString()} leads</span>{loadMore}</> : undefined;
 
   return <div className="m-stagger space-y-6">

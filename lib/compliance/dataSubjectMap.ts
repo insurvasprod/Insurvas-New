@@ -85,6 +85,8 @@ export const DATA_SUBJECT_MAP: Record<string, SubjectTable> = {
 
   // leads — anonymised so vendor cost reporting still reconciles.
   agent_leads: { action: "anonymise", group: "leads", reason: "Lead rows stay without the person so vendor cost reporting still reconciles." },
+  // Same-phone questions on Clean (20261029600000): deleted by a trigger when their lead is anonymised.
+  lead_duplicate_reviews: { action: "cascade", parent: "agent_leads" },
   deal_flow: { action: "anonymise", group: "leads", reason: "Sales rows stay without the person: sales and cost figures still reconcile." },
   form_drafts: { action: "anonymise", group: "leads" },
   partner_messages: { action: "anonymise", group: "leads" },

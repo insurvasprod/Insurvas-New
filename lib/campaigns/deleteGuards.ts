@@ -50,6 +50,7 @@ export const CAMPAIGN_REFERENCES: Reference[] = [
   { table: "tenant_vendor_post_keys", column: "campaign_id", reason: `A lead-posting key sends leads to it — ${EXHAUST}.` },
   { table: "retention_settings", column: "winback_campaign_id", reason: "Win-back sends leads to it — pick another win-back campaign first." },
   { table: "winback_candidate", column: "campaign_id", reason: `Win-back leads name it — ${EXHAUST}.` },
+  { table: "lead_duplicate_reviews", column: "campaign_id", only: { column: "status", values: ["pending"] }, reason: "Leads from it are waiting on Clean (same phone) — answer them first." },
 ];
 
 export const VENDOR_REFERENCES: Reference[] = [

@@ -12,6 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import {
   EDITABLE,
   INVOICE_STATUS_LABELS,
@@ -475,7 +476,8 @@ export function InvoicesBoard({ invoices, sources, templates, readOnly, openId }
     return invoices.filter((i) => (view === "all" ? true : view === "open" ? ["draft", "received", "disputed", "approved"].includes(i.status) : i.status === view)
       && (!needle || i.invoiceNumber.toLowerCase().includes(needle) || i.sourceName.toLowerCase().includes(needle)));
   }, [invoices, q, view]);
-  const shown = paginate(visible, page, 15);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(visible, page, pageSize);
   const toApprove = invoices.filter((i) => EDITABLE.includes(i.status));
   const flagged = invoices.filter((i) => i.flagged && i.status !== "void").length;
   const unpaid = invoices.filter((i) => i.status === "approved");
@@ -501,7 +503,7 @@ export function InvoicesBoard({ invoices, sources, templates, readOnly, openId }
             </select>
           </DataToolbar>
         }
-        footer={visible.length > 15 ? <Pager page={shown.current} pageSize={15} total={visible.length} noun="invoices" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="invoices" onPage={setPage} /> : undefined}
       >
         {invoices.length === 0 ? (
           <EmptyState title="No invoices yet" hint="Enter each lead invoice as it arrives: approving it puts the cost in your P&L for the month it belongs to." action={!readOnly ? <Button onClick={() => setCreating("new")}>Enter an invoice</Button> : undefined} />

@@ -15,6 +15,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { DISCREPANCY_KIND_LABELS, OWED_KINDS, type DiscrepancyKind } from "@/lib/discrepancies/compute";
 import { fileDay } from "@/lib/ingestion/constants";
 import { DISCREPANCY_LABELS, DISCREPANCY_TYPES, moneySummary, type DiscrepancyType } from "@/lib/ingestion/discrepancyEngine";
@@ -126,7 +127,8 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
     (!type || (i.source === "hand" ? HAND_TYPE[i.row.kind] === type : i.row.type === type)) &&
     (!carrier || carrierKey(i) === carrier) &&
     statusMatches(i, status)), [all, source, type, carrier, status]);
-  const { current, rows } = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows } = paginate(visible, page, pageSize);
   const pickedRows = items.filter((i) => picked.includes(i.id));
   const pickedCarrier = pickedRows[0]?.carrierId ?? null;
   const canPick = (row: DiscrepancyRow) => !readOnly && handPicked.length === 0 && row.status === "open" && DISPUTABLE.has(row.type) && (!pickedCarrier || pickedCarrier === row.carrierId);
@@ -340,7 +342,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
             )}
           </DataToolbar>
         }
-        footer={all.length ? <Pager page={current} pageSize={10} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "item" : "items"} /> : undefined}
+        footer={all.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "item" : "items"} /> : undefined}
       >
         {all.length === 0 ? (
           <EmptyState title="Nothing found yet" hint="Discrepancies appear once commission files are read: commission that never came, was paid short or at the wrong rate, chargebacks that look wrong or are coming, held money and debit balances." />
@@ -419,6 +421,9 @@ export function DisputeLetters({ disputes, readOnly }: { disputes: DisputeRow[];
   const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState<DisputeRow | null>(null);
   const [outcome, setOutcome] = useState<{ id: string; outcome: string; amount: string; notes: string } | null>(null);
+  const [letterPage, setLetterPage] = useState(1);
+  const letterPageSize = useFittingPageSize(480, 49);
+  const letters = paginate(disputes, letterPage, letterPageSize);
 
   const record = useMemo(() => {
     const byCarrier = new Map<string, { name: string; settled: number; won: number; claimed: number; credited: number }>();
@@ -454,14 +459,14 @@ export function DisputeLetters({ disputes, readOnly }: { disputes: DisputeRow[];
           {record.slice(0, 5).map((r) => <StatTile key={r.name} label={r.name} value={`${r.won} of ${r.settled}`} footnote={`credited ${money(r.credited)} of ${money(r.claimed)} claimed`} />)}
         </StatStrip>
       )}
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Newest first</span></DataToolbar>}>
+      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Newest first</span></DataToolbar>} footer={disputes.length ? <Pager page={letters.current} pageSize={letterPageSize} total={disputes.length} onPage={setLetterPage} noun={disputes.length === 1 ? "letter" : "letters"} /> : undefined}>
         {disputes.length === 0 ? (
           <EmptyState title="No letters yet" hint="Choose open items of one carrier on the Discrepancies tab and draft a letter. You send it; record here what happened." />
         ) : (
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
             <thead><tr><th className="w-[120px]">Drafted</th><th>Carrier</th><th className="w-[80px] text-right">Items</th><th className="w-[120px] text-right">Claimed</th><th className="w-[150px]">Status</th><th className="w-[130px] text-right">Credited</th><th className="w-[300px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              {disputes.map((d) => (
+              {letters.rows.map((d) => (
                 <tr key={d.id}>
                   <td className="tabular-nums">{fileDay(d.createdAt.slice(0, 10))}</td>
                   <td className="font-semibold text-foreground">{d.carrierName}</td>

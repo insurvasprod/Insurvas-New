@@ -1,5 +1,6 @@
 import type { NurtureCampaignReport, NurtureReport } from "@/lib/nurture/report";
-import { STALLED_MINUTES, type RecycleBatch } from "@/lib/nurture/contract";
+import { RECYCLABLE_DISPOSITIONS, SAID_NO_MIN_DAYS, STALLED_MINUTES, type RecycleBatch } from "@/lib/nurture/contract";
+import { isOwnBookVendor } from "@/lib/campaigns/ownBook";
 
 /** Shared by the Recycle step's parts (components/app/nurture-workspace.tsx and components/app/nurture/*). */
 export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -43,6 +44,29 @@ export function draftProblem(draft: RuleDraft) {
   if (draft.max.trim() === "" || !Number.isInteger(max) || max < 0 || max > 100) return "Recycle at most 0 to 100 times";
   if (!draft.outcomes.length) return "Pick at least one outcome to recycle";
   return "";
+}
+
+/** What a campaign with no saved rule recycles by (tenant_nurture_campaigns' coalesce, 20260913450000). */
+export const DEFAULT_RULE: Rule = { wait_days: 180, allowed_dispositions: ["no_answer", "voicemail"], max_recycles: 3 };
+export const isDefaultRule = (rule: Rule) => sameRule(draftOf(DEFAULT_RULE), rule);
+
+/** Days after the outcome before a lead with it comes back (said no: the rule's wait, at least 90; the SQL's greatest()). */
+export const restDays = (rule: Rule, outcome: string) => (outcome === "not_interested" ? Math.max(rule.wait_days, SAID_NO_MIN_DAYS) : rule.wait_days);
+
+/** The table's Rule cell: "30 / 30 / 90 days · max 3", "60 days · max 2", or "Default". */
+export function ruleSummary(rule: Rule) {
+  if (isDefaultRule(rule)) return "Default";
+  if (rule.max_recycles === 0) return "Off · max 0";
+  const days = RECYCLABLE_DISPOSITIONS.filter((outcome) => rule.allowed_dispositions.includes(outcome)).map((outcome) => restDays(rule, outcome));
+  const shown = days.every((day) => day === days[0]) ? [days[0]] : days;
+  return `${shown.map(count).join(" / ")} days · max ${rule.max_recycles}`;
+}
+
+/** The line under a campaign's name: "3 lists", "No vendor" (the own-book stand-in), or the vendor. */
+export function sourceLine(campaign: NurtureCampaignReport) {
+  if (campaign.vendorName != null && isOwnBookVendor(campaign.vendorName)) return "No vendor";
+  if (campaign.lists != null) return plural(campaign.lists, "list");
+  return campaign.vendorName ?? "";
 }
 
 /** Why a campaign can't start a batch now, or "" when it can. */
