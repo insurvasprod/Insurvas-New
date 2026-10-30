@@ -61,7 +61,9 @@ export function PageHeader({
           {description && !infoDescription && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
           {meta}
         </div>
-        {(titleInfo || actions) && <div className="flex shrink-0 flex-wrap items-center gap-2">{titleInfo}{actions}</div>}
+        {/* On a phone the actions take their own line, so the title keeps the first one whole —
+            at 320 the header otherwise squeezed the title block until its (i) was cut off. */}
+        {(titleInfo || actions) && <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2 max-sm:w-full">{titleInfo}{actions}</div>}
       </div>
     </header>
   );

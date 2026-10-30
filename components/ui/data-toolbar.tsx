@@ -32,8 +32,10 @@ export function DataToolbar({
 }) {
   return (
     <div className={cn("flex w-full flex-wrap items-center gap-2", className)}>
-      {children && <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>}
-      {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
+      {/* Below sm the search and filters take the whole row and the actions wrap under them: sharing
+          one row on a 375px screen left the search box about 70px wide, reading "Se". */}
+      {children && <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-1">{children}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 sm:ml-auto">{actions}</div>}
     </div>
   );
 }
@@ -187,11 +189,11 @@ export function ToolbarCheckbox({ checked, onChange, label, disabled = false, ti
 }
 
 /** Reloads the list. Last in the actions; spins while the reload is in flight. */
-export function RefreshButton({ onClick, refreshing = false, label = "Refresh" }: { onClick: () => void; refreshing?: boolean; label?: string }) {
+export function RefreshButton({ onClick, refreshing = false, label = "Refresh", className, labelClassName }: { onClick: () => void; refreshing?: boolean; label?: string; className?: string; /** Lets a narrow toolbar hide the word and keep the icon; the name stays on the control. */ labelClassName?: string }) {
   return (
-    <Button type="button" variant="outline" onClick={onClick} disabled={refreshing} aria-busy={refreshing}>
+    <Button type="button" variant="outline" onClick={onClick} disabled={refreshing} aria-busy={refreshing} aria-label={label} className={className}>
       <RotateCw className={cn(refreshing && "animate-spin")} aria-hidden="true" />
-      {label}
+      <span className={labelClassName}>{label}</span>
     </Button>
   );
 }

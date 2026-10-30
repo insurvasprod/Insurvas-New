@@ -62,7 +62,9 @@ export async function GET(request: NextRequest) {
       }),
     ]);
     const primary = channels.find((item) => item.channel.channel_type === "partner") ?? await getPartnerChat(auth.context.tenantId, auth.context.partnerId, auth.context.userId);
-    return NextResponse.json({ ...primary, channels, directory, agencyName: agency.data?.name ?? null, agencySupport: support }, { headers: { "Cache-Control": "no-store" } });
+    // viewerId is the caller's own id, from the session — never a parameter. The thread needs it to
+    // know which messages are the reader's own and draw them on the sent side.
+    return NextResponse.json({ ...primary, channels, directory, viewerId: auth.context.userId, agencyName: agency.data?.name ?? null, agencySupport: support }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Could not load partner chat" }, { status: 503 }); }
 }
 

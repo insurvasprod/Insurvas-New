@@ -1,26 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ShieldCheck, UserPlus } from "lucide-react";
+import { MailCheck, ShieldCheck, UserMinus, UserPlus, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { PartnerInviteResultPanel, type PartnerInviteResult } from "@/components/app/partner-invite-result";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { activityLabel, dayMonth, dayMonthTime, expiresInLabel } from "@/lib/format/ago";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
-import { cn } from "@/lib/utils";
 
 
 type PartnerUser = {
@@ -221,11 +221,28 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
       <PageHeader title="Team access" description="See who has access to your partner workspace." visible infoDescription actions={<Button type="button" onClick={() => setInviteOpen(true)}><UserPlus aria-hidden="true" />Invite teammate</Button>} />
       {error &&<p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team access could not be refreshed: {error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
 
-      <StatStrip label="Team totals">
-        <StatTile label="Active members" value={active} valueTone="good" footnote={seatLimit ? `${agencySeatsUsed ?? seatsUsed} of ${seatLimit} agency seats used` : "no seat limit"} />
-        <StatTile label="Pending invitations" value={pending} valueTone={pending ? "warning" : undefined} footnote={soonestExpiry ? expiresInLabel(soonestExpiry, now) : "none waiting"} />
-        <StatTile label="Deactivated" value={deactivated} valueTone={deactivated ? "danger" : undefined} footnote="history retained" />
-      </StatStrip>
+      <StatRow label="Team totals">
+        <StatCard
+          icon={Users}
+          label="Active members"
+          value={active}
+          meter={seatLimit ? { value: agencySeatsUsed ?? seatsUsed, max: seatLimit, tone: "good", label: `${agencySeatsUsed ?? seatsUsed} of ${seatLimit} agency seats used` } : undefined}
+          fact={{ label: seatLimit ? `${agencySeatsUsed ?? seatsUsed} of ${seatLimit} agency seats used` : "No seat limit" }}
+        />
+        <StatCard
+          icon={MailCheck}
+          label="Pending invitations"
+          value={pending}
+          tone={pending ? "warn" : "default"}
+          fact={{ label: soonestExpiry ? expiresInLabel(soonestExpiry, now) : "None waiting" }}
+        />
+        <StatCard
+          icon={UserMinus}
+          label="Deactivated"
+          value={deactivated}
+          fact={{ label: "History retained" }}
+        />
+      </StatRow>
       {invite && <PartnerInviteResultPanel result={invite} />}
 
       <TableCard
@@ -286,15 +303,26 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
               <Input id="partner-team-email" className="mt-1.5" type="email" autoComplete="email" maxLength={254} value={email} aria-invalid={fieldError?.field === "email"} onChange={(event) => { setEmail(event.target.value); if (fieldError?.field === "email") setFieldError(null); }} />
               {fieldError?.field === "email" && <small className="mt-1.5 block text-xs text-[var(--error-ink)]" role="alert">{fieldError.message}</small>}
             </label>
-            <label className="block">
+            <div className="block">
               <span className={labelText}>Role</span>
-              <select value="partner_user" onChange={() => undefined} className={cn(toolbarControl, "mt-1.5 w-full")}>
-                <option value="partner_user">Partner user</option>
-                {/* A partner admin can grant only what they cannot use to widen their own access. */}
-                <option value="partner_admin" disabled>Partner admin — added by your agent</option>
-              </select>
+              {/* A partner admin can grant only what they cannot use to widen their own access, so
+                  the one option they cannot pick is shown disabled with the reason rather than
+                  hidden — the control opens and explains itself instead of ignoring the press. */}
+              <SelectMenu
+                label="Role"
+                value="partner_user"
+                onChange={() => undefined}
+                className="mt-1.5 w-full"
+                panelClassName="w-72 max-w-[calc(100vw-2rem)]"
+                panelAlign="start"
+                searchPlaceholder="Search roles"
+                options={[
+                  { value: "partner_user", label: "Partner user" },
+                  { value: "partner_admin", label: "Partner admin", description: "Added by your agent", disabled: true },
+                ]}
+              />
               <small className="mt-1.5 block text-xs text-muted-foreground">Partner users can submit leads, track your organization&rsquo;s pipeline, and message the agent.</small>
-            </label>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={busy !== null}>{busy === "invite" ? "Sending…" : "Send invitation"}</Button>

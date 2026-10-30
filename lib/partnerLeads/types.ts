@@ -1,3 +1,6 @@
+import type { AgeThresholds } from "./view";
+import type { PartnerTerm } from "../partners/payout";
+
 export type PartnerLeadFilters = {
   dateFrom?: string;
   dateTo?: string;
@@ -48,4 +51,29 @@ export type PartnerLeadRow = {
 export type PartnerLeadDetail = PartnerLeadRow & {
   values: Record<string, unknown>;
   timeline: Array<{ type: string; label: string; at: string; detail?: string | null }>;
+};
+
+/**
+ * One read of the partner Pipeline page, as `listPartnerLeads` returns it and the page consumes it.
+ * Declared once so the two cannot drift: the page used to type a narrower shape and silently ignore
+ * `oldestOpenAt` — the one figure that answers "is anything stuck?" — because it never declared it.
+ */
+export type PartnerPipelinePayload = {
+  rows: PartnerLeadRow[];
+  stages: PartnerPipelineStage[];
+  facets: PartnerLeadFacets;
+  counters: { submittedToday: number; claimed: number; converted: number; stillOpen: number };
+  /** When the longest-waiting open submission was queued. Null while any filter narrows the page,
+   *  because an "oldest" from outside that filter would sit under a number it does not describe. */
+  oldestOpenAt: string | null;
+  /** The partner's own payout terms in force today, or null when none can be read. */
+  terms: PartnerTerm | null;
+  /** The tenant's SLA ladder, in the two thresholds this page tones a submission's age by. */
+  ageThresholds: AgeThresholds;
+  laneCounts: import("./lanes").PartnerLaneCounts | null;
+  total: number;
+  nextOffset: number | null;
+  pageSize: number;
+  realtimeTopic: string;
+  generatedAt: string;
 };

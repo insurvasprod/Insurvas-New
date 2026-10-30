@@ -1,30 +1,73 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { CheckCheck, CircleDot, FileText, Info, MessageCircle, Paperclip, Plus, Search, Send, X } from "lucide-react";
+import { ArrowLeft, Building2, CircleDot, FileText, Info, MessageCircle, Plus, Search, User, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { MultiPicker } from "@/components/app/multi-picker";
+import { ChatThread } from "@/components/partner/chat-message";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ChatComposer } from "@/components/ui/chat-composer";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { control, Field } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
+import { Sheet } from "@/components/ui/sheet";
+import { Segmented } from "@/components/ui/view-tabs";
+import { clockTime, viewerTimeZone } from "@/lib/format/dates";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PartnerMessage } from "@/lib/partnerChat/cards";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
-import { productLineLabel } from "@/lib/format/productLine";
 import { composerCountLabel, PARTNER_CHAT_MESSAGE_MAX } from "@/lib/partnerChat/composer";
 import { formatSupportPhone, type SupportContact } from "@/lib/partnerSupport/contact";
-import { StatusChip } from "@/components/ui/status-chip";
+import { cn } from "@/lib/utils";
+
+/**
+ * Messages: conversations beside a thread, and nothing else on screen.
+ *
+ * It used to be three panels at once — conversations, thread, and a details column that was mostly
+ * "Not set by your agency" — on 127 hand-rolled `.portal-agent-chat-*` rules (§9). Details is
+ * reference, not something read while typing, so it is a `Sheet` opened from the thread's header
+ * (§11), the page is built from the shared kit, and on a phone it is one pane at a time: the list,
+ * then the conversation, with a way back.
+ */
+
+/** Below this the frame stops shrinking and the page scrolls instead — a laptop in a short window. */
+const MIN_FRAME_PX = 416;
 
 type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string };
 type DirectoryUser = { id: string; name: string; email: string; label: string; scope: "agent" | "partner"; role?: string; partnerName?: string };
-type ChatResponse = { channel?: { id: string; name: string; partner_id: string | null; channel_type: Channel["channel_type"]; status: string }; messages?: PartnerMessage[]; unreadCount?: number; realtimeTopic?: string; channels?: Array<{ channel: Channel; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string }>; directory?: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> } };
+type ChatResponse = { viewerId?: string | null; channel?: { id: string; name: string; partner_id: string | null; channel_type: Channel["channel_type"]; status: string }; messages?: PartnerMessage[]; unreadCount?: number; realtimeTopic?: string; channels?: Array<{ channel: Channel; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string }>; directory?: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> } };
 
-function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "?").join(""); }
 function channelTypeLabel(channel: Channel) { return channel.channel_type === "partner" ? "Agent channel" : channel.channel_type === "direct" ? "Direct message" : "Partner team channel"; }
 function channelPreview(channel: Channel) { return channel.messages.at(-1)?.message ?? "No messages yet"; }
-function formatMessageTime(value: string) { return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+
+/**
+ * §10 reserves avatars for staff users with a photo. A channel is not a person, and initials in a
+ * circle said nothing about it — so a glyph says what kind of conversation it is instead.
+ */
+function ChannelIcon({ channel, large = false }: { channel: Channel; large?: boolean }) {
+  const Glyph = channel.channel_type === "direct" ? User : channel.channel_type === "group" ? Users : Building2;
+  return (
+    <span className={cn("grid shrink-0 place-items-center rounded-md bg-[var(--surface-alt)] text-muted-foreground", large ? "size-10" : "size-9")}>
+      <Glyph className={large ? "size-5" : "size-[18px]"} aria-hidden="true" />
+      <span className="sr-only">{channelTypeLabel(channel)}</span>
+    </span>
+  );
+}
+
+function Pair({ label, value, unset }: { label: string; value: string | null; unset?: string }) {
+  if (!value && !unset) return null;
+  return (
+    <>
+      <dt className="min-w-0 text-muted-foreground">{label}</dt>
+      <dd className={cn("m-0 min-w-0 break-words", value ? "font-medium text-foreground" : "text-muted-foreground")}>{value ?? unset}</dd>
+    </>
+  );
+}
 
 function normalize(body: ChatResponse) {
   const channels = body.channels?.map((item) => ({ ...item.channel, messages: item.messages, unreadCount: item.unreadCount, realtimeTopic: item.realtimeTopic })) ?? (body.channel ? [{ ...body.channel, messages: body.messages ?? [], unreadCount: body.unreadCount ?? 0, realtimeTopic: body.realtimeTopic ?? `partner-chat:${body.channel.id}` }] : []);
@@ -34,51 +77,35 @@ function normalize(body: ChatResponse) {
 }
 
 /**
- * An automatic update, as p-par-messages draws it: tinted and labelled so it can never be taken for
- * a person's message, with the time and "cannot be edited", then the facts. Lead, Product, Event and
- * State; State appears on cards recorded after it was added to the payload.
+ * What `/design/messages` hands the panel instead of a database. A partner's own page never passes
+ * it; with it set, the panel reads nothing and writes nothing, so the preview cannot touch a live
+ * channel (lib/partnerChat/fixtures.ts).
  */
-function SystemCard({ message }: { message: PartnerMessage }) {
-  const payload = message.cardPayload;
-  const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
-  const product = text(payload.product);
-  const fields: Array<[string, string]> = [
-    ["Lead", text(payload.customer)],
-    ["Product", product && product !== "lead" ? productLineLabel(product) : null],
-    ["Event", text(message.message)],
-    ["State", text(payload.state)],
-    // Added as the card is read (enrichCards in lib/partnerChat/service.ts), from the agency's own flags.
-    ["Work", typeof payload.counts_as_work_completed === "boolean" ? (payload.counts_as_work_completed ? "Counts as work completed" : "Does not count as work completed") : null],
-    ["Picked up", typeof payload.minutes_after_submission === "number" ? (payload.minutes_after_submission === 0 ? "Under a minute after submission" : `${payload.minutes_after_submission} ${payload.minutes_after_submission === 1 ? "minute" : "minutes"} after submission`) : null],
-  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  return <article className="portal-chat-auto-card" aria-label="Automatic update">
-    <div className="portal-chat-auto-head"><StatusChip tone="info">Automatic update</StatusChip><span className="portal-chat-auto-time">{formatMessageTime(message.createdAt)} · cannot be edited</span></div>
-    {fields.length > 0 && <dl className="portal-chat-auto-fields">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
-  </article>;
-}
+export type PartnerChatSample = { viewerId: string | null; channels: Channel[]; directory: DirectoryUser[]; agencyName: string | null; agencySupport: SupportContact | null };
 
-function MessageAttachments({ message }: { message: PartnerMessage }) {
-  if (!message.attachments.length) return null;
-  return <ul className="portal-agent-chat-attachments" aria-label="Message attachments">{message.attachments.map((attachment) => <li key={attachment.id}>{attachment.downloadUrl ? <a href={attachment.downloadUrl} target="_blank" rel="noreferrer"><FileText aria-hidden="true" /><span>{attachment.fileName}</span><span className="portal-agent-chat-attachment-size">{Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB</span></a> : <span><FileText aria-hidden="true" />{attachment.fileName} unavailable</span>}</li>)}</ul>;
-}
-
-export function PartnerChatPanel({ role }: { role: PartnerRole }) {
-  const [data, setData] = useState<{ channels: Channel[]; directory: DirectoryUser[] }>({ channels: [], directory: [] });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export function PartnerChatPanel({ role, sample }: { role: PartnerRole; sample?: PartnerChatSample }) {
+  const [data, setData] = useState<{ channels: Channel[]; directory: DirectoryUser[] }>(sample ? { channels: sample.channels, directory: sample.directory } : { channels: [], directory: [] });
+  const [selectedId, setSelectedId] = useState<string | null>(sample?.channels[0]?.id ?? null);
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [search, setSearch] = useState("");
   const [newOpen, setNewOpen] = useState(false);
-  // Mirrors the agent side: "Details" and the pane header control both used to do nothing.
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Phones show one pane at a time. Above md both are on screen and this is ignored.
+  const [threadOnPhone, setThreadOnPhone] = useState(false);
   const [channelType, setChannelType] = useState<"direct" | "group">("direct");
   const [recipientIds, setRecipientIds] = useState<string[]>([]);
   const [channelName, setChannelName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [agencyName, setAgencyName] = useState<string | null>(null);
-  const [agencySupport, setAgencySupport] = useState<SupportContact | null>(null);
+  const [loading, setLoading] = useState(!sample);
+  // Who "you" is in the thread. It comes from the session via the channels read, never a parameter.
+  const [viewerId, setViewerId] = useState<string | null>(sample?.viewerId ?? null);
+  const [agencyName, setAgencyName] = useState<string | null>(sample?.agencyName ?? null);
+  const [agencySupport, setAgencySupport] = useState<SupportContact | null>(sample?.agencySupport ?? null);
   const [error, setError] = useState<string | null>(null);
+
+  // One boolean, so the effects below read as "the preview does nothing" rather than repeating the prop.
+  const sampled = Boolean(sample);
 
   const load = useCallback(async () => {
     try {
@@ -86,6 +113,7 @@ export function PartnerChatPanel({ role }: { role: PartnerRole }) {
       const body = await response.json().catch(() => null) as ChatResponse | { error?: string } | null;
       if (!response.ok) throw new Error(body && "error" in body ? body.error : "Could not load partner chat");
       const next = normalize(body as ChatResponse);
+      setViewerId(typeof (body as { viewerId?: unknown }).viewerId === "string" ? (body as { viewerId: string }).viewerId : null);
       setAgencyName(typeof (body as { agencyName?: unknown }).agencyName === "string" ? (body as { agencyName: string }).agencyName : null);
       setAgencySupport((body as { agencySupport?: SupportContact }).agencySupport ?? null);
       setData(next);
@@ -95,13 +123,13 @@ export function PartnerChatPanel({ role }: { role: PartnerRole }) {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { const kickoff = window.setTimeout(() => void load(), 0); const fallback = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 15000); return () => { window.clearTimeout(kickoff); window.clearInterval(fallback); }; }, [load]);
+  useEffect(() => { if (sampled) return; const kickoff = window.setTimeout(() => void load(), 0); const fallback = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 15000); return () => { window.clearTimeout(kickoff); window.clearInterval(fallback); }; }, [load, sampled]);
   // Keyed on strings, not data.channels (a new array every poll), so the 15s poll no longer
   // re-subscribes realtime or re-marks read. Read state still follows the newest message.
   const selectedTopic = data.channels.find((channel) => channel.id === selectedId)?.realtimeTopic ?? null;
   const selectedLatestId = data.channels.find((channel) => channel.id === selectedId)?.messages.at(-1)?.id ?? null;
-  useEffect(() => { if (!selectedTopic) return; const supabase = getSupabaseBrowserClient(); let channel: RealtimeChannel | null = null; if (supabase) channel = supabase.channel(selectedTopic).on("broadcast", { event: "message" }, () => { void load(); }).subscribe(); return () => { if (channel && supabase) void supabase.removeChannel(channel); }; }, [load, selectedTopic]);
-  useEffect(() => { if (!selectedId || !selectedTopic) return; void fetch("/api/partner/chat", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel_id: selectedId }) }); }, [selectedId, selectedTopic, selectedLatestId]);
+  useEffect(() => { if (sampled || !selectedTopic) return; const supabase = getSupabaseBrowserClient(); let channel: RealtimeChannel | null = null; if (supabase) channel = supabase.channel(selectedTopic).on("broadcast", { event: "message" }, () => { void load(); }).subscribe(); return () => { if (channel && supabase) void supabase.removeChannel(channel); }; }, [load, sampled, selectedTopic]);
+  useEffect(() => { if (sampled || !selectedId || !selectedTopic) return; void fetch("/api/partner/chat", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel_id: selectedId }) }); }, [sampled, selectedId, selectedTopic, selectedLatestId]);
   // Attachment-only messages need a valid editable body for the shared message contract.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (files.length > 0 && !draft.trim()) setDraft(files.length === 1 ? "Shared an attachment" : `Shared ${files.length} attachments`); }, [files.length, draft]);
@@ -112,15 +140,274 @@ export function PartnerChatPanel({ role }: { role: PartnerRole }) {
   const relatedLeadCount = new Set(selected?.messages.map((item) => item.workItemId).filter(Boolean)).size;
   const directory = useMemo(() => data.directory.filter((item) => item.id !== undefined), [data.directory]);
 
+  // The thread runs client-side after the channels land, so the viewer's own zone is readable here
+  // (lib/format/dates: never during a server render).
+  const zone = viewerTimeZone();
+  const nameOf = useCallback(
+    (userId: string | null) => (userId ? data.directory.find((user) => user.id === userId)?.name ?? "Workspace member" : "INSURVAS"),
+    [data.directory]);
+
+  // The frame runs from where it sits to the page's own bottom margin. The gutter is read from the
+  // first ancestor that has one, so it follows the shell's p-4 / sm:p-6 / lg:p-8 without repeating
+  // those numbers here — and a header that wraps on a narrow window moves the top, not the margin.
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [frameHeight, setFrameHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const fit = () => {
+      let gutter = 0;
+      for (let node = frame.parentElement; node; node = node.parentElement) {
+        const padding = Number.parseFloat(getComputedStyle(node).paddingBottom) || 0;
+        if (padding > 0) { gutter = padding; break; }
+      }
+      const top = frame.getBoundingClientRect().top;
+      setFrameHeight(Math.max(MIN_FRAME_PX, Math.round(window.innerHeight - top - gutter)));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    const observer = new ResizeObserver(fit);
+    if (frame.parentElement) observer.observe(frame.parentElement);
+    return () => { window.removeEventListener("resize", fit); observer.disconnect(); };
+  }, []);
+
+  function openConversation(id: string) { setSelectedId(id); setThreadOnPhone(true); setDetailsOpen(false); }
+
   async function createChannel() {
     setBusy(true); setError(null);
-    try { const response = await fetch("/api/partner/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_channel", channel_type: channelType, name: channelName, user_ids: recipientIds }) }); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Could not create chat channel"); setChannelName(""); setRecipientIds([]); setNewOpen(false); notify.done(channelType === "direct" ? "Direct message ready" : "Partner team channel created"); await load(); if (body.channel?.id) setSelectedId(body.channel.id); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not create chat channel"); } finally { setBusy(false); }
+    try { const response = await fetch("/api/partner/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_channel", channel_type: channelType, name: channelName, user_ids: recipientIds }) }); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Could not create chat channel"); setChannelName(""); setRecipientIds([]); setNewOpen(false); notify.done(channelType === "direct" ? "Direct message ready" : "Partner team channel created"); await load(); if (body.channel?.id) openConversation(body.channel.id); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not create chat channel"); } finally { setBusy(false); }
   }
 
-  async function send(event: FormEvent) {
-    event.preventDefault(); if (!selected || (!draft.trim() && files.length === 0)) return; setBusy(true); setError(null);
+  // The composer owns the form and its default; this just sends.
+  async function send() {
+    if (!selected || (!draft.trim() && files.length === 0)) return; setBusy(true); setError(null);
     try { const form = new FormData(); form.set("channel_id", selected.id); form.set("message", draft.trim() || (files.length === 1 ? "Shared an attachment" : `Shared ${files.length} attachments`)); files.forEach((file) => form.append("files", file)); const response = await fetch("/api/partner/chat", { method: "POST", body: form }); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Message could not be sent"); setDraft(""); setFiles([]); notify.done("Message sent"); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Message could not be sent"); } finally { setBusy(false); }
   }
 
-  return <main className="m-stagger portal-agent-chat-page"><PageHeader className="pb-[1.1rem]" title="Messages" description="Chat with your agent and your team." visible infoDescription actions={<Button type="button" onClick={() => setNewOpen(true)}><Plus aria-hidden="true" />New conversation</Button>} /><div className="portal-agent-chat-layout" data-details={detailsOpen ? "open" : "closed"}><aside className="portal-agent-chat-conversations" aria-label="Conversations"><div className="portal-agent-chat-conversations-heading"><div><h2>Conversations</h2><p>{loading ? "" : `${data.channels.length} ${data.channels.length === 1 ? "channel" : "channels"} · `}{role === "partner_admin" ? "admin access" : "partner access"}</p></div><button type="button" onClick={() => setNewOpen(true)} aria-label="New conversation" title="New conversation"><Plus aria-hidden="true" /></button></div><label className="portal-agent-chat-search"><Search aria-hidden="true" /><span className="sr-only">Search conversations</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations…" /></label><div className="portal-agent-chat-list" role="list">{loading && <SectionLoading rows={5} columns={2} label="Loading conversations" />}{!loading && filteredChannels.length === 0 && <p className="portal-agent-chat-empty-list">No conversations match your search.</p>}{filteredChannels.map((channel) => <button type="button" role="listitem" key={channel.id} className={`portal-agent-chat-conversation ${channel.id === selectedId ? "is-selected" : ""}`} onClick={() => setSelectedId(channel.id)} aria-current={channel.id === selectedId ? "true" : undefined}><span className="portal-agent-chat-avatar">{initials(channel.name)}</span><span className="portal-agent-chat-conversation-copy"><span className="portal-agent-chat-conversation-top"><strong>{channel.name}</strong><time>{channel.messages.at(-1) ? formatMessageTime(channel.messages.at(-1)!.createdAt) : "—"}</time></span><span className="portal-agent-chat-conversation-type">{channelTypeLabel(channel)} · {channel.status === "active" ? "Connected" : "Archived"}</span><span className="portal-agent-chat-conversation-preview">{channelPreview(channel)}</span></span>{channel.unreadCount > 0 && <span className="portal-agent-chat-unread" aria-label={`${channel.unreadCount} unread`}>{channel.unreadCount}</span>}</button>)}</div></aside><section className="portal-agent-chat-main" aria-label="Selected conversation">{newOpen ? <div className="portal-agent-chat-new-panel"><div className="portal-agent-chat-panel-heading"><div><h2>New conversation</h2></div><button type="button" onClick={() => setNewOpen(false)} aria-label="Close new conversation"><X aria-hidden="true" /></button></div><div className="portal-agent-chat-new-grid"><label><span>Conversation type</span><select value={channelType} onChange={(event) => setChannelType(event.target.value as "direct" | "group")}><option value="direct">Direct message</option><option value="group">Partner team channel</option></select></label><label><span>Channel name <em>optional</em></span><input maxLength={160} value={channelName} onChange={(event) => setChannelName(event.target.value)} placeholder={channelType === "direct" ? "Direct message" : "e.g. Partner operations"} /></label><label className="portal-agent-chat-new-full"><span>{channelType === "direct" ? "Recipient" : "Participants"}</span><select multiple value={recipientIds} onChange={(event) => setRecipientIds(Array.from(event.target.selectedOptions, (option) => option.value))}>{directory.map((user) => <option value={user.id} key={user.id}>{user.label}</option>)}</select><small>{recipientIds.length ? directory.filter((user) => recipientIds.includes(user.id)).map((user) => user.name).join(", ") : "Choose at least one person"}</small></label></div><div className="portal-agent-chat-new-actions"><button type="button" className="portal-agent-chat-secondary" onClick={() => setNewOpen(false)}>Cancel</button><button type="button" className="portal-agent-chat-primary" disabled={busy || recipientIds.length === 0} onClick={() => void createChannel()}>{busy ? "Creating…" : channelType === "direct" ? "Start direct message" : "Create team channel"}</button></div></div> : selected ? <><header className="portal-agent-chat-thread-header"><div className="portal-agent-chat-avatar portal-agent-chat-avatar-large">{initials(selected.name)}</div><div className="min-w-0"><h2>{selected.name}</h2><p>{channelTypeLabel(selected)} <span>·</span> {selected.partner_id ? "Your organization" : "Secure workspace"} <span>·</span> <CircleDot aria-hidden="true" /> {selected.status === "active" ? "Connected" : "Archived"}</p></div><div className="portal-agent-chat-thread-actions"><button type="button" className="portal-agent-chat-secondary" aria-expanded={detailsOpen} aria-controls="partner-chat-details" onClick={() => setDetailsOpen((value) => !value)}><Info aria-hidden="true" />Details</button></div></header><div className="portal-agent-chat-messages" aria-live="polite">{selected.messages.length === 0 ? <div className="portal-agent-chat-no-messages"><MessageCircle aria-hidden="true" /><h3>No messages yet</h3><p>Send the first update to this conversation.</p></div> : selected.messages.map((item) => item.messageKind === "system_card" ? <SystemCard key={item.id} message={item} /> : <article className="portal-agent-chat-text-message" key={item.id}><div className="portal-agent-chat-message-meta"><strong>{item.createdBy ? data.directory.find((user) => user.id === item.createdBy)?.name ?? "Workspace member" : "INSURVAS"}</strong><span>{formatMessageTime(item.createdAt)}</span><CheckCheck aria-hidden="true" /></div><p>{item.message}</p><MessageAttachments message={item} /></article>)}</div><form className="portal-agent-chat-composer" onSubmit={send}><textarea aria-label="Message" maxLength={PARTNER_CHAT_MESSAGE_MAX} placeholder={`Write a message to ${selected.name}…`} value={draft} onChange={(event) => setDraft(event.target.value)} /><div className="portal-agent-chat-composer-footer"><label className="portal-agent-chat-attach"><Paperclip aria-hidden="true" /><span>Attach files</span><input className="sr-only" type="file" multiple accept="image/jpeg,image/png,image/gif,application/pdf,text/plain,.docx,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0, 3))} /></label><div className="portal-agent-chat-file-chips">{files.map((file) => <span key={`${file.name}-${file.size}`}><FileText aria-hidden="true" />{file.name}<button type="button" onClick={() => setFiles((current) => current.filter((item) => item !== file))} aria-label={`Remove ${file.name}`}><X aria-hidden="true" /></button></span>)}</div><button className="portal-agent-chat-primary portal-agent-chat-send" type="submit" disabled={busy || (!draft.trim() && files.length === 0)}>{busy ? "Sending…" : "Send message"}<Send aria-hidden="true" /></button></div><div className="portal-chat-composer-help"><span className="portal-chat-composer-count ml-auto">{composerCountLabel(draft.length)}</span></div></form></> : <div className="portal-agent-chat-no-selection"><MessageCircle aria-hidden="true" /><h2>Select a conversation</h2><p>Choose an agent channel or start a private partner-team conversation.</p></div>}</section>{detailsOpen && <aside id="partner-chat-details" className="portal-agent-chat-details" aria-label="Conversation details"><div className="portal-agent-chat-details-heading"><h2>Details</h2><button type="button" aria-label="Close conversation details" onClick={() => setDetailsOpen(false)}><Info aria-hidden="true" /></button></div>{selected ? <><section className="portal-agent-chat-detail-section"><p className="portal-agent-chat-detail-label">Channel</p><div className="portal-agent-chat-partner"><span className="portal-agent-chat-avatar portal-agent-chat-avatar-large">{initials(selected.name)}</span><div><strong>{selected.name}</strong><span>{channelTypeLabel(selected)}</span><small><CircleDot aria-hidden="true" />{selected.status === "active" ? "Active" : "Archived"}</small></div></div></section><section className="portal-agent-chat-detail-section"><dl className="portal-chat-detail-grid">{agencyName && <div><dt>Agent</dt><dd>{agencyName}</dd></div>}{agencySupport?.schemaReady && <><div><dt>Support</dt>{agencySupport.email ? <dd>{agencySupport.email}</dd> : <dd className="is-unset">Not set by your agency</dd>}</div><div><dt>Phone</dt>{agencySupport.phone ? <dd>{formatSupportPhone(agencySupport.phone)}</dd> : <dd className="is-unset">Not set by your agency</dd>}</div></>}<div><dt>Related leads</dt><dd>{relatedLeadCount}</dd></div></dl></section><section className="portal-agent-chat-detail-section"><div className="portal-agent-chat-section-heading"><p className="portal-agent-chat-detail-label">Shared files ({sharedAttachments.length})</p><Link href="/partner/pipeline">Open pipeline</Link></div>{sharedAttachments.length > 0 ? <ul className="portal-agent-chat-shared-files">{sharedAttachments.slice(0, 5).map((attachment) => <li key={attachment.id}><FileText aria-hidden="true" /><span>{attachment.fileName}<small>{Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB</small></span></li>)}</ul> : <p className="portal-agent-chat-detail-muted">No files shared yet.</p>}</section></> : <p className="portal-agent-chat-detail-muted">Select a conversation to see channel details.</p>}</aside>}</div>{error && <p className="portal-agent-chat-error" role="alert">{error}</p>}</main>;
+  return (
+    <main className="m-stagger mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 flex-col">
+      <PageHeader
+        className="pb-[1.1rem]"
+        title="Messages"
+        description="Chat with your agent and your team."
+        visible
+        infoDescription
+        actions={<Button type="button" onClick={() => setNewOpen(true)}><Plus aria-hidden="true" />New conversation</Button>}
+      />
+
+      {/* It reaches the page's bottom margin exactly — measured, not guessed from the viewport with
+          a fixed subtraction, which is what left a band of empty page under it (owner, 30 Oct). */}
+      <Card ref={frameRef} style={frameHeight ? { height: frameHeight } : undefined} className="min-h-[26rem] flex-row gap-0 overflow-hidden p-0 py-0">
+        {/* Conversations. On a phone this is the page until one is opened. */}
+        <aside
+          className={cn("flex w-full min-w-0 flex-col md:w-[16rem] md:shrink-0 md:border-r md:border-border lg:w-[17rem]", threadOnPhone && "hidden md:flex")}
+          aria-label="Conversations"
+        >
+          <div className="flex items-start justify-between gap-2 border-b border-border px-3 py-3 sm:px-4">
+            <div className="min-w-0">
+              <h2 className="m-0 text-card-title font-semibold text-foreground">Conversations</h2>
+              <p className="m-0 mt-0.5 text-xs text-muted-foreground">
+                {loading ? "" : `${data.channels.length} ${data.channels.length === 1 ? "channel" : "channels"} · `}
+                {role === "partner_admin" ? "admin access" : "partner access"}
+              </p>
+            </div>
+            <Button type="button" variant="secondary" size="icon-sm" onClick={() => setNewOpen(true)} aria-label="New conversation">
+              <Plus aria-hidden="true" />
+            </Button>
+          </div>
+
+          <div className="relative px-3 py-2.5 sm:px-4">
+            <Search className="pointer-events-none absolute left-[1.4rem] top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-[1.65rem]" aria-hidden="true" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search conversations…"
+              aria-label="Search conversations"
+              className={cn(control, "mt-0 pl-9")}
+            />
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" role="list">
+            {loading && <div className="px-3 sm:px-4"><SectionLoading rows={5} columns={2} label="Loading conversations" /></div>}
+            {!loading && filteredChannels.length === 0 && <p className="m-0 px-4 py-6 text-center text-sm text-muted-foreground">No conversations match your search.</p>}
+            {filteredChannels.map((channel) => {
+              const newest = channel.messages.at(-1);
+              const current = channel.id === selectedId;
+              return (
+                <button
+                  type="button"
+                  role="listitem"
+                  key={channel.id}
+                  onClick={() => openConversation(channel.id)}
+                  aria-current={current ? "true" : undefined}
+                  className={cn(
+                    "flex w-full min-w-0 items-start gap-3 border-b border-l-[3px] border-b-border border-l-transparent px-3 py-3 text-left transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)] motion-reduce:transition-none sm:px-4",
+                    current && "border-l-[var(--primary)] bg-[var(--primary-soft)]",
+                  )}
+                >
+                  <ChannelIcon channel={channel} />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="flex min-w-0 items-baseline justify-between gap-2">
+                      <span className="truncate text-sm font-semibold text-foreground">{channel.name}</span>
+                      <time className="shrink-0 text-xs text-muted-foreground">{newest ? clockTime(newest.createdAt, zone, "12h") : "—"}</time>
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">{channelTypeLabel(channel)} · {channel.status === "active" ? "Connected" : "Archived"}</span>
+                    <span className="truncate text-xs text-muted-foreground">{channelPreview(channel)}</span>
+                  </span>
+                  {channel.unreadCount > 0 && (
+                    <span className="grid size-5 shrink-0 place-items-center self-center rounded-badge bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]" aria-label={`${channel.unreadCount} unread`}>
+                      {channel.unreadCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* The conversation. On a phone it is the page once one is open. */}
+        <section className={cn("flex min-w-0 flex-1 flex-col", !threadOnPhone && "hidden md:flex")} aria-label="Selected conversation">
+          {selected ? (
+            <>
+              <header className="flex min-w-0 items-center gap-2 border-b border-border px-3 py-2.5 sm:gap-3 sm:px-4">
+                <Button type="button" variant="ghost" size="icon-sm" className="md:hidden" aria-label="Back to conversations" onClick={() => setThreadOnPhone(false)}>
+                  <ArrowLeft aria-hidden="true" />
+                </Button>
+                <ChannelIcon channel={selected} large />
+                <div className="min-w-0 flex-1">
+                  <h2 className="m-0 truncate text-card-title font-semibold text-foreground">{selected.name}</h2>
+                  <p className="m-0 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="truncate">{channelTypeLabel(selected)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="inline-flex shrink-0 items-center gap-1">
+                      <CircleDot className="size-3 text-[var(--success-ink)]" aria-hidden="true" />
+                      {selected.status === "active" ? "Connected" : "Archived"}
+                    </span>
+                  </p>
+                </div>
+                <Button type="button" variant="secondary" size="sm" aria-expanded={detailsOpen} aria-controls="partner-chat-details" onClick={() => setDetailsOpen(true)}>
+                  <Info aria-hidden="true" />
+                  <span className="hidden sm:inline">Details</span>
+                </Button>
+              </header>
+
+              <ChatThread messages={selected.messages} viewerId={viewerId} nameOf={nameOf} zone={zone} />
+
+              <ChatComposer
+                value={draft}
+                onChange={setDraft}
+                onSubmit={() => void send()}
+                files={files}
+                onFilesChange={setFiles}
+                busy={busy}
+                placeholder={`Write a message to ${selected.name}…`}
+                maxLength={PARTNER_CHAT_MESSAGE_MAX}
+                countLabel={composerCountLabel}
+                accept="image/jpeg,image/png,image/gif,application/pdf,text/plain,.docx,.xlsx"
+                className="mx-3 mb-3 sm:mx-4 sm:mb-4"
+              />
+            </>
+          ) : (
+            <div className="m-auto flex flex-col items-center gap-2 px-4 py-8 text-center">
+              <MessageCircle className="size-6 text-muted-foreground" aria-hidden="true" />
+              <h2 className="m-0 text-card-title font-semibold text-foreground">Select a conversation</h2>
+              <p className="m-0 text-sm text-muted-foreground">Choose an agent channel or start a private partner-team conversation.</p>
+            </div>
+          )}
+        </section>
+      </Card>
+
+      {error && <p role="alert" className="mt-3 rounded-md border border-border bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+
+      {detailsOpen && selected && (
+        <Sheet
+          id="partner-chat-details"
+          title="Conversation details"
+          subtitle={selected.name}
+          onClose={() => setDetailsOpen(false)}
+          closeLabel="Close conversation details"
+          footer={<Button asChild variant="secondary" className="w-full"><Link href="/partner/pipeline">Open pipeline</Link></Button>}
+        >
+          <dl className="m-0 grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
+            <Pair label="Channel" value={channelTypeLabel(selected)} />
+            <Pair label="Status" value={selected.status === "active" ? "Active" : "Archived"} />
+            <Pair label="Your agency" value={agencyName} />
+            {agencySupport?.schemaReady && (
+              <>
+                <Pair label="Support email" value={agencySupport.email} unset="Not set by your agency" />
+                <Pair label="Support phone" value={agencySupport.phone ? formatSupportPhone(agencySupport.phone) : null} unset="Not set by your agency" />
+              </>
+            )}
+            <Pair label="Related leads" value={String(relatedLeadCount)} />
+          </dl>
+
+          <section className="min-w-0 border-t border-border pt-4">
+            <h3 className="m-0 text-card-title font-semibold text-foreground">Shared files ({sharedAttachments.length})</h3>
+            {sharedAttachments.length > 0 ? (
+              <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
+                {sharedAttachments.slice(0, 8).map((attachment) => (
+                  <li key={attachment.id} className="flex min-w-0 items-center gap-2 text-sm">
+                    <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="min-w-0 truncate text-foreground">{attachment.fileName}</span>
+                    <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">{Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="m-0 mt-2 text-sm text-muted-foreground">No files shared yet.</p>
+            )}
+          </section>
+        </Sheet>
+      )}
+
+      <Dialog open={newOpen} onOpenChange={setNewOpen}>
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>New conversation</DialogTitle>
+            <DialogDescription>A direct message reaches one person; a team channel is for your own organisation.</DialogDescription>
+          </DialogHeader>
+          <div className="flex min-w-0 flex-col gap-4">
+            <div className="min-w-0">
+              <span className="text-label text-[var(--body)]">Conversation type</span>
+              <div className="mt-1.5">
+                <Segmented
+                  label="Conversation type"
+                  value={channelType}
+                  onChange={(next) => setChannelType(next)}
+                  // Short enough for the track to fit a 375-wide dialog; the line above says what each one means.
+                  options={[{ key: "direct" as const, label: "Direct message" }, { key: "group" as const, label: "Team channel" }]}
+                />
+              </div>
+            </div>
+            <Field label="Channel name" hint="Optional — a direct message is named after the person.">
+              <input
+                maxLength={160}
+                value={channelName}
+                onChange={(event) => setChannelName(event.target.value)}
+                placeholder={channelType === "direct" ? "Direct message" : "e.g. Partner operations"}
+                className={control}
+              />
+            </Field>
+            <Field label={channelType === "direct" ? "Recipient" : "Participants"} hint={recipientIds.length ? directory.filter((user) => recipientIds.includes(user.id)).map((user) => user.name).join(", ") : "Choose at least one person"}>
+              <div className="mt-1.5">
+                <MultiPicker
+                  label={channelType === "direct" ? "Recipient" : "Participants"}
+                  placeholder="Choose people"
+                  value={recipientIds}
+                  onChange={setRecipientIds}
+                  options={directory.map((user) => ({ value: user.id, label: user.label }))}
+                />
+              </div>
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setNewOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={busy || recipientIds.length === 0} onClick={() => void createChannel()}>
+              {busy ? "Creating…" : channelType === "direct" ? "Start direct message" : "Create team channel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </main>
+  );
 }

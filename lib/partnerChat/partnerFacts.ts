@@ -1,7 +1,7 @@
 import "server-only";
 
 import { intakeLocalDate, localRangeToUtc } from "@/lib/dealFlow/localDate";
-import { formatCentsAsCurrency } from "@/lib/money";
+import { payoutLabel } from "@/lib/partners/payout";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -23,13 +23,9 @@ export type PartnerChannelFacts = {
 
 type Term = { partner_id: string; payout_model: string; rate_cents: number | null; rate_pct_bp: number | null; effective_from: string };
 
-export function payoutLabel(term: Pick<Term, "payout_model" | "rate_cents" | "rate_pct_bp"> | null): string | null {
-  if (!term) return null;
-  if (term.payout_model === "revenue_share") return term.rate_pct_bp == null ? null : `${(term.rate_pct_bp / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}% revenue share`;
-  if (term.rate_cents == null) return null;
-  const unit = ({ per_transfer: "transfer", per_lead: "lead", per_sale: "sale", per_issued_policy: "issued policy" } as Record<string, string>)[term.payout_model] ?? term.payout_model.replace(/_/g, " ");
-  return `${formatCentsAsCurrency(term.rate_cents)} / ${unit}`;
-}
+// The partner portal shows the same sentence to the partner it describes, and this module is
+// server-only, so the implementation lives in the client-safe lib/partners/payout.ts.
+export { payoutLabel };
 
 export async function getPartnerChannelFacts(tenantId: string, timeZone: string | null): Promise<PartnerChannelFacts[]> {
   const db = getSupabaseServiceClient();

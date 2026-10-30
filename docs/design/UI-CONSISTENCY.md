@@ -129,7 +129,10 @@ glossy card as it was.
 
 Before that (2026-10-27): live for new and reworked pages. Pages are moved one at a time, only when someone works
 on them; untouched pages keep `StatStrip` (decision 2026-10-27). The `mixed-stat` ratchet keeps a
-page from using both.
+page from using both. Moved so far: the partner home, the partner Pipeline
+(2026-10-30, preview on `/design/pipeline`), and on the same day the rest of the partner portal —
+Team review, Team access and Statements (previews on `/design/overview` and `/design/organization`).
+**No `StatStrip` is left in `components/partner/**`.**
 
 The figures under a page header are a row of glossy stat cards: `StatRow` and `StatCard` from
 `components/ui/stat-card.tsx`. Reference: the "Footer fact, glossy" row in the mockup, and every
@@ -226,6 +229,14 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
   13/500 (`text-label`), body 14, meta 12.
 - **Chips.** A state is `StatusChip`; a choice someone presses or removes is `ToggleChip`
   (`components/ui/toggle-chip.tsx`, 36px since 2026-10-30, §16). No local `Chip`/`Pill` (`local-chip`).
+- **Charts.** `BarSeries`, `ShareBar` and `Sparkline` from `components/ui/chart.tsx`, drawn in the
+  ramp that file sets (`CHART_TONES`). Tokens only, both themes, and every shape carries its
+  figures in text behind the picture. There is no charting dependency: the kit is one file with a
+  narrow surface so one could be swapped in later without touching a page. A chart's own series
+  belongs in a tested pure helper, as `lib/partnerLeads/trend.ts` is for submissions over time —
+  two pages drawing the same figures must not each work them out.
+- **Chat.** A message bar is `ChatComposer` (`components/ui/chat-composer.tsx`): one bar, Enter
+  sends, and typing anywhere on the page starts a message in it.
 - **Pop-ups.** By task (§11): `Dialog` at a size, `ConfirmDialog`/`confirmAction()` for a loss,
   `Sheet` for a record, `Popover` for a picker, `DropdownMenu` for actions. Never
   `window.confirm` (`window-confirm`) or a page's own click-outside listener (`hand-popover`).
@@ -235,8 +246,17 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
   (`DraftActions` or `SettingsSaveBar`) and a `LeaveGuard` (`components/ui/leave-guard.tsx`), so a
   click away asks Save changes / Discard changes / Stay (`unguarded-dirty`).
 - **Tabs.** `ViewTabs` or `Segmented`; never a hand-made `role="tablist"` (`hand-tablist`).
-- **Dropdowns.** Native `<select>` with `toolbarControl` or `control`. The console's radix
-  `Select` moves to the same (`radix-select`).
+- **Dropdowns.** `SelectMenu` (`components/ui/select-menu.tsx`): a 36px trigger that takes the
+  brand tint while it holds anything but its default, and a panel with a search box at the top,
+  titled groups, optional dots and counts, and a tick on the chosen option. Set by the owner on
+  2026-10-29 — the native dropdowns were "so plain", and the operating system draws their menu in
+  its own colours, which is why a filter on a dark page opened bright blue. A native `<select>` is
+  no longer the rule; the console's radix `Select` moves to `SelectMenu` too (`radix-select`).
+  - **Two to five options that are not a list to search through is a `Segmented`** (§15), not a
+    dropdown; **several answers from a short list is the checkbox dropdown**
+    (`components/app/multi-picker.tsx`, §13), never a native multiple `<select>`.
+  - Native date inputs with `toolbarControl` stay for now: `DateTimePicker` picks a date *and* a
+    time, so a date-only filter has nowhere to go until it gains a date-only mode.
 - Pill shapes remain only for toggle tracks, the count badge on the Filters button, and the
   marketing and pricing CTAs, which keep the brand's pill ([BRAND.md](BRAND.md)).
 
@@ -326,6 +346,10 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - New screens use Tailwind and the shared components; do not add page-specific `.portal-*` rules to
   `app/globals.css`. A sweep on 2026-09-28 removed ~2,200 lines of rules whose classes no component
   used any more. A header cell's own `text-right` now wins over `.portal-lead-table th`.
+- The partner **Messages** page was the largest block left: 147 lines of `.portal-agent-chat-*` and
+  `.portal-chat-*`, and the reason that page looked unlike the rest of the product. It was rebuilt
+  from the kit on 2026-10-30 and the rules are gone; only `.portal-status-chip.is-info` stayed,
+  because the chip is shared. A page rebuilt from the kit should take its CSS with it.
 
 ## 10. People and companies (v3)
 **Status:** Live.

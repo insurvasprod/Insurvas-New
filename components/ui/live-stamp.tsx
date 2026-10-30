@@ -14,6 +14,15 @@ const clockSeconds = () => Math.floor(Date.now() / 1000);
 const noClock = () => null;
 
 /**
+ * The same clock, for anything that has to say how long ago something happened. Whole seconds, one
+ * tick a second; null on the server, so the first client pass matches the markup it hydrates and a
+ * relative time never causes a mismatch.
+ */
+export function useClockSeconds(): number | null {
+  return useSyncExternalStore(subscribeClock, clockSeconds, noClock);
+}
+
+/**
  * "● Live · updated 12s ago" — how fresh the figures on a dashboard are.
  *
  * `updatedAt` is when the data was read (the server's render time, or a poll's last success). The
