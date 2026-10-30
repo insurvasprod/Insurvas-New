@@ -17,9 +17,9 @@ type Fly =
   | { kind: "tip"; key: string; label: string; top: number };
 
 /**
- * Desktop navigation for staff and partner shells. It uses the agent workspace's labeled accordion
- * rail and collapse control while keeping each shell's ordered menu data and active-route rules.
- * Mobile keeps each shell's own drawer; partner Overview matches only itself.
+ * Desktop navigation for staff and partner shells. Each shell keeps its ordered menu data and
+ * active-route rules; partner can opt into the agent sidebar presentation while staff keeps the
+ * compact-rail treatment. Mobile keeps each shell's own drawer; partner Overview matches only itself.
  */
 export function NavRail({
   label,
@@ -28,6 +28,7 @@ export function NavRail({
   foot,
   card,
   isActive,
+  sidebarPresentation = false,
 }: {
   label: string;
   homeHref: string;
@@ -35,6 +36,8 @@ export function NavRail({
   foot: RailLink[];
   card?: { label: string; icon: Icon; body: ReactNode };
   isActive: (href: string, pathname: string) => boolean;
+  /** Use the agent shell's full sidebar geometry and left-aligned top-bar search. */
+  sidebarPresentation?: boolean;
 }) {
   const pathname = usePathname();
   const [fly, setFly] = useState<Fly | null>(null);
@@ -183,11 +186,28 @@ export function NavRail({
   const CardIcon = card?.icon;
 
   return (
-    <aside data-print-hide className={`portal-agent-rail portal-agent-rail-expanded portal-agent-desktop-nav hidden md:flex ${isCollapsed ? "is-collapsed" : ""}`} onKeyDown={onKeyDown}>
-      <div className="portal-agent-rail-brand">
-        <Link href={homeHref} aria-label="Insurvas home">
-          <InsurvasLogo size="sidebar" tone="dark" className="portal-agent-rail-brand-full" />
-          <InsurvasLogo size="compact" variant="symbol" tone="dark" className="portal-agent-rail-brand-compact" />
+    <aside
+      data-print-hide
+      className={`${sidebarPresentation ? "portal-agent-sidebar-desktop" : "portal-agent-rail"} portal-agent-rail-expanded portal-agent-desktop-nav hidden md:flex md:flex-col ${isCollapsed ? "is-collapsed" : ""}`}
+      onKeyDown={onKeyDown}
+    >
+      <div className={sidebarPresentation ? "portal-agent-sidebar-brand" : "portal-agent-rail-brand"}>
+        <Link
+          href={homeHref}
+          aria-label="Insurvas home"
+          className={sidebarPresentation ? "portal-agent-desktop-brand-link" : undefined}
+        >
+          <InsurvasLogo
+            size="sidebar"
+            tone="dark"
+            className={sidebarPresentation ? "portal-agent-desktop-brand-full" : "portal-agent-rail-brand-full"}
+          />
+          <InsurvasLogo
+            size="compact"
+            variant="symbol"
+            tone="dark"
+            className={sidebarPresentation ? "portal-agent-desktop-brand-compact" : "portal-agent-rail-brand-compact"}
+          />
         </Link>
         <button
           type="button"
@@ -201,7 +221,7 @@ export function NavRail({
           {isCollapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
         </button>
       </div>
-      <nav id={navId} className="portal-agent-rail-scroll" aria-label={label}>
+      <nav id={navId} className={`portal-agent-rail-scroll ${sidebarPresentation ? "portal-agent-sidebar-scroll" : ""}`} aria-label={label}>
         <div className={`portal-agent-nav ${isCollapsed ? "is-collapsed" : ""}`}>
           {blocks.map((block, index) => Array.isArray(block) ? (
             <ul key={`links-${index}`} className={index === 0 ? "portal-agent-nav-home" : "portal-agent-nav-settings"}>
