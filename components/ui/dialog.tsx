@@ -50,13 +50,14 @@ function DialogOverlay({
 /**
  * Widths by task (UI-CONSISTENCY §11, foundation v3): `sm` 400 for a step that loses something
  * (use ConfirmDialog), `md` 440 for a short edit (the default), `lg` 560 and `xl` 720 for a form
- * with two columns or a table. Pass a size, not a max-w class.
+ * with two columns or a table, `2xl` 960 for a detailed record review. Pass a size, not a max-w class.
  */
 const DIALOG_SIZE = {
   sm: "sm:max-w-[400px]",
   md: "sm:max-w-[440px]",
   lg: "sm:max-w-[560px]",
   xl: "sm:max-w-[720px]",
+  "2xl": "sm:max-w-[960px]",
 } as const
 
 function DialogContent({
