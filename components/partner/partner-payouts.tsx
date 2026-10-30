@@ -5,14 +5,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Building2, CheckCircle2, Clock3, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { Field } from "@/components/ui/field";
+import { Segmented } from "@/components/ui/view-tabs";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerStatement } from "@/lib/accounting/payoutsCore";
 import { dayMonth, dayMonthYear } from "@/lib/format/dates";
@@ -141,9 +143,13 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
   const [open, setOpen] = useState<string | null>(null);
   const [loading, setLoading] = useState(!sample);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | RunRow["status"]>("all");
+  const [periodFrom, setPeriodFrom] = useState("");
+  const [periodTo, setPeriodTo] = useState("");
   // main's rule (30 Oct): the pager takes as many rows as the window has room for.
   const pageSize = useFittingPageSize(380, 45);
-  const paged = paginate(runs ?? [], page, pageSize);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -168,6 +174,34 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
   const awaiting = runs?.filter((run) => run.status !== "paid") ?? [];
   const latest = runs?.[0] ?? null;
   const count = (rows: RunRow[]) => `${rows.length} statement${rows.length === 1 ? "" : "s"}`;
+  const searchTerm = search.trim().toLowerCase();
+  const filteredRuns = (runs ?? []).filter((run) => {
+    const matchesStatus = statusFilter === "all" || run.status === statusFilter;
+    // Date filters use overlap: a statement stays visible when any part of its period falls in range.
+    const matchesFrom = !periodFrom || run.periodEnd >= periodFrom;
+    const matchesTo = !periodTo || run.periodStart <= periodTo;
+    const matchesSearch = !searchTerm || [
+      period(run.periodStart, run.periodEnd),
+      run.periodStart,
+      run.periodEnd,
+      run.status,
+      run.status === "paid" ? "paid" : "awaiting payment",
+      money(run.netCents),
+      run.paidOn ? dayMonthYear(run.paidOn) : "",
+    ].some((value) => value.toLowerCase().includes(searchTerm));
+    return matchesStatus && matchesFrom && matchesTo && matchesSearch;
+  });
+  const paged = paginate(filteredRuns, page, pageSize);
+  const activeFilters: ActiveFilter[] = [
+    statusFilter !== "all" && { key: "status", label: "Status", value: statusFilter === "paid" ? "Paid" : "Published", onRemove: () => { setStatusFilter("all"); setPage(1); } },
+    (periodFrom || periodTo) && { key: "period", label: "Period", value: `${periodFrom ? dayMonthYear(periodFrom) : "Any date"} – ${periodTo ? dayMonthYear(periodTo) : "Any date"}`, onRemove: () => { setPeriodFrom(""); setPeriodTo(""); setPage(1); } },
+  ].filter(Boolean) as ActiveFilter[];
+  const clearAll = () => { setSearch(""); setStatusFilter("all"); setPeriodFrom(""); setPeriodTo(""); setPage(1); };
+  const setStatus = (value: "all" | RunRow["status"]) => { setStatusFilter(value); setPage(1); };
+  const setFrom = (value: string) => { setPeriodFrom(value); setPage(1); };
+  const setTo = (value: string) => { setPeriodTo(value); setPage(1); };
+  const hasFilters = statusFilter !== "all" || Boolean(periodFrom || periodTo);
+  const noMatchBySearch = Boolean(searchTerm && !hasFilters);
 
   return (
     <>
@@ -194,18 +228,43 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
       </StatRow>
 
       <TableCard
-        toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />} />}
-        footer={runs?.length ? <Pager page={paged.current} total={runs.length} noun={runs.length === 1 ? "statement" : "statements"} pageSize={pageSize} onPage={setPage} /> : undefined}
+        toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+          <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search statements" />
+          <FilterButton open={filtersOpen} controls="partner-payout-filters" onClick={() => setFiltersOpen((value) => !value)} count={activeFilters.length} />
+        </DataToolbar>}
+        filters={<>
+          <FilterPanel id="partner-payout-filters" open={filtersOpen}>
+            <Field label="Statement status">
+              <Segmented label="Statement status" value={statusFilter} onChange={setStatus} options={[
+                { key: "all", label: "All", count: runs?.length ?? 0 },
+                { key: "published", label: "Published", count: runs?.filter((run) => run.status === "published").length ?? 0 },
+                { key: "paid", label: "Paid", count: paid.length },
+              ]} />
+            </Field>
+            <Field label="From" htmlFor="partner-payout-period-from">
+              <input id="partner-payout-period-from" type="date" className={`${toolbarControl} mt-1.5 w-full`} value={periodFrom} onChange={(event) => setFrom(event.target.value)} />
+            </Field>
+            <Field label="Through" htmlFor="partner-payout-period-to">
+              <input id="partner-payout-period-to" type="date" className={`${toolbarControl} mt-1.5 w-full`} value={periodTo} onChange={(event) => setTo(event.target.value)} />
+            </Field>
+            <p className="m-0 self-end pb-2 text-xs text-muted-foreground">Matches statements whose period overlaps these dates.</p>
+          </FilterPanel>
+          <ActiveFilters filters={activeFilters} onClear={clearAll} />
+        </>}
+        footer={filteredRuns.length ? <Pager page={paged.current} total={filteredRuns.length} noun={filteredRuns.length === 1 ? "statement" : "statements"} pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         {error ? <EmptyState title="Statements are not available" hint={error} /> : runs === null ? <SectionLoading rows={4} columns={4} /> : runs.length === 0 ? (
           <EmptyState title="No statements yet" hint="When the agency publishes a payout statement for you, it appears here." />
+        ) : filteredRuns.length === 0 ? (
+          <NoMatches noun="statements" by={noMatchBySearch ? "search" : "filters"} onClear={clearAll} />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Period</TableHead>
+                <TableHead>Statement period</TableHead>
                 <TableHead className="w-[160px] text-right">Net payable</TableHead>
-                <TableHead className="w-[170px]">Status</TableHead>
+                <TableHead className="w-[150px]">Status</TableHead>
+                <TableHead className="w-[150px]">Paid on</TableHead>
                 <TableHead className="w-[90px] text-right"><span className="sr-only">Open</span></TableHead>
               </TableRow>
             </TableHeader>
@@ -214,7 +273,8 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
                 <TableRow key={r.id}>
                   <TableCell className="font-medium text-foreground">{period(r.periodStart, r.periodEnd)}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.netCents)}</TableCell>
-                  <TableCell><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? `Paid ${r.paidOn ? dayMonth(r.paidOn) : ""}`.trim() : "Published"}</StatusChip></TableCell>
+                  <TableCell><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? "Paid" : "Published"}</StatusChip></TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">{r.paidOn ? dayMonthYear(r.paidOn) : "Awaiting payment"}</TableCell>
                   <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => setOpen(r.id)}>Open</Button></TableCell>
                 </TableRow>
               ))}
