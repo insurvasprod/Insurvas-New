@@ -301,13 +301,7 @@ export function activityView(today: Pick<HomeToday, "series" | "insights"> | nul
 }
 
 /** The chart's top gridline: the smallest readable round number at or above the busiest day. */
-export function niceMax(value: number): number {
-  if (value <= 5) return 5;
-  // Half the order of magnitude as the step (50 for hundreds, 5 for tens): the tallest bar fills
-  // most of the chart, and the halfway gridline still lands on a round number.
-  const step = 10 ** Math.floor(Math.log10(value)) / 2;
-  return Math.ceil(value / step) * step;
-}
+export { niceMax } from "../chart/scale.ts";
 
 /* ── Today's schedule ───────────────────────────────────────────────────────────────────────── */
 

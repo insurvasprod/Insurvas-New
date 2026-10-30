@@ -120,18 +120,18 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 `useMemo`, extracted and tested.
 
 **Acceptance criteria:**
-- [ ] `components/ui/chart.tsx` exports a bar series, a stacked share bar with a legend, and a
+- [x] `components/ui/chart.tsx` exports a bar series, a stacked share bar with a legend, and a
       sparkline — tokens only, no hex, no local surface
-- [ ] Every shape has an accessible summary: a table or a described list behind the visual
-- [ ] `lib/partnerLeads/trend.ts` buckets rows into days or weeks over a range, picks the step, and
+- [x] Every shape has an accessible summary: a table or a described list behind the visual
+- [x] `lib/partnerLeads/trend.ts` buckets rows into days or weeks over a range, picks the step, and
       returns the max — pure, no React
-- [ ] Unit tests: a single day, a range crossing a month, an empty range, a range longer than the
+- [x] Unit tests: a single day, a range crossing a month, an empty range, a range longer than the
       data, the day/week step boundary
 
 **Verification:**
-- [ ] `node --experimental-strip-types --test lib/partnerLeads/trend.test.mjs`
-- [ ] The shapes render at 320 and 1536 without overflow
-- [ ] Reduced motion: no animation on first paint beyond the kit's own
+- [x] `node --experimental-strip-types --test lib/partnerLeads/trend.test.mjs`
+- [x] The shapes render at 320 and 1536 without overflow
+- [x] Reduced motion: no animation on first paint beyond the kit's own
 
 **Dependencies:** None · **Files:** `components/ui/chart.tsx`, `lib/partnerLeads/trend.ts`,
 `lib/partnerLeads/trend.test.mjs` · **Scope:** Medium
@@ -143,16 +143,16 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 **Description:** Replace the one-bar "Lead pipeline" panel with a real 30-day series.
 
 **Acceptance criteria:**
-- [ ] A daily bar series over 30 days, from the existing pipeline API (as Team review does)
-- [ ] The 7-day total with its change against the previous 7, naming the comparison (§14)
-- [ ] Best day as a supporting fact; a link into Team review for the date range
-- [ ] Loads without blocking the stat cards; its own skeleton, and an honest empty state
-- [ ] A figure that was not read is never drawn as 0
+- [x] A daily bar series over 30 days, from the existing pipeline API (as Team review does)
+- [x] The 7-day total with its change against the previous 7, naming the comparison (§14)
+- [x] Best day as a supporting fact; a link into Team review for the date range
+- [x] Loads without blocking the stat cards; its own skeleton, and an honest empty state
+- [x] A figure that was not read is never drawn as 0
 
 **Verification:**
-- [ ] Busy and quiet fixtures both read correctly; empty says so
-- [ ] The 7-day total matches the sum of the last 7 bars
-- [ ] 375: the chart is legible and the page does not scroll sideways
+- [x] Busy and quiet fixtures both read correctly; empty says so
+- [x] The 7-day total matches the sum of the last 7 bars
+- [x] 375: the chart is legible and the page does not scroll sideways
 
 **Dependencies:** B1 · **Files:** `components/partner/partner-portal-overview.tsx` · **Scope:** Medium
 
@@ -163,17 +163,17 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 **Description:** The share breakdown and the speed the partner actually experiences.
 
 **Acceptance criteria:**
-- [ ] A stacked share bar by lane (New / With a closer / On a call / Converted / Closed) with a
+- [x] A stacked share bar by lane (New / With a closer / On a call / Converted / Closed) with a
       legend and counts, replacing the stage-share panel
-- [ ] Conversion rate as a figure with its comparison named
-- [ ] A speed panel: average time to claim, and average reply in chat (from the pulse endpoint)
-- [ ] Each figure links to the rows behind it where one exists
-- [ ] Nothing shows a rate computed from zero submissions
+- [x] Conversion rate as a figure with its comparison named
+- [x] A speed panel: average time to claim, and average reply in chat (from the pulse endpoint)
+- [x] Each figure links to the rows behind it where one exists
+- [x] Nothing shows a rate computed from zero submissions
 
 **Verification:**
-- [ ] The lane shares sum to the total and agree with the stat cards
-- [ ] With no data the panels say so rather than drawing 0%
-- [ ] Contrast of every legend swatch and label measured against the real surface
+- [x] The lane shares sum to the total and agree with the stat cards
+- [x] With no data the panels say so rather than drawing 0%
+- [x] Contrast of every legend swatch and label measured against the real surface
 
 **Dependencies:** B1 · **Files:** `components/partner/partner-portal-overview.tsx` · **Scope:** Medium
 
@@ -184,14 +184,14 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 **Description:** Money over time, and the shortcut list that replaces the three tiles.
 
 **Acceptance criteria:**
-- [ ] Statement history as a small bar series with the latest figure, from `/api/partner/payouts`
-- [ ] The partner's rate shown beside it; a revenue share shows the percentage and no estimate
-- [ ] "Jump to" as one-line links with their figures (§4b), replacing the three tiles
-- [ ] `partner_user` sees only what their role may see; nothing new is exposed
+- [x] Statement history as a small bar series with the latest figure, from `/api/partner/payouts`
+- [x] The partner's rate shown beside it; a revenue share shows the percentage and no estimate
+- [x] "Jump to" as one-line links with their figures (§4b), replacing the three tiles
+- [x] `partner_user` sees only what their role may see; nothing new is exposed
 
 **Verification:**
-- [ ] A partner with no published statement gets an honest empty state, not an empty chart
-- [ ] Both roles checked on the preview
+- [x] A partner with no published statement gets an honest empty state, not an empty chart
+- [x] Both roles checked on the preview
 
 **Dependencies:** B1 · **Files:** `components/partner/partner-portal-overview.tsx` · **Scope:** Medium
 
@@ -202,11 +202,11 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 **Description:** The Overview on fixtures, so its states are checkable without a database.
 
 **Acceptance criteria:**
-- [ ] Busy, quiet, empty, error; both roles; development only, as `/design/pipeline`
-- [ ] Fixtures reuse `lib/partnerLeads/fixtures.ts` rather than inventing a second set
+- [x] Busy, quiet, empty, error; both roles; development only, as `/design/pipeline`
+- [x] Fixtures reuse `lib/partnerLeads/fixtures.ts` rather than inventing a second set
 
 **Verification:**
-- [ ] Every state renders at 1536×826 and 375 with no console error
+- [x] Every state renders at 1536×826 and 375 with no console error
 
 **Dependencies:** B2, B3, B4 · **Files:** `app/design/overview/page.tsx`,
 `lib/partnerLeads/fixtures.ts` · **Scope:** Small
@@ -214,9 +214,9 @@ swapped for Recharts later. Plus the daily bucketing that Team review currently 
 ---
 
 ### ✅ Checkpoint: Overview
-- [ ] A partner can answer "am I sending more, do they convert, how fast, what do I earn"
-- [ ] Every figure agrees with the Pipeline page
-- [ ] `npm test`, typecheck, lint green
+- [x] A partner can answer "am I sending more, do they convert, how fast, what do I earn"
+- [x] Every figure agrees with the Pipeline page
+- [x] `npm test`, typecheck, lint green
 
 ---
 

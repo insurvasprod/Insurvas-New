@@ -258,3 +258,113 @@ export function sampleDetail(row: PartnerLeadRow): PartnerLeadDetail {
     ],
   };
 }
+
+/* ── The Overview's thirty days (/design/overview) ───────────────────────────────────────────── */
+
+export const SAMPLE_OVERVIEW_STATES = ["busy", "quiet", "empty", "error"] as const;
+export type SampleOverviewState = (typeof SAMPLE_OVERVIEW_STATES)[number];
+
+/** How many a day, over 30 days, for each state. Deliberately uneven: a flat chart proves nothing. */
+const DAILY: Record<Exclude<SampleOverviewState, "error">, (dayIndex: number) => number> = {
+  // A working week with weekends off, growing a little over the month.
+  busy: (day) => ([0, 6].includes((day + 3) % 7) ? 0 : 3 + ((day * 5) % 6) + Math.floor(day / 10)),
+  quiet: (day) => (day % 9 === 0 ? 1 : 0),
+  empty: () => 0,
+};
+
+const LANE_CYCLE: PartnerLane[] = ["converted", "closed", "closed", "claimed", "new", "verification", "closed", "converted"];
+
+export type PartnerOverviewSampleData = {
+  pipeline: PartnerPipelinePayload;
+  /** The 30-day window the charts are drawn over; null is "the read failed", [] is "nothing sent". */
+  windowRows: PartnerLeadRow[] | null;
+  extras: {
+    rejectedCompliance: number | null;
+    alerts: Array<{ id: string; title: string; body: string; link: string; actionLabel: string }>;
+    team?: { active: number; pending: number } | null;
+    pulse?: { averageResponseMinutes: number | null; responses: number; pendingFollowUps: number } | null;
+  };
+  statements: Array<{ periodStart: string; periodEnd: string; status: "published" | "paid"; netCents: number; paidOn: string | null }> | null;
+};
+
+/**
+ * The Overview on sample data. The window is built here rather than from `samplePipeline`, whose
+ * rows are all hours old — a thirty-day chart drawn from them is one tall bar on today, which shows
+ * nothing about whether the chart works.
+ */
+export function sampleOverview(options: { state: SampleOverviewState; role?: SampleRole; payout?: SamplePayout; now?: number }): PartnerOverviewSampleData {
+  const { state, role = "partner_admin", payout = "per_sale", now = sampleNow() } = options;
+  const pipeline = samplePipeline({ state: state === "busy" ? "busy" : state === "quiet" ? "quiet" : "empty", role, payout, now });
+
+  let windowRows: PartnerLeadRow[] | null = [];
+  if (state === "error") windowRows = null;
+  else {
+    const rows: PartnerLeadRow[] = [];
+    for (let day = 0; day < 30; day += 1) {
+      const count = DAILY[state](day);
+      for (let index = 0; index < count; index += 1) {
+        const lane = LANE_CYCLE[(day + index) % LANE_CYCLE.length];
+        // Days back from today, at a plausible hour, so each lands in its own calendar day.
+        const at = new Date(now - (29 - day) * 86_400_000);
+        at.setHours(9 + (index % 8), (index * 7) % 60, 0, 0);
+        rows.push({
+          id: `00000000-0000-4000-7000-${String(day * 100 + index).padStart(12, "0")}`,
+          workItemId: `00000000-0000-4000-7100-${String(day * 100 + index).padStart(12, "0")}`,
+          customer: `Sample lead ${day}-${index}`,
+          submittedAt: at.toISOString(),
+          updatedAt: at.toISOString(),
+          product: index % 2 ? "final_expense" : "medicare_advantage",
+          stageId: "s-new",
+          stageName: "New lead",
+          stageType: "open",
+          disposition: lane === "converted" ? "application_submitted" : null,
+          outcome: lane === "converted" ? "Application submitted" : null,
+          submittedBy: index % 3 === 0 ? ME : TEAM[(index % TEAM.length)],
+          status: lane === "new" ? "unclaimed" : lane === "converted" || lane === "closed" ? "completed" : "claimed",
+          lane,
+        });
+      }
+    }
+    // The same narrowing the service applies: a partner user sees only what they sent.
+    windowRows = role === "partner_user" ? rows.filter((row) => row.submittedBy.id === ME.id) : rows;
+  }
+
+  const month = (back: number) => {
+    const end = new Date(now);
+    end.setDate(1);
+    end.setMonth(end.getMonth() - back);
+    const start = new Date(end);
+    end.setMonth(end.getMonth() + 1);
+    end.setDate(0);
+    const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    return { periodStart: iso(start), periodEnd: iso(end) };
+  };
+
+  return {
+    pipeline,
+    windowRows,
+    extras: {
+      rejectedCompliance: state === "empty" ? 0 : state === "quiet" ? 1 : 7,
+      alerts: state === "busy"
+        ? [{ id: "a1", title: "3 submissions nobody has claimed", body: "The oldest has waited 4 hours", link: "/partner/pipeline", actionLabel: "Open pipeline" }]
+        : [],
+      ...(role === "partner_admin"
+        ? {
+          team: { active: 4, pending: 1 },
+          pulse: state === "empty"
+            ? { averageResponseMinutes: null, responses: 0, pendingFollowUps: 0 }
+            : { averageResponseMinutes: 18, responses: 64, pendingFollowUps: 2 },
+        }
+        : {}),
+    },
+    statements: role !== "partner_admin" ? null
+      : state === "empty" ? []
+        : state === "error" ? null
+          : [0, 1, 2, 3, 4, 5].map((back) => ({
+            ...month(back + 1),
+            status: back === 0 ? "published" as const : "paid" as const,
+            netCents: 180_000 + ((5 - back) * 46_000) + ((back % 2) * 17_500),
+            paidOn: back === 0 ? null : month(back).periodStart,
+          })),
+  };
+}

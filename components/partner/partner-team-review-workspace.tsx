@@ -87,10 +87,26 @@ function rangeLabel(from: string, to: string, now: Date) {
 type Figures = ReturnType<typeof figures>;
 type Pulse = { averageResponseMinutes: number | null; responses: number; pendingFollowUps: number };
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * `?from=&to=` — so a chart elsewhere can link here showing the window it was drawn over, instead
+ * of landing the reader on a different thirty days and letting them wonder why the numbers moved.
+ * Read from the address bar rather than `useSearchParams`, which would need a Suspense boundary
+ * around a board that is already client-side; anything malformed falls back to the default.
+ */
+function rangeFromUrl(): { from: string; to: string } | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  return DAY.test(from) && DAY.test(to) && from <= to && spanDays(from, to) <= 366 ? { from, to } : null;
+}
+
 export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: string }) {
   // The board's default: the last 30 days, ending today, in the viewer's own calendar.
-  const [initialTo] = useState(() => localDay(new Date()));
-  const initialFrom = shiftDay(initialTo, -29);
+  const [asked] = useState(rangeFromUrl);
+  const [initialTo] = useState(() => asked?.to ?? localDay(new Date()));
+  const initialFrom = asked?.from ?? shiftDay(initialTo, -29);
   const [draftFrom, setDraftFrom] = useState(initialFrom);
   const [draftTo, setDraftTo] = useState(initialTo);
   const [range, setRange] = useState({ from: initialFrom, to: initialTo });
