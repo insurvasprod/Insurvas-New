@@ -1508,7 +1508,7 @@ function PreviewControl({
       <div
         aria-label={field.label}
         role="group"
-        className="mt-1 flex min-h-10 flex-wrap gap-x-4 gap-y-2 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2"
+        className="mt-1 flex min-h-9 flex-wrap gap-x-4 gap-y-2 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2"
       >
         {options.length ? options.map((option) => (
           <label key={option} className="flex items-center gap-2 text-sm text-muted-foreground">

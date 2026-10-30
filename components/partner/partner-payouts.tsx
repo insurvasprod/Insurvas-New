@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { CheckCircle2, Clock3, WalletCards } from "lucide-react";
+import { Building2, CheckCircle2, Clock3, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { Sheet } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -45,7 +45,7 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
       if (!live) return;
       if (!res.ok) setError(body?.error ?? "Could not open the statement");
       else setS(body.statement);
-    });
+    }).catch(() => { if (live) setError("Check your connection and try opening this statement again."); });
     return () => { live = false; };
   }, [id]);
   const raise = async () => {
@@ -68,58 +68,69 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
     }
   };
   return (
-    <Sheet title={s ? `Statement · ${period(s.periodStart, s.periodEnd)}` : "Statement"} subtitle={s ? `Net payable ${money(s.totals.netCents)}` : undefined}
-      status={s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid ${s.paidOn ? dayMonthYear(s.paidOn) : ""}`.trim() : "Published"}</StatusChip> : undefined} onClose={onClose}
-      footer={s && !dispute ? <Button variant="outline" onClick={() => setDispute({ itemId: null, reason: "", amount: "" })}>Dispute this statement</Button> : undefined}>
-      {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
-      {!s ? null : (
-        <>
-          {dispute ? (
-            <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
-              <label className="flex flex-col gap-1 text-sm">What is wrong{dispute.itemId ? " with this line" : ""}?<input className={toolbarControl} value={dispute.reason} onChange={(e) => setDispute({ ...dispute, reason: e.target.value })} autoFocus /></label>
-              <label className="flex flex-col gap-1 text-sm">Amount you believe is owed ($)<input className={toolbarControl} inputMode="decimal" value={dispute.amount} onChange={(e) => setDispute({ ...dispute, amount: e.target.value })} /></label>
-              <div className="flex gap-2"><Button disabled={busy || !dispute.reason.trim()} onClick={() => void raise()}>Send to the agency</Button><Button variant="outline" onClick={() => setDispute(null)}>Cancel</Button></div>
+    <Dialog open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
+      <DialogContent size="2xl" className="flex max-h-[min(90dvh,900px)] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b border-border px-6 py-5 pr-14">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <DialogTitle>{s ? `Statement · ${period(s.periodStart, s.periodEnd)}` : "Statement details"}</DialogTitle>
+              <DialogDescription className="mt-1">Review your published payout, its line items, and any disputes.</DialogDescription>
             </div>
-          ) : null}
-          {s.from?.name ? (
-            <div className="text-sm">
-              <p className="m-0 font-semibold">From {s.from.name}</p>
-              {s.from.addressLines.map((line) => <p key={line} className="m-0 text-muted-foreground">{line}</p>)}
-            </div>
-          ) : null}
-          <table className="w-full text-left text-sm">
-            <tbody>
-              {s.lines.map((l) => (
-                <tr key={`${l.label}-${l.rateCents}`} className="border-t border-border"><td className="py-1">{l.label}</td><td className="text-right">{l.count}</td><td className="text-right text-muted-foreground">{l.rateCents != null ? `@ ${money(l.rateCents)}` : ""}</td><td className="text-right tabular-nums">{money(l.amountCents)}</td></tr>
-              ))}
-              {s.revenueShare ? <tr className="border-t border-border"><td className="py-1">Revenue share</td><td /><td /><td className="text-right tabular-nums">{money(s.revenueShare.amountCents)}</td></tr> : null}
-              {s.rejectedCount ? <tr className="border-t border-border"><td className="py-1">Rejected — compliance</td><td className="text-right">{s.rejectedCount}</td><td /><td className="text-right text-muted-foreground">—</td></tr> : null}
-              {s.credits.count ? <tr className="border-t border-border"><td className="py-1">Credits accepted ({s.credits.count})</td><td /><td /><td className="text-right tabular-nums">{money(s.credits.amountCents)}</td></tr> : null}
-              {s.totals.disputedCents ? <tr className="border-t border-border"><td className="py-1">Disputed, withheld</td><td /><td /><td className="text-right tabular-nums">{money(-s.totals.disputedCents)}</td></tr> : null}
-              <tr className="border-t-2 border-border font-semibold"><td className="pt-2">Net payable</td><td /><td /><td className="pt-2 text-right tabular-nums">{money(s.totals.netCents)}</td></tr>
-            </tbody>
-          </table>
-          {s.rejectedCount ? <p className="text-xs text-muted-foreground">Transfers rejected at the agency&apos;s compliance check are not billable. The count tells you there is a source to look at.</p> : null}
-          {s.footer ? <p className="text-xs text-muted-foreground">{s.footer}</p> : null}
-          {s.disputes.length ? (
-            <div className="flex flex-col gap-2 border-t border-border pt-4">
-              <h3 className="text-sm font-semibold">Disputes</h3>
-              {s.disputes.map((d) => <div key={d.id} className="text-sm">Raised by {d.raisedBy}: {d.reason} · {money(d.amountCents)} · <span className="text-muted-foreground">{d.status === "open" ? "open" : `${d.status}: ${d.resolutionNote ?? ""}`}</span></div>)}
-            </div>
-          ) : null}
-          <div className="flex flex-col gap-2 border-t border-border pt-4">
-            <h3 className="text-sm font-semibold">Every line</h3>
-            <table className="w-full text-left text-sm">
-              <tbody>
-                {s.items.map((i) => (
-                  <tr key={i.id} className="border-t border-border"><td className="py-1 whitespace-nowrap">{dayMonth(i.occurredOn)}</td><td>{i.label}{i.reference ? <span className="text-xs text-muted-foreground"> · ref {i.reference}</span> : null}{i.disputed ? <span className="text-xs text-[var(--warning-ink)]"> · disputed</span> : null}</td><td className="text-right tabular-nums">{money(i.amountCents)}</td><td className="w-[84px] text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</td></tr>
-                ))}
-              </tbody>
-            </table>
+            {s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid${s.paidOn ? ` · ${dayMonthYear(s.paidOn)}` : ""}` : "Published"}</StatusChip> : null}
           </div>
-        </>
-      )}
-    </Sheet>
+          {s ? <div className="mt-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-3">
+            <div><p className="m-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">Net payable</p><p className="m-0 mt-1 text-2xl font-semibold tabular-nums text-foreground">{money(s.totals.netCents)}</p></div>
+            <p className="m-0 text-sm text-muted-foreground">{s.items.length} {s.items.length === 1 ? "transfer" : "transfers"} in this statement</p>
+          </div> : null}
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {error ? <p role="alert" className="mb-4 rounded-md border border-[var(--error)]/30 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p> : null}
+          {!s ? <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground" aria-live="polite">{error ? "Statement details could not be loaded." : "Loading statement details…"}</div> : (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)]">
+              <div className="flex min-w-0 flex-col gap-6">
+                <section aria-labelledby="statement-summary-heading">
+                  <h3 id="statement-summary-heading" className="mb-3 text-sm font-semibold">Statement summary</h3>
+                  <TableCard>
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="w-20 text-right">Count</TableHead><TableHead className="w-28 text-right">Rate</TableHead><TableHead className="w-32 text-right">Amount</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {s.lines.map((l) => <TableRow key={`${l.label}-${l.rateCents}`}><TableCell className="font-medium">{l.label}</TableCell><TableCell className="text-right tabular-nums">{l.count}</TableCell><TableCell className="text-right tabular-nums text-muted-foreground">{l.rateCents != null ? money(l.rateCents) : "—"}</TableCell><TableCell className="text-right tabular-nums">{money(l.amountCents)}</TableCell></TableRow>)}
+                        {s.revenueShare ? <TableRow><TableCell className="font-medium">Revenue share</TableCell><TableCell /><TableCell /><TableCell className="text-right tabular-nums">{money(s.revenueShare.amountCents)}</TableCell></TableRow> : null}
+                        {s.rejectedCount ? <TableRow><TableCell className="font-medium">Rejected · compliance</TableCell><TableCell className="text-right tabular-nums">{s.rejectedCount}</TableCell><TableCell /><TableCell className="text-right text-muted-foreground">Not billable</TableCell></TableRow> : null}
+                        {s.credits.count ? <TableRow><TableCell className="font-medium">Credits accepted</TableCell><TableCell className="text-right tabular-nums">{s.credits.count}</TableCell><TableCell /><TableCell className="text-right tabular-nums">{money(s.credits.amountCents)}</TableCell></TableRow> : null}
+                        {s.totals.disputedCents ? <TableRow><TableCell className="font-medium">Disputed · withheld</TableCell><TableCell /><TableCell /><TableCell className="text-right tabular-nums">{money(-s.totals.disputedCents)}</TableCell></TableRow> : null}
+                        <TableRow><TableCell colSpan={3} className="font-semibold">Net payable</TableCell><TableCell className="text-right font-semibold tabular-nums">{money(s.totals.netCents)}</TableCell></TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableCard>
+                  {s.rejectedCount ? <p className="mt-2 text-xs text-muted-foreground">Transfers rejected at the agency&apos;s compliance check are not billable. The count identifies records you may want to review.</p> : null}
+                </section>
+                <section aria-labelledby="statement-transfers-heading">
+                  <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="statement-transfers-heading" className="m-0 text-sm font-semibold">Transfers in this statement</h3><span className="text-xs text-muted-foreground">{s.items.length} {s.items.length === 1 ? "item" : "items"}</span></div>
+                  <TableCard>
+                    <Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Transfer</TableHead><TableHead className="w-32 text-right">Amount</TableHead><TableHead className="w-24 text-right"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+                      <TableBody>{s.items.map((i) => <TableRow key={i.id}><TableCell className="whitespace-nowrap text-muted-foreground">{dayMonth(i.occurredOn)}</TableCell><TableCell className="font-medium">{i.label}{i.reference ? <span className="block text-xs font-normal text-muted-foreground">Reference {i.reference}</span> : null}{i.disputed ? <span className="block text-xs font-medium text-[var(--warning-ink)]">Dispute submitted</span> : null}</TableCell><TableCell className="text-right tabular-nums">{money(i.amountCents)}</TableCell><TableCell className="text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</TableCell></TableRow>)}</TableBody>
+                    </Table>
+                  </TableCard>
+                </section>
+                {s.disputes.length ? <section aria-labelledby="statement-disputes-heading" className="border-t border-border pt-4"><h3 id="statement-disputes-heading" className="mb-3 text-sm font-semibold">Disputes</h3><div className="flex flex-col gap-2">{s.disputes.map((d) => <div key={d.id} className="rounded-md border border-border px-3 py-2 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{d.reason}</span><StatusChip tone={d.status === "open" ? "warning" : "neutral"}>{d.status === "open" ? "Under review" : d.status}</StatusChip></div><p className="mb-0 mt-1 text-xs text-muted-foreground">Raised by {d.raisedBy} · {money(d.amountCents)}{d.resolutionNote ? ` · ${d.resolutionNote}` : ""}</p></div>)}</div></section> : null}
+                {s.footer ? <p className="m-0 border-t border-border pt-4 text-xs text-muted-foreground">{s.footer}</p> : null}
+              </div>
+              <aside className="flex min-w-0 flex-col gap-4">
+                {s.from?.name ? <section className="rounded-lg border border-border p-4" aria-labelledby="statement-from-heading"><div className="mb-2 flex items-center gap-2 text-muted-foreground"><Building2 size={16} aria-hidden="true"/><h3 id="statement-from-heading" className="m-0 text-sm font-semibold text-foreground">Issued by</h3></div><p className="m-0 font-medium">{s.from.name}</p>{s.from.addressLines.map((line) => <p key={line} className="m-0 text-sm text-muted-foreground">{line}</p>)}</section> : null}
+                {dispute ? <section className="rounded-lg border border-border p-4" aria-labelledby="statement-dispute-form-heading"><h3 id="statement-dispute-form-heading" className="mb-1 text-sm font-semibold">Tell the agency what needs review</h3><p className="mb-3 text-xs text-muted-foreground">{dispute.itemId ? "This dispute is linked to the selected transfer." : "Your message will be attached to this statement."}</p><label className="flex flex-col gap-1 text-sm">What is wrong?<input className={toolbarControl} value={dispute.reason} onChange={(e) => setDispute({ ...dispute, reason: e.target.value })} autoFocus /></label><label className="mt-3 flex flex-col gap-1 text-sm">Amount you believe is owed<input className={toolbarControl} inputMode="decimal" placeholder="0.00" value={dispute.amount} onChange={(e) => setDispute({ ...dispute, amount: e.target.value })} /><span className="text-xs text-muted-foreground">Enter dollars and cents. Leave blank if you are not disputing an amount.</span></label></section> : null}
+              </aside>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="border-t border-border bg-card px-6 py-4 sm:justify-between">
+          <div className="min-h-9" aria-live="polite">{busy ? <span className="text-sm text-muted-foreground">Sending dispute…</span> : null}</div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {dispute ? <><Button variant="outline" disabled={busy} onClick={() => setDispute(null)}>Cancel dispute</Button><Button disabled={busy || !dispute.reason.trim()} onClick={() => void raise()}>Send dispute</Button></> : <><Button variant="outline" onClick={onClose}>Close statement</Button>{s ? <Button variant="secondary" onClick={() => setDispute({ itemId: null, reason: "", amount: "" })}>Dispute statement</Button> : null}</>}
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
