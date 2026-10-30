@@ -437,7 +437,10 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const sortBy = (key: "age" | "submitted") => setSort((current) => ({ key, dir: current.key === key && current.dir === "desc" ? "asc" : "desc" }));
   const sortState = (key: "age" | "submitted") => (sort.key === key ? (sort.dir === "desc" ? "descending" : "ascending") : "none");
 
-  const board = !allRows.length && !narrowed ? empty : <div className="flex h-[max(420px,calc(100vh-420px))] gap-3 overflow-x-auto p-3">
+  // Both views answer an empty result the same way: nothing submitted yet offers the action that
+  // fills the page, a filter that matched nothing offers to clear itself (§8). The board used to
+  // show four empty columns instead, which offered neither.
+  const board = !visibleRows.length ? empty : <div className="flex h-[max(420px,calc(100vh-420px))] gap-3 overflow-x-auto p-3">
     {columns.map((column) => {
       const rows = laneRows.get(column.key) ?? [];
       const total = laneTotal(column.key);

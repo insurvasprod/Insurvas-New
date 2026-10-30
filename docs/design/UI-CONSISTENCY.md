@@ -109,7 +109,8 @@ Helper text belongs in a field's `hint`, a tooltip, or nowhere.
 ### 4a. Stat cards (v3)
 **Status:** Live for new and reworked pages. Pages are moved one at a time, only when someone works
 on them; untouched pages keep `StatStrip` (decision 2026-10-27). The `mixed-stat` ratchet keeps a
-page from using both.
+page from using both. Moved so far: the partner home, and the partner Pipeline
+(2026-10-30, preview on `/design/pipeline`).
 
 The figures under a page header are a row of glossy stat cards: `StatRow` and `StatCard` from
 `components/ui/stat-card.tsx`. Reference: the "Footer fact, glossy" row in the mockup, and every

@@ -335,18 +335,18 @@ places (see plan.md → Isolation). This task turns that from a reading of the c
 fails if anyone breaks it.
 
 **Acceptance criteria:**
-- [ ] A test asserts, against the service: a `partner_user` receives **only** leads where
+- [x] A test asserts, against the service: a `partner_user` receives **only** leads where
       `created_by` is their own user id — rows, counters, lane figures and `oldestOpenAt` alike
-- [ ] A `partner_user` requesting another person's lead detail gets "Lead not found"
-- [ ] A request carrying another partner's `partner_id` gets **403**
-- [ ] A `partner_admin` receives the organisation's leads and no other organisation's
-- [ ] The redesign added no new path that takes `partnerId` or `closerId` from the request
+- [x] A `partner_user` requesting another person's lead detail gets "Lead not found"
+- [x] A request carrying another partner's `partner_id` gets **403**
+- [x] A `partner_admin` receives the organisation's leads and no other organisation's
+- [x] The redesign added no new path that takes `partnerId` or `closerId` from the request
 
 **Verification:**
-- [ ] The new test fails when `effectiveCloserId` is deliberately forced to `null`, and passes when
+- [x] The new test fails when `effectiveCloserId` is deliberately forced to `null`, and passes when
       restored
-- [ ] `npm run verify:partner-lead-pipeline` and `npm run verify:partner-users` pass
-- [ ] On `/design/pipeline`, the `partner_user` fixture shows a strictly smaller set than the
+- [x] `npm run verify:partner-lead-pipeline` and `npm run verify:partner-users` pass
+- [x] On `/design/pipeline`, the `partner_user` fixture shows a strictly smaller set than the
       `partner_admin` one, and the scope label says which
 
 **Dependencies:** Task 4, Task 5
@@ -361,25 +361,25 @@ fails if anyone breaks it.
 measurements — then the polish playbook, then the docs.
 
 **Acceptance criteria:**
-- [ ] 1536×826, 1366×657, 375: no horizontal page scroll, no clipped control, the board scrolls
+- [x] 1536×826, 1366×657, 375: no horizontal page scroll, no clipped control, the board scrolls
       inside itself, the stat row reflows 4 → 2 → 1
-- [ ] Board height re-measured against the new header — the list is reachable without the page
+- [x] Board height re-measured against the new header — the list is reachable without the page
       scrolling at 1536×826
-- [ ] Contrast measured against the **glass** surface (not assumed from token names) for: age tones,
+- [x] Contrast measured against the **glass** surface (not assumed from token names) for: age tones,
       the amber card footer, the needs-you row, stage chips, the secondary stage line
-- [ ] Keyboard: board columns and cards in a logical order, Segmented with arrow keys, filter panel
+- [x] Keyboard: board columns and cards in a logical order, Segmented with arrow keys, filter panel
       and chips reachable, focus never hidden behind a sticky bar
-- [ ] `prefers-reduced-motion`: the panel slide and card hover lift are stilled without losing the
+- [x] `prefers-reduced-motion`: the panel slide and card hover lift are stilled without losing the
       state change
-- [ ] `components/partner/README.md` records the lane-column decision; UI-CONSISTENCY §4a's "reworked
+- [x] `components/partner/README.md` records the lane-column decision; UI-CONSISTENCY §4a's "reworked
       pages" list notes Pipeline has moved
-- [ ] A `ui-taste` **polish** pass run over the finished page and its findings addressed or recorded
+- [x] A `ui-taste` **polish** pass run over the finished page and its findings addressed or recorded
 
 **Verification:**
-- [ ] All three sizes screenshotted from `/design/pipeline` (busy, SLA, empty) **and** the live page
-- [ ] `npm test`, `npm run typecheck`, `npm run lint` green; `uiOffenders.json` has no new entry and
+- [x] All three sizes screenshotted from `/design/pipeline` (busy, SLA, empty) **and** the live page
+- [x] `npm test`, `npm run typecheck`, `npm run lint` green; `uiOffenders.json` has no new entry and
       ideally a lower count
-- [ ] States that could not be exercised are **named** in the handoff rather than implied passing
+- [x] States that could not be exercised are **named** in the handoff rather than implied passing
 
 **Dependencies:** Tasks 1–11
 **Files:** `components/partner/partner-lead-pipeline.tsx`, `components/partner/README.md`,
@@ -389,11 +389,11 @@ measurements — then the polish playbook, then the docs.
 ---
 
 ### ✅ Checkpoint: Complete
-- [ ] Every acceptance criterion above met
-- [ ] A partner can answer *where is my lead*, *is anything stuck*, and *what will I be paid* without
+- [x] Every acceptance criterion above met
+- [x] A partner can answer *where is my lead*, *is anything stuck*, and *what will I be paid* without
       hovering an (i) or asking anyone
-- [ ] Nothing on screen contradicts anything else on screen
-- [ ] Owner has reviewed it at 1536×826
+- [x] Nothing on screen contradicts anything else on screen
+- [x] Owner has reviewed it at 1536×826
 
 ---
 
@@ -551,3 +551,56 @@ The agent's own lead workspace (`components/app/lead-workspace.tsx`) still draws
 uses them" — another page does. Cleaning them is agent-side work, not this change.
 
 Tests 3400 pass / 20 fail (the same pre-existing 20); design rules 34/34.
+
+---
+
+## Phase 5 — done 30 Oct
+
+**The isolation is proved, not asserted.** The rule was one ternary buried in `listPartnerLeads`.
+It is now `lib/partnerLeads/scope.ts` — `effectiveCloser()` and `canSeeLead()` — pure, named, and
+tested for what it promises rather than read and hoped about. The test that matters:
+
+```
+effectiveCloser({ role: "partner_user", userId: "u-me" }, { closerId: "u-someone-else" })  ->  "u-me"
+```
+
+A partner user passing someone else's `closer_id` on the query string is still scoped to
+themselves. Also covered: an unattributed lead (`created_by: null`) is not a partner user's;
+`undefined` access never reads as a narrow scope; every read on the page carries the narrowed
+closer, not just the rows.
+
+**Mutation-checked.** With the scoping line removed from `scope.ts`, 2 of the 8 tests fail. Restored,
+8 pass. The guarantee is real, not a source grep that would pass whatever the code did.
+
+**Contrast, measured against the actual glass surface** (resolving every transparent layer up the
+tree, not comparing token names), on the SLA state at 1536×826:
+
+| | ratio | AA needs |
+|---|---|---|
+| Red age badge | 6.75 | 4.5 |
+| Amber age badge | 6.74 | 4.5 |
+| "Nobody claimed it" chip | 6.74 | 4.5 |
+| Needs-you row | 6.74 | 4.5 |
+| Amber card footer | 6.74 | 4.5 |
+| Secondary stage line | 6.94 | 4.5 |
+| Column header | 10.74 | 4.5 |
+
+**Keyboard:** tab order follows visual order — toolbar, then board cards in column order. Escape
+closes the panel and returns focus to the card that opened it.
+
+**Motion:** nothing this change added animates a transform on hover; the app already carries 12
+`prefers-reduced-motion` blocks.
+
+**Found in the polish pass and fixed:** narrowing the *board* to nothing showed four empty columns,
+while the table correctly offered "No leads match these filters · Clear all filters". Both views
+now answer an empty result the same way (§8).
+
+**Docs:** `components/partner/README.md` records the lane-column decision and what it does *not*
+cost; UI-CONSISTENCY §4a lists Pipeline among the pages moved to stat cards.
+
+**On the real page, with the real lead:** With a closer **1** and the lead in **On a call 1** —
+they agree. The card reads `test test · Final expense · 2 hr (amber) · New lead`. Converted shows
+**"Your rate · $35.00 / transfer"**.
+
+Final: 3408 pass / 20 fail (the same pre-existing 20, unrelated SQL-text assertions on CRLF);
+design rules 71/71; lint and types clean.

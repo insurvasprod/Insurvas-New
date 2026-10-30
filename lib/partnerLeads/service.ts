@@ -3,11 +3,11 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { csvCell } from "@/lib/csv/cell";
 import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
-import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
 import { CONVERTED_WINDOW_MS, HELD_STATUSES, NOBODY_CLAIMED_LABEL, SALE_DISPOSITIONS, nobodyClaimed, partnerLane, type PartnerLaneCounts } from "./lanes";
 import { countersFromLanes, startOfTodayIn, submittedSinceFromBuckets } from "./counters";
 import { partnerBoardStages, type BoardCount, type BoardStage } from "./board";
+import { canSeeLead, effectiveCloser, type PartnerLeadAccess } from "./scope";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { DEFAULT_AGE_THRESHOLDS, type AgeThresholds } from "./view";
 import type { PartnerTerm } from "@/lib/partners/payout";
@@ -37,7 +37,7 @@ type StageRow = { id: string; pipeline_id: string; name: string; position: numbe
 type PipelineRow = { id: string; name: string };
 type UserRow = { id: string; name: string };
 type DispositionRow = { disposition_key: string; label: string };
-export type PartnerLeadAccess = { userId: string; role: PartnerRole };
+export type { PartnerLeadAccess } from "./scope";
 
 const PARTNER_OUTCOME_LABELS: Record<string, string> = {
   application_submitted: "Application submitted",
@@ -380,7 +380,8 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   // in the read-model query itself (created_by), before paging, counters, or facets
   // are calculated. Partner admins retain organization-wide visibility and may use
   // the optional closer filter.
-  const effectiveCloserId = access?.role === "partner_user" ? access.userId : filters.closerId ?? null;
+  // A partner user is pinned to their own submissions whatever the request asked for (scope.ts).
+  const effectiveCloserId = effectiveCloser(access, filters);
   const [{ data, error }, ownPipelineId] = await Promise.all([
     db.rpc("partner_lead_pipeline_page", {
       p_tenant_id: tenantId,
@@ -515,7 +516,7 @@ export async function getPartnerLeadDetail(tenantId: string, partnerId: string, 
   const lead = data.leads.find((item) => item.id === leadId);
   const queue = data.queues[0];
   if (!row || !lead || !queue) throw new Error("Lead not found");
-  if (access?.role === "partner_user" && lead.created_by !== access.userId) throw new Error("Lead not found");
+  if (!canSeeLead(access, lead)) throw new Error("Lead not found");
   const db = getSupabaseServiceClient();
   const messages = data.timelineMessages;
   if (!messages) throw new Error("Lead not found");
