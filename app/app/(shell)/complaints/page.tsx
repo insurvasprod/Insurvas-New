@@ -5,7 +5,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ComplaintsBoard } from "@/components/app/compliance/complaints-board";
-import { PageHeader } from "@/components/ui/page-header";
+import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -54,10 +54,6 @@ export default async function ComplaintsPage({ searchParams }: { searchParams: P
   ) : (
     <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>
   );
-  return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Complaints" description="Who complained, about what, and how long is left to answer." />
-      {content}
-    </div>
-  );
+  // The Complaints step of the one Compliance page (2026-10-30).
+  return <ComplianceFlowPage step="complaints">{content}</ComplianceFlowPage>;
 }

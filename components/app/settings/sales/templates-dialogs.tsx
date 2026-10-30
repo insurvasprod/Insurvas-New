@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import type { TemplateChanges } from "@/lib/salesSettings/templateCoverage";
 import type { NamedCarrier, ProductLine } from "@/lib/salesSettings/views";
 
 import { DialogActions, SalesDialog, WithReason } from "./shared";
@@ -82,8 +83,19 @@ export function PairDialog({
   );
 }
 
-export function PublishDialog({ name, version, liveVersion, onConfirm, onClose }: { name: string; version: number; liveVersion: number | null; onConfirm: (retirePrevious: boolean) => Promise<void>; onClose: () => void }) {
+/** What a version changes against the one before it (underwriting, round 2): said before it goes live. */
+export type PublishChanges = { against: number; summary: string; detail: TemplateChanges };
+
+export function PublishDialog({ name, version, liveVersion, changes, onConfirm, onClose }: { name: string; version: number; liveVersion: number | null; changes?: PublishChanges | null; onConfirm: (retirePrevious: boolean) => Promise<void>; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
+  const lines = changes ? [
+    ...changes.detail.added.map((l) => `Added: ${l}`),
+    ...changes.detail.removed.map((l) => `Removed: ${l}`),
+    ...changes.detail.knockoutsAdded.filter((l) => !changes.detail.added.includes(l)).map((l) => `Now a knockout: ${l}`),
+    ...changes.detail.knockoutsRemoved.filter((l) => !changes.detail.removed.includes(l)).map((l) => `No longer a knockout: ${l}`),
+    ...changes.detail.reworded.map((l) => `Reworded: ${l}`),
+    ...changes.detail.changed.map((l) => `Changed: ${l}`),
+  ] : [];
   return (
     <SalesDialog
       open
@@ -92,6 +104,16 @@ export function PublishDialog({ name, version, liveVersion, onConfirm, onClose }
       description="Once published, this version cannot be changed. New work loads it; work already started keeps the version it began on."
     >
       <div className="flex flex-col gap-4">
+        {changes && (
+          <div className="text-sm leading-[1.5] text-[var(--ink)]">
+            <p className="m-0 font-semibold">Against v{changes.against}: {changes.summary}</p>
+            {lines.length > 0 && (
+              <ul className="m-0 mt-1.5 flex max-h-48 list-none flex-col gap-1 overflow-auto p-0 text-[var(--body)]">
+                {lines.map((l) => <li key={l}>{l}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
         {liveVersion !== null && (
           <p className="m-0 text-sm leading-[1.5] text-[var(--body)]">
             Version {liveVersion} is retired at the same time.
@@ -107,7 +129,12 @@ export function PublishDialog({ name, version, liveVersion, onConfirm, onClose }
   );
 }
 
-export function RetireDialog({ name, version, onConfirm, onClose }: { name: string; version: number; onConfirm: () => Promise<void>; onClose: () => void }) {
+export function RetireDialog({ name, version, impact, onConfirm, onClose }: {
+  name: string; version: number;
+  /** What happens to calls once it is retired (underwriting, round 3): said first, in the dialog. */
+  impact?: string | null;
+  onConfirm: () => Promise<void>; onClose: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   return (
     <SalesDialog
@@ -116,6 +143,7 @@ export function RetireDialog({ name, version, onConfirm, onClose }: { name: stri
       title={`Retire ${name} v${version}?`}
       description="New work stops loading it. Anything already started or submitted under it keeps pointing at it. A retired version cannot be published again — edit it to start a new draft version."
     >
+      {impact && <p className="m-0 mb-4 text-sm leading-[1.5] font-semibold text-[var(--ink)]">{impact}</p>}
       <DialogActions>
         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
         <Button type="button" variant="destructive" disabled={busy} onClick={() => { setBusy(true); void onConfirm().finally(() => setBusy(false)); }}>{busy ? "Retiring…" : `Retire v${version}`}</Button>

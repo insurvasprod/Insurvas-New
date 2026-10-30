@@ -23,6 +23,8 @@ import { CampaignComparisonWorkspace } from "./campaign-comparison-workspace";
 import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
 import { cn } from "@/lib/utils";
 import { NextStepLine } from "@/components/app/next-step-line";
+import { InReportsSlot, ReportsSlot } from "@/components/app/reports/reports-slot";
+import { keepSharedPeriod } from "@/lib/reports/views";
 
 /** One view at a time: Vendors, Where leads drop off (funnel, curves, speed and consent), Compare (2026-10-26). */
 type View = "scorecard" | "dropoff" | "compare";
@@ -150,7 +152,12 @@ const METRICS_APART = "Undialable rate and claim acceptance answer different que
  * best/worst tint, price per record and dialable counts, a persistency toggle, and speed-to-lead and
  * consent read from the same views /app/campaigns reads. Vendor returns has its own page.
  */
-export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: VendorScorecardReport | null } = {}) {
+/**
+ * `framed`: inside the Reports page (components/app/reports/reports-page.tsx), which draws the title;
+ * the views and the scope go to its top row, Export to its corner, and an applied period is kept in
+ * the address for the other Reports views.
+ */
+export function TrueCpaWorkspace({ initialReport = null, framed = false }: { initialReport?: VendorScorecardReport | null; framed?: boolean } = {}) {
   // The page renders the default period's report on the server (LA-2.17-8), so the first paint has
   // the figures and no second round trip follows the shell. Its period is the one the server used.
   const [draft, setDraft] = useState<Scope>(() => ({ from: initialReport?.from ?? defaultFrom(), to: initialReport?.to ?? new Date().toISOString().slice(0, 10), vendorId: "", campaignId: "", productCode: "", persist: false }));
@@ -256,7 +263,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     setDraft(next); setApplied(next); setGrain("campaign"); setSearch(""); setPage(0);
   }
 
-  const apply = () => { setFiltersOpen(false); setApplied({ ...draft }); };
+  const apply = () => { setFiltersOpen(false); setApplied({ ...draft }); if (framed) keepSharedPeriod(draft); };
   const pending = JSON.stringify(draft) !== JSON.stringify(applied);
   const filterCount = [applied.vendorId, applied.campaignId, applied.productCode].filter(Boolean).length;
   const vendors = [...new Map((report?.rows ?? []).map((row) => [row.vendor_id, row.vendor_name])).entries()];
@@ -312,7 +319,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
   const timesDearer = bestLine?.cpi && worstLine?.cpi ? worstLine.cpi / bestLine.cpi : null;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="True CPA" description="What an issued policy really cost, by vendor and campaign." actions={<Button asChild variant="outline"><a href={exportUrl}><Download aria-hidden="true" />Export</a></Button>} />
+    {framed
+      ? <ReportsSlot slot="corner"><Button asChild variant="outline"><a href={exportUrl}><Download aria-hidden="true" />Export</a></Button></ReportsSlot>
+      : <PageHeader title="True CPA" description="What an issued policy really cost, by vendor and campaign." actions={<Button asChild variant="outline"><a href={exportUrl}><Download aria-hidden="true" />Export</a></Button>} />}
 
     {/* The one thing to do next: spend that can't be counted yet, then the dearest vendor against the cheapest. */}
     {unallocated > 0 ? (
@@ -338,7 +347,8 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
 
     {/* Views on the left; the report's scope (period and filters), which every view reads, on the
         right. The scope is a draft that Apply commits, so a change of vendor does not fire three reloads. */}
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <InReportsSlot framed={framed} slot="lead">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
       <ViewTabs label="True CPA views" tabs={tabs} value={view} onChange={setView} idPrefix="true-cpa-tab" controls="true-cpa-view" />
       <div className="flex flex-wrap items-center gap-2">
         <input type="date" aria-label="From" className={toolbarControl} value={draft.from} max={draft.to} onChange={(event) => setDraft((current) => ({ ...current, from: event.target.value || current.from }))} />
@@ -348,6 +358,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
         {pending && <Button type="button" onClick={apply}>Apply</Button>}
       </div>
     </div>
+    </InReportsSlot>
 
     {/* The scope's filters open inline under the row (UI-CONSISTENCY §6a), not as a popover. */}
     <FilterPanel id="true-cpa-filters" open={filtersOpen} className={cn(cardSurface, "border-b")}>
@@ -441,7 +452,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
                 <div className="flex flex-col gap-1.5" aria-label={`${line.label}: from bought to issued`}>
                   {steps.map((step) => <div key={step.label} className="grid grid-cols-[80px_minmax(0,1fr)_64px] items-center gap-2.5 text-xs">
                     <span className="text-[var(--body)]">{step.label}</span>
-                    <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${step.value ? Math.max(2, (100 * step.value) / top) : 0}%` }} /></span>
+                    <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="m-bar-x block h-full rounded-full bg-[var(--primary)]" style={{ width: `${step.value ? Math.max(2, (100 * step.value) / top) : 0}%` }} /></span>
                     <span className="text-right tabular-nums text-foreground">{step.stage ? figure(step.value, step.stage) : <span title={`${plural(line.records, "record")} bought`}>{number(step.value)}</span>}</span>
                   </div>)}
                 </div>
@@ -497,7 +508,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           {report.funnel && item.attempts > 0
             ? <button type="button" className="w-[120px] shrink-0 text-left capitalize text-[var(--body)] hover:underline" aria-label={`${item.label}: show the leads`} onClick={() => openDrill(item.spec)}>{item.label}</button>
             : <span className="w-[120px] shrink-0 capitalize text-[var(--body)]">{item.label}</span>}
-          <span className="h-1.5 flex-grow overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, item.rate ?? 0)}%` }} /></span>
+          <span className="h-1.5 flex-grow overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="m-bar-x block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, item.rate ?? 0)}%` }} /></span>
           <span className="w-[200px] shrink-0 text-right tabular-nums"><strong className="font-semibold text-foreground">{percent(item.rate)}</strong> <span className="text-xs text-muted-foreground">({item.contacts}/{item.attempts}){item.share != null ? ` · ${item.share}% of contacts` : ""}</span></span>
         </div>) : <div className="border-t border-border"><EmptyState title="No dispositions in this period" hint="Rates appear once calls are dispositioned." /></div>}
       </TableCard>)}
@@ -511,7 +522,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
               <span className="font-semibold text-foreground">{row.vendor_name}</span>
               <span className="tabular-nums"><strong className={`font-semibold ${row.speed_median_seconds != null && row.speed_median_seconds <= 60 ? "text-[var(--success-ink)]" : "text-foreground"}`}>{clock(row.speed_median_seconds)}</strong> <span className="text-xs text-muted-foreground">{percent(row.speed_within_60s_pct)} within a minute</span></span>
             </div>
-            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, (100 * (row.speed_median_seconds ?? 0)) / slowest)}%` }} /></span>
+            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="m-bar-x block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, (100 * (row.speed_median_seconds ?? 0)) / slowest)}%` }} /></span>
             {/* LA-2.5-5: the vendor's campaigns, one line each, under its row (builder S's component). */}
             <CampaignSpeedToLead vendorId={row.vendor_id} />
           </div>) : <div className="border-t border-border"><EmptyState title="No real-time leads yet" hint="Leads posted by a vendor in real time show here." /></div>}

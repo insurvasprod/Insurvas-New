@@ -6,6 +6,8 @@ export type Current = { tenant_template_id: string; assignment: { template_id: s
 export type Available = { id: string; name: string; product_code: string; product_name: string; version: number; description: string | null };
 export type Product = { code: string; name: string };
 export type Preview = { fieldsToAdd: string[]; stagesToAdd: string[]; sectionsToAdd: string[]; alreadyApplied: boolean };
+/** Who put the live version out, and when (GET /api/app/templates `published`). */
+export type Published = { at: string; by: string | null };
 export type DraftState = { draft: TemplateDraft; seen: Record<string, number> };
 
 export function cloneForm(form: TemplateFormDefinition): TemplateFormDefinition { return { sections: form.sections.map((section) => ({ ...section, fields: section.fields.map((field) => ({ ...field, show_when: field.show_when ? { ...field.show_when } : null, conditional_on: field.conditional_on ? { ...field.conditional_on } : undefined })) })), ...(form.section_availability ? { section_availability: { ...form.section_availability } } : {}) }; }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -34,11 +35,18 @@ import type { ComplaintRow, Respondent } from "@/lib/compliance/complaintStore";
 import { formatPhone } from "@/lib/compliance/evidenceGaps";
 import { notify } from "@/lib/notify";
 import { fieldLabel } from "@/components/ui/field";
+import { ViewTabs } from "@/components/app/view-tabs";
+import { NextUp } from "@/components/app/lead-sources/next-up";
+import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 
 /**
  * LA-6.4 · the complaint list: days remaining first, amber at 10, red at 5, overdue loudest. Opening
  * a row shows the record, the response checklist, the attached evidence report and the agent's own
  * response — typed by the agent; nothing here drafts it.
+ *
+ * Compliance in one page (2026-10-30): the Complaints step. Not resolved / All are tabs in the frame's top
+ * row and Record a complaint is the corner's one primary; the step opens on one next-up line (the most
+ * urgent complaint, or the regulators with no deadline set); the panel's Save sits in its header.
  */
 type Person = { id: string; name: string; role: string };
 type Coverage = { licensed: number; covered: number; missing: string[]; ftc: boolean; sentence: string };
@@ -184,7 +192,7 @@ function ComplaintPanel({ id, team, isOwner, readOnly, onClose, onChanged }: { i
       subtitle={c ? `${CHANNEL_LABELS[c.channel as ComplaintChannel] ?? c.channel}${c.regulatorState ? ` · ${c.regulatorState}` : ""} · received ${day(c.receivedAt)}` : undefined}
       status={c ? <StatusChip tone={TONE[c.countdown.tone]}>{c.countdown.label}</StatusChip> : undefined}
       onClose={onClose}
-      footer={c && !readOnly ? <Button disabled={busy} onClick={() => void patch({ status: draft.status, outcome: draft.outcome || null, owner_user_id: draft.owner, response_text: draft.response || null, notes: draft.notes || null }, "Complaint saved")}>Save</Button> : undefined}
+      actions={c && !readOnly ? <Button disabled={busy} onClick={() => void patch({ status: draft.status, outcome: draft.outcome || null, owner_user_id: draft.owner, response_text: draft.response || null, notes: draft.notes || null }, "Complaint saved")}>{busy ? "Saving…" : "Save"}</Button> : undefined}
     >
       {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
       {!c ? null : (
@@ -270,6 +278,19 @@ export function ComplaintsBoard({ complaints, coverage, thresholds, search, open
   const open5 = complaints.filter((c) => c.countdown.pinned).length;
   const regulator = complaints.filter((c) => (c.channel === "doi" || c.channel === "ftc") && c.status !== "resolved").length;
   const noDeadline = complaints.filter((c) => c.countdown.tone === "no_deadline").length;
+  const openRows = complaints.filter((c) => c.status !== "resolved");
+  // The one next step: the most urgent open complaint (the list is already in deadline order), then a
+  // regulator with no deadline set, then the licensed states with no response days at all.
+  const urgent = openRows.find((c) => c.countdown.tone === "overdue" || c.countdown.tone === "red");
+  const unset = openRows.find((c) => c.countdown.tone === "no_deadline");
+  const settingsLink = isOwner ? <Button asChild variant="outline"><Link href="/app/compliance/settings#deadlines">Set them</Link></Button> : null;
+  const nextUp = urgent
+    ? <NextUp tone="danger" action={<Button variant="outline" onClick={() => setOpen(urgent.id)}>Open it</Button>}>The <strong>{urgent.channel === "ftc" ? "FTC" : urgent.channel === "doi" ? `${urgent.regulatorState ?? "state"} DOI` : CHANNEL_LABELS[urgent.channel as ComplaintChannel] ?? urgent.channel}</strong> complaint{urgent.complainantName ? ` from ${urgent.complainantName}` : ""}: <strong>{urgent.countdown.label.toLowerCase()}</strong>.</NextUp>
+    : unset
+      ? <NextUp tone="warning" action={<Button variant="outline" onClick={() => setOpen(unset.id)}>Open it</Button>}>The <strong>{unset.regulatorState ?? "state"} DOI</strong> complaint has no response deadline. Set the statutory days — no default is assumed.</NextUp>
+      : coverage.missing.length
+        ? <NextUp tone="warning" action={settingsLink}>{coverage.sentence}</NextUp>
+        : <NextUp tone="done">{openRows.length ? <><strong>{openRows.length}</strong> open, and no deadline is close.</> : "No open complaints."}</NextUp>;
 
   useEffect(() => {
     const t = setTimeout(() => { if (q !== search) router.replace(q.trim() ? `/app/complaints?q=${encodeURIComponent(q.trim())}` : "/app/complaints"); }, 350);
@@ -278,21 +299,24 @@ export function ComplaintsBoard({ complaints, coverage, thresholds, search, open
 
   return (
     <>
+      <ComplianceSlot slot="lead">
+        <ViewTabs label="Which complaints" idPrefix="complaints-view" value={view} onChange={(next) => { setView(next); setPage(1); }}
+          tabs={[{ key: "open", label: "Not resolved", count: openRows.length }, { key: "all", label: "All", count: complaints.length }]} />
+      </ComplianceSlot>
+      {!readOnly ? <ComplianceSlot slot="corner"><Button onClick={() => setCreating(true)}><Plus aria-hidden="true" />Record a complaint</Button></ComplianceSlot> : null}
+      {nextUp}
       <StatStrip label="Complaint totals">
         <StatTile label="Open" value={String(complaints.filter((c) => c.status !== "resolved").length)} footnote={`${complaints.length} on record`} />
         <StatTile label="Regulator" value={String(regulator)} footnote="DOI and FTC, open" />
         <StatTile label={`Due within ${thresholds.redDays} days`} value={String(open5)} valueTone={open5 ? "danger" : undefined} footnote="or overdue" />
-        <StatTile label="No deadline set" value={String(noDeadline)} valueTone={noDeadline ? "warning" : undefined} footnote="regulator complaints" />
+        <StatTile label="No deadline set" value={String(noDeadline)} valueTone={noDeadline ? "warning" : undefined} footnote="regulator complaints"
+          action={isOwner && (noDeadline || coverage.missing.length) ? <Link href="/app/compliance/settings#deadlines" className="font-semibold text-[var(--accent-ink)] hover:underline">Set them</Link> : undefined} />
       </StatStrip>
-      {coverage.missing.length ? <p role="alert" className="rounded-lg border border-[var(--warning)] bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{coverage.sentence}</p> : null}
       <TableCard
+        className="flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:flex-1"
         toolbar={
-          <DataToolbar actions={<>{!readOnly ? <Button onClick={() => setCreating(true)}>Record a complaint</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>}>
+          <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
             <ToolbarSearch value={q} onChange={setQ} placeholder="Search complaints and responses" />
-            <select aria-label="Which complaints" className={toolbarControl} value={view} onChange={(e) => { setView(e.target.value as "open" | "all"); setPage(1); }}>
-              <option value="open">Not resolved</option>
-              <option value="all">All</option>
-            </select>
           </DataToolbar>
         }
         footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="complaints" onPage={setPage} /> : undefined}

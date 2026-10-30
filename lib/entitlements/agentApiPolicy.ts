@@ -91,6 +91,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/calling-windows/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter", "assistant"] },
   { sourceFile: "app/api/app/lead-post-keys/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/lead-post-keys/[id]/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/lead-post-keys/activity/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
   // Reading the diary. A setter books into it, so a setter can see it — booking into a calendar you
   // cannot see is how two setters put two people in the same hour.
   { sourceFile: "app/api/app/calendar/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant", "setter"] },
@@ -128,6 +129,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/compliance/gap-scan/route.ts", featureKey: "litigation_packet", allowedRoles: ["owner", "producer"] },
   // LA-6.4: complaints. Setting a regulator's deadline is agency configuration, owner only.
   { sourceFile: "app/api/app/compliance/complaints/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  // The Compliance rail's counts (2026-10-30): complaints and deletions waiting on a person, under their steps' gate.
+  { sourceFile: "app/api/app/compliance/steps/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/compliance/complaints/[id]/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/compliance/complaints/[id]/deadline/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/compliance/complaints/[id]/attachments/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
@@ -339,6 +342,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/settings/sales/disclosures/[id]/copy/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/settings/sales/disclosures/[id]/publish/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/settings/sales/disclosures/[id]/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/settings/sales/disclosures/calls/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/settings/sales/disclosures/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/settings/sales/portals/[id]/verify/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/settings/sales/portals/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
@@ -347,6 +351,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/settings/sales/products/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/settings/sales/settings/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/settings/sales/stage-map/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/settings/sales/stage-map/activity/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/settings/sales/templates/[id]/copy/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/settings/sales/templates/[id]/publish/route.ts", featureKey: "applications", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/settings/sales/templates/[id]/retire/route.ts", featureKey: "applications", allowedRoles: ["owner"] },

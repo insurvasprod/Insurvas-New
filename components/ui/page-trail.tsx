@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 
 import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { LEADS_IN_STEPS, leadsInStepLabel, leadsInStepOf } from "@/lib/leadSources/steps";
+import { COMPLIANCE_STEPS, complianceStepLabel, complianceStepOf } from "@/lib/compliance/steps";
+import { REPORTS_VIEWS, reportsViewLabel, reportsViewOf } from "@/lib/reports/views";
 import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
 
 /**
@@ -16,6 +18,11 @@ const MenuContext = createContext<MenuSection[] | null>(null);
 
 export function PageTrailProvider({ menu, children }: { menu: MenuSection[]; children: ReactNode }) {
   return <MenuContext.Provider value={menu}>{children}</MenuContext.Provider>;
+}
+
+/** The shell's server-filtered menu (null outside the agent shell): a page menu that offers only what the sidebar does. */
+export function useMenuSections(): MenuSection[] | null {
+  return useContext(MenuContext);
 }
 
 /** The page open now: the menu item with the longest path that holds the address. */
@@ -71,6 +78,20 @@ export function PageTrail({ title }: { title: string }) {
   if (leadsStep) {
     const stepHref = LEADS_IN_STEPS.find((step) => step.key === leadsStep)?.href;
     return <Breadcrumbs crumbs={[{ label: item?.section ?? "Leads" }, { label: "Lead Flow", href: LEADS_IN_STEPS[0]?.href }, { label: leadsInStepLabel(leadsStep), href: stepHref }, ...leadsCrumbs]} />;
+  }
+  // A Compliance step (2026-10-30): Compliance › the step, named as the rail names it.
+  const complianceStep = complianceStepOf(pathname);
+  if (complianceStep) {
+    const stepHref = COMPLIANCE_STEPS.find((step) => step.key === complianceStep)?.href;
+    return <Breadcrumbs crumbs={[{ label: "Compliance", href: COMPLIANCE_STEPS[0]?.href }, { label: complianceStepLabel(complianceStep), href: stepHref }]} />;
+  }
+  // A Reports view (2026-10-30): Reports › the view, and › the record it has open (a partner).
+  const reportsView = reportsViewOf(pathname);
+  if (reportsView) {
+    const view = REPORTS_VIEWS.find((entry) => entry.key === reportsView);
+    const label = reportsViewLabel(reportsView);
+    const below = view && pathname !== view.href && title.trim() && title !== label;
+    return <Breadcrumbs crumbs={[{ label: "Reports" }, { label, href: view?.href }, ...(below ? [{ label: title }] : [])]} />;
   }
   if (!item) return null;
   const page = item.navLabel ?? item.label;

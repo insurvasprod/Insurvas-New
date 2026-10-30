@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { LeaveGuard } from "@/components/ui/leave-guard";
+import { InReportsSlot } from "@/components/app/reports/reports-slot";
 import { PageLoading } from "@/components/ui/page-loading";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
@@ -255,7 +256,11 @@ const SIGNAL_COLOURS = [
  * comes first — scored against the holdout, with the verdict — then the score drawn as one bar you
  * divide among the seven signals, then who is next for an agent and why.
  */
-export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = {}) {
+/**
+ * `framed`: inside the Reports page (components/app/reports/reports-page.tsx), which draws the title;
+ * the comparison window goes to its top row, the switch and Save to its corner.
+ */
+export function ScoringWorkspace({ readOnly = false, framed = false }: { readOnly?: boolean; framed?: boolean } = {}) {
   const [data, setData] = useState<Overview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
@@ -314,7 +319,7 @@ export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = 
 
   if (loadError && !data) return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Queue scoring" />
+      {!framed && <PageHeader title="Queue scoring" />}
       <section className="rounded-lg border border-border bg-card"><ErrorState title="Queue scoring did not load" detail={loadError} action={<Button variant="outline" onClick={() => void load(holdoutWindow)}>Try again</Button>} /></section>
     </div>
   );
@@ -336,13 +341,8 @@ export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = 
     void load(next, false);
   }
 
-  return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <LeaveGuard dirty={!readOnly && dirty} what="the queue scoring" onDiscard={() => { if (!data) return; setEnabled(data.enabled); setHoldout(String(data.holdoutPct)); setWeights(Object.fromEntries(data.weights.map((weight) => [weight.signal, weight.weight.toFixed(2)]))); }} />
-      <PageHeader
-        title="Queue scoring"
-        description="How the dialer picks the next lead"
-        actions={<>
+  // The page's actions: unsaved, the switch, Save (one primary, top-right).
+  const corner = <>
           {dirty && <StatusChip tone="warning">Not saved yet</StatusChip>}
           <label className="inline-flex h-9 items-center gap-3 text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">
             <span className="portal-toggle shrink-0">
@@ -352,8 +352,12 @@ export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = 
             {enabled ? "Scoring is on" : "Scoring is off"}
           </label>
           <Button type="button" disabled={readOnly || saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</Button>
-        </>}
-      />
+  </>;
+
+  return (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <LeaveGuard dirty={!readOnly && dirty} what="the queue scoring" onDiscard={() => { if (!data) return; setEnabled(data.enabled); setHoldout(String(data.holdoutPct)); setWeights(Object.fromEntries(data.weights.map((weight) => [weight.signal, weight.weight.toFixed(2)]))); }} />
+      <InReportsSlot framed={framed} slot="corner">{framed ? corner : <PageHeader title="Queue scoring" description="How the dialer picks the next lead" actions={corner} />}</InReportsSlot>
 
       {readOnly && <p role="status" className="m-0 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]">Your plan is read-only: you can see how the queue is ordered, not change it.</p>}
 
@@ -365,7 +369,8 @@ export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = 
           <StatTile label="Difference" value={lift === null ? "—" : pts(lift)} footnote={<StatusChip tone={verdict.tone}>{verdict.label}</StatusChip>} />
           <StatTile label="95% interval" value={comparison.interval ? `${pts(comparison.interval.low).replace(" pts", "")} to ${pts(comparison.interval.high)}` : "—"} footnote={periodLabel} />
         </StatStrip>
-        <div className="flex items-center justify-end gap-2">
+        <InReportsSlot framed={framed} slot="lead">
+        <div className={cn("flex items-center gap-2", !framed && "justify-end")}>
           <span className="text-xs text-muted-foreground">Compare over</span>
           {/* The holdout comparison's window; it re-reads the figures above and leaves unsaved edits alone. */}
           <select
@@ -379,6 +384,7 @@ export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = 
             <option value="all">All time</option>
           </select>
         </div>
+        </InReportsSlot>
       </div>
 
       {/* How the score is divided: one bar, then each signal with its share and its weight. */}
@@ -396,7 +402,7 @@ export function ScoringWorkspace({ readOnly = false }: { readOnly?: boolean } = 
           </span>
         </div>
         {typedTotal > 0 ? (
-          <div className="flex h-7 overflow-hidden rounded-lg" role="img" aria-label={weightList.map((weight) => `${weight.label} ${Math.round(shareOf(weight.signal))}%`).join(", ")}>
+          <div className="m-bar-x flex h-7 overflow-hidden rounded-lg" role="img" aria-label={weightList.map((weight) => `${weight.label} ${Math.round(shareOf(weight.signal))}%`).join(", ")}>
             {weightList.map((weight, index) => shareOf(weight.signal) > 0 && (
               <span key={weight.signal} title={`${weight.label}: ${Math.round(shareOf(weight.signal))}% of the score`} style={{ width: `${shareOf(weight.signal)}%`, background: SIGNAL_COLOURS[index % SIGNAL_COLOURS.length] }} />
             ))}

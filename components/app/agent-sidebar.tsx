@@ -94,6 +94,8 @@ import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/me
 import { titleCaseNode } from "@/components/ui/title-case";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { leadsInStepOf } from "@/lib/leadSources/steps";
+import { complianceStepOf } from "@/lib/compliance/steps";
+import { reportsViewOf } from "@/lib/reports/views";
 
 /** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
 export type AgentModuleAccess = ModuleAccess;
@@ -110,6 +112,10 @@ function isActivePath(pathname: string, href: string) {
   if (SETTINGS_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))) return href === "/app/settings";
   // Every Lead sources step (/app/campaigns, /app/import, …) is Lead sources in the menu, so Leads opens there.
   if (href === "/app/lead-sources" && leadsInStepOf(pathname)) return true;
+  // Every Compliance step (/app/tcpa, /app/consent, …) is Compliance › Overview in the menu (2026-10-30).
+  if (href === "/app/compliance" && complianceStepOf(pathname)) return true;
+  // Every Reports view is the one Reports entry, whichever view it opens on.
+  if (reportsViewOf(href) && reportsViewOf(pathname)) return true;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -379,7 +385,12 @@ function NavList({
         ))}
       </ul>
 
-      {tree.groups.map((group) => (
+      {tree.groups.map((group) => group.items.length === 1 && group.items[0].groupLink ? (
+        // A group that is one page (Compliance): one link under the group's own name and icon, no dropdown.
+        <ul key={group.label} className="portal-agent-nav-home">
+          <NavItemLink item={{ ...group.items[0], navLabel: group.label, icon: group.icon }} onNavigate={onNavigate} />
+        </ul>
+      ) : (
         <DisclosureSection
           key={group.label}
           label={group.label}

@@ -76,7 +76,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
         switch (known) {
           case "dob":
             return (
-              <Field key={f.key} label={f.label} htmlFor={id} required={f.required}>
+              <Field key={f.key} label={f.label} htmlFor={id} required={f.required} hint={f.help}>
                 <div className="mt-1.5 flex items-center gap-2">
                   <input id={id} type="date" className={cn(control, "mt-0 min-w-0 flex-1", warm("dob"))} value={value.dob} disabled={readOnly} onChange={(e) => onChange({ dob: e.target.value }, "dob")} />
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-[var(--ink)]" aria-live="polite">{age !== null ? `Age ${age}` : "Age —"}</span>
@@ -86,7 +86,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
             );
           case "gender":
             return (
-              <Field key={f.key} label={f.label} htmlFor={id} required={f.required}>
+              <Field key={f.key} label={f.label} htmlFor={id} required={f.required} hint={f.help}>
                 <select id={id} className={cn(control, warm("gender"))} value={value.gender} disabled={readOnly} onChange={(e) => onChange({ gender: e.target.value as RatingTemplate["gender"] }, "gender")}>
                   <option value="">Choose</option>
                   {(f.options.length ? f.options : ["Female", "Male"]).map((o) => <option key={o} value={o.toLowerCase()}>{o}</option>)}
@@ -96,7 +96,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
             );
           case "state":
             return (
-              <Field key={f.key} label={f.label} htmlFor={id} required={f.required}>
+              <Field key={f.key} label={f.label} htmlFor={id} required={f.required} hint={f.help}>
                 <select id={id} className={cn(control, warm("state"))} value={value.state} disabled={readOnly} onChange={(e) => onChange({ state: e.target.value }, "state")}>
                   <option value="">Choose</option>
                   {US_STATES.filter(([code]) => !f.options.length || f.options.includes(code)).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
@@ -106,7 +106,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
             );
           case "tobacco":
             return (
-              <Field key={f.key} label={f.label} htmlFor={id} required={f.required}>
+              <Field key={f.key} label={f.label} htmlFor={id} required={f.required} hint={f.help}>
                 <select id={id} className={cn(control, warm("tobacco"))} value={value.tobacco} disabled={readOnly} onChange={(e) => onChange({ tobacco: e.target.value as RatingTemplate["tobacco"] }, "tobacco")}>
                   <option value="">Choose</option>
                   <option value="no">No</option>
@@ -118,7 +118,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
           case "face":
             // `cov.face_amount` is the id QA's face-limit items land on.
             return (
-              <Field key={f.key} label={f.label} htmlFor="cov.face_amount" required={f.required}>
+              <Field key={f.key} label={f.label} htmlFor="cov.face_amount" required={f.required} hint={f.help}>
                 <input id="cov.face_amount" inputMode="decimal" autoComplete="off" placeholder="15,000" className={cn(control, "tabular-nums", warm("face"))} value={value.faceText} disabled={readOnly} onChange={(e) => onChange({ faceText: e.target.value }, "face")} />
                 {hint("face")}
               </Field>
@@ -127,7 +127,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
             const allowed = (f.options.length ? f.options : Object.keys(TIER_LABEL)).filter((t) => !product?.tiers.length || product.tiers.includes(t));
             const options = allowed.length ? allowed : product?.tiers ?? [];
             return (
-              <Field key={f.key} label={f.label} htmlFor={id} required={f.required}>
+              <Field key={f.key} label={f.label} htmlFor={id} required={f.required} hint={f.help}>
                 <select id={id} className={cn(control, warm("tier"))} value={options.includes(value.tier) ? value.tier : options[0] ?? ""} disabled={readOnly} onChange={(e) => onChange({ tier: e.target.value }, "tier")}>
                   {options.map((t) => <option key={t} value={t}>{TIER_LABEL[t] ?? t}</option>)}
                 </select>
@@ -140,6 +140,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
             return (
               <fieldset key={f.key} className="min-w-0 sm:col-span-2 lg:col-span-3">
                 <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{f.label}</legend>
+                {f.help && <p className="mt-0.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{f.help}</p>}
                 {options.length === 0 ? (
                   <p className="mt-1.5 flex h-9 items-center text-sm text-muted-foreground">None on this product</p>
                 ) : (
@@ -173,7 +174,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
               input = <input id={id} type={f.type === "date" ? "date" : "text"} inputMode={f.type === "number" || f.type === "currency" ? "decimal" : undefined} className={cls} value={v} disabled={readOnly} onChange={(e) => set(e.target.value)} />;
             }
             return (
-              <Field key={f.key} label={f.label} htmlFor={id} required={f.required}>
+              <Field key={f.key} label={f.label} htmlFor={id} required={f.required} hint={f.help}>
                 {input}
                 <PrefillHint fv={p?.fv} confirmable={false} fieldKey={id} readOnly />
               </Field>

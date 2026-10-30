@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { control } from "@/components/app/settings/primitives";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { TEMPLATE_FIELD_TYPES, type TemplateField, type TemplateFieldType } from "@/lib/templates/constants";
 import { COMMON_FIELD_TYPES, TEMPLATE_FIELD_PLAIN } from "@/lib/templates/plainLabels";
 
@@ -34,7 +34,7 @@ export function AddQuestion({ sectionLabel, reusable, onPick, onReuse, onClose }
       className="flex min-h-[52px] flex-col items-start justify-center rounded-[10px] border-0 bg-[var(--surface)] px-3 py-2 text-left transition-colors hover:bg-[var(--primary-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
       <span className="text-sm font-semibold text-[var(--ink)]">{TEMPLATE_FIELD_PLAIN[type].label}</span>
-      <span className="text-xs text-[var(--muted)]">{TEMPLATE_FIELD_PLAIN[type].hint}</span>
+      <span className="text-xs text-[var(--body)]">{TEMPLATE_FIELD_PLAIN[type].hint}</span>
     </button>
   );
   return (
@@ -57,13 +57,12 @@ export function AddQuestion({ sectionLabel, reusable, onPick, onReuse, onClose }
         </div>
       )}
       {reusable.length > 0 && (
-        <label className="block text-sm text-[var(--body)]">
-          <span className="font-semibold">Or reuse a question you already have</span>
-          <select className={control} defaultValue="" onChange={(event) => { if (event.target.value) onReuse(event.target.value); }}>
-            <option value="">Choose one…</option>
-            {reusable.map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}
-          </select>
-        </label>
+        <div role="group" aria-label="Or reuse a question you already have" className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-[var(--ink)]">Or reuse a question you already have</span>
+          <div className="flex flex-wrap gap-1.5">
+            {reusable.map((field) => <ToggleChip key={field.field_key} onClick={() => onReuse(field.field_key)}><span>{field.label || "Untitled question"}</span></ToggleChip>)}
+          </div>
+        </div>
       )}
     </div>
   );

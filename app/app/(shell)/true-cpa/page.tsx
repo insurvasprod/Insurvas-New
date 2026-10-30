@@ -4,8 +4,10 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { TrueCpaWorkspace } from "@/components/app/true-cpa-workspace";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { getVendorScorecard } from "@/lib/vendorScorecard/service";
+import { ReportsPage } from "@/components/app/reports/reports-page";
+import { sharedPeriod } from "@/lib/reports/views";
 
-export default async function TrueCpaPage() {
+export default async function TrueCpaPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("true_cpa");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="True CPA" description="See what each vendor costs per issued policy." />;
   if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="True CPA" detail="Owners, producers, and bookkeepers can review vendor economics." />;
@@ -14,6 +16,8 @@ export default async function TrueCpaPage() {
   // LA-2.17-8: the default period's report is rendered with the page, so the figures arrive with the
   // first paint instead of after the shell, hydration and a second request. A failure here is not a
   // failed page: the workspace fetches it itself and shows its own error.
-  const initialReport = await getVendorScorecard(guard.context.tenantId, {}, guard.entitlement.access === "read_only").catch(() => null);
-  return <><TrueCpaWorkspace initialReport={initialReport} /></>;
+  // The Reports views' shared period (?from&to), when another view set one.
+  const period = sharedPeriod(await searchParams);
+  const initialReport = await getVendorScorecard(guard.context.tenantId, period ?? {}, guard.entitlement.access === "read_only").catch(() => null);
+  return <ReportsPage view="cpa"><TrueCpaWorkspace initialReport={initialReport} framed /></ReportsPage>;
 }

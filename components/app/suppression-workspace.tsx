@@ -1,20 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PhoneOff, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Loader2, PhoneOff, Search, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { PageHeader } from "@/components/ui/page-header";
-import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { Callout } from "@/components/app/settings/primitives";
 import { ViewTabs } from "@/components/app/view-tabs";
 import { cn } from "@/lib/utils";
 import { agoLabel } from "@/lib/format/ago";
@@ -34,6 +32,9 @@ import { TcpaDncExemptions } from "@/components/app/tcpa-dnc-exemptions";
 import { TcpaScreeningAudit } from "@/components/app/tcpa-screening-audit";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { inputControl } from "@/components/ui/field";
+import { Callout } from "@/components/app/settings/primitives";
+import { NextUp } from "@/components/app/lead-sources/next-up";
+import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 
 type Loaded = {
   entries: SuppressionEntry[];
@@ -44,6 +45,7 @@ type Loaded = {
 
 type Check = { phoneDigits: string; suppressed: boolean; listType: string | null; reason: string | null; lists?: PhoneListRow[]; checkedAt?: string; exemption?: DncExemption | null };
 type Tab = "list" | "exemptions" | "audit" | "feeds";
+const TABS: readonly Tab[] = ["list", "exemptions", "audit", "feeds"];
 const EXEMPTED_LISTS = new Set(["federal_dnc", "state_dnc"]);
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -58,8 +60,8 @@ const SOURCE_LABELS: Record<string, string> = {
 const field = inputControl;
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
-/** The tab's one card reaches the bottom of the window, so a short list never leaves half a page empty. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>*:nth-child(2)]:flex-1";
+/** The tab's one card fills the rest of the step's column, so a short list never leaves half a page empty. */
+const FILL = "flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:flex-1";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "2 Aug 2026", as the board dates a suppression. */
 const dayMonthYear = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
@@ -78,6 +80,10 @@ const stamp = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.
  *
  * 2026-10-06 redesign: the check sits on the tab row (the question the screen is opened to answer),
  * its answer stays on screen above whichever tab is open, and the four lists are tabs.
+ *
+ * Compliance in one page (2026-10-30): the TCPA / DNC step. Its tabs sit in the frame's top row and the
+ * check and Suppress a number in its corner, so both are one click from every tab; the feed state is the
+ * step's one next-up line, whose button opens Feed health; `?tab=` opens a tab directly.
  */
 export function SuppressionWorkspace() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -88,7 +94,8 @@ export function SuppressionWorkspace() {
   const [listType, setListType] = useState<string>("");
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<Tab>("list");
+  const asked = useSearchParams().get("tab");
+  const [tab, setTab] = useState<Tab>(TABS.includes(asked as Tab) ? (asked as Tab) : "list");
   const pageSize = useFittingPageSize(480, 41);
 
   const [lookup, setLookup] = useState("");
@@ -191,32 +198,19 @@ export function SuppressionWorkspace() {
   const filtered = Boolean(search || listType);
   const clearFilters = () => { setSearch(""); setListType(""); };
 
-  // The first read only; a search or filter change keeps the page drawn and swaps the rows.
-  if (!loaded && !error) return <PageLoading />;
+  const showFeeds = <Button variant="outline" onClick={() => setTab("feeds")}>Feed health</Button>;
+  // One line for the state someone must act on: dialing refused, a feed down, demo screening — or all clear.
+  const nextUp = !overview ? null
+    : overview.feeds.length === 0
+      ? <NextUp tone={overview.demo ? "warning" : "danger"}>{overview.demo ? "Demo screening is on here: DNC and litigator lookups are answered locally." : "No scrub vendor is enabled — dialing is refused until the Insurvas team enables one."}</NextUp>
+      : overview.dialingBlocked ? <NextUp tone="danger" action={showFeeds}>Dialing is refused until a DNC feed recovers.</NextUp>
+      : failing.length > 0 ? <NextUp tone="warning" action={showFeeds}><strong>{failing[0].name}</strong> is failing{failing[0].lastSuccessAt ? ` — last good answer ${agoLabel(Date.parse(failing[0].lastSuccessAt), overviewAt)}` : ""}. Dials continue only while another DNC vendor answers.</NextUp>
+      : overview.demo ? <NextUp tone="warning" action={showFeeds}>Demo screening is on here: the feeds are listed but do not gate dialing.</NextUp>
+      : <NextUp tone="done">{loaded ? <><strong>{total.toLocaleString()}</strong> {total === 1 ? "number" : "numbers"} will never be called. </> : null}Every DNC and litigator feed is answering.</NextUp>;
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="TCPA / DNC"
-        actions={loaded?.canEdit ? <Button onClick={() => setOpen(true)}><PhoneOff aria-hidden="true" />Suppress a number</Button> : undefined}
-      />
-
-      <StatStrip label="Suppression totals">
-        <StatTile label="Suppressed" value={loaded ? total.toLocaleString() : "—"} footnote={loaded ? `${loaded.counts.internal.toLocaleString()} on your own list` : undefined} reserveFootnote />
-        <StatTile label="Refused today" value={overview?.refusedLast24h == null ? "—" : overview.refusedLast24h.toLocaleString()} valueTone={overview?.refusedLast24h ? "warning" : undefined} footnote="dials screening refused · 24 h" />
-        <StatTile label="Feeds answering" value={overview ? `${answering} of ${overview.feeds.length}` : "—"} valueTone={failing.length > 0 ? "danger" : undefined} footnote={failing.length > 0 ? `${failing.length} failing` : overview?.demo ? "demo screening" : "DNC and litigator feeds"} />
-      </StatStrip>
-
-      {/* A state someone must act on, one line each: dialing refused, or a feed down. */}
-      {overview && (overview.feeds.length === 0
-        ? <Callout tone={overview.demo ? "info" : "error"} title={overview.demo ? "Demo screening is on here: DNC and litigator lookups are answered locally." : "No scrub vendor is enabled — dialing is refused until the Insurvas team enables one."} />
-        : overview.dialingBlocked ? <Callout tone="error" title="Dialing is refused until a DNC feed recovers." />
-        : failing.length > 0 ? <Callout tone="warning" title={`${failing[0].name} is failing${failing[0].lastSuccessAt ? ` — last good answer ${agoLabel(Date.parse(failing[0].lastSuccessAt), overviewAt)}` : ""}. Dials continue only while another DNC vendor answers.`} />
-        : overview.demo ? <Callout tone="info" title="Demo screening is on here: the feeds below are listed but do not gate dialing." />
-        : null)}
-
-      {/* The views on the left; "Can we call this number?" — the question this screen is opened to answer — on the right. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <>
+      <ComplianceSlot slot="lead">
         <ViewTabs
           label="TCPA views"
           idPrefix="tcpa-view"
@@ -229,17 +223,27 @@ export function SuppressionWorkspace() {
             { key: "feeds", label: "Feed health", count: overview ? failing.length || null : null, tone: "danger" },
           ]}
         />
-        <form onSubmit={runCheck} className="flex items-center gap-2" aria-label="Can we call this number?">
+      </ComplianceSlot>
+      {/* "Can we call this number?" — the question this screen is opened to answer — then the one primary. */}
+      <ComplianceSlot slot="corner">
+        {/* One field with its Check inside, so the four tabs keep the row at 1440px. */}
+        <form onSubmit={runCheck} className="relative flex items-center" aria-label="Can we call this number?">
           <label className="block">
             <span className="sr-only">Phone number</span>
-            <input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder="Can we call (555) 123-4567?" inputMode="tel" aria-label="Phone number" className={cn(toolbarControl, "w-60")} />
+            <input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder="Can we call (555) 123-4567?" inputMode="tel" aria-label="Phone number" className={cn(toolbarControl, "w-56 pr-10")} />
           </label>
-          <Button type="submit" disabled={checking || !lookup.trim()}>{checking ? "Checking…" : "Check"}</Button>
+          <Button type="submit" variant="ghost" size="icon" aria-label={checking ? "Checking" : "Check"} title="Check" disabled={checking || !lookup.trim()} className="absolute right-0.5 size-8">
+            {checking ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Search aria-hidden="true" />}
+          </Button>
         </form>
-      </div>
+        {loaded?.canEdit ? <Button onClick={() => setOpen(true)}><PhoneOff aria-hidden="true" />Suppress a number</Button> : null}
+      </ComplianceSlot>
 
-      {/* The answer stays above whichever tab is open until it is closed; recording an exemption re-runs it. */}
-      {check && (
+      {/* The first read only; a search or filter change keeps the page drawn and swaps the rows. */}
+      {!loaded && !error ? <TableCard className={FILL}><SectionLoading rows={6} columns={5} label="Loading the suppression list" /></TableCard> : <>
+
+      {/* The answer stands in for the next-up line, above whichever tab is open, until it is closed; recording an exemption re-runs it. */}
+      {check ? (
         <section aria-label="Can we call this number?" className="rounded-lg border border-border bg-card">
           <div className="flex items-start gap-3 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -262,9 +266,16 @@ export function SuppressionWorkspace() {
             </table></div>
           )}
         </section>
-      )}
+      ) : nextUp}
 
-      <div role="tabpanel" aria-labelledby={`tcpa-view-${tab}`} className="flex min-w-0 flex-col">
+      <StatStrip label="Suppression totals">
+        <StatTile label="Suppressed" value={loaded ? total.toLocaleString() : "—"} footnote={loaded ? `${loaded.counts.internal.toLocaleString()} on your own list` : undefined} reserveFootnote />
+        <StatTile label="Refused today" value={overview?.refusedLast24h == null ? "—" : overview.refusedLast24h.toLocaleString()} valueTone={overview?.refusedLast24h ? "warning" : undefined} footnote="dials screening refused · 24 h" />
+        <StatTile label="Feeds answering" value={overview ? `${answering} of ${overview.feeds.length}` : "—"} valueTone={failing.length > 0 ? "danger" : undefined} footnote={failing.length > 0 ? `${failing.length} failing` : overview?.demo ? "demo screening" : "DNC and litigator feeds"} />
+      </StatStrip>
+
+
+      <div role="tabpanel" aria-labelledby={`tcpa-view-${tab}`} className="flex min-w-0 flex-1 flex-col">
       {tab === "list" && (
         <TableCard
           className={FILL}
@@ -342,6 +353,7 @@ export function SuppressionWorkspace() {
         </TableCard>
       )}
       </div>
+      </>}
 
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setConfirmed(false); }}>
         <DialogContent>
@@ -386,6 +398,6 @@ export function SuppressionWorkspace() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

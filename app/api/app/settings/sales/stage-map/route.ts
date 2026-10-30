@@ -7,7 +7,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 const NO_STORE = { "Cache-Control": "no-store" };
 
 /**
- * LA-3.23 · Settings › Sales › Pipeline sync. GET: the tenant's pipelines and stages and the current
+ * LA-3.23 · Settings › Sales › Application stages. GET: the tenant's pipelines and stages and the current
  * map (owners and producers). PUT: owners — `{ map: { sync_key: stage_id | null } }`; null unmaps
  * ("Doesn't move the card"). Audited old → new.
  */

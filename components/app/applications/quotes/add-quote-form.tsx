@@ -109,7 +109,11 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
 
   const termLength = term && product ? (termChoice !== null && product.termLengths.includes(termChoice) ? termChoice : product.termLengths[0] ?? null) : null;
   const healthClass = term && product ? (classChoice !== null && product.healthClasses.includes(classChoice) ? classChoice : product.healthClasses[0] ?? null) : null;
-  const tiers = product?.tiers.length ? product.tiers : ["level"];
+  // The product's tiers, narrowed to the ones its quotation template offers (Settings › Quotation templates).
+  const productTiers = product?.tiers.length ? product.tiers : ["level"];
+  const templateTiers = fields.find((f) => f.key === "tier")?.options ?? [];
+  const offered = templateTiers.length ? productTiers.filter((t) => templateTiers.includes(t)) : productTiers;
+  const tiers = offered.length ? offered : productTiers;
   const tier = tiers.includes(template.tier) ? template.tier : tiers[0];
 
   const faceCents = parseDollarsToCents(template.faceText);
@@ -202,6 +206,7 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
   ].filter(Boolean).join(" · ");
   // 2 · the coverage
   const tierField = fields.find((f) => f.key === "tier");
+  const faceField = fields.find((f) => f.key === "face_amount");
   const riderField = fields.filter((f) => f.key === "riders");
   const facePrefill = prefill("face");
   const faceOptions = faceQuickPicks(product);
@@ -235,7 +240,7 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
 
         <Part n={2} title="The coverage">
           <div className="grid gap-4 ">
-            <Field label="Face amount" htmlFor="cov.face_amount" required error={faceFormat}>
+            <Field label={faceField?.label ?? "Face amount"} htmlFor="cov.face_amount" required error={faceFormat} hint={faceField?.help}>
               <div className="relative">
                 <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-[var(--muted)]">$</span>
                 {/* `cov.face_amount` is the id QA's face-limit items land on. */}
@@ -257,6 +262,7 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
                 <span id="rate.tier" role="radiogroup" aria-label={tierField.label} className="mt-1.5 flex flex-wrap gap-1.5">
                   {tiers.map((t) => <ToggleChip role="radio" key={t} selected={tier === t} disabled={readOnly} onClick={() => onTemplate({ tier: t }, "tier")}>{TIER_LABEL[t] ?? t}</ToggleChip>)}
                 </span>
+                {tierField.help && <span className="mt-1.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{tierField.help}</span>}
               </div>
             )}
           </div>

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { applyTemplate, listAvailableTemplates, previewTemplateApplication, TemplateProductError } from "@/lib/agentTemplates/service";
+import { livePublication } from "@/lib/agentTemplates/publishedBy";
 
 const PRODUCT_CODE = /^[a-z][a-z0-9_]{0,79}$/;
 
@@ -19,7 +20,15 @@ export async function GET(request: NextRequest) {
       listAvailableTemplates(auth.context.tenantId, auth.context.userId, product),
       getSupabaseServiceClient().from("tenants").select("name").eq("id", auth.context.tenantId).maybeSingle<{ name: string }>(),
     ]);
-    return NextResponse.json({ ...templates, agencyName: tenant.data?.name ?? null }, { headers: { "Cache-Control": "no-store" } });
+    // published: who put the live version out, and when (Form templates layout A). A failed read
+    // only drops the line; the form still loads.
+    // liveVersions: each product's live form version, for its chip. One row per product's copy.
+    const [published, copies] = await Promise.all([
+      livePublication(templates.current.tenant_template_id, templates.current.assignment.definition_version).catch(() => null),
+      getSupabaseServiceClient().from("tenant_templates").select("product_code, definition_version").eq("tenant_id", auth.context.tenantId),
+    ]);
+    const liveVersions = Object.fromEntries((copies.data ?? []).map((row) => [row.product_code, row.definition_version]));
+    return NextResponse.json({ ...templates, agencyName: tenant.data?.name ?? null, published, liveVersions }, { headers: { "Cache-Control": "no-store" } });
   }
   catch (error) {
     if (error instanceof TemplateProductError) return NextResponse.json({ error: error.message }, { status: 403 });

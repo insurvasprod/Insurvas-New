@@ -25,7 +25,7 @@ export const SALES_SETTINGS_AUDIT_ACTIONS = {
   "tenant.application_disclosure_discarded": "Disclosure draft discarded",
   "tenant.application_disclosure_retired": "Disclosure version retired",
   "tenant.application_disclosure_attached": "Disclosure PDF attached",
-  "tenant.application_stage_map_updated": "Application pipeline sync changed",
+  "tenant.application_stage_map_updated": "Application stages changed",
 } as const satisfies Partial<Record<AuditAction, string>>;
 export type SalesSettingsAuditAction = keyof typeof SALES_SETTINGS_AUDIT_ACTIONS;
 

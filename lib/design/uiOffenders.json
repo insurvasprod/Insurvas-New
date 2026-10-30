@@ -24,8 +24,6 @@
   "local-surface": {},
   "window-confirm": {},
   "hand-tablist": {
-    "components/app/form-templates/form-settings.tsx": 1,
-    "components/app/form-templates/status-tabs.tsx": 1,
     "components/public/pricing-explorer.tsx": 1
   },
   "local-chip": {
@@ -38,9 +36,7 @@
   "hand-popover": {
     "components/app/multi-picker.tsx": 1
   },
-  "unguarded-dirty": {
-    "components/app/form-templates/status-line.tsx": 1
-  },
+  "unguarded-dirty": {},
   "radix-select": {},
   "section-help": {}
 }
