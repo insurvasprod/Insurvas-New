@@ -158,7 +158,21 @@ export function ChatThread({
   // conversation anybody wants to start.
   useEffect(() => {
     const element = scroller.current;
-    if (element) element.scrollTop = element.scrollHeight;
+    if (!element) return;
+    const toBottom = () => { element.scrollTop = element.scrollHeight; };
+    toBottom();
+
+    // On a phone the thread is display:none until a conversation is opened, so the line above
+    // measured a box of no height and left the reader at the oldest message. Catch the moment it is
+    // shown — and only that moment, so someone reading history is not dragged back down when the
+    // composer grows under them.
+    let wasHidden = element.clientHeight === 0;
+    const observer = new ResizeObserver(() => {
+      if (element.clientHeight === 0) { wasHidden = true; return; }
+      if (wasHidden) { wasHidden = false; toBottom(); }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, [newest]);
 
   const items = buildThread(messages, { viewerId, zone });

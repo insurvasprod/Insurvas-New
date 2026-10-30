@@ -29,6 +29,30 @@ is still a filter. It stopped being the thing that sorts the board, nothing more
 Check a change on `/design/pipeline` (development only): busy, quiet, SLA-flagged, many pipelines,
 empty and error, for both roles and three payout models, at 1536×826, 1366×657 and 375 wide.
 
+## Messages (2026-10-30)
+
+A messenger, built from the kit — not a document with a form under it.
+
+- **The thread** is [`chat-message.tsx`](chat-message.tsx), drawing what
+  [`lib/partnerChat/thread.ts`](../../lib/partnerChat/thread.ts) returns: days, then runs of
+  messages from one sender. That module is pure and tested; the component only draws it. Change
+  *what groups with what* there, not here.
+- **The composer** is the shared [`ChatComposer`](../ui/chat-composer.tsx): one bar, paperclip
+  inside on the left, send on the right. Enter sends, Shift+Enter breaks the line.
+- **Two panes, not three.** Conversation details is a `Sheet` (§11) opened from the thread's
+  header. Below `md` it is one pane: the list, then the conversation, with a back control.
+- **No avatars for channels** (§10). A Lucide glyph says agent channel, direct message or team
+  channel.
+- **No page CSS.** The 147 `.portal-agent-chat-*` rules are gone (§9). Keep it that way.
+
+`viewerId` comes from `/api/partner/chat` — the caller's own id, from the session. Without it the
+thread cannot tell your messages from the agency's, and draws everything on the received side
+rather than guessing.
+
+Check a change on `/design/messages` (development only): busy, quiet and empty, both roles, at
+1536×826 and 375 wide. The development database has one channel and no reply, so two sides, a run,
+a day separator and an attachment exist only there.
+
 ## Controls (2026-10-30)
 
 The portal has **no native `<select>` left**. Every dropdown is `SelectMenu` — the searchable one

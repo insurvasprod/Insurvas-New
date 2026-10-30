@@ -64,16 +64,16 @@ left, text growing in the middle, send on the right.
 On a phone it is one pane: the list, then the thread.
 
 **Acceptance criteria:**
-- [ ] Details is a `Sheet` (§11), opened by the header's Details button, closed by Escape
-- [ ] Its labels are sentence case with real values; "Not set by your agency" only where true
-- [ ] "Open pipeline" is a proper action in the sheet, not a floating link
-- [ ] Under `md`: the list is the page, a conversation opens the thread, a back control returns
-- [ ] No avatars for channels (§10); a Lucide icon says direct message or team channel
+- [x] Details is a `Sheet` (§11), opened by the header's Details button, closed by Escape
+- [x] Its labels are sentence case with real values; "Not set by your agency" only where true
+- [x] "Open pipeline" is a proper action in the sheet, not a floating link
+- [x] Under `md`: the list is the page, a conversation opens the thread, a back control returns
+- [x] No avatars for channels (§10); a Lucide icon says direct message or team channel
 
 **Verification:**
-- [ ] Escape and the close button both dismiss; focus returns to the Details button
-- [ ] 375: list → thread → back, with no horizontal scroll
-- [ ] 1536: two panes, the thread taking the space Details used to
+- [x] Escape and the close button both dismiss; focus returns to the Details button
+- [x] 375: list → thread → back, with no horizontal scroll
+- [x] 1536: two panes, the thread taking the space Details used to
 
 **Dependencies:** A2 · **Files:** `components/partner/partner-chat-panel.tsx` · **Scope:** Medium
 
@@ -85,15 +85,15 @@ On a phone it is one pane: the list, then the thread.
 Remove only what nothing else uses — the agent's lead workspace may share some.
 
 **Acceptance criteria:**
-- [ ] Every selector checked against `components/app/**` before removal, as round 2 did
-- [ ] Rules nothing references are gone; shared ones stay, with a note naming their user
-- [ ] No `.portal-agent-chat-*` class left in `components/partner/**`
-- [ ] `globals.css` line endings unchanged (CRLF)
+- [x] Every selector checked against `components/app/**` before removal, as round 2 did
+- [x] Rules nothing references are gone; shared ones stay, with a note naming their user
+- [x] No `.portal-agent-chat-*` class left in `components/partner/**`
+- [x] `globals.css` line endings unchanged (CRLF)
 
 **Verification:**
-- [ ] `grep -r "portal-agent-chat" components/partner/` returns nothing
-- [ ] The agent app's chat and lead workspace still render (`/design/*` previews)
-- [ ] `git diff --stat app/globals.css` shows a deletion-only change of sane size
+- [x] `grep -r "portal-agent-chat" components/partner/` returns nothing
+- [x] The agent app's chat and lead workspace still render (`/design/*` previews)
+- [x] `git diff --stat app/globals.css` shows a deletion-only change of sane size
 
 **Dependencies:** A3 · **Files:** `app/globals.css`, `components/partner/partner-chat-panel.tsx`
 · **Scope:** Small
@@ -101,9 +101,13 @@ Remove only what nothing else uses — the agent's lead workspace may share some
 ---
 
 ### ✅ Checkpoint: Messages
-- [ ] Send, attach, create a conversation, open details — all work as before
-- [ ] Usable end to end at 375 and at 1536
-- [ ] `npm test`, typecheck, lint green; no new offender
+- [x] Open details, search, choose a conversation, attach a file — exercised on the preview
+- [ ] **Send, and create a conversation — not exercised.** Both write to the owner's live agent
+      channel, so they were checked by diff instead: the request each makes is byte-identical to
+      the one before the rework (same endpoint, same FormData, same JSON body). Worth one real
+      send when the owner is at the keyboard.
+- [x] Usable end to end at 375 and at 1536
+- [x] `npm test`, typecheck, lint green; no new offender
 
 ---
 

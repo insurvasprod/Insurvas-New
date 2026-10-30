@@ -316,6 +316,10 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - New screens use Tailwind and the shared components; do not add page-specific `.portal-*` rules to
   `app/globals.css`. A sweep on 2026-09-28 removed ~2,200 lines of rules whose classes no component
   used any more. A header cell's own `text-right` now wins over `.portal-lead-table th`.
+- The partner **Messages** page was the largest block left: 147 lines of `.portal-agent-chat-*` and
+  `.portal-chat-*`, and the reason that page looked unlike the rest of the product. It was rebuilt
+  from the kit on 2026-10-30 and the rules are gone; only `.portal-status-chip.is-info` stayed,
+  because the chip is shared. A page rebuilt from the kit should take its CSS with it.
 
 ## 10. People and companies (v3)
 **Status:** Live.
