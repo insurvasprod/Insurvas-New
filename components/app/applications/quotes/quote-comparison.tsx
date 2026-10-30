@@ -30,8 +30,11 @@ export function QuoteComparison({ quotes, onSelect, busyId, readOnly, paymentMet
   /** Quotes older than their template's validity (LA-3.4): marked, still selectable. */
   expiredIds?: ReadonlySet<string>;
 }) {
+  // Two or more quotes sit two to a row (owner, 2026-10-29); each card then stacks the carrier over
+  // its premium, and what you earn over the button.
+  const paired = quotes.length >= 2;
   return (
-    <ul aria-label="Quotes" className="m-0 flex list-none flex-col gap-3 p-0">
+    <ul aria-label="Quotes" className={cn("m-0 grid list-none gap-3 p-0", paired && "lg:grid-cols-2")}>
       {quotes.map((q) => {
         const selected = q.status === "selected";
         const per1000 = premiumPer1000(q.monthlyPremiumCents, q.faceAmountCents);
@@ -47,7 +50,8 @@ export function QuoteComparison({ quotes, onSelect, busyId, readOnly, paymentMet
             key={q.id}
             aria-label={`${q.carrierName} quote`}
             className={cn(
-              "grid min-w-0 items-center gap-x-4 gap-y-3 rounded-xl border-[1.5px] px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_110px_170px_180px]",
+              "grid min-w-0 items-center gap-x-4 gap-y-3 rounded-xl border-[1.5px] px-4 py-3.5",
+              paired ? "grid-cols-[minmax(0,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_110px_170px_180px]",
               selected ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] bg-[var(--surface)]",
               !q.appointed.ok && !selected && "opacity-80",
             )}
@@ -67,7 +71,7 @@ export function QuoteComparison({ quotes, onSelect, busyId, readOnly, paymentMet
                 </ul>
               )}
             </span>
-            <span className="flex flex-col">
+            <span className={cn("flex flex-col", paired && "items-end text-right")}>
               <strong className="text-base font-semibold tabular-nums text-[var(--ink)]">{money(q.monthlyPremiumCents)}</strong>
               <span className="text-xs text-[var(--muted)]">a month</span>
             </span>

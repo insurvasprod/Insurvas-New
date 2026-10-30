@@ -1,16 +1,20 @@
 "use client";
 
 /**
- * Submit (step 9; board l3-ws-submit): fill the carrier's form — with the extension (LA-3.12) or
- * copy-assist (LA-3.14) — submit on the carrier's own site, then capture what its confirmation said
- * (LA-3.15, the capture overlay l3-ov-capture). Only a `ready` attempt can be captured. The welcome
- * pack (LA-3.20) goes out once the capture is saved.
+ * Submit (step 9; board l3-ws-submit): copy the application onto the carrier's form with copy-assist
+ * (LA-3.14), then capture what its confirmation said (LA-3.15, the capture overlay l3-ov-capture).
+ * Only a `ready` attempt can be captured.
+ *
+ * Owner 2026-10-29: two sections only. The extension's "Fill on carrier site" card is hidden until the
+ * extension is switched on, the "Submit it on their site" step is gone (Record says it), and the
+ * welcome pack (LA-3.20) is off for now. Copy-assist folds whenever the agent wants, finished or not,
+ * and its Next folds it and goes to Record.
  */
 
-import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, ExternalLink, FileText, Wand2 } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, ArrowRight, FileText } from "lucide-react";
 
-import { Callout, Field, control } from "@/components/app/settings/primitives";
+import { Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { notify } from "@/lib/notify";
@@ -23,14 +27,15 @@ import { AttachedFile, PasteBox, useAttachment, useFilePicker } from "@/componen
 import { dateTime, SUBMITTED_VIA_LABEL } from "@/components/app/applications/submit/labels";
 import { useReferenceExample } from "@/components/app/applications/submit/reference-check";
 import { SubmissionDialog, toLocalInput, type CaptureSeed } from "@/components/app/applications/submit/submission-dialog";
-import { useExtensionDetected, useFillOnCarrierSite } from "@/components/app/applications/submit/use-extension";
-import { Warning } from "@/components/app/applications/submit/warning-line";
+import { useExtensionDetected } from "@/components/app/applications/submit/use-extension";
 import { WelcomePackPanel } from "@/components/app/applications/submit/welcome-pack-panel";
+import { Warning } from "@/components/app/applications/submit/warning-line";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
 import { BareStepCards, StepCard } from "@/components/app/applications/workspace/step-card";
 import { FoldSection } from "@/components/app/applications/workspace/fold-section";
 
-type Site = { carrierId: string; name: string; origin: string; fieldMap: "none" | "draft" | "published" | "needs_review" };
+/** The welcome pack (LA-3.20) is off for now (owner 2026-10-29); true brings its section back. */
+const WELCOME_PACK_ON = false;
 
 export function SubmitStep() {
   const { attempt } = useWorkspace();
@@ -38,35 +43,15 @@ export function SubmitStep() {
   return <SubmitBody key={attempt.id} />;
 }
 
-/** The carrier's field-map status for the chip (LA-3.13), from the extension's site list. */
-function useCarrierSite(carrierId: string | null, sample: boolean) {
-  const [site, setSite] = useState<Site | null | undefined>(undefined);
-  useEffect(() => {
-    if (sample || !carrierId) return;
-    let live = true;
-    void request<{ sites: Site[] }>("/api/app/extension/grants").then((r) => {
-      if (live) setSite(r.ok ? r.data.sites.find((s) => s.carrierId === carrierId) ?? null : null);
-    });
-    return () => { live = false; };
-  }, [carrierId, sample]);
-  return site;
-}
-
-const hostOf = (url: string | null | undefined) => {
-  if (!url) return null;
-  try { return new URL(url).host.replace(/^www\./, ""); } catch { return null; }
-};
-
 function SubmitBody() {
   const { caseView, attempt, sample, readOnly, goTo, timeZone } = useWorkspace();
   const extension = useExtensionDetected();
-  const fill = useFillOnCarrierSite({ applicationId: attempt.id, carrierId: attempt.carrierId, carrierName: attempt.carrierName, sample });
-  const site = useCarrierSite(attempt.carrierId, sample);
   const example = useReferenceExample(attempt.id, sample);
   const submitted = attempt.status !== "draft" && attempt.status !== "ready";
   const ready = attempt.status === "ready" || (sample && attempt.status === "draft");
   const carrier = attempt.carrierName ?? "the carrier";
-  const host = hostOf(site?.origin) ?? hostOf(attempt.carrierPortalUrl);
+  // Copy-assist is open until the agent folds it (its header, or Next); once captured it starts folded.
+  const [copyFolded, setCopyFolded] = useState(submitted);
 
   const [reference, setReference] = useState("");
   const [at, setAt] = useState(() => toLocalInput(new Date()));
@@ -75,17 +60,6 @@ function SubmitBody() {
   const [seed, setSeed] = useState<CaptureSeed | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [editing, setEditing] = useState<SubmissionView | null>(null);
-
-  function openPortal() {
-    if (!attempt.carrierPortalUrl) return;
-    window.open(attempt.carrierPortalUrl, "_blank", "noopener,noreferrer");
-    if (attempt.portalUsername) {
-      void navigator.clipboard?.writeText(attempt.portalUsername).then(
-        () => notify.done(`Username ${attempt.portalUsername} copied`, { detail: "Your password manager fills the rest." }),
-        () => notify.warn("The portal opened, but the username could not be copied"),
-      );
-    }
-  }
 
   function capture() {
     setSeed({ reference, submittedAt: at, attachment: shot.value });
@@ -100,58 +74,21 @@ function SubmitBody() {
     window.open(r.data.url, "_blank", "noopener,noreferrer");
   }
 
-  const mapChip = site === undefined || site === null
-    ? null
-    : site.fieldMap === "published" ? <StatusChip tone="good" dot={false}>Map published · {site.name}</StatusChip>
-    : site.fieldMap === "needs_review" ? <StatusChip tone="warning" dot={false}>Map needs review</StatusChip>
-    : site.fieldMap === "draft" ? <StatusChip tone="neutral" dot={false}>Map in draft</StatusChip>
-    : <StatusChip tone="neutral" dot={false}>No field map</StatusChip>;
-  const fillBlocked = submitted ? "Already submitted — the capture is below"
-    : !ready ? "Mark the application ready on the Review step first"
-    : !extension ? "Install the Insurvas extension to fill the carrier's form — or use copy-assist"
-    : readOnly ? "Read-only — nothing on this attempt can change"
-    : fill.busy ? "Opening the carrier's site…" : undefined;
-  const fillTip = fillBlocked ?? `Opens ${host ?? "the carrier's site"} with a 60-minute token that covers this application only`;
   const subs = [...attempt.submissions].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   return (
     <section aria-label="Submit" className="m-glass flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--border)] p-[18px]">
-      {/* Three numbered sections (owner pick C, 2026-10-28; folding like the other steps): fill their form,
-          submit on their site, record it. Each folds once the submission is captured. */}
+      {/* Two numbered sections (owner 2026-10-29): copy it onto their form, then record what they gave you. */}
       <BareStepCards>
-        <FoldSection heading={`1 · Fill ${carrier}’s form`} done={submitted ? 1 : 0} total={1} complete={submitted} progressLabel={ready ? "Ready to fill" : "Mark it ready on Review first"} completeLabel="Done">
-        <div className="flex flex-col gap-1.5">
-        <StepCard title={`1 · Fill ${carrier}’s form`} chips={mapChip} footerNote="The extension fills it for you; without it, copy each field from copy-assist below.">
-          <div className="flex flex-wrap items-center gap-3">
-            <span title={fillTip}>
-              <Button type="button" onClick={fill.start} disabled={Boolean(fillBlocked)}>
-                <Wand2 aria-hidden="true" />Fill on carrier site
-              </Button>
-            </span>
-            <Button type="button" variant="outline" onClick={openPortal} disabled={!attempt.carrierPortalUrl} title={attempt.carrierPortalUrl ? undefined : "No portal address is on file for this carrier"}>
-              <ExternalLink aria-hidden="true" />Open portal
-            </Button>
-          </div>
-          {site?.fieldMap === "needs_review" && (
-            <Callout tone="warning" title={`Some fields have no selector on ${carrier}'s form — they are left blank. Copy them from copy-assist.`} />
-          )}
-        </StepCard>
-
-        <CopyAssistPanel attempt={attempt} caseId={caseView.caseId} sample={sample} />
-        </div>
+        <FoldSection heading="1 · Copy-assist" done={submitted ? 1 : 0} total={1} complete={submitted} progressLabel={ready ? "Copy each field to their form" : "Mark it ready on Review first"} completeLabel="Done" folded={copyFolded} onFoldedChange={setCopyFolded}>
+          <CopyAssistPanel attempt={attempt} caseId={caseView.caseId} sample={sample} onNext={() => setCopyFolded(true)} />
         </FoldSection>
 
-        <FoldSection heading={`2 · Submit it on ${carrier}’s site`} done={submitted ? 1 : 0} total={1} complete={submitted} progressLabel="On their site" completeLabel="Submitted">
-        <StepCard title={`2 · Submit it on ${carrier}’s site`} chips={submitted ? <StatusChip tone="good">Submitted</StatusChip> : undefined}>
-          <p className="m-0 text-sm text-[var(--body)]">Check the form on their site and press their submit button. Insurvas never submits for you. Keep their confirmation screen open: the next step needs what it says.</p>
-        </StepCard>
-        </FoldSection>
-
-        <FoldSection heading="3 · Record what they gave you" done={submitted ? 1 : 0} total={1} complete={false} progressLabel={submitted ? "Captured" : "Not captured yet"}>
+        <FoldSection heading="2 · Record what they gave you" done={submitted ? 1 : 0} total={1} complete={false} progressLabel={submitted ? "Captured" : "Not captured yet"}>
         <StepCard
-          title="3 · Record what they gave you"
+          title="2 · Record what they gave you"
           chips={submitted ? <StatusChip tone="good">Captured</StatusChip> : <StatusChip tone="action" dot={false}>Not captured yet</StatusChip>}
-          footerNote={submitted ? "Recorded. The QA verdict was frozen with it." : `Submit on ${carrier}'s own site first, then capture what its confirmation says.`}
+          footerNote={submitted ? "Recorded. The QA verdict was frozen with it." : `Submit on ${carrier}'s own site, then capture what its confirmation says: the application number and a screenshot.`}
           actions={<>
             <Button type="button" variant="outline" onClick={() => goTo("review")}><ArrowLeft aria-hidden="true" />Back to Review</Button>
             <Button type="button" onClick={() => goTo("after")} disabled={!submitted} title={submitted ? undefined : "Capture the submission first"}>Continue to After submit<ArrowRight aria-hidden="true" /></Button>
@@ -214,9 +151,11 @@ function SubmitBody() {
         </StepCard>
         </FoldSection>
 
-        <FoldSection heading="Welcome pack" done={0} total={0} complete={false} progressLabel="For the client">
-          <WelcomePackPanel attempt={attempt} sample={sample} readOnly={readOnly} />
-        </FoldSection>
+        {WELCOME_PACK_ON && (
+          <FoldSection heading="Welcome pack" done={0} total={0} complete={false} progressLabel="For the client">
+            <WelcomePackPanel attempt={attempt} sample={sample} readOnly={readOnly} />
+          </FoldSection>
+        )}
       </BareStepCards>
 
       <SubmissionDialog

@@ -58,7 +58,7 @@ export type Attempt = { id: string; attempt_number?: number };
 
 export type Served = { leadId: string; workItemId?: string; tier: number; tierName: string; selectionReason: string | null; appointmentNotes: string | null; lockedUntil: string };
 
-export type QueueRow = { workItemId: string; leadId: string; tier: number; tierName: string; name: string | null; state: string | null; attemptsMade: number; assignedToYou: boolean; localTime: string | null };
+export type QueueRow = { workItemId: string; leadId: string; tier: number; tierName: string; name: string | null; state: string | null; attemptsMade: number; assignedToYou: boolean; localTime: string | null; campaignId?: string | null; campaignName?: string | null; phone?: string | null };
 
 export type Stats = { dials: number; contacts: number; contactRate: number | null; since: string; zone: string };
 

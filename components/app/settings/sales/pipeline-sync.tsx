@@ -11,6 +11,10 @@
  * Before anything is saved, the draft is pre-filled by matching stage names on the default pipeline
  * (case-insensitive, the §6 seeding rule); nothing that does not match is guessed, and nothing is
  * stored until Save.
+ *
+ * Per pipeline (owner 2026-10-29, 20261029100000): pick a pipeline, map its own stages; a lead's card
+ * moves only within the pipeline it is on. A pipeline with nothing saved yet is pre-filled the same
+ * way from its own stage names. Before that migration there is one map, as before.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -20,6 +24,7 @@ import { Callout, SettingsStack, control, st } from "@/components/app/settings/p
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { TableCard } from "@/components/ui/table-card";
+import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PIPELINE_SYNC_KEYS, SAMPLE_STAGES, type PipelineSyncKey } from "@/lib/applications/settingsFixtures";
 import type { PipelineOption, StageMapView } from "@/lib/salesSettings/stageMap";
 import { cn } from "@/lib/utils";
@@ -33,12 +38,12 @@ const EMPTY = Object.fromEntries(PIPELINE_SYNC_KEYS.map((k) => [k.key, null])) a
 
 const SAMPLE: StageMapView = {
   pipelines: [{ id: "pl-sample", name: "Outbound", isDefault: true, stages: SAMPLE_STAGES.map((name, i) => ({ id: `st-${i}`, name, stageType: name === "Issued" ? "won" : name === "Lost" ? "lost" : "open" })) }],
-  map: EMPTY, stored: 0, canEdit: true,
+  map: EMPTY, maps: { "pl-sample": EMPTY }, perPipeline: true, stored: 0, canEdit: true,
 };
 
-/** §6's seeding rule: the default stage names, matched case-insensitively on the default pipeline. */
-function suggested(pipelines: PipelineOption[]): Mapping {
-  const pipeline = pipelines.find((p) => p.isDefault) ?? pipelines[0];
+/** §6's seeding rule: the default stage names, matched case-insensitively (on the chosen pipeline, else the default one). */
+function suggested(pipelines: PipelineOption[], pipelineId?: string | null): Mapping {
+  const pipeline = pipelines.find((p) => p.id === pipelineId) ?? pipelines.find((p) => p.isDefault) ?? pipelines[0];
   const out = { ...EMPTY };
   if (!pipeline) return out;
   for (const k of PIPELINE_SYNC_KEYS) out[k.key] = pipeline.stages.find((s) => s.name.trim().toLowerCase() === k.defaultStage.toLowerCase())?.id ?? null;
@@ -49,15 +54,27 @@ export function SalesPipelineSync() {
   const sample = useSalesSample();
   const [view, setView] = useState<StageMapView | null>(sample ? SAMPLE : null);
   const [draft, setDraft] = useState<Mapping | null>(sample ? suggested(SAMPLE.pipelines) : null);
+  // The pipeline being mapped (per-pipeline maps); null before the migration (one map).
+  const [pipelineId, setPipelineId] = useState<string | null>(sample ? "pl-sample" : null);
   const [loading, setLoading] = useState(!sample);
   const [error, setError] = useState<{ text: string; pending: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const accept = useCallback((next: StageMapView) => {
+  /** What is stored for a pipeline (or the one map), and the draft it starts from. */
+  const savedFor = useCallback((v: StageMapView, id: string | null): Mapping => ({ ...EMPTY, ...(v.perPipeline && id ? v.maps[id] ?? {} : v.map) }), []);
+  const startDraft = useCallback((v: StageMapView, id: string | null): Mapping => {
+    const stored = savedFor(v, id);
+    const nothing = Object.values(stored).every((x) => !x);
+    return nothing && v.canEdit ? suggested(v.pipelines, id) : stored;
+  }, [savedFor]);
+
+  const accept = useCallback((next: StageMapView, keep?: string | null) => {
     setView(next);
-    setDraft(next.stored === 0 && next.canEdit ? suggested(next.pipelines) : { ...EMPTY, ...next.map });
-  }, []);
+    const id = next.perPipeline ? (keep && next.pipelines.some((p) => p.id === keep) ? keep : (next.pipelines.find((p) => p.isDefault) ?? next.pipelines[0])?.id ?? null) : null;
+    setPipelineId(id);
+    setDraft(startDraft(next, id));
+  }, [startDraft]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,25 +99,26 @@ export function SalesPipelineSync() {
     return () => window.clearTimeout(t);
   }, [load, sample]);
 
-  const saved = useMemo(() => ({ ...EMPTY, ...(view?.map ?? {}) }), [view]);
+  const saved = useMemo(() => (view ? savedFor(view, pipelineId) : EMPTY), [view, pipelineId, savedFor]);
+  const pipeline = view?.pipelines.find((p) => p.id === pipelineId) ?? null;
   const dirty = Boolean(draft && JSON.stringify(draft) !== JSON.stringify(saved));
-  const suggestedOnly = Boolean(view && view.stored === 0 && dirty);
+  const suggestedOnly = Boolean(view && Object.values(saved).every((x) => !x) && dirty);
   const stageName = (id: string | null) => (id ? view?.pipelines.flatMap((p) => p.stages.map((s) => ({ ...s, pipeline: p.name }))).find((s) => s.id === id) : null);
 
   async function save() {
     if (!draft) return;
     if (sample) {
-      setView((v) => (v ? { ...v, map: draft, stored: 1 } : v));
+      setView((v) => (v ? { ...v, map: draft, maps: pipelineId ? { ...v.maps, [pipelineId]: draft } : v.maps, stored: 1 } : v));
       notify.done("Sample data — not saved");
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch("/api/app/settings/sales/stage-map", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ map: draft }) });
+      const res = await fetch("/api/app/settings/sales/stage-map", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(view?.perPipeline && pipelineId ? { pipeline_id: pipelineId, map: draft } : { map: draft }) });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "That didn't save. Try again.");
-      accept(data as StageMapView);
+      accept(data as StageMapView, pipelineId);
       notify.done("Pipeline sync saved");
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "That didn't save. Try again.");
@@ -109,7 +127,10 @@ export function SalesPipelineSync() {
     }
   }
 
-  const noStages = view ? view.pipelines.every((p) => p.stages.length === 0) : false;
+  const noStages = view ? (view.perPipeline ? !pipeline || pipeline.stages.length === 0 : view.pipelines.every((p) => p.stages.length === 0)) : false;
+  // The stages a state may move to: the chosen pipeline's own (per pipeline), else every pipeline's.
+  const choices = view ? (view.perPipeline ? (pipeline ? [pipeline] : []) : view.pipelines.filter((p) => p.stages.length)) : [];
+  const choosePipeline = (id: string) => { if (!view) return; setPipelineId(id); setDraft(startDraft(view, id)); setSaveError(null); };
   const ro = !view?.canEdit;
   const mappedCount = Object.values(saved).filter(Boolean).length;
 
@@ -127,8 +148,25 @@ export function SalesPipelineSync() {
 
           <TableCard
             title="Where the card goes"
-            info="When the application reaches a state, the lead's card moves to this stage once. A card moved by hand stays where it was put."
-            action={<CardFact>{view.stored === 0 ? "Nothing is mapped yet — no card moves" : `${mappedCount} of ${PIPELINE_SYNC_KEYS.length} states move a card`}</CardFact>}
+            info={view.perPipeline ? "Each pipeline has its own map: when the application reaches a state, the lead's card moves to this stage of the pipeline it is on, once. A card moved by hand stays where it was put." : "When the application reaches a state, the lead's card moves to this stage once. A card moved by hand stays where it was put."}
+            action={<span className="flex flex-wrap items-center gap-2">
+              {view.perPipeline && view.pipelines.length > 0 && (
+                <select
+                  aria-label="Pipeline"
+                  className={cn(toolbarControl, "w-auto min-w-[200px]")}
+                  value={pipelineId ?? ""}
+                  disabled={dirty}
+                  title={dirty ? "Save or discard this pipeline's changes first" : undefined}
+                  onChange={(e) => choosePipeline(e.target.value)}
+                >
+                  {view.pipelines.map((p) => {
+                    const count = Object.values(view.maps[p.id] ?? {}).filter(Boolean).length;
+                    return <option key={p.id} value={p.id}>{p.name} · {count ? `${count} mapped` : "not mapped"}</option>;
+                  })}
+                </select>
+              )}
+              <CardFact>{mappedCount === 0 ? "Nothing is mapped yet — no card moves" : `${mappedCount} of ${PIPELINE_SYNC_KEYS.length} states move a card`}</CardFact>
+            </span>}
           >
             {noStages ? (
               <EmptyState title="No pipeline stages yet" hint="Add stages to a pipeline in Settings › Pipelines, then map them here." />
@@ -160,7 +198,7 @@ export function SalesPipelineSync() {
                           >
                             <option value="">{UNMAPPED}</option>
                             {missing && <option value={value ?? ""}>A stage that was archived</option>}
-                            {view.pipelines.filter((p) => p.stages.length).map((p) => (
+                            {choices.map((p) => (
                               <optgroup key={p.id} label={`${p.name} pipeline`}>
                                 {p.stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                               </optgroup>
@@ -176,7 +214,7 @@ export function SalesPipelineSync() {
           </TableCard>
 
           <LeaveGuard dirty={view.canEdit && dirty} onDiscard={() => { setDraft(saved); setSaveError(null); }} what="the pipeline sync" />
-          <SettingsSaveBar visible={view.canEdit && dirty} note={suggestedOnly ? "Filled in from your stage names — nothing moves until you save." : "Unsaved changes to pipeline sync"}>
+          <SettingsSaveBar visible={view.canEdit && dirty} note={suggestedOnly ? `Filled in from ${pipeline ? `${pipeline.name}'s` : "your"} stage names — nothing moves until you save.` : `Unsaved changes to pipeline sync${pipeline ? ` · ${pipeline.name}` : ""}`}>
             <DiscardSave
               saving={saving}
               problem={noStages ? "Add pipeline stages first." : null}

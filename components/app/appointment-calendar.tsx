@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { inputControl } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -52,7 +53,9 @@ type Context = Omit<PickerContext, "blocks"> & {
 };
 type Day = { year: number; month: number; day: number; weekday: number; noon: number };
 type Cell =
-  | { kind: "appointment"; items: Appointment[] }
+  | { kind: "appointment"; items: Appointment[]; callbacks?: DiaryCallback[] }
+  // A callback owed at this time takes the slot (owner 2026-10-29): it is not offered as free.
+  | { kind: "callback"; items: DiaryCallback[] }
   | { kind: "blocked"; label: string; sub: string }
   | { kind: "free"; startIso: string; agentUserId: string; past: boolean };
 type View = "week" | "day" | "list";
@@ -156,7 +159,9 @@ function Slot({ title, sub, tone, children }: { title: ReactNode; sub?: ReactNod
 }
 
 /** A callback in the diary's day (Calendar B): read from /api/app/callbacks when this person may. */
-type DiaryCallback = { id: string; leadId: string; customerName: string; scheduledAtUtc: string; assignedTo: string; status: string; productName: string | null; isOverdue: boolean; isDemo?: boolean };
+type DiaryCallback = { id: string; leadId: string; customerName: string; scheduledAtUtc: string; customerTimezone?: string; assignedTo: string; status: string; productName: string | null; note?: string | null; phone?: string | null; isOverdue: boolean; isDemo?: boolean };
+/** The callback's own slot card in the week (2026-10-29): the same card as an appointment, an amber bar. */
+const CALLBACK_TONE = "bg-[var(--surface-alt)] border-l-[var(--warning)]";
 const OPEN_CALLBACK = new Set(["scheduled", "due", "missed"]);
 
 type AgendaRow =
@@ -173,7 +178,7 @@ const AGENDA_STEP_LABEL: Record<Step, string> = { confirm: "Confirm", showed: "S
  * One line of Calendar B's day: an appointment with what can be done to it, a stretch of free time
  * to book, blocked time, or a callback owed. Time on the left in the diary's clock.
  */
-function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFuture, onStep, onBook, onRebooked }: {
+function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFuture, onStep, onBook, onRebooked, onOpen }: {
   row: AgendaRow;
   zone: string;
   slotLength: number;
@@ -184,6 +189,8 @@ function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFut
   onStep: (item: Appointment, step: Step) => void;
   onBook: (startIso: string) => void;
   onRebooked: () => void;
+  /** Opens the appointment or callback in the calendar's pop-up (owner 2026-10-29). */
+  onOpen: (row: AgendaRow) => void;
 }) {
   const line = "grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-4 border-t border-border px-5 sm:grid-cols-[88px_minmax(0,1fr)_auto_auto]";
   if (row.kind === "free") {
@@ -212,7 +219,7 @@ function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFut
         <span className="flex min-w-0 items-center gap-3">
           <span className="w-[3px] self-stretch rounded-full bg-[var(--warning)]" aria-hidden="true" />
           <span className="min-w-0">
-            {callback.isDemo ? <span className="block truncate text-sm font-semibold">{callback.customerName}</span> : <Link href={`/app/leads/${callback.leadId}`} className="block truncate text-sm font-semibold text-[var(--ink)] hover:underline">{callback.customerName}</Link>}
+            <button type="button" onClick={() => onOpen(row)} className="block max-w-full truncate text-left text-sm font-semibold text-[var(--ink)] hover:underline">{callback.customerName}</button>
             <span className="block truncate text-xs text-muted-foreground">Callback{callback.productName ? ` · ${callback.productName}` : ""}</span>
           </span>
         </span>
@@ -243,7 +250,7 @@ function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFut
         <span className="min-w-0">
           {item.redacted
             ? <span className="block truncate text-sm font-semibold text-muted-foreground">Booked by another setter</span>
-            : <Link href={`/app/leads/${item.leadId}`} className="block truncate text-sm font-semibold text-[var(--ink)] hover:underline">{item.customerName}</Link>}
+            : <button type="button" onClick={() => onOpen(row)} className="block max-w-full truncate text-left text-sm font-semibold text-[var(--ink)] hover:underline">{item.customerName}</button>}
           <span className="block truncate text-xs text-muted-foreground" title={facts.join(" · ")}>{facts.join(" · ")}</span>
         </span>
       </span>
@@ -262,7 +269,7 @@ function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFut
               : <RebookButton appointmentId={item.appointmentId} agentUserId={item.agentUserId} customerName={item.customerName} onRebooked={onRebooked} />}
           </>
         )}
-        {steps.length === 0 && !noShow && !item.redacted && <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${item.leadId}`}>Open</Link></Button>}
+        {steps.length === 0 && !noShow && !item.redacted && <Button type="button" size="sm" variant="outline" onClick={() => onOpen(row)}>Open</Button>}
       </span>
     </li>
   );
@@ -406,6 +413,13 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     [status, needle],
   );
   const mine = useMemo(() => appointments.filter((item) => item.agentUserId === selected), [appointments, selected]);
+  // The open callbacks on this calendar, when the Callbacks filter is on and the search finds them.
+  const diaryCallbacks = useMemo(
+    () => (showCallbacks && callbacks ? callbacks.filter((row) => row.assignedTo === selected && OPEN_CALLBACK.has(row.status) && (!needle || row.customerName.toLowerCase().includes(needle))) : []),
+    [showCallbacks, callbacks, selected, needle],
+  );
+  // The pop-up an appointment or a callback opens in (owner 2026-10-29: edit in place, not the lead page).
+  const [opened, setOpened] = useState<{ kind: "appointment"; item: Appointment } | { kind: "callback"; callback: DiaryCallback } | null>(null);
 
   /** One agent's cells for one local date, keyed by the local minute each cell starts at. */
   const cellsFor = useCallback((day: Day): Map<number, Cell> => {
@@ -461,8 +475,17 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
       const existing = cells.get(slot);
       cells.set(slot, existing?.kind === "appointment" ? { kind: "appointment", items: [...existing.items, item] } : { kind: "appointment", items: [item] });
     }
+    // Callbacks owed on this calendar snap the same way and take the slot (owner 2026-10-29); one
+    // sharing a slot with an appointment rides on that appointment's card.
+    for (const callback of diaryCallbacks.filter((row) => sameDay(wallClock(row.scheduledAtUtc, zone), day))) {
+      const minute = wallClock(callback.scheduledAtUtc, zone).minutes;
+      const slot = [...cells.keys()].find((key) => key <= minute && minute < key + length) ?? minute;
+      const existing = cells.get(slot);
+      if (existing?.kind === "appointment") cells.set(slot, { ...existing, callbacks: [...(existing.callbacks ?? []), callback] });
+      else cells.set(slot, existing?.kind === "callback" ? { kind: "callback", items: [...existing.items, callback] } : { kind: "callback", items: [callback] });
+    }
     return cells;
-  }, [context, now, selected, zone, mine]);
+  }, [context, now, selected, zone, mine, diaryCallbacks]);
 
   const grid = useMemo(() => {
     const perDay = days.map((day) => cellsFor(day));
@@ -535,25 +558,26 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   const slotLength = policy?.appointmentMinutes ?? 30;
   const agenda: AgendaRow[] = [];
   if (view === "day" && shownDay) {
+    let takenByCallback = false;
     for (const [minute, cell] of [...cellsFor(shownDay).entries()].sort((a, b) => a[0] - b[0])) {
       if (cell.kind === "appointment") {
         for (const item of cell.items.filter(matches)) agenda.push({ kind: "appointment", minute: wallClock(item.startsAtUtc, zone).minutes, item });
       } else if (cell.kind === "blocked") {
         if (showBlocked) agenda.push({ kind: "blocked", minute, label: cell.label, sub: cell.sub });
+      } else if (cell.kind === "callback") {
+        // Listed from the callbacks below; the slot is not free, so it ends the stretch before it.
+        takenByCallback = true;
       } else if (!cell.past) {
         // Back-to-back free slots read as one stretch of free time; "+ Book" offers its first slot.
         const last = agenda[agenda.length - 1];
-        if (last && last.kind === "free" && last.end + (policy?.bufferMinutes ?? 0) >= minute) last.end = minute + slotLength;
+        if (!takenByCallback && last && last.kind === "free" && last.end + (policy?.bufferMinutes ?? 0) >= minute) last.end = minute + slotLength;
         else agenda.push({ kind: "free", minute, end: minute + slotLength, startIso: cell.startIso });
+        takenByCallback = false;
       }
     }
-    if (showCallbacks && callbacks) {
-      for (const callback of callbacks) {
-        if (callback.assignedTo !== selected || !OPEN_CALLBACK.has(callback.status)) continue;
-        const clock = wallClock(callback.scheduledAtUtc, zone);
-        if (!sameDay(clock, shownDay) || (needle && !callback.customerName.toLowerCase().includes(needle))) continue;
-        agenda.push({ kind: "callback", minute: clock.minutes, callback });
-      }
+    for (const callback of diaryCallbacks) {
+      const clock = wallClock(callback.scheduledAtUtc, zone);
+      if (sameDay(clock, shownDay)) agenda.push({ kind: "callback", minute: clock.minutes, callback });
     }
     agenda.sort((a, b) => a.minute - b.minute);
   }
@@ -571,20 +595,21 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Calendar"
-        actions={<Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>}
-      />
-      {/* The page's views, on the header's row (2026-10-28): out of the grid's toolbar, which keeps
-          only the dates, the search and Refresh. */}
-      <ViewTabs
-        label="View"
-        value={view}
-        controls="calendar-panel"
-        onChange={(nextView) => { setView(nextView); setListPage(1); }}
-        tabs={[
-          { key: "week", label: "Week" },
-          { key: "day", label: "Day" },
-          { key: "list", label: "List", count: listRows.length },
-        ]}
+        // Owner 2026-10-29: Week / Day / List on the right, just left of "Book an appointment".
+        actions={<>
+          <ViewTabs
+            label="View"
+            value={view}
+            controls="calendar-panel"
+            onChange={(nextView) => { setView(nextView); setListPage(1); }}
+            tabs={[
+              { key: "week", label: "Week" },
+              { key: "day", label: "Day" },
+              { key: "list", label: "List", count: listRows.length },
+            ]}
+          />
+          <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>
+        </>}
       />
 
       {error && (
@@ -693,7 +718,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
             <>
               {agenda.length === 0
                 ? <p className="m-0 px-5 py-6 text-sm text-muted-foreground">Nothing on this day.</p>
-                : <ol className="m-0 list-none p-0">{agenda.map((row) => <AgendaLine key={`${row.kind}:${row.minute}:${row.kind === "appointment" ? row.item.appointmentId : row.kind === "callback" ? row.callback.id : ""}`} row={row} zone={zone} slotLength={slotLength} highlightId={highlightId} steps={row.kind === "appointment" ? stepsFor(row.item) : []} stepping={stepping} isFuture={(iso) => now != null && Date.parse(iso) > now} onStep={(item, chosen) => void takeStep(item, chosen)} onBook={(startIso) => setBooking({ agentUserId: selected, startIso })} onRebooked={() => { void load(); }} />)}</ol>}
+                : <ol className="m-0 list-none p-0">{agenda.map((row) => <AgendaLine key={`${row.kind}:${row.minute}:${row.kind === "appointment" ? row.item.appointmentId : row.kind === "callback" ? row.callback.id : ""}`} row={row} zone={zone} slotLength={slotLength} highlightId={highlightId} steps={row.kind === "appointment" ? stepsFor(row.item) : []} stepping={stepping} isFuture={(iso) => now != null && Date.parse(iso) > now} onStep={(item, chosen) => void takeStep(item, chosen)} onBook={(startIso) => setBooking({ agentUserId: selected, startIso })} onRebooked={() => { void load(); }} onOpen={(opening) => { if (opening.kind === "appointment") setOpened({ kind: "appointment", item: opening.item }); else if (opening.kind === "callback") setOpened({ kind: "callback", callback: opening.callback }); }} />)}</ol>}
             </>
           )
         )}
@@ -745,6 +770,17 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                           </button>
                         );
                       }
+                      if (cell.kind === "callback") {
+                        const [first, ...more] = cell.items;
+                        const theirs = first.customerTimezone ? theirTime(first.scheduledAtUtc, first.customerTimezone, zone) : null;
+                        return (
+                          <button key={index} type="button" onClick={() => setOpened({ kind: "callback", callback: first })} className="block rounded-lg text-left transition-shadow hover:shadow-[0_0_0_1px_var(--border-strong)]" aria-label={`Callback with ${first.customerName}, ${WEEKDAY_LONG[days[index].weekday]} ${time}`}>
+                            <Slot title={shortName(first.customerName)} sub={["Callback", theirs].filter(Boolean).join(" · ")} tone={CALLBACK_TONE}>
+                              {more.length > 0 && <span className="text-xs font-semibold text-[var(--accent-ink)]">+{more.length} more</span>}
+                            </Slot>
+                          </button>
+                        );
+                      }
                       const visible = cell.items.filter(matches);
                       if (visible.length === 0) return <Slot key={index} title={<span className="text-muted-foreground">Booked</span>} tone="bg-card border border-border border-l-[3px] border-l-[var(--border-strong)]" />;
                       const item = visible[0];
@@ -759,11 +795,17 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                       const secondSeat = Boolean(context?.policy.find((row) => row.userId === selected)?.allowDoubleBooking) && seated === 1 && now != null && slotStart > now;
                       return (
                         <div key={index} className="flex flex-col gap-1">
-                          <Link href={`/app/leads/${item.leadId}`} className={`block rounded-lg ${item.appointmentId === highlightId ? "ring-2 ring-[var(--ring)]" : ""}`}>
+                          {/* Opens the appointment in place (owner 2026-10-29); the lead is one button inside it. */}
+                          <button type="button" onClick={() => setOpened({ kind: "appointment", item })} className={`block rounded-lg text-left transition-shadow hover:shadow-[0_0_0_1px_var(--border-strong)] ${item.appointmentId === highlightId ? "ring-2 ring-[var(--ring)]" : ""}`}>
                             <Slot title={shortName(item.customerName)} sub={[purpose, theirs].filter(Boolean).join(" · ") || STATUS_LABEL[item.status]} tone={TONE[item.status] ?? TONE.booked}>
                               {visible.length > 1 && <span className="text-xs font-semibold text-[var(--accent-ink)]">+{visible.length - 1} more</span>}
                             </Slot>
-                          </Link>
+                          </button>
+                          {(cell.callbacks ?? []).map((callback) => (
+                            <button key={callback.id} type="button" onClick={() => setOpened({ kind: "callback", callback })} className="block rounded-lg text-left">
+                              <Slot title={shortName(callback.customerName)} sub="Callback" tone={CALLBACK_TONE} />
+                            </button>
+                          ))}
                           {secondSeat && (
                             <button type="button" onClick={() => setBooking({ agentUserId: selected, startIso: new Date(slotStart).toISOString() })} className="self-start text-xs font-semibold text-foreground underline underline-offset-2">
                               Book 2nd seat
@@ -845,7 +887,23 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
           agents={agents}
           nowAt={now ?? 0}
           onClose={() => setBooking(null)}
+          callbacks={callbacks ?? []}
           onBooked={() => { setBooking(null); void loadContext().catch(() => {}); void load(); }}
+        />
+      )}
+      {opened && context && (
+        <CalendarItemDialog
+          key={opened.kind === "appointment" ? opened.item.appointmentId : opened.callback.id}
+          opened={opened}
+          context={context}
+          zone={zone}
+          nowAt={now ?? 0}
+          callbacks={callbacks ?? []}
+          steps={opened.kind === "appointment" ? stepsFor(opened.item) : []}
+          canCancel={holdsCalendar}
+          onStep={(item, chosen) => { setOpened(null); void takeStep(item, chosen); }}
+          onClose={() => setOpened(null)}
+          onChanged={() => { setOpened(null); void loadContext().catch(() => {}); void load(); }}
         />
       )}
     </div>
@@ -859,11 +917,13 @@ type LeadHit = { id: string; title: string; meta: string };
  * of the slots the calendar offers — the server's `book_appointment` is still the authority, and
  * its refusal is shown word for word.
  */
-function BookingDialog({ context, initial, agents, nowAt, onClose, onBooked }: {
+function BookingDialog({ context, initial, agents, nowAt, callbacks, onClose, onBooked }: {
   context: Context;
   initial: { agentUserId: string; startIso: string | null };
   agents: [string, string][];
   nowAt: number;
+  /** Open callbacks: a slot one of them takes is not offered (owner 2026-10-29). */
+  callbacks: DiaryCallback[];
   onClose: () => void;
   onBooked: () => void;
 }) {
@@ -878,9 +938,9 @@ function BookingDialog({ context, initial, agents, nowAt, onClose, onBooked }: {
 
   const zone = context.availability.find((row) => row.userId === agent)?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const slots = useMemo(() => {
-    const offered = openSlots(context, agent, nowAt, { days: 21, limit: 60 });
+    const offered = slotsFree(context, agent, nowAt, callbacks);
     return initial.startIso && agent === initial.agentUserId && !offered.includes(initial.startIso) ? [initial.startIso, ...offered] : offered;
-  }, [context, agent, nowAt, initial]);
+  }, [context, agent, nowAt, initial, callbacks]);
 
   useEffect(() => {
     const term = query.trim();
@@ -978,6 +1038,140 @@ function BookingDialog({ context, initial, agents, nowAt, onClose, onBooked }: {
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="button" disabled={!lead || !slot || busy} onClick={book}>{busy ? "Booking…" : "Book appointment"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type Opened = { kind: "appointment"; item: Appointment } | { kind: "callback"; callback: DiaryCallback };
+
+/** Open slots for one calendar, less the ones a callback owed on it already takes (owner 2026-10-29). */
+function slotsFree(context: Context, agentUserId: string, nowAt: number, callbacks: DiaryCallback[]) {
+  const length = (context.policy.find((row) => row.userId === agentUserId)?.appointmentMinutes ?? 30) * 60_000;
+  const owed = callbacks.filter((row) => row.assignedTo === agentUserId && OPEN_CALLBACK.has(row.status)).map((row) => Date.parse(row.scheduledAtUtc));
+  return openSlots(context, agentUserId, nowAt, { days: 21, limit: 60 }).filter((iso) => {
+    const start = Date.parse(iso);
+    return !owed.some((at) => at >= start && at < start + length);
+  });
+}
+
+/**
+ * An appointment or a callback, opened from the calendar (owner 2026-10-29): it opens here, the way
+ * the booking pop-up does, to be changed in place, and the lead is one button at the end of the
+ * Customer field rather than where a click lands. An appointment moves to another open slot (the
+ * server's reschedule is the authority), is confirmed or closed out, or cancelled; a callback is
+ * called, or moved on the Callbacks page, which owns its calling-window rules.
+ */
+function CalendarItemDialog({ opened, context, zone, nowAt, callbacks, steps, canCancel, onStep, onClose, onChanged }: {
+  opened: Opened;
+  context: Context;
+  zone: string;
+  nowAt: number;
+  callbacks: DiaryCallback[];
+  steps: Step[];
+  canCancel: boolean;
+  onStep: (item: Appointment, step: Step) => void;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const item = opened.kind === "appointment" ? opened.item : null;
+  const callback = opened.kind === "callback" ? opened.callback : null;
+  const [slot, setSlot] = useState(item?.startsAtUtc ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const slots = useMemo(() => {
+    if (!item) return [];
+    const offered = slotsFree(context, item.agentUserId, nowAt, callbacks);
+    return offered.includes(item.startsAtUtc) ? offered : [item.startsAtUtc, ...offered];
+  }, [item, context, nowAt, callbacks]);
+
+  const label = (iso: string) => {
+    const clock = wallClock(iso, zone);
+    return `${WEEKDAY[clock.weekday]} ${clock.day} ${MONTH_LONG[clock.month - 1].slice(0, 3)} · ${clockLabel(clock.minutes)}`;
+  };
+  const leadId = item?.leadId ?? callback?.leadId ?? "";
+  const name = item?.customerName ?? callback?.customerName ?? "";
+  const when = item ? item.startsAtUtc : callback?.scheduledAtUtc ?? "";
+  const theirs = item ? theirTime(item.startsAtUtc, item.customerTimezone, zone) : callback?.customerTimezone ? theirTime(callback.scheduledAtUtc, callback.customerTimezone, zone) : null;
+  const live = item ? ["booked", "confirmed", "pending"].includes(item.status) : false;
+  const movable = Boolean(item && live && Date.parse(item.startsAtUtc) > nowAt);
+  const changed = Boolean(item && slot && slot !== item.startsAtUtc);
+  const facts = item ? [item.product, faceLabel(item.faceAmountCents ?? null)].filter(Boolean).join(" ") : [callback?.productName, callback?.phone].filter(Boolean).join(" · ");
+
+  async function send(url: string, method: string, payload: unknown, failure: string) {
+    setBusy(true); setError("");
+    const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => null);
+    const body = await response?.json().catch(() => null);
+    setBusy(false);
+    if (!response || !response.ok) { setError(body?.error ?? failure); return false; }
+    return true;
+  }
+  async function move() {
+    if (!item || !changed) return;
+    if (await send("/api/app/appointments", "PATCH", { appointment_id: item.appointmentId, starts_at_utc: slot }, "That time could not be booked. Your choice is still here.")) onChanged();
+  }
+  async function cancel() {
+    if (!item) return;
+    if (!(await confirmAction({ title: `Cancel ${item.customerName}'s appointment?`, description: "The slot opens again. The lead stays as it is.", confirmLabel: "Cancel appointment", cancelLabel: "Keep it", destructive: true }))) return;
+    if (await send("/api/app/appointments/close-out", "POST", { appointment_id: item.appointmentId, outcome: "cancelled" }, "The appointment could not be cancelled.")) onChanged();
+  }
+
+  const labelClass = "block text-xs font-semibold text-[var(--body)]";
+  const fact = (title: string, value: ReactNode) => (
+    <div className="min-w-0"><span className={labelClass}>{title}</span><span className="mt-1 block text-sm text-[var(--ink)]">{value}</span></div>
+  );
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>{item ? "Appointment" : "Callback"}</DialogTitle>
+          <DialogDescription>Times are in {zone}.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div>
+            <span className={labelClass}>Customer</span>
+            {/* The lead, as a button at the end of the field. */}
+            <div className="mt-1.5 flex items-center justify-between gap-3 rounded-lg border border-border bg-[var(--surface-alt)] px-3 py-2">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-[var(--ink)]">{name}</span>
+                <span className="block truncate text-xs text-[var(--body)]">{facts || (item ? "Appointment" : "Callback")}</span>
+              </span>
+              {leadId && !callback?.isDemo && <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${leadId}`}>Open lead<ArrowUpRight aria-hidden="true" /></Link></Button>}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {fact("When", when ? label(when) : "—")}
+            {fact("Their time", theirs?.replace("their time ", "") ?? "Same as yours")}
+            {item && fact("With", item.agentName)}
+            {item && fact("Status", <StatusChip tone={STATUS_TONE[item.status] ?? "neutral"}>{STATUS_LABEL[item.status] ?? item.status}</StatusChip>)}
+            {callback && fact("Status", <StatusChip tone={callback.isOverdue ? "danger" : "warning"}>{callback.isOverdue ? "Late callback" : "Callback"}</StatusChip>)}
+          </div>
+          {(item?.notes || callback?.note) && fact(item ? "Purpose" : "Note", item?.notes ?? callback?.note)}
+          {item && movable && (
+            <label className={labelClass}>
+              Move to
+              <select value={slot} disabled={busy} onChange={(event) => setSlot(event.target.value)} className={`${inputControl} mt-1.5`}>
+                {slots.map((iso) => <option key={iso} value={iso}>{label(iso)}{iso === item.startsAtUtc ? " (current)" : ""}</option>)}
+              </select>
+            </label>
+          )}
+          {item && (steps.length > 0 || (canCancel && live)) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {steps.map((step) => (
+                <Button key={step} type="button" size="sm" variant="outline" disabled={busy} onClick={() => onStep(item, step)}>{AGENDA_STEP_LABEL[step]}</Button>
+              ))}
+              {canCancel && live && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void cancel()}>Cancel appointment</Button>}
+            </div>
+          )}
+          {error && <p role="alert" className="m-0 rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Close</Button>
+          {item && movable && <Button type="button" disabled={!changed || busy} onClick={() => void move()}>{busy ? "Saving…" : "Save new time"}</Button>}
+          {callback && !callback.isDemo && <Button asChild variant="outline"><Link href="/app/callbacks">Move in Callbacks</Link></Button>}
+          {callback && !callback.isDemo && <Button asChild><Link href={`/app/dialer?lead=${callback.leadId}`}>Call now</Link></Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

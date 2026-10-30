@@ -237,7 +237,10 @@ function QuoteStepFor() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* The quotes first, each with "Use this quote" (owner pick C, 2026-10-28); typing a new one is under them. */}
+      {/* Typing a quote first; the quotes and the commission under it, next to the way on (owner,
+          2026-10-29): using a quote and continuing to the application sit together at the foot. */}
+      {formCard}
+
       {expired.length > 0 && (
         <Callout tone="warning" title={expired.length === 1 ? "A quote has expired" : `${expired.length} quotes have expired`}>
           <ul className="flex flex-col gap-1.5">
@@ -253,7 +256,7 @@ function QuoteStepFor() {
 
       {attempt.quotes.length === 0 ? (
         <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-          <EmptyState title="No quotes yet" hint="Type each carrier's premium below, then use the one that goes on the application." />
+          <EmptyState title="No quotes yet" hint="Type each carrier's premium above, then use the one that goes on the application." />
         </div>
       ) : (
         <QuoteComparison
@@ -267,8 +270,6 @@ function QuoteStepFor() {
       )}
 
       <PayoutStrip quotes={attempt.quotes} />
-
-      {formCard}
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-5 py-4">
         <span className="min-w-0 text-xs text-[var(--muted)]">

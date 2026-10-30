@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db, isMissingSchema, rows } from "./db";
+import { db, isMissingSchema, rows, type DbError } from "./db";
 import { currentSyncKey, HUMAN_STAGE_SOURCES, shouldMove, SYNC_KEY_LABEL, SYNC_KEYS, targetSyncKey, type SyncAttempt, type SyncKey } from "./stageSync";
 import type { ApplicationOutcome, ApplicationStatus, InsuredRole } from "./constants";
 
@@ -38,12 +38,21 @@ type CaseRow = { id: string; lead_id: string; status: string; opened_at: string 
 
 const iso = (value: string | null | undefined) => (value ? new Date(value).toISOString() : null);
 
+/** The agency's stage map, with each row's pipeline once 20261029100000 is applied; `perPipeline` says which. */
+async function stageMapRows(tenantId: string): Promise<{ data: unknown; error: DbError; perPipeline: boolean }> {
+  const full = await db().from("tenant_application_stage_map").select("sync_key, stage_id, pipeline_id").eq("tenant_id", tenantId);
+  if (!full.error) return { data: full.data, error: null, perPipeline: true };
+  if (!isMissingSchema(full.error) && !/pipeline_id/.test(full.error.message ?? "")) return { data: null, error: full.error, perPipeline: false };
+  const legacy = await db().from("tenant_application_stage_map").select("sync_key, stage_id").eq("tenant_id", tenantId);
+  return { data: legacy.data, error: legacy.error, perPipeline: false };
+}
+
 async function evaluate(tenantId: string, kase: CaseRow): Promise<(LeadStageState & { boardPipelineId: string | null; targetPipelineId: string | null; unmapped?: boolean; schemaPending?: boolean; targetUsable?: boolean }) > {
   const client = db();
   const [attemptsQ, quotesQ, mapQ, leadQ, eventsQ] = await Promise.all([
     client.from("tenant_applications").select("id, insured_role, attempt_no, status, outcome, quote_id, created_at").eq("tenant_id", tenantId).eq("case_id", kase.id),
     client.from("tenant_quotes").select("id, insured_role, application_id, created_at").eq("tenant_id", tenantId).eq("case_id", kase.id),
-    client.from("tenant_application_stage_map").select("sync_key, stage_id").eq("tenant_id", tenantId),
+    stageMapRows(tenantId),
     client.from("agent_leads").select("id, pipeline_id, stage_id").eq("tenant_id", tenantId).eq("id", kase.lead_id).maybeSingle(),
     client.from("tenant_lead_stage_events").select("source, created_at").eq("tenant_id", tenantId).eq("lead_id", kase.lead_id).order("created_at", { ascending: false }).limit(100),
   ]);
@@ -64,8 +73,14 @@ async function evaluate(tenantId: string, kase: CaseRow): Promise<(LeadStageStat
   const caseStatus = kase.status === "won" ? "won" : kase.status === "lost" ? "lost" : "open";
   const target = targetSyncKey({ caseStatus, attempts: syncAttempts });
 
+  // Per pipeline (20261029100000): the card moves within the pipeline the lead is on, by that pipeline's
+  // own map. Before that migration rows carry no pipeline and the one map applies, as before.
   const map: Partial<Record<SyncKey, string>> = {};
-  for (const row of rows<{ sync_key: SyncKey; stage_id: string }>(mapQ.data)) if ((SYNC_KEYS as readonly string[]).includes(row.sync_key)) map[row.sync_key] = row.stage_id;
+  for (const row of rows<{ sync_key: SyncKey; stage_id: string; pipeline_id?: string | null }>(mapQ.data)) {
+    if (!(SYNC_KEYS as readonly string[]).includes(row.sync_key)) continue;
+    if (mapQ.perPipeline && row.pipeline_id !== base.boardPipelineId) continue;
+    map[row.sync_key] = row.stage_id;
+  }
   const targetStageId = target ? map[target] ?? null : null;
 
   const stageIds = [...new Set([targetStageId, base.boardStageId].filter((x): x is string => Boolean(x)))];

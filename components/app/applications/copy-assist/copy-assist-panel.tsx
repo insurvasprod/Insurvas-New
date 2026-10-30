@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ClipboardX, ExternalLink, Eye, EyeOff, X } from "lucide-react";
+import { ArrowRight, Check, ClipboardX, ExternalLink, Eye, EyeOff, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
@@ -132,6 +132,8 @@ type Props = {
   /** True inside the pop-out window: a Close button instead of Pop out, and the white header. */
   popout?: boolean;
   className?: string;
+  /** The way on, at the foot beside Clear clipboard (the Submit step folds the panel and goes to Record). */
+  onNext?: () => void;
 };
 
 export function CopyAssistPanel(props: Props) {
@@ -139,7 +141,7 @@ export function CopyAssistPanel(props: Props) {
   return <CopyAssistBody key={props.attempt.id} {...props} />;
 }
 
-function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }: Props) {
+function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className, onNext }: Props) {
   const groups = useMemo(() => {
     const all = buildCopyGroups(attempt);
     return TAB_ORDER.map((k) => all.find((g) => g.key === k)).filter((g): g is CopyGroup => Boolean(g && g.items.some((i) => i.display)));
@@ -320,6 +322,8 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <Button type="button" variant="ghost" size="sm" onClick={() => void clearClipboard()}><ClipboardX aria-hidden="true" />Clear clipboard</Button>
           <p className="text-xs text-[var(--muted)]">{CLIPBOARD_HONESTY_LINE}</p>
+          {/* Copied or not, the agent moves on from here (owner 2026-10-29). */}
+          {onNext && <Button type="button" size="sm" className="ml-auto" onClick={onNext}>Next<ArrowRight aria-hidden="true" /></Button>}
         </div>
       </div>
     </section>
