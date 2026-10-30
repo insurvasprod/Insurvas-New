@@ -229,11 +229,17 @@ export function TopBarShell({
   accountHostId,
   accountExtra,
   leading,
+  spacer = false,
   actions,
   inbox = false,
 }: {
   /** Drawn before the search: the agent shell's breadcrumb (Navigation A). */
   leading?: ReactNode;
+  /**
+   * An empty slot before the search, so the search sits where the agent shell's does (the partner
+   * portal, 2026-10-30). It names nothing: the page names itself (PageHeader), never the bar.
+   */
+  spacer?: boolean;
   /** Drawn first on the right: the agent shell's Inbound pill and New menu. */
   actions?: ReactNode;
   /**
@@ -560,7 +566,7 @@ export function TopBarShell({
 
   return (
     <div ref={rootRef} className="portal-top-bar" data-open={menu ?? undefined} data-inbox={inbox || undefined}>
-      {leading}
+      {leading ?? (spacer ? <span className="portal-top-crumb" aria-hidden="true" /> : null)}
       {/* ---------------------------------------------------------- search */}
       <form role="search" className="portal-top-search" onSubmit={(event) => event.preventDefault()}>
         <Search className="portal-top-search-icon size-[15px]" aria-hidden="true" />
