@@ -1,24 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { AlignLeft, Download, GitBranch, PanelLeftClose, PanelLeftOpen, RotateCw, SquareCheck, Trash, type LucideIcon } from "lucide-react";
 
-import { leadsInStepStatus, type LeadsInStep } from "@/lib/leadSources/steps";
+import { RAIL_COOKIE, leadsInStepStatus, type LeadsInStep } from "@/lib/leadSources/steps";
 import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
 import { cn } from "@/lib/utils";
 
 type RailStep = { key: LeadsInStep; label: string; sub: string; href: string };
 
-const LAST_STEP = "insurvas.leadsIn.lastStep";
+const ICONS: Partial<Record<LeadsInStep, LucideIcon>> = { source: AlignLeft, import: Download, review: SquareCheck, clean: Trash, route: GitBranch, recycle: RotateCw };
 
 /**
- * The one Leads page's rail (owner pick B, 2026-10-28). It stands the column's full height, every step
- * sharing the space, like the application's rail. Moving between steps animates the way the application
- * does: the pill slides from the step you left to the one you opened, and the line fills green up to it
- * (each step is its own address, so the step you left is remembered for the moment of the move).
+ * The Lead sources menu (owner pick "Navigation A", canvas m2-leads-in-r3 board LirN1, 2026-10-29): a
+ * menu, not a path. No step numbers and no line joining the pages, because each page stands alone and
+ * opens any time (owner: "I don't want the user to think that he still needs to go from step one to step
+ * two"). The usual order lives in one quiet card at the foot. An amber badge shows only where something
+ * waits for a person.
  *
- * Under each step, its live count once /api/app/lead-sources/steps answers (its plain line until then,
- * or if a read fails); counts that want a person are amber.
+ * Under each page, its live count once /api/app/lead-sources/steps answers (its plain line until then,
+ * or if a read fails).
  *
  * Review is this browser's: a staged file can only be reviewed where it was dropped (the file itself
  * waits in this tab's sessionStorage, see import-review-bridge.tsx). So Review counts and opens the
@@ -56,7 +58,18 @@ async function stillStaged(ids: string[], signal: AbortSignal): Promise<string[]
   return kept.filter((id): id is string => id !== null);
 }
 
-export function LeadsInRail({ steps, step }: { steps: RailStep[]; step: LeadsInStep }) {
+/** A badge's figure: 12,805 reads 12.8k so the badge stays one short pill. */
+function badgeFigure(n: number) {
+  return n >= 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : n.toLocaleString("en-US");
+}
+
+export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: RailStep[]; step: LeadsInStep; initialCollapsed?: boolean }) {
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try { document.cookie = `${RAIL_COOKIE}=${next ? "collapsed" : "open"}; path=/; max-age=31536000; SameSite=Lax`; } catch { /* still toggles for this visit */ }
+  };
   const [counts, setCounts] = useState<Partial<Record<LeadsInStep, number>>>({});
   const [reviewHref, setReviewHref] = useState<string | null>(null);
   useEffect(() => {
@@ -74,82 +87,66 @@ export function LeadsInRail({ steps, step }: { steps: RailStep[]; step: LeadsInS
     return () => controller.abort();
   }, [step]);
 
-  const here = steps.findIndex((item) => item.key === step);
-  const listRef = useRef<HTMLOListElement>(null);
-  const links = useRef<Array<HTMLAnchorElement | null>>([]);
-  const [pill, setPill] = useState<{ top: number; left: number; width: number; height: number; slide: boolean } | null>(null);
-  const [filled, setFilled] = useState(here);
-
-  // Start where the last step left off, then slide to this one on the next frame.
-  useLayoutEffect(() => {
-    let from = here;
-    try {
-      const last = sessionStorage.getItem(LAST_STEP);
-      const index = steps.findIndex((item) => item.key === last);
-      if (index >= 0) from = index;
-      sessionStorage.setItem(LAST_STEP, step);
-    } catch { /* private window: no slide, nothing else lost */ }
-    const place = (index: number, slide: boolean) => {
-      const link = links.current[index];
-      if (link) setPill({ top: link.offsetTop, left: link.offsetLeft, width: link.offsetWidth, height: link.offsetHeight, slide });
-    };
-    let second = 0;
-    const first = requestAnimationFrame(() => {
-      place(from, false);
-      setFilled(from);
-      second = requestAnimationFrame(() => { place(here, true); setFilled(here); });
-    });
-    const list = listRef.current;
-    const observer = list && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => place(here, false)) : null;
-    if (list) observer?.observe(list);
-    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); observer?.disconnect(); };
-  }, [here, step, steps]);
-
-  const seg = (green: boolean) => (
-    <span aria-hidden="true" className={cn("hidden w-[3px] flex-1 rounded-full transition-colors duration-700 lg:block", green ? "bg-[var(--primary)] shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_45%,transparent)]" : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]")} />
-  );
-
   return (
-    <nav aria-label="Lead source steps" className="m-glass rounded-xl border border-[var(--border)] p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
-      <ol ref={listRef} className="relative m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-1 lg:flex-col lg:gap-0 lg:overflow-visible">
-        {pill && (
-          <span
-            aria-hidden="true"
-            className={cn("pointer-events-none absolute rounded-full bg-[var(--primary-soft)] ring-1 ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]", pill.slide && "transition-[top,left,width,height] duration-500 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none")}
-            style={{ top: pill.top, left: pill.left, width: pill.width, height: pill.height }}
-          />
-        )}
-        {steps.map((item, i) => {
+    <nav aria-label="Lead flow" data-collapsed={collapsed ? "" : undefined} className={cn(
+      "m-glass rounded-xl border border-[var(--border)] p-3 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:transition-[width] lg:duration-300 lg:ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none",
+      collapsed ? "lg:w-[72px] lg:px-2" : "lg:w-[248px]",
+    )}>
+      <ul className="m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-col lg:overflow-visible">
+        {steps.map((item) => {
           const on = item.key === step;
           const n = counts[item.key];
           const status = n === undefined ? null : leadsInStepStatus(item.key, n);
           const href = item.key === "review" && !on ? reviewHref ?? item.href : item.href;
-          const lit = i <= filled;
+          const Icon = ICONS[item.key] ?? AlignLeft;
           return (
-            <li key={item.key} className="flex shrink-0 flex-col lg:min-h-[64px] lg:flex-1 lg:shrink">
-              <span className="hidden h-2 flex-col pl-[25px] lg:flex">{i > 0 ? seg(i <= filled) : <span className="flex-1" />}</span>
+            <li key={item.key} className="shrink-0">
               <Link
-                ref={(element) => { links.current[i] = element; }}
                 href={href}
-                aria-current={on ? "step" : undefined}
-                className="group relative z-10 flex items-center gap-3 rounded-full px-2.5 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+                aria-current={on ? "page" : undefined}
+                title={collapsed ? `${item.label} · ${status?.text ?? item.sub}` : undefined}
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-xl outline-none",
+                  collapsed ? "justify-center px-1 py-2" : "px-3 py-2.5",
+                  " transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
+                  on ? "bg-[var(--primary-soft)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--primary)_50%,transparent)]" : "hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]",
+                )}
               >
                 <span aria-hidden="true" className={cn(
-                  "inline-grid size-[30px] shrink-0 place-items-center rounded-full border-2 text-xs font-bold transition-all duration-500",
-                  on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)] shadow-[0_0_14px_color-mix(in_srgb,var(--primary)_55%,transparent)]"
-                    : lit ? "border-[var(--primary)] bg-[var(--surface)] text-[var(--ink)]"
-                    : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] group-hover:border-[var(--primary)]",
-                )}>{i + 1}</span>
-                <span className="min-w-0 pr-2">
-                  <span className={cn("block text-sm text-[var(--ink)]", on ? "font-semibold" : "font-medium")}>{item.label}</span>
-                  <span className={cn("block truncate text-xs transition-colors", status?.needsYou ? "font-medium text-[var(--warning-ink)]" : "text-[var(--body)]")}>{status?.text ?? item.sub}</span>
+                  "inline-grid size-[34px] shrink-0 place-items-center rounded-[10px] transition-colors duration-200",
+                  on ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] text-[var(--ink)]",
+                )}><Icon className="size-[18px]" strokeWidth={1.8} /></span>
+                <span className={cn("min-w-0 flex-1", collapsed && "lg:sr-only")}>
+                  <span className="block text-sm font-semibold text-[var(--ink)]">{item.label}</span>
+                  <span className="block truncate text-xs text-[var(--ink)]">{status?.text ?? item.sub}</span>
                 </span>
+                {status?.needsYou && n ? (collapsed
+                  // Collapsed, the count rides on the icon's corner as a dot with its number in the tooltip.
+                  ? <span aria-hidden="true" className="absolute top-1.5 right-2 hidden size-2.5 rounded-full bg-[var(--warning)] ring-2 ring-[var(--canvas)] lg:block" />
+                  : <span className="inline-grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] px-[7px] text-xs font-bold text-[var(--warning-ink)] tabular-nums">{badgeFigure(n)}</span>
+                ) : null}
               </Link>
-              <span className="hidden flex-1 flex-col pl-[25px] lg:flex">{i < steps.length - 1 ? seg(i < filled) : <span className="flex-1" />}</span>
             </li>
           );
         })}
-      </ol>
+      </ul>
+      {/* The order, said once and quietly: a guide, never a gate. */}
+      <div className={cn("mt-auto hidden flex-col gap-1.5 rounded-xl bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] p-3", !collapsed && "lg:flex")}>
+        <span className="text-xs font-semibold text-[var(--ink)]">How a list usually moves</span>
+        <span className="text-xs leading-[1.5] text-[var(--ink)]">{steps.map((item) => item.label).join(" › ")}</span>
+        <span className="text-xs text-[var(--body)]">Open any page, any time.</span>
+      </div>
+      {/* Collapse to icons and back (owner 2026-10-30); the pages keep every number as a badge or tooltip. */}
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? "Show the Lead flow menu" : "Collapse the Lead flow menu"}
+        title={collapsed ? "Show labels" : "Collapse"}
+        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto")}
+      >
+        {collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+      </button>
     </nav>
   );
 }

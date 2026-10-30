@@ -29,6 +29,10 @@ const KIND_DOT: Record<string, string> = { sale: "bg-[var(--info)]", carrier: "b
 const signed = (cents: number) => `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const policyHref = (carrierId: string, policyNumber: string) => `/app/policies/carrier/${carrierId}/${encodeURIComponent(policyNumber)}`;
+/** One header for both branches (found / not in your book), with the way back as its trail. */
+const header = (title: string, description?: string) => (
+  <PageHeader title={title} description={description} breadcrumbs={[{ label: "Book" }, { label: "Policies", href: "/app/policies" }, { label: title }]} />
+);
 
 /**
  * Book of Business › Policies › one policy (LA-4.11, Notion sprint): who, which carrier, how much,
@@ -51,7 +55,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
     if (awaiting) return <PolicyAwaitingFile sale={awaiting} />;
     return (
       <div className="m-stagger flex flex-col gap-6">
-        <Link href="/app/policies" className="text-sm text-muted-foreground hover:underline">← Policies</Link>
+        {header(`Policy ${policyNumber}`)}
         <EmptyState title="This policy is not in your book" hint={guard.role === "producer" ? "It may be credited to another agent, or its carrier file hasn't arrived yet." : "Its carrier file may not have arrived yet, or the policy number is different."} />
       </div>
     );
@@ -63,11 +67,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <Link href="/app/policies" className="text-sm text-muted-foreground hover:underline">← Policies</Link>
-      <PageHeader
-        title={client?.name ?? sale?.name ?? `Policy ${policy.policyNumber}`}
-        description={`${policy.carrierName} · Policy ${policy.policyNumber}${policy.product ? ` · ${policy.product}` : ""}`}
-      />
+      {header(client?.name ?? sale?.name ?? `Policy ${policy.policyNumber}`, `${policy.carrierName} · Policy ${policy.policyNumber}${policy.product ? ` · ${policy.product}` : ""}`)}
       {client?.provisional && <p role="status" className="-mt-4 m-0 text-sm"><ProvisionalBadge /> <span className="text-muted-foreground">This client was built from the carrier&apos;s file. <Link href="/app/duplicates" className="font-medium text-[var(--accent-ink)] hover:underline">Check it in the contact directory</Link>.</span></p>}
       {/* The sale this policy is linked to (LA-3): shown whether or not its client is known yet. */}
       {sale && <p role="status" className="-mt-4 m-0 text-sm text-muted-foreground">Linked to {sale.name ? `${sale.name}'s` : "an"} application{saleState ? ` (${saleState})` : ""}. <Link href={`/app/applications/${sale.caseId}`} className="font-medium text-[var(--accent-ink)] hover:underline">Open the application</Link></p>}

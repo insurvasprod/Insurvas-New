@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HoverHint } from "@/components/ui/hover-hint";
 import { SectionLoading } from "@/components/ui/page-states";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { allowedNextActions, type NextActionKind } from "@/lib/dispositions/nextAction";
@@ -406,13 +407,19 @@ export function PipelinesOutcomesSettings() {
     <SettingsStack>
       {/* No section title or purpose line (owner, 2026-10-27): the pipelines are the first line. */}
       <div className="flex flex-wrap items-center gap-2">
-        {draft.pipelines.map((item) => (
-          <button key={item.id} type="button" onClick={() => { setPipelineId(item.id); setPicked(null); }} aria-pressed={item.id === pipeline.id} className={cn(CHIP(item.id === pipeline.id), "h-9 px-4 text-sm")}>
-            {item.name || "Unnamed pipeline"}<span className="opacity-60">{liveStages(item).length} stages</span>
-          </button>
-        ))}
-        <button type="button" onClick={() => setPicked({ kind: "pipeline" })} aria-label="Pipeline settings" title="This pipeline's name, partner type and default" className={cn(CHIP(picked?.kind === "pipeline"), "h-9")}><Settings2 className="size-4" aria-hidden="true" />Pipeline</button>
-        <button type="button" onClick={() => setCreating(true)} disabled={dirty} title={dirty ? "Save or discard your changes first" : "A new pipeline, from one you have or blank"} className={cn(CHIP(false), "h-9")}><Plus className="size-4" aria-hidden="true" />New pipeline</button>
+        <div role="radiogroup" aria-label="Pipeline" className="flex flex-wrap items-center gap-2">
+          {draft.pipelines.map((item) => (
+            <span key={item.id} className="contents" title={`${liveStages(item).length} stages`}>
+              <ToggleChip role="radio" selected={item.id === pipeline.id} count={liveStages(item).length} onClick={() => { setPipelineId(item.id); setPicked(null); }}>
+                {item.name || "Unnamed pipeline"}
+              </ToggleChip>
+            </span>
+          ))}
+        </div>
+        <span className="contents" title="This pipeline's name, partner type and default">
+          <ToggleChip selected={picked?.kind === "pipeline"} onClick={() => setPicked({ kind: "pipeline" })}><Settings2 className="size-4" aria-hidden="true" />Pipeline settings</ToggleChip>
+        </span>
+        <Button type="button" variant="outline" onClick={() => setCreating(true)} disabled={dirty} title={dirty ? "Save or discard your changes first" : "A new pipeline, from one you have or blank"}><Plus className="size-4" aria-hidden="true" />New pipeline</Button>
         <span className="ml-auto flex flex-wrap items-center gap-2">
           <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold", dirty ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--primary-soft)] text-[var(--accent-ink)]")}>
             {dirty ? <span className="size-2 rounded-full bg-[var(--warning)]" aria-hidden="true" /> : <span className="grid size-4 place-items-center rounded-full bg-[var(--primary)] text-[var(--on-primary)]"><Check className="size-3" aria-hidden="true" /></span>}

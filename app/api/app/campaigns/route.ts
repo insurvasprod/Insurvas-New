@@ -73,6 +73,18 @@ function unwrapLimits<T>(result: { ok: true; value: T } | { ok: false; error: un
   return result.value;
 }
 
+/** Committed imports per campaign (Module 2 §5: a list is one import). Null when the read fails. */
+async function listCountsByCampaign(db: Db, tenantId: string): Promise<Record<string, number> | null> {
+  const counts: Record<string, number> = {};
+  for (let from = 0; ; from += 1000) {
+    const page = await (db.from("agent_lead_import_batches").select("campaign_id").eq("tenant_id", tenantId).eq("status", "completed") as unknown as { not(column: string, op: string, value: null): { range(a: number, b: number): PromiseLike<{ data: Array<{ campaign_id: string }> | null; error: { message: string } | null }> } })
+      .not("campaign_id", "is", null).range(from, from + 999);
+    if (page.error) return null;
+    for (const row of page.data ?? []) counts[row.campaign_id] = (counts[row.campaign_id] ?? 0) + 1;
+    if (!page.data || page.data.length < 1000) return counts;
+  }
+}
+
 export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", roles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
@@ -86,7 +98,7 @@ export async function GET() {
   // The concept audit's per-campaign facts (worked, workable, cadence, scrub run, cost per issued,
   // test batch) ride alongside, each tolerant of its own migration not being applied yet.
   // The limit snapshot needs nothing the list returns, so it rides in the same round trip.
-  const [full, extras, funnel, limits] = await Promise.all([
+  const [full, extras, funnel, limits, listCounts] = await Promise.all([
     db.from("tenant_campaign_costs").select(COST_COLUMNS).eq("tenant_id", auth.context.tenantId).order("name"),
     campaignExtras(auth.context.tenantId, auth.entitlement),
     // A failure here costs the contacts column, not the campaign list: it is said, not swallowed.
@@ -95,8 +107,10 @@ export async function GET() {
       pending: { missing: ["contacted_leads"], detail: error instanceof Error ? error.message : "Contacts per campaign could not be loaded." } as SchemaGapNotice,
     })),
     outboundLimitSnapshot(auth.context.tenantId).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error })),
+    // Lists per campaign, for Source's cards ("3 lists"): its committed imports. Null on a failed read.
+    listCountsByCampaign(db, auth.context.tenantId),
   ]);
-  const shared = { ...extras, funnel: funnel.rows, canScrub: auth.context.role === "owner", ...(funnel.pending ? { funnelPending: funnel.pending } : {}) };
+  const shared = { ...extras, funnel: funnel.rows, canScrub: auth.context.role === "owner", listCounts, ...(funnel.pending ? { funnelPending: funnel.pending } : {}) };
   if (!full.error)
     return NextResponse.json(
       { campaigns: full.data ?? [], limits: unwrapLimits(limits), ...shared },

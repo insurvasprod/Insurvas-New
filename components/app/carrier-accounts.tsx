@@ -14,6 +14,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { accountTrend, statementProblem, type StatementCheck } from "@/lib/ingestion/carrierAccounts";
 import { fileDay } from "@/lib/ingestion/constants";
 import { notify } from "@/lib/notify";
@@ -59,7 +60,8 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
   const carrierFiles = files.filter((f) => f.carrierId === form.carrier);
   const [page, setPage] = useState(1);
   const statementRows = byCarrier.flatMap((carrier) => carrier.rows.map((s, index) => ({ carrier, s, index })));
-  const shown = paginate(statementRows, page);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(statementRows, page, pageSize);
 
   async function save() {
     const opening = toCents(form.opening ?? "");
@@ -106,7 +108,7 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
             <span className="text-sm text-muted-foreground">Oldest statement first, per carrier</span>
           </DataToolbar>
         }
-        footer={statementRows.length > 10 ? <Pager page={shown.current} total={statementRows.length} noun="statements" onPage={setPage} /> : undefined}
+        footer={statementRows.length ? <Pager page={shown.current} total={statementRows.length} noun="statements" pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         {byCarrier.length === 0 ? (
           <EmptyState title="No statement totals yet" hint="Each carrier statement starts with its account: opening balance, activity, closing balance. Add those for a commission file to check that it adds up and to follow the balance from one statement to the next." />

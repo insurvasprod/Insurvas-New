@@ -17,5 +17,5 @@ export default async function CampaignsPage() {
     return <RoleGateNotice featureLabel="Vendors & campaigns" detail="Only owners and producers can see lead spend and vendor costs." />;
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Vendors & campaigns" detail="In an agency, the owner and admins handle vendors and lead spend." />;
-  return <LeadsInPage step="source"><CampaignWorkspace embedded readOnly={guard.entitlement.access === "read_only"} /></LeadsInPage>;
+  return <LeadsInPage step="source" ownContinue><CampaignWorkspace embedded readOnly={guard.entitlement.access === "read_only"} /></LeadsInPage>;
 }

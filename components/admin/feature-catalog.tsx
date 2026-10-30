@@ -10,6 +10,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { NoMatches } from "@/components/ui/page-states";
 import { Pager } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -90,18 +91,19 @@ export function FeatureCatalog({
 
   const shown = filteredGroups.reduce((n, group) => n + group.features.filter((f) => !f.is_archived).length, 0);
 
-  // Paged by feature row, 10 a page, across the module groups: a group split by a page boundary
-  // repeats its module row at the top of the next page, so every row still sits under its module.
-  const PAGE_SIZE = 10;
+  // Paged by feature row, as many as the window holds (10 at most), across the module groups: a group
+  // split by a page boundary repeats its module row at the top of the next page, so every row still
+  // sits under its module.
+  const pageSize = useFittingPageSize(480, 45);
   const listed = filteredGroups.map((group) => ({
     group,
     visible: showArchived ? group.features : group.features.filter((f) => !f.is_archived),
   }));
   const rowTotal = listed.reduce((n, entry) => n + entry.visible.length, 0);
-  const pages = Math.max(1, Math.ceil(rowTotal / PAGE_SIZE));
+  const pages = Math.max(1, Math.ceil(rowTotal / pageSize));
   const current = Math.min(Math.max(1, page), pages);
-  const pageStart = (current - 1) * PAGE_SIZE;
-  const pageEnd = pageStart + PAGE_SIZE;
+  const pageStart = (current - 1) * pageSize;
+  const pageEnd = pageStart + pageSize;
   // Each group's first row's position in the whole list.
   const starts = listed.reduce<number[]>((acc, entry, index) => [...acc, index === 0 ? 0 : acc[index - 1] + listed[index - 1].visible.length], []);
   const onPage = listed.flatMap(({ group, visible }, index) => {
@@ -147,7 +149,7 @@ export function FeatureCatalog({
             </span>
           </DataToolbar>
         }
-        footer={rowTotal > 0 ? <Pager page={current} pageSize={PAGE_SIZE} total={rowTotal} noun="features" onPage={setPage} /> : undefined}
+        footer={rowTotal > 0 ? <Pager page={current} pageSize={pageSize} total={rowTotal} noun="features" onPage={setPage} /> : undefined}
       >
         {filteredGroups.length === 0 ? (
           <NoMatches

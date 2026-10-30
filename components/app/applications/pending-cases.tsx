@@ -34,7 +34,7 @@ const PENDING_TABS = [
 export type PendingTab = (typeof PENDING_TABS)[number]["key"];
 
 /** The table card fills the viewport under the header, strip and tab row (2026-10-06 redesign). */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-360px)] flex-col [&>*:nth-child(2)]:flex-1";
+const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-392px)] flex-col [&>*:nth-child(2)]:flex-1";
 
 type PendingPayload = { requirements: RequirementRow[]; counteroffers: CounterofferRow[]; awaiting: AwaitingNumberRow[]; ageingDays: number };
 

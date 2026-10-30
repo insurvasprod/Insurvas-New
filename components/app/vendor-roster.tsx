@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, AlertTriangle, Ban, ChevronDown, Clock, Eye, FlaskConical, Trash2 } from "lucide-react";
 import { notify } from "@/lib/notify";
 
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
+import { cardSurface } from "@/components/ui/card";
+import { LeadsInSlot } from "@/components/app/lead-sources/leads-in-slot";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { InfoTip } from "@/components/ui/info-tip";
 import { LeaveGuard } from "@/components/ui/leave-guard";
@@ -16,6 +18,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
 import { RowActions } from "@/components/app/campaigns/row-actions";
 import { NumberStepper } from "@/components/app/campaigns/number-stepper";
@@ -181,6 +184,108 @@ function VendorFields({ draft, onChange, idPrefix, mode }: { draft: Draft; onCha
       <Field label="Terms" htmlFor={id("terms")} className="col-span-full"><input id={id("terms")} className={control} value={draft.terms} onChange={set("terms")} maxLength={2000} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
       <Field label="Notes" htmlFor={id("notes")} className="col-span-full"><textarea id={id("notes")} className={`${control} min-h-16 py-2`} value={draft.notes} onChange={set("notes")} maxLength={2000} placeholder="Anything your team should know about this vendor" /></Field>
     </div>}
+  </div>;
+}
+
+/**
+ * A vendor's Settings tab (owner pick C, 2026-10-30, board LirE6): Details and Terms on the left,
+ * Contact, Notes and the delete on the right, saved by the one Save the frame's corner holds. The
+ * same draft, PATCH and checks as the edit sheet; an unsaved change asks before a click away drops it.
+ */
+export function VendorSettings({ row, locked, onSaved, onDelete, deleting = false }: {
+  row: RosterVendor;
+  /** Why nothing can change (a read-only plan), or null. */
+  locked: string | null;
+  onSaved: () => Promise<unknown> | void;
+  onDelete: () => void;
+  deleting?: boolean;
+}) {
+  const [initial, setInitial] = useState<Draft>(() => draftOf(row));
+  const [draft, setDraft] = useState<Draft>(initial);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const scope = useRef<HTMLDivElement>(null);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const disabled = saving || locked !== null;
+  const set = (key: keyof Draft) => (event: { target: { value: string } }) => setDraft((current) => ({ ...current, [key]: event.target.value }));
+  const id = (key: string) => `vendor-settings-${row.id}-${key}`;
+  const warning = vendorCampaignWarning(draft.status, draft.name || row.name);
+
+  async function save(): Promise<boolean> {
+    if (saving || !draft.name.trim()) return false;
+    setSaving(true); setSaveError(null);
+    try {
+      const response = await fetch("/api/app/vendors", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: row.id, ...payloadOf(draft) }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        if (response.status === 503) setSaveError(body?.error ?? "This setting needs a database update that has not been applied yet.");
+        else notify.block(body?.error ?? "Could not save this vendor");
+        return false;
+      }
+      notify.done(`${body.vendor.name} saved`);
+      setInitial(draft);
+      await onSaved();
+      return true;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const label = (text: string) => <span className="text-xs font-semibold tracking-[0.06em] text-[var(--ink)] uppercase">{text}</span>;
+  const card = (children: ReactNode) => <div className={cn(cardSurface, "flex min-w-0 flex-col gap-6 p-5")}>{children}</div>;
+  return <div ref={scope} className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+    <LeadsInSlot slot="continue">
+      {dirty && <Button type="button" variant="outline" disabled={saving} onClick={() => setDraft(initial)}>Discard</Button>}
+      <Button type="button" disabled={!dirty || disabled || !draft.name.trim()} title={locked ?? undefined} onClick={() => void save()}>{saving ? "Saving…" : "Save changes"}</Button>
+    </LeadsInSlot>
+    {card(<>
+      <section aria-label="Details" className="flex flex-col gap-3">
+        {label("Details")}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Name" htmlFor={id("name")}><input id={id("name")} className={control} value={draft.name} disabled={disabled} onChange={set("name")} maxLength={160} /></Field>
+          <div className="grid gap-1.5"><span id={id("type")} className="text-label text-[var(--ink)]">Lead type</span><LeadTypeChoice value={draft.lead_type} onChange={(next) => setDraft((current) => ({ ...current, lead_type: next }))} labelledBy={id("type")} /></div>
+        </div>
+        <Field label="Category" htmlFor={id("category")}><input id={id("category")} className={control} value={draft.category} disabled={disabled} onChange={set("category")} maxLength={80} placeholder="Aged & ping-post" /></Field>
+        <Field label="Status" htmlFor={id("status")} hint={warning ?? undefined}>
+          <select id={id("status")} className={control} value={draft.status} disabled={disabled} onChange={set("status")}>
+            <option value="active">{VENDOR_STATUS_LABEL.active}</option>
+            <option value="under_review">{VENDOR_STATUS_LABEL.under_review}</option>
+            <option value="inactive">{VENDOR_STATUS_LABEL.inactive}</option>
+          </select>
+        </Field>
+      </section>
+      <section aria-label="Terms" className="flex flex-col gap-3">
+        {label("Terms")}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Return window" htmlFor={id("window")} hint="How long you have to claim bad rows">
+            <NumberStepper id={id("window")} value={draft.return_window_days} onChange={(next) => setDraft((current) => ({ ...current, return_window_days: next }))} min={0} max={365} label="days in the return window" after="days" />
+          </Field>
+          <Field label="Renews on" htmlFor={id("renews")}><input id={id("renews")} className={control} type="date" value={draft.renews_on} disabled={disabled} onChange={set("renews_on")} /></Field>
+        </div>
+        <Field label="Terms" htmlFor={id("terms")} hint="What you agreed with them"><input id={id("terms")} className={control} value={draft.terms} disabled={disabled} onChange={set("terms")} maxLength={2000} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
+      </section>
+    </>)}
+    {card(<>
+      <section aria-label="Contact" className="flex flex-col gap-3">
+        {label("Contact")}
+        <Field label="Name" htmlFor={id("contact")}><input id={id("contact")} className={control} value={draft.contact_name} disabled={disabled} onChange={set("contact_name")} maxLength={120} /></Field>
+        <Field label="Email" htmlFor={id("email")}><input id={id("email")} className={control} type="email" value={draft.contact_email} disabled={disabled} onChange={set("contact_email")} maxLength={200} /></Field>
+        <Field label="Phone" htmlFor={id("phone")}><input id={id("phone")} className={control} type="tel" value={draft.contact_phone} disabled={disabled} onChange={set("contact_phone")} maxLength={40} /></Field>
+      </section>
+      <section aria-label="Notes" className="flex flex-col gap-3">
+        {label("Notes")}
+        <Field label="Notes" htmlFor={id("notes")}><textarea id={id("notes")} className={`${control} min-h-16 py-2`} value={draft.notes} disabled={disabled} onChange={set("notes")} maxLength={2000} placeholder="Anything your team should know about this vendor" /></Field>
+      </section>
+      {saveError && <p className="m-0 text-sm text-[var(--error-ink)]" role="alert">{saveError}</p>}
+      <section aria-label="Delete" className="flex flex-col gap-3">
+        {label("Danger zone")}
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="min-w-0 flex-1 text-sm text-[var(--ink)]">Delete the vendor. One with campaigns asks twice and takes them with it.</span>
+          <Button type="button" variant="outline" size="sm" disabled={disabled || deleting} onClick={onDelete}><Trash2 aria-hidden="true" />Delete vendor</Button>
+        </div>
+      </section>
+    </>)}
+    <LeaveGuard dirty={dirty} scope={scope} onSave={save} onDiscard={() => setDraft(initial)} what={`${row.name}'s settings`} />
   </div>;
 }
 
@@ -352,6 +457,7 @@ export function VendorRoster({ vendors, rollup, speed, consent, facts, factsErro
 }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 57);
   const [refreshing, setRefreshing] = useState(false);
 
   async function refresh() {
@@ -367,7 +473,7 @@ export function VendorRoster({ vendors, rollup, speed, consent, facts, factsErro
   const best = facts?.best ?? null;
   const query = search.trim().toLowerCase();
   const matching = query ? rollup.filter((vendor) => vendor.vendor_name.toLowerCase().includes(query)) : rollup;
-  const { current, rows: shown } = paginate(matching, page, 25);
+  const { current, rows: shown } = paginate(matching, page, pageSize);
 
   return <TableCard
     className="flex min-h-0 flex-1 flex-col [&>div.overflow-x-auto]:min-h-0 [&>div.overflow-x-auto]:flex-1 [&>div.overflow-x-auto]:overflow-y-auto"
@@ -376,7 +482,7 @@ export function VendorRoster({ vendors, rollup, speed, consent, facts, factsErro
       <InfoTip label="What the colours mean">{TONE_KEY}</InfoTip>
     </DataToolbar>}
     footer={<>
-      {matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "vendor" : "vendors"} onPage={setPage} pageSize={25} /> : <span />}
+      {matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "vendor" : "vendors"} onPage={setPage} pageSize={pageSize} /> : <span />}
       {(factsError || (facts?.pending.length ?? 0) > 0) && <span role="status" title={factsError ?? undefined}>{factsError ? "Refresh to load cost per policy and returns." : facts?.pending.map((item) => item.detail).join(" ")}</span>}
     </>}
   >

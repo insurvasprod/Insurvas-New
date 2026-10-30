@@ -3,28 +3,20 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 import { Breadcrumbs, type Crumb } from "./breadcrumbs";
-import { PageHeaderActions } from "./page-header-actions";
+import { PageTrail } from "./page-trail";
 import { InfoTip } from "@/components/ui/info-tip";
 
 /**
- * The top of every page, in one shape.
+ * The top of every page, in one shape (owner 2026-10-30, the Partner Chat header everywhere):
  *
- * No visible title (owner 2026-10-28): the top bar's breadcrumb already says where you are, so the
- * page no longer repeats its own name. The title is still the page's `<h1>`, visually hidden, so a
- * screen reader lands on it and the bar can read it (`data-page-title`) where a shell has no menu
- * of its own to name the page. The one line of description goes with it, hidden the same way.
+ *   Group › Page            the trail, from the menu (PageTrail) unless the page passes its own
+ *   Title  (i)    actions   the page's one <h1>, its help behind an (i), the actions on the right
  *
- * What stays on screen is the actions. When the page's own tabs or step bar come straight after the
- * header (anything marked `data-page-lead`: ViewTabs, UnderlineTabs, the Inbound step bar), the
- * actions sit on that row, on the right, from md up; otherwise they are one row at the top, on the
- * right. A header with no actions takes no space at all.
+ * The top bar no longer names the page. `description` sits behind the (i) by default
+ * (`infoDescription={false}` shows it as one line under the title). The header never grows the page
+ * past the window: it is one row plus the trail, and the content under it takes what is left.
  *
- * `size` and `eyebrow` are kept so no caller has to change.
- *
- * `visible` (settings-shell plan, 2026-10-28): the title shown again, top-left, with the breadcrumb
- * above it and the description under it, the actions on the title's line on the right. Used by the
- * Settings frame first; the rest of the app moves to it page by page (the top bar's crumb goes when
- * every page has one).
+ * `size`, `eyebrow` and `visible` are kept so no caller has to change.
  */
 export function PageHeader({
   title,
@@ -32,57 +24,43 @@ export function PageHeader({
   description,
   actions,
   size = "page",
-  visible = false,
   breadcrumbs,
   meta,
-  infoDescription = false,
+  infoDescription = true,
   className,
 }: {
-  /** `visible` only: the description sits behind an (i) beside the title instead of a line under it
-   *  (manager review 29 Oct, 05:50: "remove this text, put it into an info icon right here"). */
+  /** The description behind an (i) beside the title (default) rather than a line under it. */
   infoDescription?: boolean;
-  /** Show the title, description and breadcrumb on the page (see above). */
+  /** Accepted and ignored (2026-10-30): every header shows its title now. */
   visible?: boolean;
-  /** The trail above the title when `visible`: real pages only, the last one this page. */
+  /** The trail above the title, the last one this page. Left out, the menu draws it. */
   breadcrumbs?: Crumb[];
-  /** One quiet line under the description when `visible` (Settings: who last changed something here). */
+  /** One quiet line under the title (Settings: who last changed something here). */
   meta?: ReactNode;
-  /** Accepted and ignored (2026-09-28 review): one title per page, and now that one is hidden too. */
+  /** Accepted and ignored (2026-09-28 review): one title per page. */
   eyebrow?: string;
   title: string;
-  /** Optional help tip retained beside the page actions when the visible title moves to the top bar. */
+  /** A help tip or chip on the title's line, before the actions. */
   titleInfo?: ReactNode;
   description?: string;
   actions?: ReactNode;
   size?: "page" | "hero";
   className?: string;
 }) {
-  if (visible) {
-    return (
-      <header data-page-header="visible" className={cn("flex flex-col gap-2", className)}>
-        {breadcrumbs && <Breadcrumbs crumbs={breadcrumbs} />}
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="min-w-0 max-w-[44rem]">
-            <div className="flex items-center gap-1.5">
-              <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
-              {description && infoDescription && <InfoTip label={`About ${title}`} side="bottom">{description}</InfoTip>}
-            </div>
-            {description && !infoDescription && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
-            {meta}
-          </div>
-          {(titleInfo || actions) && <div className="flex shrink-0 flex-wrap items-center gap-2">{titleInfo}{actions}</div>}
-        </div>
-      </header>
-    );
-  }
   return (
-    <div className={cn("m-page-header", className)} data-has-actions={actions ? "" : undefined}>
-      {/* The display face (Inter Tight, foundation v3) if it is ever shown again; sr-only for now. */}
-      <h1 data-page-title data-size={size} className="sr-only font-[family-name:var(--font-display)] text-page text-[var(--ink)]">
-        {title}
-      </h1>
-      {description && <p className="sr-only">{description}</p>}
-      {(titleInfo || actions) && <PageHeaderActions>{titleInfo}{actions}</PageHeaderActions>}
-    </div>
+    <header data-page-header="visible" className={cn("flex shrink-0 flex-col gap-1.5", className)}>
+      {breadcrumbs ? <Breadcrumbs crumbs={breadcrumbs} /> : <PageTrail title={title} />}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0 max-w-[44rem]">
+          <div className="flex items-center gap-1.5">
+            <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
+            {description && infoDescription && <InfoTip label={`About ${title}`} side="bottom">{description}</InfoTip>}
+          </div>
+          {description && !infoDescription && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
+          {meta}
+        </div>
+        {(titleInfo || actions) && <div className="flex shrink-0 flex-wrap items-center gap-2">{titleInfo}{actions}</div>}
+      </div>
+    </header>
   );
 }

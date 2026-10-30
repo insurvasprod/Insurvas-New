@@ -496,7 +496,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
       {tab === "deals" && (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
           <TableCard
-            className="relative z-20 flex min-h-[calc(100dvh-var(--top-bar-h)-360px)] min-w-0 flex-1 flex-col [&>.overflow-x-auto]:flex-1"
+            className="relative z-20 flex min-h-[calc(100dvh-var(--top-bar-h)-392px)] min-w-0 flex-1 flex-col [&>.overflow-x-auto]:flex-1"
             toolbar={
               // Foundation v3 §6a: search, the day range (the page's scope), one Filters button; the
               // facets open inline under the toolbar and show as chips while closed.
@@ -618,7 +618,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
               title={customerName(selectedRow)}
               status={<><StagePill row={selectedRow} /><CopyId leadId={selectedRow.lead_id} /></>}
               onClose={() => setPanelOpen(false)}
-              className="lg:max-h-[calc(100dvh-var(--top-bar-h)-360px)] lg:min-h-[calc(100dvh-var(--top-bar-h)-360px)]"
+              className="lg:max-h-[calc(100dvh-var(--top-bar-h)-360px)] lg:min-h-[calc(100dvh-var(--top-bar-h)-392px)]"
               footer={<>
                 <Button type="button" variant="outline" disabled={data.readOnly || editing === selectedRow.id} onClick={() => startEdit(selectedRow)}>Edit record</Button>
                 {/* LA-1.20-5: every lead list links to the lead workspace. */}
@@ -670,7 +670,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
 
       {tab === "partners" && (
         <TableCard
-          className="flex min-h-[calc(100dvh-var(--top-bar-h)-360px)] flex-col [&>.overflow-x-auto]:flex-1"
+          className="flex min-h-[calc(100dvh-var(--top-bar-h)-392px)] flex-col [&>.overflow-x-auto]:flex-1"
           toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load(query)} refreshing={loading} />}><span className="text-sm text-muted-foreground">{isToday ? "Today" : rangeText(active.from, active.to)}</span></DataToolbar>}
           footer={<span>{data.summary.length.toLocaleString("en-US")} {data.summary.length === 1 ? "partner" : "partners"} · the deals in the Deals tab&rsquo;s range and filters</span>}
         >

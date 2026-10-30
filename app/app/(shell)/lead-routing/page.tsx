@@ -20,9 +20,11 @@ export default async function LeadRoutingPage() {
   if (guard.role !== "owner") return <RoleGateNotice featureLabel="Lead routing" detail="In an agency the owner or an admin routes leads. Your assigned leads are in your queue." />;
   // The same page as /app/assignments (2026-10-26), the pool a view on it. Without dialing there is no rule
   // chain to show, only the pool, filling the step; the frame draws the one title (a second one doubled it).
+  // With the rule chain the corner holds its "Edit rules" and "Hand out N now" (board LirT1, 2026-10-30).
+  const dialing = hasFeature(guard.entitlement, "outbound_dialing");
   return (
-    <LeadsInPage step="route">
-      {hasFeature(guard.entitlement, "outbound_dialing")
+    <LeadsInPage step="route" ownContinue={dialing}>
+      {dialing
         ? <AssignmentWorkspace canManage pool />
         : <div className="m-stagger flex w-full min-w-0 flex-col lg:min-h-0 lg:flex-1"><UnassignedPool fill /></div>}
     </LeadsInPage>

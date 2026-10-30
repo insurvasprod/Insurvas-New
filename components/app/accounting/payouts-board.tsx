@@ -13,6 +13,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
 import { ITEM_LABELS, RUN_STATUS_LABELS, type RunDispute, type RunHeader, type RunItem, type RunStatus, type StatementLine, type PartnerStatement } from "@/lib/accounting/payoutsCore";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -251,7 +252,8 @@ export function PayoutsBoard({ runs, partners, readOnly, openId, partnerFixed = 
   const [refreshing, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
   const visible = useMemo(() => runs.filter((r) => (!partner || r.partnerId === partner) && (!status || r.status === status)), [runs, partner, status]);
-  const shown = paginate(visible, page, 15);
+  const pageSize = useFittingPageSize(460, 45);
+  const shown = paginate(visible, page, pageSize);
   const month = new Date().toISOString().slice(0, 7);
   const drafts = runs.filter((r) => r.status === "draft");
   const owed = runs.filter((r) => r.status === "published");
@@ -274,7 +276,7 @@ export function PayoutsBoard({ runs, partners, readOnly, openId, partnerFixed = 
             <select aria-label="Status" className={toolbarControl} value={status} onChange={(e) => { setStatus(e.target.value as "" | RunStatus); setPage(1); }}><option value="">Any status</option>{(["draft", "published", "paid", "void"] as RunStatus[]).map((s) => <option key={s} value={s}>{RUN_STATUS_LABELS[s]}</option>)}</select>
           </DataToolbar>
         }
-        footer={visible.length > 15 ? <Pager page={shown.current} pageSize={15} total={visible.length} noun="runs" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="runs" onPage={setPage} /> : undefined}
       >
         {runs.length === 0 ? (
           <EmptyState title="No payout runs yet" hint={partners.length ? "Draft one for a partner and a month: it is priced from the terms on the partner's record." : "Add a partner with payout terms first."} action={!readOnly && partners.length ? <Button onClick={() => setCreating(true)}>Draft a run</Button> : undefined} />

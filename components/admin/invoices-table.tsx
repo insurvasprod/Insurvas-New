@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { StatusChip, invoiceTone } from "@/components/admin/status-chip";
 import { fullDate } from "@/components/admin/tenant-record/billing-format";
@@ -19,7 +20,6 @@ import { INVOICE_STATUSES, INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/l
 import type { InvoiceListRow, InvoiceTotals } from "@/lib/invoices/queries";
 import { cn } from "@/lib/utils";
 
-const PAGE = 10;
 type Lens = "all" | "overdue" | "mismatched";
 
 const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
@@ -75,9 +75,8 @@ export function InvoicesTable({
     [initialInvoices, tenant, status, lens, needle],
   );
   const anyFilter = Boolean(tenant || needle || status !== "all" || lens !== "all");
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
-  const current = Math.min(page, pages);
-  const shown = rows.slice((current - 1) * PAGE, current * PAGE);
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(rows, page, pageSize);
 
   const collectedShare = totals.invoicedThisMonthCents > 0
     ? `${((totals.collectedThisMonthCents / totals.invoicedThisMonthCents) * 100).toFixed(1)}%`
@@ -108,6 +107,7 @@ export function InvoicesTable({
 
       <TableCard
         className="min-w-0"
+        footer={rows.length ? <Pager page={current} pageSize={pageSize} total={rows.length} noun={rows.length === 1 ? "invoice" : "invoices"} suffix="by number, newest first" onPage={setPage} /> : undefined}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
             <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search invoice, tenant" />
@@ -184,7 +184,6 @@ export function InvoicesTable({
             })}
           </tbody>
         </table>
-        {rows.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={rows.length} itemLabel={rows.length === 1 ? "invoice" : "invoices"} order="by number, newest first" onPageChange={setPage} />}
       </TableCard>
     </div>
   );

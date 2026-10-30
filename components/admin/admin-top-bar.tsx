@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { TopBarShell, type TopBarAlert, type TopBarFeed, type TopBarNotification, type TopBarUser } from "@/components/app/app-top-bar";
 import { notify } from "@/lib/notify";
-import { TopBarTitleCrumb } from "@/components/app/nav/top-bar-title-crumb";
 
 /**
  * The staff bar (p-nav-admin): the same bar, with the platform's own contents.
@@ -93,7 +92,6 @@ export function AdminTopBar({ user }: { user: TopBarUser }) {
          settings store has one entry (Platform > Advanced), and most staff roles could not open it. */
       signOutEndpoint="/api/admin/auth/logout"
       signOutRedirect="/admin/login"
-      leading={<TopBarTitleCrumb />}
     />
   );
 }

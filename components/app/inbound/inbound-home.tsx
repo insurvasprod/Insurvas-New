@@ -25,6 +25,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { productLineLabel } from "@/lib/format/productLine";
 import { languageKey, languageName } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
@@ -112,6 +114,9 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
     };
   }, [floor?.members, currentUserId, now]);
 
+  const [linePage, setLinePage] = useState(1);
+  const linePageSize = useFittingPageSize(560, 65);
+
   if (!floor) {
     if (!error) return <PageLoading />;
     return (
@@ -128,6 +133,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
   const start = () => setAvailability("ready");
   const next = line[0] ?? null;
   const rest = line.slice(1);
+  const restShown = paginate(rest, linePage, linePageSize);
   const takeReason = readOnly ? "Your agency’s account is paused." : !ready ? "Start taking calls first." : undefined;
 
   const headerActions = (
@@ -218,9 +224,9 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           )}
 
           {rest.length > 0 && (
-            <TableCard title="Also in line" description="Longest wait first." action={<StatusChip tone="neutral" dot={false}>{rest.length}</StatusChip>}>
+            <TableCard title="Also in line" description="Longest wait first." action={<StatusChip tone="neutral" dot={false}>{rest.length}</StatusChip>} footer={<Pager page={restShown.current} total={rest.length} noun={rest.length === 1 ? "caller" : "callers"} pageSize={linePageSize} onPage={setLinePage} />}>
               <ul className="m-0 list-none p-0">
-                {rest.map((item) => {
+                {restShown.rows.map((item) => {
                   const wait = secondsSince(item.queuedAt, now);
                   const tone = waitTone(wait, floor);
                   const first = checks(item)[0];

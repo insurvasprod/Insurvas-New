@@ -20,7 +20,8 @@ import {
   type StaffRow,
 } from "@/lib/adminStaff/present";
 import { st, pillTone } from "@/components/app/settings/primitives";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { NoMatches } from "@/components/admin/empty-state";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -35,7 +36,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const PAGE_SIZE = 10;
 
 type RoleFilter = "all" | AdminRole;
 type StateFilter = "all" | "active" | "inactive";
@@ -77,6 +77,7 @@ export function AdminUsersTable({
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
   const [pending, setPending] = useState<Pending | null>(null);
 
   const filtered = useMemo(() => {
@@ -90,9 +91,7 @@ export function AdminUsersTable({
     });
   }, [admins, search, roleFilter, stateFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const { current: safePage, rows: paged } = paginate(filtered, page, pageSize);
 
   function clearFilters() {
     setSearch("");
@@ -106,6 +105,7 @@ export function AdminUsersTable({
   return (
     <>
       <TableCard
+        footer={<Pager page={safePage} pageSize={pageSize} total={filtered.length} noun="admins" suffix={STAFF_ORDER} onPage={setPage} />}
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
             <ToolbarSearch
@@ -217,14 +217,6 @@ export function AdminUsersTable({
             </tbody>
           </table>
         </div>
-        <BoardTableFooter
-          page={safePage}
-          pageSize={PAGE_SIZE}
-          total={filtered.length}
-          itemLabel="admins"
-          order={STAFF_ORDER}
-          onPageChange={setPage}
-        />
       </TableCard>
 
       <ConfirmChangeDialog pending={pending} onClose={() => setPending(null)} onDone={() => router.refresh()} />

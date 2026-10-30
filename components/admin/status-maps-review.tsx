@@ -10,6 +10,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay, FILE_TYPE_LABELS, type CarrierFileType } from "@/lib/ingestion/constants";
 import type { MappingRow, QueueEntry } from "@/lib/ingestion/statusAdmin";
 import { shownWord, STATUS_LABELS, STATUS_VOCABULARY, type NormalizedStatus } from "@/lib/ingestion/statuses";
@@ -36,8 +37,9 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
   const [queuePage, setQueuePage] = useState(1);
   const [mappingPage, setMappingPage] = useState(1);
 
-  const shownQueue = paginate(queue, queuePage, 10);
-  const shownMappings = paginate(mappings, mappingPage, 10);
+  const pageSize = useFittingPageSize(420, 45);
+  const shownQueue = paginate(queue, queuePage, pageSize);
+  const shownMappings = paginate(mappings, mappingPage, pageSize);
   const rowsHeld = queue.reduce((sum, entry) => sum + entry.rows, 0);
   const carriersWaiting = new Set(queue.map((entry) => entry.carrierId)).size;
   // Each word carries its own agency count; the same agency can sit behind several words, so the
@@ -78,7 +80,7 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
 
-      <TableCard title="Waiting to be mapped" description="Gathered across agencies: a carrier's word means the same for everyone." footer={queue.length > 0 ? <Pager page={shownQueue.current} pageSize={10} total={queue.length} noun="words" onPage={setQueuePage} /> : undefined}>
+      <TableCard title="Waiting to be mapped" description="Gathered across agencies: a carrier's word means the same for everyone." footer={queue.length > 0 ? <Pager page={shownQueue.current} pageSize={pageSize} total={queue.length} noun="words" onPage={setQueuePage} /> : undefined}>
         {queue.length === 0 ? (
           <EmptyState title="No status is waiting" hint="When a carrier file has a status word nobody has mapped, it appears here and its rows are held." />
         ) : (
@@ -127,7 +129,7 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
         )}
       </TableCard>
 
-      <TableCard title="Status map" description="An approved mapping is what files were read with; it never changes." footer={mappings.length > 0 ? <Pager page={shownMappings.current} pageSize={10} total={mappings.length} noun="mappings" onPage={setMappingPage} /> : undefined}>
+      <TableCard title="Status map" description="An approved mapping is what files were read with; it never changes." footer={mappings.length > 0 ? <Pager page={shownMappings.current} pageSize={pageSize} total={mappings.length} noun="mappings" onPage={setMappingPage} /> : undefined}>
         {mappings.length === 0 ? (
           <EmptyState title="No status mapped yet" hint="Mappings come from the words real carrier files use; none is guessed." />
         ) : (

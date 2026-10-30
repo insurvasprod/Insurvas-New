@@ -5,7 +5,7 @@ import { cadenceMaxAttempts, getCadence, humanInterval } from "@/lib/cadence/ser
 import { effectiveLadder, ladderSummary } from "@/lib/cadence/ladder";
 import { DEFAULT_CEILING, SLOTS, type Slot } from "@/lib/cadence/engine";
 import { isMissingSchema, listNurtureCampaigns, type NurtureCampaign } from "./service";
-import type { RecycleBatch, RecyclePool } from "./contract";
+import { RECYCLABLE_DISPOSITIONS, SAID_NO_MIN_DAYS, type RecycleBatch, type RecyclePool } from "./contract";
 
 /**
  * Everything the Lead recycling board shows besides the rule itself, read and never written.
@@ -30,12 +30,26 @@ import type { RecycleBatch, RecyclePool } from "./contract";
  */
 
 export type NurtureRun = { at: string; cleared: number; blocked: number; failed: number; pending: number };
-export type NurtureCampaignReport = NurtureCampaign & { eligibleNow: number; lastRun: NurtureRun | null; pool: RecyclePool | null; openBatch: RecycleBatch | null };
+/**
+ * The Recycle table's row facts (board LirY3, 2026-10-29), each null when its read failed — a missing
+ * figure, never a zero: `lists` completed imports into the campaign, `vendorName` the campaign's
+ * vendor (the own-book stand-in reads as "No vendor"), `contact` this month's contact rate for the
+ * campaign's recycled and fresh leads (tenant_recycle_performance with p_campaign_id).
+ */
+export type NurtureCampaignFacts = { lists: number | null; vendorName: string | null; contact: { recycled: number | null; fresh: number | null } | null };
+/**
+ * `nextBackAt`: the soonest moment a lead still resting comes back under the campaign's rule (its
+ * outcome is in the rule, the cap is not reached, it is not do-not-call), or null when none is
+ * waiting on the clock. Worked out from the same leads as the in-TypeScript eligible count, so it is
+ * "after caps, before the fresh scrub" too. It feeds the page's "nothing is ready yet" line.
+ */
+export type NurtureCampaignReport = NurtureCampaign & NurtureCampaignFacts & { eligibleNow: number; nextBackAt: string | null; lastRun: NurtureRun | null; pool: RecyclePool | null; openBatch: RecycleBatch | null };
 export type RotationSlot = { slot: Slot; state: "failed" | "answered" | "next" | "untried"; note: string };
 export type ConversionSide = { leads: number; policies: number; percent: number | null };
 export type NurtureReport = {
   campaigns: NurtureCampaignReport[];
-  totals: { inNurture: number; eligibleNow: number; recycledThisMonth: number; recycledLastMonth: number; blockedThisMonth: number };
+  /** `nextBackAt`: the soonest of the campaigns' own, or null. */
+  totals: { inNurture: number; eligibleNow: number; recycledThisMonth: number; recycledLastMonth: number; blockedThisMonth: number; nextBackAt: string | null };
   /** Null before 20260925706500. */
   pool: { exhaustedNoOutcome: number; saidNo: number; never: number; tooRecent: number } | null;
   /** Every cleared reactivation ever, with what came of it. Null before 20260925706500. */
@@ -80,6 +94,8 @@ const text = (value: unknown) => (typeof value === "string" ? value : "");
 const PAGE = 1000;
 const CHUNK = 150;
 const EMPTY_POOL: RecyclePool = { exhaustedNoOutcome: 0, saidNo: 0, never: 0, noPhone: 0, resting: 0, live: 0, pending: 0, beingWorked: 0, capped: 0, outcomeNotInRule: 0, ownerOnly: 0, tooRecent: 0, eligible: 0, eligibleSaidNo: 0 };
+/** "Not interested", read from the recycle contract (lib/nurture/contract.ts), not spelled here again. */
+const SAID_NO = RECYCLABLE_DISPOSITIONS[2];
 const NO_CONTACT = new Set(["no_answer", "voicemail", "busy", "call_dropped", "disconnected", "wrong_number"]);
 
 type RpcOutcome = { data: unknown; error: { message: string; code?: string } | null };
@@ -139,6 +155,49 @@ async function conversion(db: Db, tenantId: string): Promise<NurtureReport["conv
   }
 }
 
+/** Campaigns read for a per-row contact rate: those with leads in nurture or recycled, at most this many. */
+const CONTACT_CAMPAIGNS = 40;
+
+/**
+ * The Recycle table's per-campaign facts. Each read stands alone and fails to null, so one bad read
+ * blanks one column instead of the page.
+ */
+async function campaignFacts(db: Db, tenantId: string, actor: { userId: string; role: string }, campaigns: NurtureCampaign[], from: string) {
+  const lists = allRows(
+    (start) => db.from("agent_lead_import_batches").select("id, campaign_id").eq("tenant_id", tenantId).eq("status", "completed").order("id", { ascending: true }).range(start, start + PAGE - 1),
+    "imported lists",
+  ).then((rows) => {
+    const out = new Map<string, number>();
+    for (const row of rows) { const id = text(row.campaign_id); if (id) out.set(id, (out.get(id) ?? 0) + 1); }
+    return out;
+  }, () => null);
+  const vendors = Promise.all([
+    db.from("tenant_campaigns").select("id, vendor_id").eq("tenant_id", tenantId),
+    db.from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId),
+  ]).then(([campaignRows, vendorRows]) => {
+    if (campaignRows.error || vendorRows.error) return null;
+    const names = new Map((vendorRows.data ?? []).map((row) => [text(row.id), text(row.name)]));
+    return new Map((campaignRows.data ?? []).map((row) => [text(row.id), names.get(text(row.vendor_id)) ?? ""]));
+  }, () => null);
+  const worked = campaigns.filter((campaign) => campaign.eligible_count > 0 || campaign.reactivated_count > 0).slice(0, CONTACT_CAMPAIGNS);
+  const contact = Promise.all(worked.map((campaign) =>
+    Promise.resolve(db.rpc("tenant_recycle_performance", { p_tenant_id: tenantId, p_actor_user_id: actor.userId, p_actor_role: actor.role, p_agent_user_id: null, p_campaign_id: campaign.campaign_id, p_disposition: null, p_from_at: from, p_to_at: null }))
+      .then((result) => {
+        if (result.error || !Array.isArray(result.data)) return [campaign.campaign_id, null] as const;
+        const rows = result.data as Row[];
+        const rate = (kind: string) => { const row = rows.find((item) => item.source_type === kind); return row && row.contact_rate_percent != null ? Number(row.contact_rate_percent) : null; };
+        return [campaign.campaign_id, { recycled: rate("recycled"), fresh: rate("fresh") }] as const;
+      }, () => [campaign.campaign_id, null] as const),
+  )).then((pairs) => new Map(pairs));
+  const [listMap, vendorMap, contactMap] = await Promise.all([lists, vendors, contact]);
+  return (campaignId: string): NurtureCampaignFacts => ({
+    lists: listMap ? listMap.get(campaignId) ?? 0 : null,
+    vendorName: vendorMap ? vendorMap.get(campaignId) || null : null,
+    // A campaign with nothing in nurture and nothing recycled was not read: no rate, not a failure.
+    contact: contactMap.get(campaignId) ?? null,
+  });
+}
+
 function monthStart(offset: number) {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1)).toISOString();
@@ -172,6 +231,8 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
   ]);
 
   const tenantCeiling = await ceilingRead;
+  // Started now, awaited where the campaigns are assembled: it runs beside the reads below.
+  const factsRead = campaignFacts(db, tenantId, actor, campaigns, thisMonth);
 
   // 20260925706500. A missing function is "not applied yet"; any other failure is an error.
   const batchesReady = !poolResult.error && !batchResult.error;
@@ -219,16 +280,24 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
 
   const ruleOf = new Map(campaigns.map((campaign) => [campaign.campaign_id, campaign.rule]));
   const eligible = new Map<string, number>();
+  /** Per campaign, the soonest a resting lead comes back (ms). */
+  const nextBack = new Map<string, number>();
   const now = Date.now();
   for (const lead of nurtureLeads) {
     const campaignId = text(lead.campaign_id);
     const rule = ruleOf.get(campaignId);
     if (!rule) continue;
     const entered = Date.parse(text(lead.nurture_entered_at) || text(lead.updated_at) || text(lead.created_at));
-    if (!(entered <= now - rule.wait_days * 86_400_000)) continue;
     if (Number(lead.recycle_count ?? 0) >= rule.max_recycles) continue;
-    if (!rule.allowed_dispositions.includes(lastDisposition.get(text(lead.id)) ?? "")) continue;
+    const outcome = lastDisposition.get(text(lead.id)) ?? "";
+    if (!rule.allowed_dispositions.includes(outcome)) continue;
     if (["dnc", "tcpa_litigator"].includes(text(lead.screening_outcome))) continue;
+    if (!(entered <= now - rule.wait_days * 86_400_000)) {
+      // Still resting: when it comes back (said no rests at least SAID_NO_MIN_DAYS, the SQL's greatest()).
+      const back = entered + (outcome === SAID_NO ? Math.max(rule.wait_days, SAID_NO_MIN_DAYS) : rule.wait_days) * 86_400_000;
+      if (Number.isFinite(back) && back > now && back < (nextBack.get(campaignId) ?? Infinity)) nextBack.set(campaignId, back);
+      continue;
+    }
     eligible.set(campaignId, (eligible.get(campaignId) ?? 0) + 1);
   }
 
@@ -292,11 +361,14 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
     };
   }
 
+  const factsOf = await factsRead;
   const withRuns = campaigns.map((campaign) => {
     const pool = poolOf.get(campaign.campaign_id) ?? (batchesReady ? EMPTY_POOL : null);
     return {
       ...campaign,
+      ...factsOf(campaign.campaign_id),
       eligibleNow: pool ? pool.eligible : eligible.get(campaign.campaign_id) ?? 0,
+      nextBackAt: nextBack.has(campaign.campaign_id) ? new Date(nextBack.get(campaign.campaign_id) as number).toISOString() : null,
       lastRun: runs.get(campaign.campaign_id) ?? null,
       pool,
       openBatch: batches.find((batch) => batch.campaignId === campaign.campaign_id && batch.status === "screening") ?? null,
@@ -313,6 +385,7 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
       recycledThisMonth,
       recycledLastMonth,
       blockedThisMonth,
+      nextBackAt: withRuns.reduce<string | null>((soonest, campaign) => (campaign.nextBackAt && (!soonest || campaign.nextBackAt < soonest) ? campaign.nextBackAt : soonest), null),
     },
     contactRate: performanceRows.length ? { recycled: rateOf("recycled"), fresh: rateOf("fresh") } : null,
     sources: performanceRows.filter((row) => row.source_type === "fresh" || row.source_type === "recycled").map((row) => ({ source: row.source_type === "fresh" ? "fresh" as const : "recycled" as const, served: Number(row.served ?? 0), dialled: Number(row.clicked ?? 0), contacts: Number(row.contacts ?? 0), contactRate: row.contact_rate_percent == null ? null : Number(row.contact_rate_percent) })),

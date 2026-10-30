@@ -280,6 +280,7 @@ export function LicenceDialog({
   extended,
   saving,
   onSave,
+  initialState = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -287,8 +288,10 @@ export function LicenceDialog({
   extended: boolean;
   saving: boolean;
   onSave: (payload: unknown) => Promise<SaveResult>;
+  /** The state to open on, e.g. from Route's "Add a TX licence" (?tab=licences&state=TX). */
+  initialState?: string | null;
 }) {
-  const blank = { state: "AZ", license_number: "", expires_at: "", licence_type: "" as "" | LicenceType, lines: [] as string[] };
+  const blank = { state: initialState || "AZ", license_number: "", expires_at: "", licence_type: "" as "" | LicenceType, lines: [] as string[] };
   const [form, setForm] = useState(() => {
     const row = licences.find((item) => item.state === blank.state);
     return row ? { state: row.state, license_number: licenceNumberValue(row.license_number), expires_at: licenceExpiryValue(row.expires_at), licence_type: row.licence_type ?? ("" as const), lines: row.lines_of_authority ?? [] } : blank;

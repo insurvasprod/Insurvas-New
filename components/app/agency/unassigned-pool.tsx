@@ -10,6 +10,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ageLabel, ageTone } from "@/lib/agency/routingCore";
 
 type PoolLead = { workItemId: string; leadId: string; name: string; state: string | null; productLine: string | null; queuedAt: string; ageMinutes: number };
@@ -57,10 +58,11 @@ export function UnassignedPool({ onCount, fill = false, bare = false, refreshKey
     const q = search.trim().toLowerCase();
     return (rows ?? []).filter((r) => !q || r.name.toLowerCase().includes(q) || (r.state ?? "").toLowerCase().includes(q));
   }, [rows, search]);
-  const { rows: pageRows, current: safePage } = paginate(filtered, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const { rows: pageRows, current: safePage } = paginate(filtered, page, pageSize);
 
   const searchBox = <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search name or state" label="Search the pool" />;
-  const pager = rows && filtered.length > 10 ? <Pager page={safePage} total={filtered.length} noun="leads" onPage={setPage} /> : undefined;
+  const pager = rows && filtered.length ? <Pager page={safePage} total={filtered.length} noun="leads" pageSize={pageSize} onPage={setPage} /> : undefined;
   const body = error ? (
     <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
   ) : rows === null ? (

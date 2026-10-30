@@ -121,7 +121,11 @@ type PreviewState =
   | { status: "ready"; preview: LeadListAssignmentPreview }
   | { status: "error"; message: string; pending: boolean; tooSlow: boolean };
 
-export function LeadListAssignDrawer({ campaignId, listName, assignable, defaultOpen = false, onDone, members: givenMembers, picker }: {
+export function LeadListAssignDrawer({ campaignId, listName, assignable, defaultOpen = false, onDone, members: givenMembers, picker, label = null, outline = false }: {
+  /** The trigger's words, when the default "Assign the N" would mislead (a list's page assigns its campaign). */
+  label?: string | null;
+  /** An outline trigger, when another button on the page is its one primary. */
+  outline?: boolean;
   campaignId: string;
   listName: string;
   assignable: number;
@@ -268,7 +272,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable, default
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Trigger asChild>
-        <Button type="button" onPointerEnter={() => void prefetchListPreview(campaignId)} onFocus={() => void prefetchListPreview(campaignId)}>Assign the {count(assignable)}</Button>
+        <Button type="button" variant={outline ? "outline" : "default"} onPointerEnter={() => void prefetchListPreview(campaignId)} onFocus={() => void prefetchListPreview(campaignId)}>{label ?? `Assign the ${count(assignable)}`}</Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(10,12,16,0.55)] transition-opacity duration-200 starting:opacity-0" />

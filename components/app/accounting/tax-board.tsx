@@ -10,6 +10,8 @@ import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { ENTITY_TYPES, EXEMPT_LABELS, EXEMPT_REASONS, maskTaxId, TAX_CATEGORIES, TAX_CATEGORY_LABELS, TAX_NOTICE, type ExemptReason, type TaxCategory } from "@/lib/accounting/taxCore";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -95,6 +97,8 @@ export function TaxBoard({ data, readOnly }: { data: TaxData; readOnly: boolean 
   const [tab, setTab] = useState<"contractors" | "categories" | "export">("contractors");
   const [editing, setEditing] = useState<Row | null>(null);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(520, 45);
   const [, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
   const years = Array.from({ length: 4 }, (_, i) => new Date().getUTCFullYear() - i);
@@ -109,6 +113,7 @@ export function TaxBoard({ data, readOnly }: { data: TaxData; readOnly: boolean 
   const byCategory = new Map<TaxCategory, number>();
   for (const t of data.totals) byCategory.set(t.taxCategory, (byCategory.get(t.taxCategory) ?? 0) + t.amountCents);
   const c = data.contractors;
+  const shown = paginate(c.rows, page, pageSize);
   return (
     <>
       <TaxNotice />
@@ -123,13 +128,13 @@ export function TaxBoard({ data, readOnly }: { data: TaxData; readOnly: boolean 
           <select aria-label="Year" className={toolbarControl} value={data.year} onChange={(e) => router.push(`/app/tax?year=${e.target.value}`)}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select>
           <span className="text-sm text-muted-foreground">{tab === "contractors" ? "Paid in the calendar year, by the date money moved." : `${data.basis === "cash" ? "Cash" : "Accrual"} basis, as your P&L.`}</span>
         </DataToolbar>
-      }>
+      } footer={tab === "contractors" && c.rows.length ? <Pager page={shown.current} total={c.rows.length} noun="contractors" pageSize={pageSize} onPage={setPage} /> : undefined}>
         {tab === "contractors" ? (
           c.rows.length === 0 ? <EmptyState title={`Nobody over ${money(c.thresholdCents)} in ${data.year}`} hint="Payments to partners, producers and lead vendors are counted here as they are marked paid." /> : (
             <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
               <thead><tr><th>Name on the form</th><th className="w-[170px]">Tax ID</th><th className="w-[130px] text-right">Paid</th><th className="w-[230px]">1099</th><th className="w-[100px] text-right" /></tr></thead>
               <tbody>
-                {c.rows.map((r) => (
+                {shown.rows.map((r) => (
                   <tr key={`${r.payeeType}-${r.payeeId}`}>
                     <td><div className="font-medium">{r.nameOnForm}</div><div className="text-xs text-muted-foreground">{r.displayName} · {r.payeeType}</div></td>
                     <td>{r.profileId && revealed[r.profileId] ? <span className="font-mono">{revealed[r.profileId]}</span> : maskTaxId(r.profile?.taxIdType ?? "none", r.profile?.taxIdLast4 ?? null)}{r.profileId && r.profile?.taxIdLast4 && data.canReveal && !revealed[r.profileId] ? <Button size="sm" variant="ghost" onClick={() => void reveal(r.profileId!)}>Reveal</Button> : null}</td>

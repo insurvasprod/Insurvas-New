@@ -12,6 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { DELETION_VIA, METHOD_LABELS, STATUS_LABELS, VIA_LABELS, holdRemaining, type DeletionStatus, type VerificationMethod } from "@/lib/compliance/dataSubject";
 import type { DeletionRequest } from "@/lib/compliance/dataSubjectStore";
 import { formatPhone } from "@/lib/compliance/evidenceGaps";
@@ -186,7 +187,8 @@ export function DeletionRequestsBoard({ requests, methods, holdDays, isOwner, re
   const [open, setOpen] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
-  const shown = paginate(requests, page, 15);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(requests, page, pageSize);
   const openCount = requests.filter((r) => ["received", "verifying", "verified", "scheduled"].includes(r.status)).length;
   const due = requests.filter((r) => r.status === "scheduled" && holdRemaining(r.scheduledPurgeAt, new Date()).due).length;
   return (
@@ -199,7 +201,7 @@ export function DeletionRequestsBoard({ requests, methods, holdDays, isOwner, re
       </StatStrip>
       <TableCard
         toolbar={<DataToolbar actions={<>{!readOnly ? <Button onClick={() => setCreating(true)}>Log a request</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>} />}
-        footer={requests.length > 15 ? <Pager page={shown.current} pageSize={15} total={requests.length} noun="requests" onPage={setPage} /> : undefined}
+        footer={requests.length ? <Pager page={shown.current} pageSize={pageSize} total={requests.length} noun="requests" onPage={setPage} /> : undefined}
       >
         {requests.length === 0 ? (
           <EmptyState title="No deletion requests" hint="When someone asks to be deleted, log it the day it arrives." action={!readOnly ? <Button onClick={() => setCreating(true)}>Log a request</Button> : undefined} />

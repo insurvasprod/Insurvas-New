@@ -350,7 +350,7 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
       {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
       <div id="sales-panel" role="tabpanel" aria-labelledby={`sales-panel-tab-${tab}`} className="flex flex-col gap-6">
-        <PagedTableCard key={tab} total={total} noun={noun} suffix={suffix} className={secondary ? undefined : "flex min-h-[calc(100dvh-var(--top-bar-h)-400px)] flex-col [&>.overflow-x-auto]:flex-1"} toolbar={toolbar} footer={footer}>{body}</PagedTableCard>
+        <PagedTableCard key={tab} total={total} noun={noun} suffix={suffix} className={secondary ? undefined : "flex min-h-[calc(100dvh-var(--top-bar-h)-432px)] flex-col [&>.overflow-x-auto]:flex-1"} toolbar={toolbar} footer={footer}>{body}</PagedTableCard>
         {!loading && secondary}
       </div>
     </div>

@@ -565,6 +565,9 @@
 /* A side panel (a record's details, a create form) slides in from the edge it is attached to, and a
    tab's view fades in when the tab changes (2026-10-09). Transform and opacity only, like the rest. */
 @keyframes m-panel-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+/* The collapsed sidebar's pages panel (CollapsedFlyout): slides a few px out of the rail. */
+@keyframes m-flyout-in { from { opacity: 0; transform: translateX(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes m-flyout-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-4px) scale(.98); } }
 .m-panel { animation: m-panel-in var(--t-panel) var(--e-out) both; }
 [role="tabpanel"] { animation: m-fade 180ms var(--e-out) both; }
 
@@ -3113,6 +3116,25 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   backdrop-filter: blur(20px) saturate(150%);
 }
 
+/* The mockups' card (owner 2026-10-30, "use the same cards that we have on the mockups", canvas board
+   LirS1's `.g`): 16px corners; in dark, a faint white wash from the top-left and a 9% white hairline,
+   blurred 14px. The corners and the hairline are unlayered, so they win over a caller's rounded-*
+   and border-border: every card on every page is this one card. A caller's own tint (a bg-* or a
+   coloured border) still wins: the wash is in the components layer, and a coloured border is left
+   alone. Light mode keeps the plain card (the mockups are dark only). */
+.m-glass:not(.rounded-full) { border-radius: 16px; }
+.dark .m-glass:is(.border-border, :not([class*="border-"])) { border-color: rgba(255, 255, 255, .09); }
+@layer components {
+  .dark .m-glass {
+    background: linear-gradient(160deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .015));
+    box-shadow: none;
+  }
+}
+.dark .m-stage .m-glass {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
 /* A glass card's header band (a table card's title row, a settings card's head): the band colour,
    see-through, so the ribbon still reads under it. */
 @layer components {
@@ -3131,20 +3153,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
    the marketing pages set Montserrat, whose ss01 is a different glyph set. */
 .m-stage { font-feature-settings: "cv11", "ss01"; }
 
-/* The strip's lit edge: a thin brand line along its top that fades out at both ends. */
+/* No lit edge and no halo behind the figures (owner 2026-10-30): the mockups' strip is the plain card. */
 .m-stat-strip { position: relative; }
-.m-stat-strip::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 75%, transparent) 50%, transparent);
-  pointer-events: none;
-}
-
-/* The halo behind a figure, dark mode only: on a light ground a glow reads as a smudge. */
-.dark .m-figure { text-shadow: 0 0 22px color-mix(in srgb, var(--primary) 34%, transparent); }
 
 /* The still brand glows behind a role home. */
 .m-ambient-orb {
@@ -3322,7 +3332,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 
 /* Accordion navigation stays in the sidebar instead of opening a detached flyout. */
-.portal-agent-desktop-nav { border-right: 1px solid var(--nav-line); }
+/* No line between the sidebar and the page or top bar (owner 2026-10-30): one surface, not two. */
+.portal-agent-desktop-nav { border-right: 0; }
 .portal-agent-desktop-nav .portal-agent-sidebar-brand {
   display: flex; height: var(--top-bar-h, 56px); min-height: var(--top-bar-h, 56px); align-items: center;
   justify-content: space-between; gap: .5rem; padding: 0 1.125rem; border-bottom: 1px solid var(--nav-line);
@@ -3678,36 +3689,6 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-nav-fly-subhead { margin: .25rem .5rem .25rem; }
 .portal-agent-rail-fly ul + .portal-nav-fly-subhead { margin-top: .625rem; padding-top: .625rem; border-top: 1px solid color-mix(in srgb, var(--nav-ink), transparent 85%); }
 
-/* Page header without a title (owner 2026-10-28, components/ui/page-header.tsx). The breadcrumb in
-   the top bar names the page; the header keeps a hidden <h1> and shows only its actions. With no
-   actions it takes no space. Right before the page's tabs or step bar ([data-page-lead]) the
-   actions join that row on the right, from md up; the lead row leaves them room and they sit at its
-   middle (both measured by page-header-actions.tsx). */
-.m-page-header:not([data-has-actions]) { display: contents; }
-.m-page-header[data-has-actions] { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
-@media (min-width: 768px) {
-  :has(> .m-page-header[data-has-actions] + :is([data-page-lead], :has(> [data-page-lead]:first-child))) { position: relative; }
-  .m-page-header[data-has-actions]:has(+ :is([data-page-lead], :has(> [data-page-lead]:first-child))) {
-    position: absolute; right: 0; z-index: 2; max-width: 70%;
-    height: var(--page-lead-h, auto);
-  }
-  /* space-y on the parent gives the lead a top margin the out-of-flow header no longer earns. */
-  .m-page-header[data-has-actions]:first-child + :is([data-page-lead], :has(> [data-page-lead]:first-child)) { margin-top: 0; }
-  .m-page-header[data-has-actions] + :is([data-page-lead], :has(> [data-page-lead]:first-child)) { max-width: calc(100% - var(--page-actions-w, 0px)); }
-  /* A step bar stays in the true middle of the row (owner 2026-10-28, "the progress bar in the
-     middle"); the actions take the space to its right and wrap onto a second line when they do not
-     fit there. The row grows to the actions' height and the bar sits at its middle. */
-  .m-page-header[data-has-actions]:has(+ [data-page-lead="center"]) {
-    height: auto; max-width: calc((100% - var(--page-lead-content-w, 0px)) / 2 - 16px);
-  }
-  .m-page-header[data-has-actions] + [data-page-lead="center"] {
-    max-width: none; align-items: center; min-height: var(--page-actions-h, auto);
-  }
-}
-/* Phones: the bar first, then the actions under it. */
-@media (max-width: 767px) {
-  .m-page-header[data-has-actions]:first-child + [data-page-lead="center"] { order: -1; }
-}
 .portal-top-bar .portal-top-crumb { display: none; }
 @media (min-width: 1024px) {
   .portal-top-bar .portal-top-crumb {
@@ -3723,35 +3704,77 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   :has(> .portal-agent-rail) .portal-top-bar .portal-top-actions { flex: 1 1 0; justify-content: flex-end; }
 }
 
-/* ── Sidebar sub-navigation as a tree (manager review 28 Oct §3.1, settings redesign 2026-10-29) ──
-   The group is the heading (icon, bold); each of its pages hangs off a rounded elbow drawn under the
-   group's icon, each starting a little under the one above (owner's reference, 2026-10-29), so the
-   eye reads parent → children at a glance. Children are text only; the active page's elbow takes
-   the accent.
-   Only for groups in the open rail: the collapsed icon rail hides sublists already. */
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) {
-  position: relative;
-  margin-left: 2.5rem !important; /* under the group's icon */
-  padding-left: .7rem !important;
-  border-left: 0 !important; /* the older straight guide; the elbows replace it */
+/* ══ The sidebar, owner 2026-10-30 ("make the icons and the text a bit bigger… change the design from
+   how it was merged"; the canvas boards' sidebar). The last word on the menu's look: it comes after
+   every earlier sidebar rule, and lib/design/sidebarLook.test.mjs fails if it is moved, weakened or
+   the tree lines come back.
+   - Groups: 15px/600 white, 42px rows. Their icon is a bare 20px glyph, no tile (owner, later the same
+     day: "remove the box and leave only the icons"); the open group's icon turns green. The arrow sits at
+     the right end of the row: pointing right when shut, down when open.
+   - Pages: 14px text with a plain 16px icon, the icon under the group's name, 36px rows, no tree
+     lines; the page you are on is a soft green row in bold.
+   - Home and Settings read as groups. ══ */
+.portal-agent .portal-agent-nav .portal-agent-nav-icon {
+  box-sizing: content-box; width: 20px; height: 20px; padding: 0; border-radius: 0;
+  background: none; color: var(--nav-ink); stroke-width: 2; opacity: 1;
 }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li { position: relative; }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li::before {
-  content: "";
-  position: absolute;
-  top: -.3rem;
-  bottom: 50%;
-  left: -.7rem;
-  width: .55rem;
-  border-left: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
-  border-bottom: 1.5px solid color-mix(in srgb, currentColor 55%, transparent);
-  border-bottom-left-radius: .45rem;
-  pointer-events: none;
+.portal-agent .portal-agent-nav .portal-agent-nav-section.is-active > .portal-agent-nav-disclosure .portal-agent-nav-icon,
+.portal-agent .portal-agent-nav .portal-agent-nav-link.is-active:not(.portal-agent-nav-link-nested) .portal-agent-nav-icon {
+  background: none; color: var(--nav-success);
 }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) > li:has(.is-active)::before { border-color: var(--accent-ink); }
-/* Children keep their own icon on the elbow, as in the reference (manager review §3.1: "connected
-   with icons"), one step smaller and quieter than the group's. */
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested .portal-agent-nav-icon { width: 1rem; height: 1rem; opacity: .8; }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested.is-active .portal-agent-nav-icon { opacity: 1; }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested { padding-left: .375rem; gap: .5rem; font-weight: 400; }
-.portal-agent-nav-section > .portal-agent-nav-sublist:not(.portal-agent-nav-sublist-nested) .portal-agent-nav-link-nested.is-active { font-weight: 600; }
+.portal-agent .portal-agent-nav .portal-agent-nav-disclosure,
+.portal-agent .portal-agent-nav .portal-agent-nav-link:not(.portal-agent-nav-link-nested) {
+  height: 42px; min-height: 42px; border-radius: 10px;
+  color: var(--nav-ink); font-size: .9375rem; font-weight: 600; letter-spacing: -.01em;
+}
+.portal-agent .portal-agent-nav .portal-agent-nav-disclosure-copy,
+.portal-agent .portal-agent-nav .portal-agent-nav-link-copy { gap: .625rem; }
+.portal-agent .portal-agent-nav .portal-agent-nav-chevron { width: 1.125rem; height: 1.125rem; }
+/* The arrow at the right end of the group's row (owner 2026-10-30): right when shut, down when open. */
+.portal-agent .portal-agent-nav .portal-agent-nav-disclosure > .portal-agent-nav-chevron {
+  order: 1; margin-left: auto; width: 1rem; height: 1rem; transform: rotate(-90deg);
+  color: color-mix(in srgb, var(--nav-ink) 60%, transparent);
+}
+.portal-agent .portal-agent-nav .portal-agent-nav-disclosure > .portal-agent-nav-chevron.is-open { transform: none; color: var(--nav-ink); }
+/* The pages: lined up under the group's name, no guide and no elbows. */
+.portal-agent .portal-agent-nav .portal-agent-nav-sublist {
+  margin: .125rem 0 .375rem 0 !important; padding-left: 0 !important; border-left: 0 !important;
+}
+.portal-agent .portal-agent-nav .portal-agent-nav-sublist::before,
+.portal-agent .portal-agent-nav .portal-agent-nav-sublist > li::before { content: none; display: none; }
+/* Each page shows its own icon (owner 2026-10-30, "add icons for all of the sub pages"): a plain 16px
+   glyph, no tile, ahead of the label, which stays lined up under the group's name. */
+.portal-agent .portal-agent-nav .portal-agent-nav-link-nested .portal-agent-nav-icon {
+  width: 16px; height: 16px; padding: 0; border-radius: 0; background: none;
+  color: color-mix(in srgb, var(--nav-ink) 72%, transparent); stroke-width: 1.9;
+}
+.portal-agent .portal-agent-nav .portal-agent-nav-link-nested:hover .portal-agent-nav-icon { background: none; color: var(--nav-ink); }
+.portal-agent .portal-agent-nav .portal-agent-nav-link-nested.is-active .portal-agent-nav-icon { background: none; color: var(--nav-success); }
+.portal-agent .portal-agent-nav .portal-agent-nav-link-nested {
+  height: 36px; min-height: 36px; padding: 0 .625rem 0 2.5rem; border-radius: 10px; box-shadow: none;
+  color: color-mix(in srgb, var(--nav-ink) 88%, transparent); font-size: .875rem; font-weight: 500; letter-spacing: -.01em;
+}
+.portal-agent .portal-agent-nav .portal-agent-nav-link-nested:hover { background: rgba(255, 255, 255, .06); color: var(--nav-ink); }
+.portal-agent .portal-agent-nav .portal-agent-nav-link-nested.is-active,
+.portal-agent .portal-agent-nav .portal-agent-nav-link-nested.is-active:hover {
+  background: rgba(7, 214, 160, .14); box-shadow: none; color: var(--nav-ink); font-weight: 700;
+}
+/* Collapsed (owner 2026-10-30, "make the icons bigger", then "a bit smaller… a better hover with a nice
+   smooth short animation"): 22px icons in 44px rows. Hovering a row lights it softly and lifts its icon;
+   the row stays lit while its pages show beside the rail (CollapsedFlyout in agent-sidebar.tsx). */
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-icon {
+  width: 22px; height: 22px; transition: transform .18s cubic-bezier(.2,.8,.2,1), color .18s ease;
+}
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-disclosure,
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-link:not(.portal-agent-nav-link-nested) {
+  height: 44px; min-height: 44px; transition: background-color .18s ease;
+}
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-disclosure:hover,
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-link:not(.portal-agent-nav-link-nested):hover,
+.portal-agent .portal-agent-nav.is-collapsed [data-flyout="open"] .portal-agent-nav-disclosure { background: rgba(255, 255, 255, .08); }
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-disclosure:hover .portal-agent-nav-icon,
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-link:not(.portal-agent-nav-link-nested):hover .portal-agent-nav-icon,
+.portal-agent .portal-agent-nav.is-collapsed [data-flyout="open"] .portal-agent-nav-icon { transform: scale(1.1); }
+@media (prefers-reduced-motion: reduce) {
+.portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-icon { transition: none; transform: none !important; }
+}

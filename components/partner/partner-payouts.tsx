@@ -7,7 +7,9 @@ import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Sheet } from "@/components/ui/sheet";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerStatement } from "@/lib/accounting/payoutsCore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
@@ -114,6 +116,9 @@ export function PartnerPayouts() {
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(380, 45);
+  const paged = paginate(runs ?? [], page, pageSize);
   useEffect(() => {
     let live = true;
     fetch("/api/partner/payouts").then(async (res) => {
@@ -126,14 +131,14 @@ export function PartnerPayouts() {
   }, []);
   return (
     <>
-      <TableCard>
+      <TableCard footer={runs?.length ? <Pager page={paged.current} total={runs.length} noun={runs.length === 1 ? "statement" : "statements"} pageSize={pageSize} onPage={setPage} /> : undefined}>
         {error ? <EmptyState title="Statements are not available" hint={error} /> : runs === null ? <SectionLoading rows={4} columns={4} /> : runs.length === 0 ? (
           <EmptyState title="No statements yet" hint="When the agency publishes a payout statement for you, it appears here." />
         ) : (
           <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
             <thead><tr><th>Period</th><th className="w-[160px] text-right">Net payable</th><th className="w-[160px]">Status</th><th className="w-[90px] text-right" /></tr></thead>
             <tbody>
-              {runs.map((r) => (
+              {paged.rows.map((r) => (
                 <tr key={r.id}><td>{r.periodStart} to {r.periodEnd}</td><td className="text-right tabular-nums">{money(r.netCents)}</td><td><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? `Paid ${r.paidOn ?? ""}` : "Published"}</StatusChip></td><td className="text-right"><Button size="sm" variant="outline" onClick={() => setOpen(r.id)}>Open</Button></td></tr>
               ))}
             </tbody>

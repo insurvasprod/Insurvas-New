@@ -29,6 +29,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Callout, control, Field } from "@/components/app/settings/primitives";
 import { WithReason } from "@/components/app/settings/sales/shared";
 import { useSampleRefresh } from "@/components/app/applications/applications-list";
@@ -72,7 +73,8 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
   const sampleRefresh = useSampleRefresh();
 
   const rows = useMemo(() => groups(maps, lastFilled), [maps, lastFilled]);
-  const { current, rows: pageRows } = paginate(rows, page);
+  const pageSize = useFittingPageSize(420, 45);
+  const { current, rows: pageRows } = paginate(rows, page, pageSize);
   const selected = maps.find((map) => map.id === selectedId) ?? null;
 
   const reload = useCallback(async () => {
@@ -216,7 +218,7 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
 
       <TableCard
         toolbar={<DataToolbar actions={<RefreshButton onClick={sample ? sampleRefresh.refresh : reload} refreshing={sample ? sampleRefresh.refreshing : loading} />} />}
-        footer={<Pager page={current} total={rows.length} noun="carrier forms" onPage={setPage} suffix="drafts first" />}
+        footer={<Pager page={current} pageSize={pageSize} total={rows.length} noun="carrier forms" onPage={setPage} suffix="drafts first" />}
       >
         {rows.length === 0
           ? <EmptyState title="No field maps yet" hint="A map tells the extension which box on a carrier's form takes each of our fields. Start one with Propose a map." />

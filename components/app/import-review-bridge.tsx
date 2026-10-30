@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowRight, CheckCircle2, FileWarning, FileX, Trash2 } from "lucide-react";
+import { ArrowRight, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Callout, DashedCard, SettingsCard, SettingsMeter } from "@/components/app/settings/primitives";
+import { SettingsCard, SettingsMeter } from "@/components/app/settings/primitives";
 import { ImportReviewWorkspace, type ReviewPlan } from "@/components/app/import-review-workspace";
-import { LeadsInSlot } from "@/components/app/lead-sources/leads-in-slot";
+import { NextUp } from "@/components/app/lead-sources/next-up";
 import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
 import { discardStagedFile, forgetStagedFile } from "@/components/app/import-discard";
 
@@ -52,12 +52,12 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
 
   // The file is not in this tab (another tab, a closed one, or site data blocked). Its way back opens
   // Import on the same campaign; or it can be dropped from here, so it stops waiting in the rail.
+  // Said once, on the Next up line (2026-10-30): its one button uploads again; Discard stays outline.
   if (!csv)
     return <><div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <DashedCard
-        icon={<FileWarning className="size-4" aria-hidden />}
-        title="Upload the file again to review it"
-        action={<span className="flex flex-wrap justify-center gap-2">
+      <NextUp
+        tone="warning"
+        action={<>
           <Button type="button" variant="outline" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={discarding} onClick={() => {
             setDiscarding(true);
             void discardStagedFile(plan.batchId, plan.fileName).then((result) => {
@@ -66,10 +66,10 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
             }).finally(() => setDiscarding(false));
           }}><Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard it"}</Button>
           <Button asChild><Link href={plan.campaignId ? `/app/import?campaign=${encodeURIComponent(plan.campaignId)}` : "/app/import"}>Upload the file again</Link></Button>
-        </span>}
+        </>}
       >
-        {plan.campaignName ? `Same campaign (${plan.campaignName}) and cost.` : "Use the same campaign and cost."} Nothing was imported, and the scrub is not charged twice.
-      </DashedCard>
+        Upload <strong>{plan.fileName ?? "the file"}</strong> again to review it: this tab no longer has it. {plan.campaignName ? `Same campaign (${plan.campaignName}) and cost.` : "Use the same campaign and cost."} Nothing was imported, and the scrub is not charged twice.
+      </NextUp>
     </div></>;
 
   // Steps 3–4 on the same moving ribbon as Lead sources, where steps 1–2 open (2026-10-26).
@@ -85,21 +85,18 @@ export function ImportAlreadyImported() {
   // An imported file is no longer this tab's to review: forget it, so the rail stops counting it.
   const { batchId } = useParams<{ batchId?: string }>();
   useEffect(() => { if (batchId) forgetStagedFile(batchId); }, [batchId]);
+  // The next step in order is Clean (step 4): the Next up line's one button (2026-10-30), the rest outline.
   return <><div className="m-stagger flex w-full min-w-0 flex-col gap-4">
-    {/* The next step in order is Clean (step 4), in the corner where every step continues. */}
-    <LeadsInSlot slot="continue">
-      <Button asChild><Link href="/app/duplicates">Continue to Clean<ArrowRight aria-hidden="true" /></Link></Button>
-    </LeadsInSlot>
-    <DashedCard
-      icon={<CheckCircle2 className="size-4" aria-hidden />}
-      title="This list has already been imported"
-      action={<span className="flex flex-wrap justify-center gap-2">
+    <NextUp
+      tone="action"
+      action={<>
         <Button asChild variant="outline"><Link href="/app/lead-lists">Open lead lists</Link></Button>
-        <Button asChild><Link href="/app/import">Import another list</Link></Button>
-      </span>}
+        <Button asChild variant="outline"><Link href="/app/import">Import another list</Link></Button>
+        <Button asChild><Link href="/app/duplicates">Continue to Clean<ArrowRight aria-hidden="true" /></Link></Button>
+      </>}
     >
-      The leads are in your lead lists.
-    </DashedCard>
+      This list has already been imported, and its leads are in your lead lists. Next, confirm the ones that match leads you have on Clean.
+    </NextUp>
   </div></>;
 }
 
@@ -108,13 +105,9 @@ export function ImportNotUnderReview() {
   const { batchId } = useParams<{ batchId?: string }>();
   useEffect(() => { if (batchId) forgetStagedFile(batchId); }, [batchId]);
   return <><div className="m-stagger flex w-full min-w-0 flex-col gap-4">
-    <DashedCard
-      icon={<FileX className="size-4" aria-hidden />}
-      title="This file was discarded"
-      action={<Button asChild><Link href="/app/import">Import a list</Link></Button>}
-    >
-      Nothing from it was imported.
-    </DashedCard>
+    <NextUp tone="action" action={<Button asChild><Link href="/app/import">Import a list</Link></Button>}>
+      This file was discarded, and nothing from it was imported.
+    </NextUp>
   </div></>;
 }
 
@@ -229,7 +222,24 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
   const left = progress.total - progress.screened;
   const minutes = perSecond && perSecond > 0 ? Math.ceil(left / perSecond / 60) : null;
 
+  // The Next up line (2026-10-30): a pause or a missing file waits on the person, and its fix is the
+  // one button; while it runs there is nothing to press, and the line says so.
+  const nextUp = needsFile
+    ? <NextUp tone="warning" action={<Button asChild><Link href="/app/import">Upload the file again</Link></Button>}>
+        Upload <strong>{progress.fileName ?? "the file"}</strong> again to finish the review. Use the same campaign and cost: every number is already checked, so nothing is screened or charged twice.
+      </NextUp>
+    : paused
+      ? <NextUp tone="warning" action={<Button type="button" onClick={() => { setPaused(null); setRun((value) => value + 1); }}>Carry on checking</Button>}>
+          Screening paused: {paused} Nothing has been staged.
+        </NextUp>
+      : <NextUp tone="done">
+          {left > 0
+            ? <>Checking <strong>{left.toLocaleString()}</strong> more number{left === 1 ? "" : "s"}. Saved as it goes, so you can leave this page; the review opens when it is done.</>
+            : "Every number has an answer. Building the review…"}
+        </NextUp>;
+
   return <><div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+    {nextUp}
     <SettingsCard pad={18} title="Screening the file" sub={`${progress.fileName ?? "This file"} · ${progress.totalRows.toLocaleString()} rows`} bodyClassName="flex flex-col gap-3">
       <SettingsMeter
         value={progress.screened}
@@ -239,30 +249,11 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
         caption={`${pct}%${minutes !== null && left > 0 ? ` · about ${minutes.toLocaleString()} min left` : ""}`}
         ariaLabel={`Screening: ${pct}% of numbers checked`}
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <p role="status" className="m-0 min-w-0 flex-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-          {left > 0
-            ? "Saved as it goes — you can leave this page."
-            : "Every number has an answer. Building the review…"}
-        </p>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={discarding} onClick={() => void discard()}>
           <Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard this file"}
         </Button>
       </div>
     </SettingsCard>
-    {paused && <Callout tone="warning" title="Screening paused">
-      <div className="flex flex-col gap-2">
-        <p className="m-0">{paused} Nothing has been staged.</p>
-        <Button type="button" variant="outline" className="self-start" onClick={() => { setPaused(null); setRun((value) => value + 1); }}>Carry on checking</Button>
-      </div>
-    </Callout>}
-    {needsFile && <DashedCard
-      icon={<FileWarning className="size-4" aria-hidden />}
-      title="Upload the file again to finish the review"
-      action={<Button asChild variant="outline"><Link href="/app/import">Upload the file again</Link></Button>}
-    >
-      Use the same campaign and cost. Every number is already checked, so nothing is screened or charged twice.
-
-    </DashedCard>}
   </div></>;
 }

@@ -16,6 +16,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
 import {
   APPLICATION_OUTCOME_LABEL, APPLICATION_OUTCOME_TONE, APPLICATION_OUTCOMES, APPLICATION_STATUS_LABEL, type ApplicationStatus,
@@ -303,7 +304,7 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone, 
 
       <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
       <TableCard
-        className="flex min-h-[calc(100dvh-var(--top-bar-h)-300px)] min-w-0 flex-1 flex-col [&>*:nth-child(2)]:flex-1"
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-332px)] min-w-0 flex-1 flex-col [&>*:nth-child(2)]:flex-1"
         toolbar={<>
           <DataToolbar actions={<>
             {filtered && <ClearFiltersButton onClick={clearFilters} />}
@@ -322,9 +323,9 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone, 
               <option value="all">All carriers</option>
               {carriers.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
-            <Button type="button" variant="outline" aria-pressed={missingOnly} onClick={() => { setMissingOnly((value) => !value); setPage(1); }} className={cn(missingOnly && "border-[var(--primary)] bg-[var(--primary-soft)] text-foreground")}>
+            <ToggleChip selected={missingOnly} onClick={() => { setMissingOnly((value) => !value); setPage(1); }}>
               Missing reference
-            </Button>
+            </ToggleChip>
             <SavedViews storageKey="applications" current={viewState} builtIns={builtInViews} onApply={applyView} />
           </DataToolbar>
           {loadError && <p role="alert" className="w-full text-sm text-destructive">{loadError}</p>}

@@ -17,9 +17,9 @@ const dollars = (cents: number | null) => (cents === null ? "—" : `$${(cents /
 export function PolicyAwaitingFile({ sale }: { sale: AwaitingSale }) {
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <Link href="/app/policies" className="text-sm text-muted-foreground hover:underline">← Policies</Link>
       <PageHeader
         title={sale.clientName ?? `Policy ${sale.policyNumber}`}
+        breadcrumbs={[{ label: "Book" }, { label: "Policies", href: "/app/policies" }, { label: sale.clientName ?? `Policy ${sale.policyNumber}` }]}
         description={[sale.carrierName, sale.product, `Policy #${sale.policyNumber}`].filter(Boolean).join(" · ")}
         actions={sale.leadId ? <Link href={`/app/leads/${sale.leadId}`} className="text-sm font-semibold underline">Open the lead</Link> : undefined}
       />

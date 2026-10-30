@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
@@ -103,15 +102,9 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
   const advanceReceived = lines.filter((line) => line.kind === "advance").reduce((sum, line) => sum + line.amountCents, 0);
   const open = (discrepancies?.items ?? []).filter((item) => item.policyId === row.id && (item.status === "open" || item.status === "disputed"));
   const status = STATUS[row.status as keyof typeof STATUS] ?? { label: row.status, tone: "neutral" as const };
-  const back = (
-    <Link href="/app/policies?source=hand" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
-      <ChevronLeft className="size-4" aria-hidden="true" />
-      Policies
-    </Link>
-  );
 
   // Each section fills the viewport under the header, strip and tab row (2026-10-06 redesign).
-  const fill = "flex min-h-[calc(100dvh-var(--top-bar-h)-380px)] flex-col [&>*:first-child]:flex-1";
+  const fill = "flex min-h-[calc(100dvh-var(--top-bar-h)-412px)] flex-col [&>*:first-child]:flex-1";
   const expectedTable = (
     <PagedTableCard total={expected.length} noun="entries" suffix="each from a commission schedule row" className={fill} footer={<span>{expected.length.toLocaleString("en-US")} {expected.length === 1 ? "entry" : "entries"}, each from a commission schedule row</span>}>
       {expected.length === 0 ? (
@@ -180,9 +173,9 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      {back}
       <PageHeader
         title={`${row.insured_name} · ${row.policy_number}`}
+        breadcrumbs={[{ label: "Book" }, { label: "Policies", href: "/app/policies?source=hand" }, { label: `${row.insured_name} · ${row.policy_number}` }]}
         description={`${row.carrier} · ${row.product} · ${statementMoney(row.annual_premium_cents)} a year · issued ${statementDay(row.effective_date)} · lead source ${leadSource}`}
         actions={<><StatusChip tone={status.tone}>{status.label}</StatusChip><RecordLapseSignal policy={{ id: row.id, status: row.status }} /></>}
       />

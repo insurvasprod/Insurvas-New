@@ -5,6 +5,8 @@ import { notify } from "@/lib/notify";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
@@ -30,6 +32,8 @@ export function SplitsBoard({ canEdit }: { canEdit: boolean }) {
   const [editing, setEditing] = useState<null | { carrierId: string; policyNumber: string; writer: string; other: string; writerPercent: string; premium: string }>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
 
   const names = useMemo(() => new Map((levels.data?.rows ?? []).map((r) => [r.producerUserId, r.producerName])), [levels.data]);
   const carriers = useMemo(() => [...new Map((levels.data?.rows ?? []).map((r) => [r.carrierId, r.carrierName])).entries()], [levels.data]);
@@ -64,6 +68,7 @@ export function SplitsBoard({ canEdit }: { canEdit: boolean }) {
     splits.reload();
   }
 
+  const shown = paginate(rows, page, pageSize);
   const start = () => { setProblem(null); setEditing({ carrierId: carriers[0]?.[0] ?? "", policyNumber: "", writer: producers[0]?.[0] ?? "", other: producers[1]?.[0] ?? "", writerPercent: "60", premium: "" }); };
 
   return (
@@ -72,16 +77,16 @@ export function SplitsBoard({ canEdit }: { canEdit: boolean }) {
       <div className="flex min-h-0 flex-col gap-4 lg:flex-row lg:items-stretch">
         <TableCard className="min-w-0 flex-1" toolbar={
           <DataToolbar actions={<RefreshButton onClick={splits.reload} refreshing={splits.refreshing} />}>
-            <ToolbarSearch value={search} onChange={setSearch} placeholder="Search policy or producer" label="Search splits" />
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search policy or producer" label="Search splits" />
           </DataToolbar>
-        }>
+        } footer={rows.length ? <Pager page={shown.current} total={rows.length} noun="splits" pageSize={pageSize} onPage={setPage} /> : undefined}>
           {splits.error ? <ErrorState detail={splits.error} /> : splits.loading ? <SectionLoading rows={4} columns={4} label="Loading splits" /> : (splits.data?.splits.length ?? 0) === 0 ? (
             <EmptyState title="No shared policies" hint="When two producers agree to share a policy, record the split here so both statements show it." action={canEdit && producers.length >= 2 ? <Button onClick={start}>New split</Button> : undefined} />
           ) : rows.length === 0 ? <NoMatches noun="splits" by="search" onClear={() => setSearch("")} /> : (
             <Table>
               <TableHeader><TableRow><TableHead>Policy</TableHead><TableHead>Carrier</TableHead><TableHead>Writer</TableHead><TableHead>Shared with</TableHead><TableHead className="text-right">Split</TableHead><TableHead>Since</TableHead></TableRow></TableHeader>
               <TableBody>
-                {rows.map((s) => {
+                {shown.rows.map((s) => {
                   const writer = s.shares.find((x) => x.isWriter);
                   const others = s.shares.filter((x) => !x.isWriter);
                   return (

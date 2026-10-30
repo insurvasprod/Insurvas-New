@@ -19,5 +19,6 @@ export default async function AssignmentsPage() {
   if (agency && guard.role !== "owner") return <RoleGateNotice reason="agency" featureLabel="Lead assignment" detail="In an agency the owner or an admin routes leads. Your assigned leads are in your queue." />;
   // One page with the agency's Lead routing (2026-10-26): in an agency the unassigned pool is a tab.
   // Step 5 · Route of the one Leads page (owner pick B, 2026-10-28).
-  return <LeadsInPage step="route"><AssignmentWorkspace canManage={holdsAnyRole(guard.roles, ["owner", "producer"])} pool={agency} /></LeadsInPage>;
+  // Round 3 (board LirT1, 2026-10-30): the corner holds the step's own "Edit rules" and "Hand out N now".
+  return <LeadsInPage step="route" ownContinue><AssignmentWorkspace canManage={holdsAnyRole(guard.roles, ["owner", "producer"])} pool={agency} /></LeadsInPage>;
 }

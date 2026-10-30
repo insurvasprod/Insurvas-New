@@ -63,7 +63,8 @@ const SECTION_ICON: Record<string, LucideIcon> = {
 };
 
 /** The fold, unfold and search buttons at the menu's top. */
-const RAIL_ICON_BUTTON = "inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-[var(--muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]";
+// The glyph grows a touch on hover, in 150ms (owner 2026-10-30: "very slightly"); still for reduced motion.
+const RAIL_ICON_BUTTON = "inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-[var(--muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] [&>svg]:transition-transform [&>svg]:duration-150 [&>svg]:ease-out hover:[&>svg]:scale-110 motion-reduce:hover:[&>svg]:scale-100";
 /** One icon per group: the folded menu's strip. */
 const GROUP_ICON: Record<string, LucideIcon> = {
   "Your account": UserRound,
@@ -162,8 +163,19 @@ export function AgentSettingsTabs({
     if (next.has(group)) next.delete(group); else next.add(group);
     return next;
   });
-  // Folded, each group is one icon; its pages open beside it.
+  // Folded, each group is one icon; its pages open beside it, on hover as well as on click (owner
+  // 2026-10-30), and stay open while the pointer crosses the gap to them.
   const [flyout, setFlyout] = useState<string | null>(null);
+  const flyoutClose = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverOpen = (group: string) => {
+    if (flyoutClose.current) clearTimeout(flyoutClose.current);
+    setFlyout(group);
+  };
+  const hoverClose = () => {
+    if (flyoutClose.current) clearTimeout(flyoutClose.current);
+    flyoutClose.current = setTimeout(() => setFlyout(null), 180);
+  };
+  useEffect(() => () => { if (flyoutClose.current) clearTimeout(flyoutClose.current); }, []);
 
   // The menu folds to an icon strip on a desktop (owner, 29 Oct: "collapsible to close on the left"),
   // giving the page its width. Below lg the menu stacks above the page, so it never folds there.
@@ -499,14 +511,15 @@ export function AgentSettingsTabs({
                   <button
                     type="button"
                     aria-label={`${name}${warn ? ", needs attention" : ""}`}
-                    title={name}
+                    onPointerEnter={() => hoverOpen(group)}
+                    onPointerLeave={hoverClose}
                     className={cn(RAIL_ICON_BUTTON, "relative mx-auto mb-1", (here || flyout === group) && "bg-[var(--primary-soft)] text-[var(--accent-ink)] hover:bg-[var(--primary-soft)] hover:text-[var(--accent-ink)]")}
                   >
                     <Icon aria-hidden="true" className="size-4" />
                     {warn && <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-[var(--warning)]" />}
                   </button>
                 </PopoverTrigger>
-                <PopoverContent side="right" align="start" sideOffset={10} className="w-64 p-1.5">
+                <PopoverContent side="right" align="start" sideOffset={10} className="w-64 p-1.5" onPointerEnter={() => hoverOpen(group)} onPointerLeave={hoverClose} onOpenAutoFocus={(event) => event.preventDefault()}>
                   <p className="m-0 px-2.5 pt-1.5 pb-1 text-sm font-semibold text-[var(--ink)]">{name}</p>
                   {items.map(renderItem)}
                 </PopoverContent>

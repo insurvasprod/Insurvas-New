@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ChevronLeft, Hand, Loader2 } from "lucide-react";
+import { CheckCircle2, Hand, Loader2 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { claimedMessage, releaseDialog } from "@/lib/transferInbox/constants";
 
@@ -404,11 +404,8 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      {/* The way back, then the record's own title: the lead's name is the first 32px thing on the page. */}
-      <Link href="/app/leads" className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
-        <ChevronLeft className="size-4" aria-hidden="true" />
-        Leads
-      </Link>
+      {/* The way back is the trail above the lead's name (owner 2026-10-30). */}
+      <PageHeader title={leadName} breadcrumbs={[{ label: "Leads" }, { label: "Lead workspace", href: "/app/leads" }, { label: leadName }]} />
       <section className="m-glass rounded-xl border border-border flex flex-wrap items-center gap-5 p-5">
         <Ring value={(data.verification?.session.progress_percentage ?? 0) / 100} tone={(data.verification?.session.progress_percentage ?? 0) >= 100 ? "success" : "brand"} size={84} thickness={7} label={data.verification ? `Verification ${data.verification.session.progress_percentage}%` : "Verification not started"}>
           <span className="block text-center">
@@ -417,7 +414,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
           </span>
         </Ring>
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <PageHeader title={leadName} description={identityLine(data) || undefined} />
+          {identityLine(data) && <p className="m-0 text-sm text-muted-foreground">{identityLine(data)}</p>}
           <div className="flex flex-wrap gap-2">
             <StatusChip tone={screeningTone} dot>Screening: {screeningLabel}</StatusChip>
             {data.stage && <StatusChip tone={stageTone} dot>{data.stage.name}</StatusChip>}

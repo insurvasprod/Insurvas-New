@@ -33,7 +33,8 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 
 | v3 rule | Section | Status |
 |---|---|---|
-| Glossy stat card (`StatRow` / `StatCard`) | §4a | Live for new and reworked pages |
+| Stat figures: the mockups' strip; `StatRow` / `StatCard` draw it too (owner 2026-10-30) | §4a, §16 | Live |
+| The owner's look: one card, one filter chip, the sidebar, title on every page | §16 | Live (`lib/design/sidebarLook.test.mjs`) |
 | Home dashboard layout | §4b | Live (`/app/dashboard`, preview on `/design/home`) |
 | 8px corners on buttons and inputs | §5a | Live |
 | Inline filter panel under the toolbar | §6a | Live for new and reworked lists |
@@ -47,7 +48,7 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | Gloss surface tokens (`--gloss-*`, `--stat-icon-*`) | `app/globals.css` | Live as tokens; used from `foundation-components` |
 | One look on every page: the ribbon stage and the glass surface | §5b | Live (consistency pass 2026-10-27) |
 | One kit for cards, chips, dialogs, menus, popovers, fields and the leave guard | §5b | Live; ratchets count the old copies down |
-| No visible page title; the breadcrumb names the page; actions on the tabs or step-bar row | §2 | Live (owner 2026-10-28) |
+| Trail and title on every page, actions on the title's line, no title in the top bar | §2 | Live (owner 2026-10-30; replaces the hidden title of 2026-10-28) |
 | Tables: 40px sentence-case head, 44px rows | §6 | Live |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
@@ -66,24 +67,37 @@ top of the test). The numbers only go down.
 ## 2. One header per page — `components/ui/page-header.tsx`
 ```tsx
 <PageHeader title="Partners" actions={<>…buttons…</>} />
-<ViewTabs …/>   {/* the actions join this row */}
+<ViewTabs …/>
 ```
-- **No visible title (owner 2026-10-28).** The top bar's breadcrumb says where you are (the agent
-  shell reads it from the menu, "Work › Dialer"; the admin and partner shells read the page's own
-  title). `PageHeader` still renders the title as the page's one `<h1>`, visually hidden
-  (`sr-only`, `data-page-title`), so screen readers land on it and the bar can read it. It is drawn
-  only by `PageHeader`; a page never writes its own `<h1>` (the `raw-h1` ratchet).
-- Pass a real title anyway: it is the page's name for assistive technology and for the admin and
-  partner breadcrumbs. No eyebrow (the prop is ignored), no second heading repeating the title.
-- **Actions** are what the header shows. When the page's tabs or step bar come straight after the
-  header — `ViewTabs`, `UnderlineTabs`, a step bar marked `data-page-lead`, or a row whose first
-  child is one of those — the actions sit on that row, on the right (md and up). Nothing may sit
-  between the header and that row, not even a hidden status span. Otherwise the actions are one row
-  at the top, on the right. A header with no actions takes no space.
-- Detail pages may keep a single back link ("← Partners") above the actions.
-- Description: one sentence, optional; it is hidden with the title, so put anything a user must see
-  in the page itself.
-- Actions: `<Button>` at the default size only (see §5), primary action last.
+- **Trail and title on every page (owner 2026-10-30, the Partner Chat header everywhere).** This
+  replaces the hidden title of 2026-10-28. Every page a person lands on (agent app, admin console,
+  partner portal) opens with exactly one `PageHeader` (or `AdminPageHeader`), drawn as:
+
+  ```
+  Group › Page          the trail
+  Title  (i)   actions  the page's one <h1>, its description behind an (i), the actions on the right
+  ```
+
+  The trail comes from the menu (`components/ui/page-trail.tsx`) when the page passes no
+  `breadcrumbs`. The title is the page's one `<h1>` (`data-page-title`), drawn only by `PageHeader`;
+  a page never writes its own `<h1>` (the `raw-h1` ratchet) and never adds a second header (the
+  `extra-page-header` ratchet). No eyebrow (the prop is ignored), no second heading repeating the
+  title, no hand-made title row in a workspace.
+- **The top bar does not name the page.** Where you are is the trail, on the page.
+- **Actions** sit on the title's line, on the right, `<Button>` at the default size only (see §5),
+  primary action last. Tabs and step bars come under the header, on their own row.
+- **Detail pages** (a record under a list, an `[id]` route) draw no back link. They pass the way back
+  as the trail, the last crumb the page itself:
+  `breadcrumbs={[{ label: "Partners" }, { label: "Lead sources", href: "/app/publishers" }, { label: name }]}`
+  (the group is the menu group in `lib/menu/definition.ts`). `AdminPageHeader` turns `backHref` into
+  that trail.
+- **Description:** one sentence, optional, behind the (i) beside the title.
+- **Fitting the window.** The header is part of the page: a page that fills the window (Dialer,
+  Inbound call, Partner chat, Lead sources, Settings) is one column of the window's height with the
+  header at its top and the content under it as `flex-1 min-h-0`, never a height that assumes the
+  header takes no space. `useFittingPageSize` already subtracts the header. Long content scrolls.
+- The loading skeleton (`components/ui/page-loading.tsx`) draws the trail and title lines, so the
+  page does not jump when the header arrives.
 
 ## 3. No explanatory, design-note or insight cards
 Remove every card/callout whose job is to explain the design or editorialise, e.g.
@@ -107,7 +121,13 @@ Helper text belongs in a field's `hint`, a tooltip, or nowhere.
   the stat cards in §4a, and does not keep a strip beside them.
 
 ### 4a. Stat cards (v3)
-**Status:** Live for new and reworked pages. Pages are moved one at a time, only when someone works
+**Status:** Live. Redrawn 2026-10-30 (owner: "don't use the foundation cards, use the same cards that
+we have on the mockups"): `StatRow` and `StatCard` keep their names and props, but draw the mockups' strip:
+`StatRow` is a `StatStrip` and `StatCard` a `StatTile` (`icon` is not drawn, `period`/`fact` are the
+line under the figure, `tone="warn"` colours the figure amber). See §16. The text below describes the
+glossy card as it was.
+
+Before that (2026-10-27): live for new and reworked pages. Pages are moved one at a time, only when someone works
 on them; untouched pages keep `StatStrip` (decision 2026-10-27). The `mixed-stat` ratchet keeps a
 page from using both.
 
@@ -196,8 +216,8 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
 - **The ground.** Every page of the agent app, the console and the partner portal sits on the one
   stage: the moving ribbon and two soft glows (`DashboardStage`), drawn once by the shell layout.
   A page never adds its own.
-- **The surface.** Every card is the glass: 55% of the card colour, blurred 20px, a hairline
-  border and 12px corners (`.m-glass`). Use `Card`, `TableCard`, `SettingsCard` or
+- **The surface.** Every card is the mockups' card (§16; until 2026-10-30 the glass: 55% of the
+  card colour, blurred 20px, a hairline border and 12px corners) (`.m-glass`). Use `Card`, `TableCard`, `SettingsCard` or
   `SettingsTableCard`; for a section that lays out its own inside, `cardSurface`, `cardHead`
   (a header band) and `cardInset` (a tile inside a card) from `components/ui/card.tsx`. Never a
   local `GLASS`/`CARD` constant or a hand-mixed `color-mix(…)`/`backdrop-blur` string
@@ -205,7 +225,7 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
 - **Type.** Page title hidden (§2; `text-page` 24/600 is kept for the day it returns), card title 15/600 (`text-card-title`), labels and column heads
   13/500 (`text-label`), body 14, meta 12.
 - **Chips.** A state is `StatusChip`; a choice someone presses or removes is `ToggleChip`
-  (`components/ui/toggle-chip.tsx`). No local `Chip`/`Pill` (`local-chip`).
+  (`components/ui/toggle-chip.tsx`, 36px since 2026-10-30, §16). No local `Chip`/`Pill` (`local-chip`).
 - **Pop-ups.** By task (§11): `Dialog` at a size, `ConfirmDialog`/`confirmAction()` for a loss,
   `Sheet` for a record, `Popover` for a picker, `DropdownMenu` for actions. Never
   `window.confirm` (`window-confirm`) or a page's own click-outside listener (`hand-popover`).
@@ -453,6 +473,28 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   times always with am/pm.
 - **Every page on the agent app that shows its own breadcrumb** (PageHeader `visible`) makes the top
   bar's crumb step aside (manager review 28 Oct §3.2). Partners pages follow the same frame.
+
+## 16. The owner's look (2026-10-30)
+**Status:** Live. Set by the owner: "no matter who merges it, or whoever pushes some code, this will
+stay consistent." `lib/design/sidebarLook.test.mjs` fails a build that undoes any of it; change a
+rule only with the owner's yes, in this section and the test together.
+
+- **Title on every page.** `PageHeader` always shows the trail ("Partners › Partner Chat", from the
+  menu by `components/ui/page-trail.tsx`) and the title, with the actions on the title's line. The
+  top bar names no page. See §2.
+- **One card.** The mockups' card (canvas board LirS1's `.g`): 16px corners; in dark, a white wash
+  from 6% to 1.5% at 160° and a 9% white hairline, blurred 14px. It is `.m-glass`, so `Card`,
+  `TableCard`, `StatStrip`, the home panels and every `cardSurface` draw it. No glossy card.
+- **One figure strip.** `StatStrip` + `StatTile`: label 12/700 uppercase at 0.06em, figure 24/700,
+  one 12px line under it, cells split by hairlines, no lit edge and no halo.
+- **One filter chip.** `ToggleChip` is 36px, 14px semibold, 8px corners, with `count` for the
+  number badge ("Live 22"). Every pick-one filter row is ToggleChips; page tabs stay `ViewTabs`.
+- **One table.** A list is a `TableCard` with `Pager` in its `footer` and `useFittingPageSize`
+  choosing the rows, so the pager sits at the foot of the window (the Source campaigns table).
+- **The sidebar.** Groups 15px/600 in 42px rows, each icon in a soft 30px tile (18px glyph, 2px
+  stroke) that turns green when its group is open; pages 14px text only under the group's name, the
+  current one a soft green row in bold; no tree lines. The block "The sidebar, owner 2026-10-30" is
+  the last sidebar rule in `app/globals.css`.
 
 ## Ownership notes
 - `components/ui/*` and `app/globals.css` are shared: change them only deliberately, once, for all.

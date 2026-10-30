@@ -44,6 +44,11 @@ const statusSchema = z.object({
   // A small trial buy (Scorecard's column, 20260925708000). The scorecard labels it rather than
   // reading two policies as a verdict.
   is_test_batch: z.boolean().optional(),
+  // A campaign's Settings tab (owner pick C, 2026-10-30): its name, the vendor it came from (the
+  // vendor-tenant trigger refuses another tenant's vendor) and its lead type.
+  name: z.string().trim().min(1).max(160).optional(),
+  vendor_id: z.string().uuid().optional(),
+  lead_type: z.enum(["list", "realtime", "aged"]).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, { message: "Nothing to change" });
 
 const COST_COLUMNS = "campaign_id, vendor_id, name, lead_type, product_code, status, scrub_status, mixing_weight, total_spend_cents, records_purchased, credits_received_cents, records_rejected, records_usable, cost_per_record_cents, effective_cost_per_record_cents, cost_per_usable_record_cents, rejected_spend_cents";

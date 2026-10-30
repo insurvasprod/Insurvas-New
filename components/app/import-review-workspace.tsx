@@ -15,7 +15,7 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TableCard } from "@/components/ui/table-card";
 import { st } from "@/components/app/settings/primitives";
-import { LeadsInSlot } from "@/components/app/lead-sources/leads-in-slot";
+import { NextUp } from "@/components/app/lead-sources/next-up";
 import { discardStagedFile } from "@/components/app/import-discard";
 import { normalizeImportState, parseCsv } from "@/lib/agentTemplates/csv";
 import {
@@ -71,7 +71,7 @@ type Decision = "existing" | "infile" | "dnc" | null;
 const CHECKS: Array<{ bucket: ReviewBucket; outcome: Outcome; label: string; note: string; blurb: string; decision: Decision }> = [
   { bucket: "ready", outcome: "ready", label: "Clean and new", note: "imported as new leads", decision: null, blurb: "Clean, scrubbed, and not already in your leads. These are imported." },
   // "Already in your leads": whether two contacts are one person is step 4 · Clean's question, not this one.
-  { bucket: "duplicate_existing", outcome: "duplicate_existing", label: "Already in your leads", note: "same phone · second source", decision: "existing", blurb: "The number matches a lead you already have. Adding the campaign keeps one lead; anyone already worked is not put back in the dialer." },
+  { bucket: "duplicate_existing", outcome: "duplicate_existing", label: "Already in your leads", note: "same phone · second source", decision: "existing", blurb: "The number matches a lead you already have. Adding the campaign keeps one lead and asks you on Clean whether each is the same person; anyone already worked is not put back in the dialer." },
   { bucket: "duplicate_in_file", outcome: "duplicate_in_file", label: "Twice in this file", note: "first kept · repeats to vendor credit", decision: "infile", blurb: "The same number appears more than once. The first is imported; every repeat is left out and recorded against the campaign for a vendor credit — the vendor billed the same person twice." },
   { bucket: "dnc_tenant", outcome: "dnc", label: "Your own Do Not Call", note: "never dialled", decision: "dnc", blurb: "The number is on your own do-not-call list." },
   { bucket: "dnc_registry", outcome: "dnc", label: "Do Not Call registry", note: "federal or state list", decision: "dnc", blurb: "The number matched the do-not-call registry your scrub vendor checks." },
@@ -91,7 +91,7 @@ const QUESTIONS: Record<Exclude<Decision, null>, { title: string; note?: string;
   existing: {
     title: "Already in your leads",
     options: [
-      { value: "attach", icon: UserPlus, label: "Add the campaign to them", help: "History kept · nobody re-dialled" },
+      { value: "attach", icon: UserPlus, label: "Add the campaign to them", help: "One lead kept · each confirmed on Clean" },
       { value: "skip", icon: SkipForward, label: "Skip them", help: "Not imported · cost not attributed" },
     ],
   },
@@ -119,7 +119,7 @@ const LIST_PAGE = 10;
 /** Settings › Team & access, where the owner records each member's licensed states. */
 const LICENCES_HREF = "/app/settings#team-access";
 
-type ImportSummary = { imported: number; attachedToExisting: number; suppressed: number; rejectionsRecorded: number; servable: boolean; campaignStatus: string | null; spendAddedCents: number; certificatesFiled?: number; noState?: number; warning?: string | null };
+type ImportSummary = { imported: number; attachedToExisting: number; suppressed: number; rejectionsRecorded: number; servable: boolean; campaignStatus: string | null; spendAddedCents: number; certificatesFiled?: number; noState?: number; sentToClean?: number; warning?: string | null };
 
 /** The server refused the commit (4xx/5xx with a reason), as opposed to the request never landing. */
 class ImportRefused extends Error {
@@ -263,7 +263,12 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
       + (summary.rejectionsRecorded ? ` · ${summary.rejectionsRecorded.toLocaleString()} recorded for a vendor credit` : "")
       + (summary.certificatesFiled ? ` · ${summary.certificatesFiled.toLocaleString()} consent certificate${summary.certificatesFiled === 1 ? "" : "s"} filed` : "");
     // Said after the commit as well as before it: these leads are in, and will not be called yet.
-    const followUps = [summary.noState ? `${summary.noState.toLocaleString()} new lead${summary.noState === 1 ? " has" : "s have"} no state and will not be dialled until one is added.` : null, summary.warning ?? null].filter(Boolean).join(" ");
+    const followUps = [
+      summary.noState ? `${summary.noState.toLocaleString()} new lead${summary.noState === 1 ? " has" : "s have"} no state and will not be dialled until one is added.` : null,
+      // Owner 2026-10-29: same-number rows are confirmed on Clean, not taken on trust.
+      summary.sentToClean ? `${summary.sentToClean.toLocaleString()} with a number you already had ${summary.sentToClean === 1 ? "is" : "are"} waiting on Clean to confirm.` : null,
+      summary.warning ?? null,
+    ].filter(Boolean).join(" ");
     const spend = [summary.spendAddedCents > 0 ? `${formatCents(summary.spendAddedCents)} added to ${campaignLabel}'s spend.` : null, followUps || null].filter(Boolean).join(" ") || undefined;
     if (summary.servable || summary.imported + summary.attachedToExisting === 0) return { title: counted, detail: spend };
     return {
@@ -476,21 +481,38 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   const lineLabel = "shrink-0 text-[var(--body)]";
   const lineValue = "m-0 min-w-0 truncate text-right font-semibold tabular-nums text-[var(--ink)]";
 
+  // The Next up line (owner 2026-10-30): what pressing Import will do, in one sentence, with Import as
+  // its button, the page's one primary. What stops it, or stops these leads being dialled, is said first.
+  const importButton = <Button type="button" title={willImportTitle} disabled={committing || discarding || willImport === 0} onClick={() => void commit()}>
+    {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
+  </Button>;
+  const discardButton = <Button type="button" variant="outline" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={committing || discarding} onClick={() => void discard()}>
+    <Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard this file"}
+  </Button>;
+  const notServing = plan.campaignStatus && plan.campaignStatus !== "active" ? plan.campaignStatus : null;
+  const skippedYours = attach ? 0 : alreadyYours;
+  const whatImportDoes = <>
+    <strong>{outcome.fresh.toLocaleString()}</strong> new lead{outcome.fresh === 1 ? "" : "s"} will be added to {campaignLabel}
+    {outcome.added > 0 && <>; {outcome.added.toLocaleString()} match{outcome.added === 1 ? "es a lead" : " leads"} you have and will wait on Clean</>}
+    {skippedYours > 0 && <>; {skippedYours.toLocaleString()} you already have will be skipped</>}
+    {outcome.suppressedImports > 0 && <> ({outcome.suppressedImports.toLocaleString()} on your do-not-call list, suppressed)</>}.
+  </>;
+  const nextUp = willImport === 0
+    // Nothing to import: the way out is to drop the file, said where it is seen.
+    ? <NextUp tone="danger" action={discardButton}>
+        Nothing in this file will be imported{questions.length > 0 ? " with these answers" : ""}. Change an answer below, or discard the file.
+      </NextUp>
+    : notServing
+      ? <NextUp tone="warning" action={importButton}>
+          {campaignLabel} is {notServing}, so the dialer will not call these leads until it is active. {whatImportDoes}
+        </NextUp>
+      : <NextUp tone="action" action={importButton}>{whatImportDoes}</NextUp>;
+
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
-    {/* The one way on, in the frame's corner where every other step has "Continue to …". Back, beside
-        it, returns to Import: the same place "Start over" went, so there is one button for it. */}
-    <LeadsInSlot slot="continue">
-      <Button type="button" title={willImportTitle} disabled={committing || discarding || willImport === 0} onClick={() => void commit()}>
-        {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
-      </Button>
-    </LeadsInSlot>
+    {nextUp}
 
     {fourSum !== plan.totalRows && <Alert tone="warning">
       The four counts add up to <span className="tabular-nums">{fourSum.toLocaleString()}</span>, not the file&rsquo;s <span className="tabular-nums">{plan.totalRows.toLocaleString()}</span> rows.
-    </Alert>}
-    {/* Nothing to import with these answers: said where it is seen, with the way out beside it. */}
-    {willImport === 0 && <Alert tone="warning" action={<Button type="button" variant="outline" size="sm" disabled={committing || discarding} onClick={() => void discard()}><Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard this file"}</Button>}>
-      Nothing in this file will be imported{questions.length > 0 ? " with these answers" : ""}.
     </Alert>}
     {!accountedFor && <Alert tone="warning">
       These choices account for <span className="tabular-nums">{(outcome.fresh + outcome.added + outcome.leftOut).toLocaleString()}</span> of the file&rsquo;s <span className="tabular-nums">{plan.totalRows.toLocaleString()}</span> rows.
@@ -605,9 +627,8 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
               />
             </>}
         <div className="border-t border-[var(--border)]" />
-        <Button type="button" variant="outline" className="text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]" disabled={committing || discarding} onClick={() => void discard()}>
-          <Trash2 aria-hidden="true" />{discarding ? "Discarding…" : "Discard this file"}
-        </Button>
+        {/* On the Next up line when nothing would import; here otherwise, so it is never shown twice. */}
+        {willImport > 0 && discardButton}
       </Card>
     </div>
 

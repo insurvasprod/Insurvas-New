@@ -288,20 +288,14 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
     finally { setRechecking(false); }
   }
 
-  /* A detail page keeps one back link above its title instead of a breadcrumb or a header button. */
-  const backLink = (
-    <Link href="/app/inbound" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
-      <ChevronLeft className="size-4" aria-hidden="true" />
-      Inbound
-    </Link>
-  );
+  /* The way back is the trail above the title (owner 2026-10-30). */
+  const trail = (current: string) => [{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: current }];
 
   if (loading && !panel) return <PageLoading strip={false} />;
   if (!panel) {
     return (
       <div className="flex w-full min-w-0 flex-col gap-6">
-        {backLink}
-        <PageHeader title="Call" />
+        {!embedded && <PageHeader title="Call" breadcrumbs={trail("Call")} />}
         {!embedded && <InboundStepBar current={2} />}
         <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "Verification is unavailable"}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></span>} />
       </div>
@@ -340,10 +334,10 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
     <div className={cn("m-stagger flex w-full min-w-0 flex-col gap-4", embedded && "lg:h-full lg:min-h-0")}>
       <LeaveGuard dirty={unsavedKeys.length > 0} onDiscard={dropUnsaved} what={unsavedKeys.length === 1 ? "a caller detail" : `${unsavedKeys.length} caller details`} />
       {revealReasonDialog}
-      {!embedded && backLink}
       {!embedded && (
         <PageHeader
           title={`Call with ${leadName}`}
+          breadcrumbs={trail(`Call with ${leadName}`)}
           actions={<StatusChip tone={onTheCall ? "info" : "neutral"} dot>{onTheCall ? `On the call ${onTheCall}` : "No open call"}</StatusChip>}
         />
       )}

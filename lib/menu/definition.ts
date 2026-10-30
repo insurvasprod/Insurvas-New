@@ -110,7 +110,7 @@ export const AGENT_MENU: MenuSection[] = [
       // different question.
       // 2026-10-26 (owner pick, split by job): Lead lists, Vendors & campaigns and List import are one
       // page, Lead sources. The key stays `leads.lists` — team access and saved hidden pages name it.
-      item("Leads", { key: "leads.lists", label: "Lead sources", path: "/app/lead-sources", icon: "package", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
+      item("Leads", { key: "leads.lists", label: "Lead flow", path: "/app/lead-sources", icon: "package", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
       // 2026-10-28 (owner pick B, "Leads in"): routing, recycling and the duplicate check are steps of
       // Lead sources, on its rail. They keep their keys, gates and addresses; the sidebar shows them only
       // to someone who cannot open Lead sources (a setter routes; a plan without import still recycles).
@@ -142,7 +142,7 @@ export const AGENT_MENU: MenuSection[] = [
       item("Book", { key: "book.policies", label: "Policies", path: "/app/policies", icon: "book-user", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "bookkeeper"], blurb: "The book you already have" }),
       item("Book", { key: "retention.lapse-risk", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"] }),
       // LA-5.3 · predicted, not observed: kept apart from Lapse risk so a guess never sits beside an emergency.
-      item("Book", { key: "retention.save-queue", label: "Save queue", path: "/app/save-queue", icon: "shield-check", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Policies paying fine today that the radar says will stop, and the fix." }),
+      item("Book", { key: "retention.save-queue", label: "Save queue", path: "/app/save-queue", icon: "life-buoy", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Policies paying fine today that the radar says will stop, and the fix." }),
       // LA-5.4 · servicing requests (the `payment_repair` feature): asked of the carrier, proven by the next file.
       item("Book", { key: "retention.payment-repair", label: "Servicing", path: "/app/servicing", icon: "wrench", built: true, required_feature: "payment_repair", required_roles: ["owner", "producer", "retention"], blurb: "Payment date, bank, bill-to-draft and address changes, verified by the next carrier file." }),
       // LA-5.6 · reinstatement (the `winback` feature): a lapsed policy brought back before the carrier's window shuts.
@@ -165,7 +165,7 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Team",
     items: [
       item("Team", { key: "team.producers", label: "Producers", path: "/app/producers", icon: "user-round-check", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Everyone who writes business under your contracts." }),
-      item("Team", { key: "team.hierarchy", label: "Hierarchy & Overrides", navLabel: "Hierarchy", path: "/app/hierarchy", icon: "trending-up", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Who reports to whom, and what the agency keeps on each producer." }),
+      item("Team", { key: "team.hierarchy", label: "Hierarchy & Overrides", navLabel: "Hierarchy", path: "/app/hierarchy", icon: "network", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Who reports to whom, and what the agency keeps on each producer." }),
       item("Team", { key: "team.routing", label: "Lead routing", path: "/app/lead-routing", icon: "route", teamOnly: true, sidebar_fallback_for: "leads.assignments", required_feature: "lead_assignment", required_roles: ["owner"], built: true, blurb: "Give every lead to a producer who can write it, before it goes cold." }),
       item("Team", { key: "team.splits", label: "Commission splits", path: "/app/commission-splits", icon: "hand-coins", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Policies two producers share, split after the override." }),
       item("Team", { key: "team.payouts", label: "Payout runs", navLabel: "Producer payouts", path: "/app/producer-payouts", icon: "wallet-cards", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Close a period and pay your producers, with a statement each." }),
@@ -181,8 +181,8 @@ export const AGENT_MENU: MenuSection[] = [
       item("Commissions", { key: "book.statements", label: "Statements", path: "/app/statements", icon: "file-text", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Carrier statements imported, matched to policies by a person, and posted to the commission ledger." }),
       item("Commissions", { key: "book.discrepancies", label: "Discrepancies", path: "/app/discrepancies", icon: "scale", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed.", built: true }),
       // AG-1.4 / AG-1.12 · statement rows no producer could be given safely, and each producer's three truths.
-      item("Commissions", { key: "commissions.attribution", label: "Attribution queue", path: "/app/attribution", icon: "scale", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Statement rows we could not safely give to one producer." }),
-      item("Commissions", { key: "commissions.producer_reconciliation", label: "Producer reconciliation", navLabel: "Reconciliation", path: "/app/producer-reconciliation", icon: "badge-dollar-sign", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Expected, reported and received, per producer, never blended." }),
+      item("Commissions", { key: "commissions.attribution", label: "Attribution queue", path: "/app/attribution", icon: "user-round-search", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Statement rows we could not safely give to one producer." }),
+      item("Commissions", { key: "commissions.producer_reconciliation", label: "Producer reconciliation", navLabel: "Reconciliation", path: "/app/producer-reconciliation", icon: "arrow-left-right", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Expected, reported and received, per producer, never blended." }),
       // AG-1.5 / AG-1.8 · a producer's own pay: his ledger and his statements, opened without asking anyone.
       item("Commissions", { key: "commissions.my_pay", label: "My pay", path: "/app/my-pay", icon: "briefcase-business", required_feature: "producer_payouts", required_roles: ["producer"], built: true, blurb: "What you earned, what came back, and every statement." }),
       item("Commissions", { key: "book.rate_card", label: "Rate card", path: "/app/rate-card", icon: "calculator", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Your contract level and commission rates per carrier, and how much of your book they can check." }),
@@ -204,15 +204,15 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       // LA-7.2 · lead invoices: what the agency paid for leads, per campaign.
       // 2026-10-26: Lead invoices and Vendor returns are one page, Vendor bills (key kept, as above).
-      item("Accounting", { key: "accounting.invoices", label: "Vendor bills", path: "/app/vendor-bills", icon: "file-check", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What you paid for leads, and whether it matches what arrived." }),
+      item("Accounting", { key: "accounting.invoices", label: "Vendor bills", path: "/app/vendor-bills", icon: "receipt-text", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What you paid for leads, and whether it matches what arrived." }),
       item("Accounting", { key: "insight.vendor-returns", label: "Vendor returns", path: "/app/vendor-returns", icon: "undo", sidebar_fallback_for: "accounting.invoices", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Prepare evidence-backed claims and reconcile vendor credits." }),
       // LA-7.3 · expenses: tools, insurance, fees — acquisition or overhead.
-      item("Accounting", { key: "accounting.expenses", label: "Expenses", path: "/app/expenses", icon: "hand-coins", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Everything you spend that is not a lead." }),
+      item("Accounting", { key: "accounting.expenses", label: "Expenses", path: "/app/expenses", icon: "credit-card", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Everything you spend that is not a lead." }),
       // LA-7.5 · producer splits: the agency's side, and each producer's own balance.
-      item("Accounting", { key: "accounting.producer_splits", label: "Producer splits", path: "/app/producer-splits", icon: "trending-up", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What each producer is owed, and what they owe back." }),
-      item("Accounting", { key: "accounting.my_balance", label: "My balance", path: "/app/my-balance", icon: "briefcase-business", required_feature: "profit_and_loss", required_roles: ["producer"], built: true, blurb: "Your share of the commission, and what has come back." }),
+      item("Accounting", { key: "accounting.producer_splits", label: "Producer splits", path: "/app/producer-splits", icon: "split", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What each producer is owed, and what they owe back." }),
+      item("Accounting", { key: "accounting.my_balance", label: "My balance", path: "/app/my-balance", icon: "wallet", required_feature: "profit_and_loss", required_roles: ["producer"], built: true, blurb: "Your share of the commission, and what has come back." }),
       // LA-7.6 · bank deposits: the third truth about money — what actually arrived.
-      item("Accounting", { key: "accounting.bank", label: "Bank deposits", path: "/app/bank", icon: "folder-input", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What actually landed in the bank, matched to what carriers said they paid." }),
+      item("Accounting", { key: "accounting.bank", label: "Bank deposits", path: "/app/bank", icon: "landmark", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What actually landed in the bank, matched to what carriers said they paid." }),
       item("Accounting", { key: "accounting.pnl", label: "Profit & loss", path: "/app/pnl", icon: "chart-line", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Did this month make money." }),
       item("Accounting", { key: "accounting.tax", label: "Tax summaries", path: "/app/tax", icon: "file-chart-column", required_feature: "tax_summaries", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What the accountant asks for." }),
     ],
@@ -234,7 +234,7 @@ export const AGENT_MENU: MenuSection[] = [
       item("Compliance", { key: "compliance.tcpa", label: "TCPA / DNC", path: "/app/tcpa", icon: "phone-off", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer", "assistant", "setter"] }),
       item("Compliance", { key: "compliance.consent", label: "Consent locker", path: "/app/consent", icon: "lock-keyhole", built: true, required_feature: "consent_locker", required_roles: ["owner", "producer", "assistant"] }),
       item("Compliance", { key: "compliance.complaints", label: "Complaints", path: "/app/complaints", icon: "circle-alert", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "Every complaint with an owner, a deadline and a countdown." }),
-      item("Compliance", { key: "compliance.deletions", label: "Deletion requests", path: "/app/deletion-requests", icon: "shield-check", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "One person asks to be deleted: verify, hold, delete, certify." }),
+      item("Compliance", { key: "compliance.deletions", label: "Deletion requests", path: "/app/deletion-requests", icon: "user-x", built: true, required_feature: "tcpa_checker", required_roles: ["owner", "producer"], blurb: "One person asks to be deleted: verify, hold, delete, certify." }),
       item("Compliance", { key: "compliance.litigation", label: "Evidence report", path: "/app/evidence-report", icon: "gavel", built: true, required_feature: "litigation_packet", required_roles: ["owner", "producer"], blurb: "Everything we hold about one number, and every gap." }),
     ],
   },
@@ -247,7 +247,7 @@ export const AGENT_MENU: MenuSection[] = [
       item("Reports", { key: "insight.scoring", label: "Queue scoring", path: "/app/scoring", icon: "brain", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"], blurb: "The order leads are served in, and whether it beats the plain order." }),
       item("Reports", { key: "insight.book-scorecards", label: "Book scorecards", path: "/app/book-scorecards", icon: "gauge", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Persistency, placement, chargebacks and true cost per sale, from your carrier files." }),
       item("Reports", { key: "insight.true-cpa", label: "True CPA", path: "/app/true-cpa", icon: "badge-dollar-sign", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "What your leads actually cost" }),
-      item("Reports", { key: "partners.review", label: "Partner quality", path: "/app/partner-quality", icon: "gauge", required_feature: "partner_quality", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
+      item("Reports", { key: "partners.review", label: "Partner quality", path: "/app/partner-quality", icon: "award", required_feature: "partner_quality", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
     ],
   },
   {

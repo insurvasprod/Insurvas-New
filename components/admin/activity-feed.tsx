@@ -22,7 +22,7 @@ import {
   type ActivityRange,
 } from "@/lib/loginEvents/present";
 import { LoginActivityTable } from "./login-activity-table";
-import { BoardTableFooter } from "./board-table-footer";
+import { Pager } from "@/components/ui/pager";
 
 type Loaded = { events: LoginEventRow[]; total: number; rangeTotal: number };
 
@@ -140,6 +140,7 @@ export function ActivityFeed({ initial, viewerRole }: { initial: Loaded; viewerR
 
   return (
     <TableCard
+      footer={<Pager page={page} pageSize={ACTIVITY_PAGE_SIZE} total={data.total} noun={data.total === 1 ? "attempt" : "attempts"} suffix="newest first" onPage={setPage} disabled={busy} />}
       toolbar={
         <DataToolbar
           actions={
@@ -202,17 +203,6 @@ export function ActivityFeed({ initial, viewerRole }: { initial: Loaded; viewerR
         events={data.events}
         busy={busy}
         empty={empty}
-        footer={
-          <BoardTableFooter
-            page={page}
-            pageSize={ACTIVITY_PAGE_SIZE}
-            total={data.total}
-            itemLabel={data.total === 1 ? "attempt" : "attempts"}
-            order="newest first"
-            onPageChange={setPage}
-            busy={busy}
-          />
-        }
       />
     </TableCard>
   );

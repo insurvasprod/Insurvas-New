@@ -377,7 +377,7 @@ export function LeadWorkspace() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <TableCard
           // Full height in every view: the card reaches the bottom of the window even when a view is short.
-          className={cn("min-w-0 flex-1 min-h-[calc(100dvh-var(--top-bar-h)-121px)]", view === "board" && "border-transparent bg-transparent shadow-none")}
+          className={cn("min-w-0 flex-1 min-h-[calc(100dvh-var(--top-bar-h)-153px)]", view === "board" && "border-transparent bg-transparent shadow-none")}
           toolbar={
             <div className="flex w-full flex-col gap-3">
             {/* Enter in the search box searches (server side); the hidden submit is for screen readers

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 import { TabTrack } from "./tab-track";
+import { ToggleChip } from "./toggle-chip";
 import { titleCaseNode } from "@/components/ui/title-case";
 
 /**
@@ -178,14 +179,14 @@ export function Segmented<K extends string>({
   value: K;
   onChange: (key: K) => void;
 }) {
+  // The one filter chip (owner 2026-10-30): a pick-one row of ToggleChips, as on the Source page.
   return (
-    <TabTrack role="group" aria-label={label} className={cn(TRACK, "w-auto")}>
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-2">
       {options.map((option) => (
-        <button key={option.key} type="button" aria-pressed={value === option.key} onClick={() => onChange(option.key)} className={item(value === option.key, "px-2.5")}>
-          {titleCaseNode(option.label)}
-          <Count value={option.count} tone={option.tone} />
-        </button>
+        <ToggleChip key={option.key} role="radio" selected={value === option.key} onClick={() => onChange(option.key)} count={option.count ?? undefined} countTone={option.tone}>
+          {option.label}
+        </ToggleChip>
       ))}
-    </TabTrack>
+    </div>
   );
 }

@@ -10,6 +10,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
 import { GROUP_LABELS, OUTCOME_LABELS, OUTCOMES, REASON_LABELS, REASONS, urgency, type Group } from "@/lib/ingestion/retentionBoard";
 import type { BoardEntry } from "@/lib/ingestion/retentionStore";
@@ -44,7 +45,8 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
 
   const carriers = useMemo(() => [...new Map(rows.map((r) => [r.carrierId, r.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [rows]);
   const visible = useMemo(() => rows.filter((r) => (!reason || r.reason === reason) && (!carrier || r.carrierId === carrier)), [rows, reason, carrier]);
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(480, 45);
+  const shown = paginate(visible, page, pageSize);
   const today = rows.filter((r) => r.daysLeft !== null && r.daysLeft <= 3).length;
   const atRisk = rows.reduce((sum, r) => sum + (r.atRiskCents ?? 0), 0);
   const unknownRisk = rows.filter((r) => r.atRiskCents === null && r.group !== "prevention").length;
@@ -97,7 +99,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
             <span className="text-sm text-muted-foreground">Soonest deadline first, then the most money</span>
           </DataToolbar>
         }
-        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title="Nobody to call" hint="Policies appear here when a carrier file shows a missed or bounced draft, a conservation notice, a request to cancel, a recent lapse that can still be reinstated, or a mailed bill worth converting." />

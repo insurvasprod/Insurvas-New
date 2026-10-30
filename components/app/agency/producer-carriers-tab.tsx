@@ -4,6 +4,8 @@ import { useState } from "react";
 import { notify } from "@/lib/notify";
 
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
@@ -36,6 +38,9 @@ export function ProducerCarriersTab({ producerId, canEdit }: { producerId: strin
   const [expires, setExpires] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
+  const shown = paginate(data?.rows ?? [], page, pageSize);
 
   const open = (row: CarrierRow) => { setEditing(row); setLevel(""); setNumber(row.writingNumber ?? ""); setFrom(today()); setState(""); setExpires(""); setProblem(null); };
 
@@ -68,7 +73,7 @@ export function ProducerCarriersTab({ producerId, canEdit }: { producerId: strin
 
   return (
     <div className="flex min-h-0 flex-col gap-4 lg:flex-row lg:items-stretch">
-      <TableCard className="min-w-0 flex-1" toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />}>
+      <TableCard className="min-w-0 flex-1" toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />} footer={data && !data.schemaPending && data.rows.length ? <Pager page={shown.current} total={data.rows.length} noun="carriers" pageSize={pageSize} onPage={setPage} /> : undefined}>
         {error ? <ErrorState detail={error} /> : loading || !data ? <SectionLoading rows={4} columns={6} label="Loading carriers" /> : data.schemaPending ? (
           <EmptyState title="Not switched on yet" hint="Levels and writing numbers appear once the agency database update is applied." />
         ) : data.rows.length === 0 ? (
@@ -88,7 +93,7 @@ export function ProducerCarriersTab({ producerId, canEdit }: { producerId: strin
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.rows.map((r) => (
+              {shown.rows.map((r) => (
                 <TableRow key={r.carrierId} className={editing?.carrierId === r.carrierId ? "bg-[var(--primary-soft)]" : r.spreadBps !== null && r.spreadBps < 0 ? "bg-[var(--error-surface)]" : undefined}>
                   <TableCell className="font-medium">{r.carrierName}</TableCell>
                   <TableCell className="text-right"><Level bps={r.producerLevelBps} onMissing="— set" /></TableCell>

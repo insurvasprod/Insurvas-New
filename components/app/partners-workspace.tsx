@@ -811,7 +811,7 @@ export function PartnersWorkspace({
       )}
       <div className="flex min-w-0 flex-col gap-4">
         {!detailOnly && <TableCard
-          className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-260px)] min-w-0`}
+          className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-292px)] min-w-0`}
           toolbar={
             <DataToolbar actions={<>
               {listFiltered && <ClearFiltersButton onClick={clearListFilters} />}

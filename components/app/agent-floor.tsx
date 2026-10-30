@@ -3,7 +3,7 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -16,6 +16,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Callout, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, TABLET_QUERY, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
 import { productLineLabel } from "@/lib/format/productLine";
@@ -24,8 +25,10 @@ import { cn } from "@/lib/utils";
 import { clockTime as zonedClock, dayMonth, dayMonthYear, viewerTimeZone, zonedParts } from "@/lib/format/dates";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
-/** Rows per page on every floor list: short enough that the queue and the roster both fit on screen. */
+/** Rows per page in the queue panel; the floor's tables fit the window (useFloorPageSize). */
 const FLOOR_PAGE = 10;
+/** The floor's tab tables: as many rows as the window holds below the totals and the tabs, at most 10. */
+const useFloorPageSize = () => useFittingPageSize(560, 49);
 type FloorPages = { calls: number; roster: number; queue: number; callbacks: number };
 type FloorTab = "calls" | "roster" | "callbacks";
 
@@ -264,10 +267,11 @@ function Roster({ members, searching, now, currentUserId, isOwner, canAsk, readO
   const sorted = members
     .map((member) => ({ member, state: rosterState(member, now) }))
     .sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || a.member.name.localeCompare(b.member.name));
-  const { current, rows } = paginate(sorted, page, FLOOR_PAGE);
+  const pageSize = useFloorPageSize();
+  const { current, rows } = paginate(sorted, page, pageSize);
   const ctx = { currentUserId, isOwner, canAsk, readOnly, saving, onAsk };
   return (
-    <TableCard toolbar={toolbar} footer={sorted.length ? <Pager page={current} total={sorted.length} pageSize={FLOOR_PAGE} noun="agents" onPage={onPage} /> : undefined}>
+    <TableCard toolbar={toolbar} footer={sorted.length ? <Pager page={current} total={sorted.length} pageSize={pageSize} noun="agents" onPage={onPage} /> : undefined}>
       {rows.length === 0 ? (
         searching
           ? <NoMatches noun="agents" onClear={onClear} />
@@ -378,10 +382,11 @@ function Verification({ percent }: { percent: number | null | undefined }) {
  */
 function OnCalls({ calls, filtered, now, currentUserId, isOwner, readOnly, saving, compact, page, onPage, onRelease, onClear, onOpenQueue, toolbar }: { calls: Call[]; filtered: boolean; now: number; currentUserId: string; isOwner: boolean; readOnly: boolean; saving: string | null; compact: boolean; page: number; onPage: (page: number) => void; onRelease: (call: Call, action: "unassign" | "end_buffer") => void; onClear: () => void; onOpenQueue: () => void; toolbar: React.ReactNode }) {
   const sorted = [...calls].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
-  const { current, rows } = paginate(sorted, page, FLOOR_PAGE);
+  const pageSize = useFloorPageSize();
+  const { current, rows } = paginate(sorted, page, pageSize);
   const ctx = { currentUserId, isOwner, readOnly, saving, onRelease };
   return (
-    <TableCard toolbar={toolbar} footer={sorted.length ? <Pager page={current} total={sorted.length} pageSize={FLOOR_PAGE} noun="calls" suffix="longest first" onPage={onPage} /> : undefined}>
+    <TableCard toolbar={toolbar} footer={sorted.length ? <Pager page={current} total={sorted.length} pageSize={pageSize} noun="calls" suffix="longest first" onPage={onPage} /> : undefined}>
       {rows.length === 0 ? (
         filtered
           ? <NoMatches noun="calls" onClear={onClear} />
@@ -576,12 +581,13 @@ function callbackFacts(callback: Callback) {
 }
 
 function CallbacksTable({ items, searching, compact, page, onPage, onClear, toolbar }: { items: Callback[]; searching: boolean; compact: boolean; page: number; onPage: (page: number) => void; onClear: () => void; toolbar: React.ReactNode }) {
-  const { current, rows } = paginate(items, page, FLOOR_PAGE);
+  const pageSize = useFloorPageSize();
+  const { current, rows } = paginate(items, page, pageSize);
   const viewAll = <Link href="/app/callbacks" className="font-semibold text-[var(--accent-ink)] hover:underline">Open Callbacks</Link>;
   return (
     <TableCard
       toolbar={toolbar}
-      footer={<Pager page={current} total={items.length} pageSize={FLOOR_PAGE} noun="callbacks" onPage={onPage} suffix={viewAll} />}
+      footer={<Pager page={current} total={items.length} pageSize={pageSize} noun="callbacks" onPage={onPage} suffix={viewAll} />}
     >
       {items.length === 0 ? (
         searching
@@ -730,8 +736,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const ownLabel = own === "ready" ? "You are taking calls" : own === "on_break" ? "You are on a break" : "You are not taking calls";
   const header = (
     <div className="flex flex-col gap-2">
-      <Link href="/app/inbound" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground hover:text-foreground"><ChevronLeft className="size-4" aria-hidden="true" />Inbound</Link>
-      <PageHeader title="Team" actions={<><Link href="/app/inbound" className="text-sm font-semibold text-muted-foreground hover:text-foreground">{ownLabel} ›</Link>{role === "owner" && <Button asChild variant="outline"><Link href="/app/settings#queue-sla">Inbound settings</Link></Button>}</>} />
+      <PageHeader title="Team" breadcrumbs={[{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: "Team" }]} actions={<><Link href="/app/inbound" className="text-sm font-semibold text-muted-foreground hover:text-foreground">{ownLabel} ›</Link>{role === "owner" && <Button asChild variant="outline"><Link href="/app/settings#queue-sla">Inbound settings</Link></Button>}</>} />
     </div>
   );
 

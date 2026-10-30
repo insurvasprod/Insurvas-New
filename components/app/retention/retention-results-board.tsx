@@ -9,7 +9,8 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { BAND_LABELS, type Band } from "@/lib/retention/constants";
 import { MIN_RATE_SAMPLE, PERIOD_LABELS, PERIODS, VERDICT_TEXT, type ArmComparison, type Cell, type Period } from "@/lib/retention/effectiveness";
 import type { Effectiveness } from "@/lib/retention/effectivenessStore";
@@ -53,7 +54,9 @@ export function RetentionResultsBoard({ data }: { data: Effectiveness }) {
           toolbar={
             <DataToolbar actions={actions}>
               {period}
-              <Segmented label="Break down by" value={cut} onChange={setCut} options={[{ key: "band", label: "By band" }, { key: "version", label: "By weight version" }, { key: "confidence", label: "By confidence" }]} />
+              <div role="radiogroup" aria-label="Break down by" className="flex flex-wrap items-center gap-2">
+                {([["band", "By band"], ["version", "By weight version"], ["confidence", "By confidence"]] as const).map(([key, label]) => <ToggleChip key={key} role="radio" selected={cut === key} onClick={() => setCut(key)}>{label}</ToggleChip>)}
+              </div>
               <span className="text-sm text-muted-foreground">{VERDICT_TEXT[accuracy.verdict]}</span>
             </DataToolbar>
           }

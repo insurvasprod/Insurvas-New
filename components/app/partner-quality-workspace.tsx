@@ -10,6 +10,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { PARTNER_TYPES, PARTNER_TYPE_LABELS } from "@/lib/partners/constants";
 import { defaultPartnerQualityPeriod, percentChange, percentOf, pointChange, screeningFlags, screeningPassRate } from "@/lib/partnerQuality/metrics";
 import type { PartnerQualityMetric, PartnerQualityReport, PartnerQualityRow } from "@/lib/partnerQuality/types";
@@ -149,7 +150,7 @@ export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false }: 
     </section>
 
     <TableCard
-      className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-260px)]`}
+      className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-292px)]`}
       toolbar={<>
         <DataToolbar actions={<>
           {filtered && <ClearFiltersButton onClick={clearFilters} />}
@@ -163,7 +164,7 @@ export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false }: 
             {PARTNER_TYPES.map((type) => <option key={type} value={type}>{PARTNER_TYPE_LABELS[type]}</option>)}
           </select>
           {/* LA-1.18: idle partners show by default; this narrows to the ones that sent something. */}
-          <Button type="button" variant="outline" aria-pressed={hideEmpty} className={cn(hideEmpty && "border-[var(--primary)] bg-[var(--primary-soft)]")} onClick={() => { setHideEmpty((value) => !value); setPage(1); }}>With leads only</Button>
+          <ToggleChip selected={hideEmpty} onClick={() => { setHideEmpty((value) => !value); setPage(1); }}>With leads only</ToggleChip>
         </DataToolbar>
         {error && <p role="alert" className="w-full text-sm text-destructive">{error}</p>}
       </>}

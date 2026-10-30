@@ -1,6 +1,3 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-
 import { PageHeader } from "@/components/ui/page-header";
 
 /**
@@ -11,8 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
  * now accepted and ignored, so older call sites keep compiling. `subtitle` is optional — one short
  * sentence at most.
  *
- * `backHref` is the detail-page shape: the one way back sits above the title, in one place, rather
- * than as an ad-hoc link each detail page invents for itself.
+ * `backHref` is the detail-page shape: the page it came from is the trail above the title.
  */
 export function AdminPageHeader({
   title,
@@ -29,26 +25,13 @@ export function AdminPageHeader({
   backLabel?: string;
   actions?: React.ReactNode;
 }) {
-  const header = (
+  // The way back is the trail above the title (owner 2026-10-30), as on every other page.
+  return (
     <PageHeader
       title={title}
       description={subtitle || undefined}
       actions={actions}
+      breadcrumbs={backHref ? [{ label: backLabel ?? "Back", href: backHref }, { label: title }] : undefined}
     />
-  );
-
-  if (!backHref) return header;
-
-  return (
-    <div>
-      <Link
-        href={backHref}
-        className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground no-underline transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden="true" />
-        {backLabel ?? "Back"}
-      </Link>
-      {header}
-    </div>
   );
 }

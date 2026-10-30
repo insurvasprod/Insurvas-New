@@ -1,6 +1,5 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
 import { Callout } from "@/components/app/settings/primitives";
@@ -35,15 +34,9 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
   return (
     <>
       <div>
-        <Link
-          href="/admin/users"
-          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-        >
-          <ArrowLeft className="size-[13px] stroke-[2.4]" aria-hidden="true" />
-          Back to users
-        </Link>
         <PageHeader
           title={user.name || user.email || "User"}
+          breadcrumbs={[{ label: "Customers" }, { label: "Users", href: "/admin/users" }, { label: user.name || user.email || "User" }]}
           actions={
             <span role="group" aria-label="Account state" className="flex flex-wrap items-center gap-2">
               <StatusChip tone={pillTone(userStatusTone(user.status))} dot>

@@ -4,7 +4,6 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronDown, History, Layers, RefreshCw, RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, inputControl, textareaControl } from "@/components/ui/field";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -19,15 +18,15 @@ import { cn } from "@/lib/utils";
 import { canContinue, count, label, money, percent, plural, stamp, startBlockedFor, type RuleDraft } from "@/components/app/nurture/format";
 
 /**
- * Lead sources › 7 Recycle, redesigned 2026-10-29 (owner: "it doesn't match the other pages … an easy
- * solution for the user"). The page is one job, read top to bottom:
- *   CampaignSwitch     the top row: one campaign at a time, each with its ready count.
+ * Lead sources › 6 Recycle, one campaign's panel (board C + A, 2026-10-29: the page is a table of
+ * campaigns, components/app/nurture/recycle-table.tsx; a row opens these in a DetailPanel):
  *   RecycleFlow        ① who is ready (count + breakdown, and the fix for whatever stops it),
  *                      ② the new angle (required), ③ Bring them back — and what that does.
  *                      A batch part-way screened replaces ②–③ with its progress and Resume.
- *   RulePanel          the campaign's rule beside it: outcomes as chips, rest and cap as steppers,
+ *   RulePanel          the campaign's rule: outcomes as chips, rest and cap as steppers,
  *                      Save only once something changed (the workspace guards leaving).
- *   RecyclePerformance recycled against fresh — only the figures that exist (owner rule: no "—" tiles).
+ *   RecyclePerformance recycled against fresh — only the figures that exist (owner rule: no "—"
+ *                      tiles); it opens in the Compare dialog beside the fresh-vs-recycled table.
  * LA-2.20 (Notion): reactivation by rule per campaign, re-scrub, attempts reset with history kept,
  * suppression since stays suppressed, lowest queue tier (serve_next_lead tier 6), recycled vs fresh.
  */
@@ -35,28 +34,18 @@ import { canContinue, count, label, money, percent, plural, stamp, startBlockedF
 export type Progress = { batchId: string; campaignId: string; screened: number; cleared: number; blocked: number; failed: number; pending: number };
 
 /** Quick fills for the angle; the field stays free text. */
-const ANGLES = ["A new, lower price", "A carrier they have not heard of", "Birthday check-in"];
-/** Up to this many campaigns the switcher is chips; past it, a select. */
-const CHIP_CAMPAIGNS = 5;
+export const ANGLES = ["A new, lower price", "A carrier they have not heard of", "Birthday check-in"];
 
-export function CampaignSwitch({ campaigns, value, onPick }: { campaigns: NurtureCampaignReport[]; value: string; onPick: (id: string) => void }) {
-  if (campaigns.length > CHIP_CAMPAIGNS) {
-    return (
-      <select aria-label="Campaign" value={value} onChange={(event) => onPick(event.target.value)} className={cn(inputControl, "w-auto max-w-[320px] truncate")}>
-        {campaigns.map((item) => <option key={item.campaign_id} value={item.campaign_id}>{item.campaign_name} · {count(item.eligibleNow)} ready{item.openBatch ? " · screening" : ""}</option>)}
-      </select>
-    );
-  }
+/** A section of the campaign panel: its label, then its body. */
+export function PanelSection({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
   return (
-    <div role="radiogroup" aria-label="Campaign" className="flex min-w-0 flex-wrap gap-1.5">
-      {campaigns.map((item) => (
-        <ToggleChip key={item.campaign_id} role="radio" selected={item.campaign_id === value} onClick={() => onPick(item.campaign_id)}>
-          <span className="max-w-[200px] truncate">{item.campaign_name}</span>
-          <span className="font-semibold tabular-nums" aria-label={`${count(item.eligibleNow)} ready`}>{count(item.eligibleNow)}</span>
-          {item.openBatch && <RefreshCw className="size-3" aria-label="being screened" />}
-        </ToggleChip>
-      ))}
-    </div>
+    <section aria-label={title} className="flex min-w-0 flex-col gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
+      <div className="flex min-h-6 flex-wrap items-center gap-2">
+        <h3 className="m-0 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">{title}</h3>
+        {aside && <span className="ml-auto flex items-center gap-2">{aside}</span>}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -143,8 +132,7 @@ export function RecycleFlow({ campaign, readOnly, readOnlyReason, busy, batchesR
   }
 
   return (
-    <Card className="min-w-0">
-      <CardContent className="flex flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
         <Step n={1} title="Who is ready">
           <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
             <strong className="text-4xl font-semibold leading-none tracking-[-0.03em] tabular-nums text-[var(--ink)]">{count(campaign.eligibleNow)}</strong>
@@ -217,7 +205,6 @@ export function RecycleFlow({ campaign, readOnly, readOnlyReason, busy, batchesR
             </Step>
           </>
         )}
-      </CardContent>
 
       <ConfirmDialog
         open={confirming}
@@ -230,11 +217,12 @@ export function RecycleFlow({ campaign, readOnly, readOnlyReason, busy, batchesR
       >
         “{angle.trim()}” · {campaign.campaign_name} · {plural(ceiling, "attempt")} this pass{script.trim() ? " · with a script" : ""}
       </ConfirmDialog>
-    </Card>
+    </div>
   );
 }
 
-function statusOf(campaign: NurtureCampaignReport, screeningNow: boolean): ReactNode {
+/** The campaign's state, for the panel's header. */
+export function campaignStatus(campaign: NurtureCampaignReport, screeningNow: boolean): ReactNode {
   if (screeningNow) return <StatusChip tone="info">Screening now</StatusChip>;
   if (campaign.openBatch) return <StatusChip tone="warning" title={`“${campaign.openBatch.angle}”`}>Being screened</StatusChip>;
   return <StatusChip tone={campaign.status === "active" ? "good" : "neutral"}>{label(campaign.status)}</StatusChip>;
@@ -258,12 +246,8 @@ export function RulePanel({ campaign, draft, onDraft, dirty, problem, saving, lo
   const run = campaign.lastRun;
   const toggle = (option: string) => onDraft({ ...draft, outcomes: draft.outcomes.includes(option) ? draft.outcomes.filter((value) => value !== option) : [...draft.outcomes, option] });
   return (
-    <Card className="min-w-0">
-      <CardHeader>
-        <CardTitle>Rule</CardTitle>
-        <CardAction>{statusOf(campaign, screeningNow)}</CardAction>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <PanelSection title="Rule">
+      <div className="flex flex-col gap-4">
         <div role="group" aria-labelledby="rule-outcomes" className="flex flex-col gap-1.5">
           <span id="rule-outcomes" className="text-label text-[var(--body)]">Recycle after</span>
           <div className="flex flex-wrap gap-1.5" title={lockedReason ?? undefined}>
@@ -287,24 +271,24 @@ export function RulePanel({ campaign, draft, onDraft, dirty, problem, saving, lo
           {run ? <>Last run {stamp(run.at)}: {count(run.cleared)} cleared · {count(run.blocked)} blocked · {count(run.failed)} held</> : "Never run"}
         </span>
         {lockedReason && !screeningNow && <span className="text-xs text-[var(--body)]">{lockedReason}</span>}
-      </CardContent>
+      </div>
       {dirty && (
-        <CardFooter className="justify-end gap-2 border-t pt-4">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {problem && <span role="alert" className="mr-auto text-xs text-[var(--error-ink)]">{problem}</span>}
           <Button type="button" variant="ghost" disabled={saving} onClick={onDiscard}>Discard</Button>
           <Button type="button" disabled={saving || Boolean(problem)} onClick={onSave}>{saving ? "Saving…" : "Save rule"}</Button>
-        </CardFooter>
+        </div>
       )}
-    </Card>
+    </PanelSection>
   );
 }
 
 /** Recycled against fresh: only the figures that exist. Null when there are none yet. */
-export function RecyclePerformance({ data, onCompare }: { data: NurtureReport; onCompare: () => void }) {
+export function RecyclePerformance({ data, onCompare }: { data: NurtureReport; onCompare?: () => void }) {
   const { contactRate, conversion, recycledAllTime, totals, batches } = data;
   const spent = batches.reduce((sum, batch) => sum + batch.costCents, 0);
   const policies = batches.reduce((sum, batch) => sum + batch.policies, 0);
-  const compare = <button type="button" onClick={onCompare} className="text-xs font-semibold text-foreground hover:underline">Compare</button>;
+  const compare = onCompare ? <button type="button" onClick={onCompare} className="text-xs font-semibold text-foreground hover:underline">Compare</button> : undefined;
   const cards: ReactNode[] = [];
   if (contactRate?.recycled != null) {
     cards.push(<StatCard key="contact" label="Contact rate" period="recycled" value={percent(contactRate.recycled)} fact={{ label: "Fresh", value: percent(contactRate.fresh) }} action={compare} />);

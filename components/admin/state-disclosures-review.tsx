@@ -8,6 +8,7 @@ import { Callout, Field, KeyValues, control, st, pillTone } from "@/components/a
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { formatEffectiveDate, STATE_NAME, type CoverageRow, type ScopeProduct } from "@/lib/stateDisclosures/board";
@@ -66,7 +67,8 @@ export function StateDisclosuresReviewCard({
   const names = useMemo(() => new Map(scope.map((entry) => [entry.code, entry.name])), [scope]);
   // One pager over the rows on screen: the pending proposals first, then the recent decisions when shown.
   const visible = showRecent ? [...proposals.pending, ...proposals.recent] : proposals.pending;
-  const { current, rows: pageRows } = paginate(visible, page);
+  const pageSize = useFittingPageSize(420, 45);
+  const { current, rows: pageRows } = paginate(visible, page, pageSize);
 
   if (proposals.error) {
     return <Callout tone="error" title="Proposals could not be loaded">{proposals.error}</Callout>;
@@ -76,7 +78,7 @@ export function StateDisclosuresReviewCard({
   return (
     <TableCard
       title={`Awaiting review · ${proposals.pending.length}`}
-      footer={<Pager page={current} total={visible.length} noun="proposals" onPage={setPage} />}
+      footer={<Pager page={current} pageSize={pageSize} total={visible.length} noun="proposals" onPage={setPage} />}
       action={
         proposals.recent.length > 0 && (
           <Button type="button" variant="outline" onClick={() => setShowRecent((value) => !value)} aria-expanded={showRecent}>

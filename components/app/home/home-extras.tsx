@@ -19,8 +19,8 @@ import { cn } from "@/lib/utils";
 export function HomeSetup({ checklist }: { checklist: SetupChecklist }) {
   const next = checklist.steps.find((step) => !step.complete && !step.skipped) ?? null;
   return (
-    <section aria-label="Get set up" data-size="panel" className="m-stat-card flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border px-4 py-3">
-      <span className="m-stat-card-icon grid size-8 shrink-0 place-items-center rounded-md text-[var(--accent-ink)]" aria-hidden="true"><Wrench className="size-4" /></span>
+    <section aria-label="Get set up" data-size="panel" className="m-glass flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border border-border px-4 py-3">
+      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[var(--primary-soft)] text-[var(--accent-ink)]" aria-hidden="true"><Wrench className="size-4" /></span>
       <div className="flex min-w-[12rem] flex-1 flex-col gap-1.5">
         <p className="m-0 flex items-baseline gap-2 text-sm">
           <span className="font-semibold text-foreground">Finish setting up</span>

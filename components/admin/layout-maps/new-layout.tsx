@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
 import { TARGET_FIELDS } from "@/lib/ingestion/layout";
 import type { LayoutMapView } from "@/lib/ingestion/layoutAdmin";
@@ -35,6 +36,7 @@ export function NewLayout() {
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 49);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +57,7 @@ export function NewLayout() {
 
   const view = sample ? sampleView(sample.read, sample.table) : null;
   const fieldLabel = (field: string) => TARGET_FIELDS[fileType].find((item) => item.key === field)?.label ?? field;
-  const shown = view ? paginate(view.draft.columns, page) : null;
+  const shown = view ? paginate(view.draft.columns, page, pageSize) : null;
   const usedCount = view ? view.draft.columns.filter((column) => column.becomes).length : 0;
 
   const create = () => run("create", async () => {
@@ -128,7 +130,7 @@ export function NewLayout() {
               )}
             </DataToolbar>
           ) : undefined}
-          footer={<Pager page={shown.current} total={view.draft.columns.length} noun="columns" onPage={setPage} />}
+          footer={<Pager page={shown.current} pageSize={pageSize} total={view.draft.columns.length} noun="columns" onPage={setPage} />}
         >
           <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
             <thead><tr><th className="w-[70px]">Column</th><th>Header in the file</th><th className="w-[300px]">Used for</th><th>Example values</th></tr></thead>

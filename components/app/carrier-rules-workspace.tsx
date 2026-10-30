@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { CADENCES, COMMISSION_TRIGGERS, RULE_SOURCE_LABELS, RULE_SOURCES, RULE_TYPE_LABELS, RULE_TYPES, STATEMENT_FORMATS, type ResolvedRule, type RuleSource, type RuleType } from "@/lib/ingestion/carrierRules";
 import type { CarrierRulesRow } from "@/lib/ingestion/carrierRulesStore";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -62,7 +63,8 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
   const [page, setPage] = useState(1);
 
   const visible = useMemo(() => carriers.filter((row) => (!query.trim() || row.carrierName.toLowerCase().includes(query.trim().toLowerCase())) && (!gapsOnly || row.gaps.length > 0)), [carriers, query, gapsOnly]);
-  const shown = paginate(visible, page, 10);
+  const pageSize = useFittingPageSize(420, 49);
+  const shown = paginate(visible, page, pageSize);
   const open = carriers.find((row) => row.carrierId === openId) ?? null;
 
   async function post(key: string, body: Record<string, unknown>, done: string) {
@@ -96,7 +98,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
             <ToolbarCheckbox checked={gapsOnly} onChange={(value) => { setGapsOnly(value); setPage(1); }} label="Only carriers with a missing rule" />
           </DataToolbar>
         }
-        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
+        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
       >
         {carriers.length === 0 ? (
           <EmptyState title="No carriers in the library" hint="Carriers come from the platform's carrier library." />

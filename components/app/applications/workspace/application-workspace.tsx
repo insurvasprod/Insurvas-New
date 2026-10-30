@@ -10,15 +10,14 @@
  */
 
 import { useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ExternalLink, History, UserPlus } from "lucide-react";
+import { ArrowRight, Check, ExternalLink, History, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
-import { backLink } from "@/lib/applications/backLink";
+import { backLink, DEFAULT_BACK } from "@/lib/applications/backLink";
 import { WORKSPACE_STEPS, PRODUCT_LABEL, type WorkspaceStep } from "@/lib/applications/constants";
 import type { AttemptView, CaseView } from "@/lib/applications/types";
 import { notify } from "@/lib/notify";
@@ -286,6 +285,7 @@ function Workspace() {
   // The spouse's own name, from the attempt on screen or any other spouse attempt that has one.
   const spouseName = insured === "spouse" ? insuredName(attempt) : "";
   const spouseOption = household ? insuredName(caseView.attempts.find((a) => a.insuredRole === "spouse" && insuredName(a))) : "";
+  const title = insured === "spouse" ? ((spouseName || spouseOption) ? `${spouseName || spouseOption} · spouse` : `${caseView.clientName}'s spouse`) : caseView.clientName;
 
   function openPortal() {
     if (!attempt.carrierPortalUrl) return;
@@ -300,11 +300,9 @@ function Workspace() {
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <Link href={back.href} className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
-        <ArrowLeft className="size-4" aria-hidden="true" />{back.label}
-      </Link>
       <PageHeader
-        title={insured === "spouse" ? ((spouseName || spouseOption) ? `${spouseName || spouseOption} · spouse` : `${caseView.clientName}'s spouse`) : caseView.clientName}
+        title={title}
+        breadcrumbs={[...(back.href === DEFAULT_BACK.href ? [{ label: "Sales" }] : []), { label: back.label, href: back.href }, { label: title }]}
         actions={<>
           {/* Which application is on screen, then what to do with it: one group, top right (2026-10-06 redesign). */}
           {household && (

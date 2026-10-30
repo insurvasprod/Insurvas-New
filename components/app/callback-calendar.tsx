@@ -15,6 +15,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { st } from "@/components/app/settings/primitives";
 import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
 import { cn } from "@/lib/utils";
@@ -534,12 +535,11 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   // Filters button, opening in the toolbar band (2026-10-09 mobile); saved views stay in the row.
   const searchBox = <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search customer, phone, note" label="Search callbacks by customer, phone, source, note or agent" />;
   const whenFilter = (
-    <span role="group" aria-label="When" className={cn("inline-flex h-9 max-w-full min-w-0 gap-0.5 overflow-x-auto rounded-md bg-[var(--canvas)] p-0.5", (compact || !wide) && "w-full")}>
+    <span role="radiogroup" aria-label="When" className={cn("inline-flex max-w-full min-w-0 gap-1.5 overflow-x-auto", (compact || !wide) && "w-full")}>
       {(Object.keys(WHEN_LABEL) as WhenFilter[]).map((key) => (
-        <button key={key} type="button" aria-pressed={when === key} onClick={() => { setWhen(key); setListPage(1); }} className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm font-semibold tracking-[-0.01em] whitespace-nowrap", when === key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+        <ToggleChip key={key} role="radio" selected={when === key} onClick={() => { setWhen(key); setListPage(1); }} count={byWhen[key].length} className="shrink-0">
           {WHEN_LABEL[key]}
-          <span className={cn("rounded-full px-1.5 text-xs tabular-nums", key === "overdue" && byWhen.overdue.length ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{byWhen[key].length}</span>
-        </button>
+        </ToggleChip>
       ))}
     </span>
   );

@@ -26,9 +26,9 @@ export function fullHeightCard(chrome: number) {
 
 // Spelled out so Tailwind sees each class literally.
 const FULL_HEIGHT: Record<number, string> = {
-  160: "min-h-[calc(100dvh-var(--top-bar-h)-160px)]",
-  200: "min-h-[calc(100dvh-var(--top-bar-h)-200px)]",
-  240: "min-h-[calc(100dvh-var(--top-bar-h)-240px)]",
-  300: "min-h-[calc(100dvh-var(--top-bar-h)-300px)]",
-  340: "min-h-[calc(100dvh-var(--top-bar-h)-340px)]",
+  160: "min-h-[calc(100dvh-var(--top-bar-h)-192px)]",
+  200: "min-h-[calc(100dvh-var(--top-bar-h)-232px)]",
+  240: "min-h-[calc(100dvh-var(--top-bar-h)-272px)]",
+  300: "min-h-[calc(100dvh-var(--top-bar-h)-332px)]",
+  340: "min-h-[calc(100dvh-var(--top-bar-h)-372px)]",
 };

@@ -11,7 +11,7 @@ import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { Segmented } from "@/components/app/view-tabs";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { formatPhone, normalizeDigits } from "@/lib/suppression/constants";
 import {
   CLEARED_LIST_LABELS,
@@ -176,15 +176,10 @@ export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onC
         >
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search numbers" label="Search exemptions by number" />
           {/* Every use of an exemption is part of its record: its own view, never cut to the last ten. */}
-          <Segmented
-            label="Exemptions or their uses"
-            value={view}
-            onChange={(next) => { setView(next); setPage(1); }}
-            options={[
-              { key: "exemptions", label: "Exemptions", count: loaded?.schemaReady ? exemptions.length : null },
-              { key: "uses", label: "Uses", count: loaded?.schemaReady ? loaded.uses.length : null },
-            ]}
-          />
+          <div role="radiogroup" aria-label="Exemptions or their uses" className="flex flex-wrap items-center gap-2">
+            <ToggleChip role="radio" selected={view === "exemptions"} count={loaded?.schemaReady ? exemptions.length : undefined} onClick={() => { setView("exemptions"); setPage(1); }}>Exemptions</ToggleChip>
+            <ToggleChip role="radio" selected={view === "uses"} count={loaded?.schemaReady ? loaded.uses.length : undefined} onClick={() => { setView("uses"); setPage(1); }}>Uses</ToggleChip>
+          </div>
         </DataToolbar>
       }
       footer={loaded?.schemaReady && view === "exemptions" && matching.length > 0

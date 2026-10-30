@@ -10,7 +10,7 @@ import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
-import { cn } from "@/lib/utils";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { LeadListIndex, type LeadListIndexRow, type LeadListPanelIntent, type LeadListPanelTab } from "@/components/app/lead-list-index";
 import { LeadListPanel, PANEL_TABS } from "@/components/app/lead-list-panel";
 import type { AssignDrawerMember } from "@/components/app/lead-list-assign-drawer";
@@ -287,9 +287,9 @@ function LeadListLeads({ open, members, onAssigned }: { open: LeadList; members:
             {/* Which leads to show, as segmented chips. Unassigned is what a person picking leads to
                 hand out asked for, not a filter left on. */}
             {!solo && (
-              <span role="group" aria-label="Which leads" className="inline-flex h-9 gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+              <span role="radiogroup" aria-label="Which leads" className="inline-flex gap-1.5">
                 {([[true, "Unassigned only"], [false, "All leads"]] as const).map(([only, text]) => (
-                  <button key={text} type="button" aria-pressed={unassignedOnly === only} onClick={() => showUnassigned(only)} className={cn("inline-flex h-8 items-center whitespace-nowrap rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", unassignedOnly === only ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{text}</button>
+                  <ToggleChip key={text} role="radio" selected={unassignedOnly === only} onClick={() => showUnassigned(only)}>{text}</ToggleChip>
                 ))}
               </span>
             )}

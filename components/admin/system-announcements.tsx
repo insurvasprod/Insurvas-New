@@ -11,7 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { control, Field, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
@@ -35,7 +36,6 @@ import {
   type AnnouncementState,
 } from "@/lib/system/adminFormat";
 
-const PAGE_SIZE = 10;
 
 const STATE_PILL: Record<AnnouncementState, { tone: PillTone; label: string }> = {
   live: { tone: "success", label: "Live" },
@@ -125,9 +125,8 @@ export function SystemAnnouncements({
   const [deleting, setDeleting] = useState<Announcement | null>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
 
-  const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-  const current = Math.min(page, pages);
-  const visible = items.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageSize = useFittingPageSize(420, 45);
+  const { current, rows: visible } = paginate(items, page, pageSize);
 
   function openNew() {
     setDraft(emptyDraft());
@@ -207,6 +206,7 @@ export function SystemAnnouncements({
     <>
       <TableCard
         title="Announcements"
+        footer={!loadError && items.length ? <Pager page={current} pageSize={pageSize} total={items.length} noun={items.length === 1 ? "announcement" : "announcements"} suffix="newest start first" onPage={setPage} /> : undefined}
         action={
           <Button type="button" variant="outline" onClick={openNew}>
             New announcement
@@ -281,16 +281,6 @@ export function SystemAnnouncements({
             )}
           </tbody>
         </table>
-        {!loadError && items.length > 0 && (
-          <BoardTableFooter
-            page={current}
-            pageSize={PAGE_SIZE}
-            total={items.length}
-            itemLabel={items.length === 1 ? "announcement" : "announcements"}
-            order="newest start first"
-            onPageChange={setPage}
-          />
-        )}
       </TableCard>
 
       {/* New / edit */}

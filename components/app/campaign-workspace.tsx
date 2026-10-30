@@ -5,14 +5,12 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Activity, AlertTriangle, Archive, BadgeCheck, BadgeDollarSign, CalendarDays, CheckCircle2, Coins, Hourglass, Layers, LifeBuoy, ListChecks, Loader2,
-  Package, Pause, Phone, PhoneCall, PieChart, Play, Plus, Receipt, RefreshCw, Repeat, ShieldAlert, ShieldCheck, Store, Trash2, Upload, WifiOff, XCircle,
+  Activity, AlertTriangle, Archive, ArrowRight, BadgeCheck, BadgeDollarSign, CalendarDays, CheckCircle2, Coins, Hourglass, Layers, LifeBuoy, ListChecks, Loader2,
+  ArrowLeft, ChevronDown, Package, Pause, Pencil, Settings as SettingsIcon, Phone, PhoneCall, PieChart, Play, Plus, Receipt, RefreshCw, Repeat, ShieldAlert, ShieldCheck, Store, Trash2, Upload, WifiOff, XCircle,
 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { useSoldProducts } from "@/components/app/products/use-sold-products";
 import {
-  CAMPAIGN_STATUSES,
-  CAMPAIGN_STATUS_LABEL,
   CAMPAIGN_STATUS_ORDER,
   SCRUB_LABEL as SCRUB_STATUS_LABEL,
   campaignServes,
@@ -27,37 +25,41 @@ import {
 } from "@/lib/campaigns/constants";
 
 import { Button } from "@/components/ui/button";
-import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { ToolbarSearch } from "@/components/ui/data-toolbar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RowActions } from "@/components/app/campaigns/row-actions";
 import { DetailPanel } from "@/components/ui/detail-panel";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { cardSurface } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { control, Field, ToggleRow } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { Meter, StatStrip, StatTile } from "@/components/ui/stat";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
-import { Pager } from "@/components/ui/pager";
-import { LeadTypeChoice, NewVendorPanel, VendorRoster, VendorSheet, useVendorCards, type RosterRollup } from "@/components/app/vendor-roster";
-import { VendorList } from "@/components/app/campaigns/vendor-list";
+import { Pager, paginate } from "@/components/ui/pager";
+import { LEAD_TYPE, LeadTypeChoice, NewVendorPanel, VendorRoster, VendorSettings, VendorSheet, useVendorCards, type RosterRollup } from "@/components/app/vendor-roster";
 import { VendorScorecard } from "@/components/app/campaigns/vendor-scorecard";
 import { Figure } from "@/components/app/campaigns/figure";
 import { LifecycleTrack, NEW_CAMPAIGN_STEPS, type LifecycleOff, type StepTone } from "@/components/app/campaigns/lifecycle";
 import { NumberStepper } from "@/components/app/campaigns/number-stepper";
 import { campaignDeleteBlocked, deleteCampaign } from "@/components/app/campaigns/delete-campaign";
 import { useVendorDelete, type DeletableVendor } from "@/components/app/campaigns/delete-vendor";
-import { RowActions } from "@/components/app/campaigns/row-actions";
-import { costTone, toneText, type FigureTone } from "@/components/app/campaigns/tones";
+import { type FigureTone } from "@/components/app/campaigns/tones";
 import { LeadsInSlot, useInLeadsFrame } from "@/components/app/lead-sources/leads-in-slot";
+import { useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
+import { NextUp, type NextUpTone } from "@/components/app/lead-sources/next-up";
 import { Callout } from "@/components/app/settings/primitives";
 import { STATE_NAMES } from "@/lib/callbacks/windowFacts";
-import { vendorTakesCampaigns } from "@/lib/vendors/types";
+import { VENDOR_STATUS_LABEL, vendorTakesCampaigns } from "@/lib/vendors/types";
+import { isOwnBookVendor } from "@/lib/campaigns/ownBook";
 import { cn } from "@/lib/utils";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { StatusChip } from "@/components/ui/status-chip";
-import { UnderlineTabs, ViewTabs } from "@/components/ui/view-tabs";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
 
 /**
  * Lead sources › 1 · Source (owner pick "A · Vendor first", canvas M2 · Vendors & campaigns,
@@ -68,6 +70,9 @@ import { UnderlineTabs, ViewTabs } from "@/components/ui/view-tabs";
  * vendor table. The whole step is one screen tall and its lists scroll inside themselves.
  */
 type View = "campaigns" | "vendors";
+type CardTab = "needs" | "live" | "drafts" | "all";
+type VendorTab = "campaigns" | "scorecard" | "settings";
+const CARD_TAB_LABEL: Record<CardTab, string> = { needs: "Needs you", live: "Live", drafts: "Drafts", all: "All" };
 
 type Campaign = {
   campaign_id: string; vendor_id: string; name: string; lead_type: string; product_code: string | null;
@@ -117,11 +122,11 @@ function money2(cents: number | null | undefined) {
 
 // Exhausted is a status like the others (lib/campaigns/constants.ts): labelled, sorted last, and
 // filterable. The scrub labels are the four values the database holds.
-const STATUS_LABEL = CAMPAIGN_STATUS_LABEL;
 const STATUS_ORDER = CAMPAIGN_STATUS_ORDER;
 const SCRUB_LABEL = SCRUB_STATUS_LABEL;
 /** Rows per page; the list scrolls inside its card, so this is a page of reading, not of screen. */
-const PAGE_SIZE = 25;
+/** A list card that reaches the foot of the step; its rows scroll inside and the pager stays at the foot. */
+const FILL_CARD = "flex min-w-0 flex-col lg:min-h-0 lg:flex-1 [&>.overflow-x-auto]:flex-1 lg:[&>.overflow-x-auto]:min-h-0 lg:[&>.overflow-x-auto]:overflow-y-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1]";
 /** A choice of this many products or fewer is chips; more is a dropdown. */
 const PRODUCT_CHIPS_MAX = 4;
 
@@ -207,12 +212,39 @@ function ScrubState({ campaign, run, compact = false }: { campaign: Campaign; ru
 
 /** Where a campaign is on its way to serving leads, and how that step is going. */
 type Stage = { current: number; tone: StepTone; off: LifecycleOff; label: ReactNode | null; leadsIn: number | null };
+type FocusTab = "lists" | "report" | "settings";
 
 /** `embedded`: drawn as step 1 of Lead sources, whose frame is the page's. */
-export function CampaignWorkspace({ embedded = false, readOnly = false }: {
+export function CampaignWorkspace({ embedded = false, readOnly = false, focusId = null, owedCents = null, assign = null, initialTab = "lists", vendorId = null, initialVendorTab = "campaigns", vendorsPage = false, report = null, children = null }: {
   embedded?: boolean;
   /** The plan is read-only (paused, suspended, cancelled): everything shows, nothing changes. */
   readOnly?: boolean;
+  /**
+   * Source › a campaign (/app/campaigns/<id>, board LirF1): the campaign takes the page — its name,
+   * its figures in one line, Edit and "+ Import a list" — and `children` (its lists and the list
+   * sections) below. Every action of the grid (the edit panel, scrub, activate, delete) stays.
+   */
+  focusId?: string | null;
+  /** What the vendor owes back on this campaign, for the figures line (lead list detail's claims). */
+  owedCents?: number | null;
+  /** The campaign's unowned leads and its assign drawer (server-rendered), for the next-up line; null when this person cannot assign. */
+  assign?: { count: number; node: ReactNode } | null;
+  /** The campaign page's view (owner pick C, 2026-10-30): its lists, its report, or its Settings (`?tab=`). */
+  initialTab?: FocusTab;
+  /**
+   * The campaign's report (removed at import, not being served, column map, health, consent): a view
+   * of its own beside Lists, not a collapsible under them (owner 2026-10-30).
+   */
+  report?: ReactNode;
+  /**
+   * Source › a vendor (/app/campaigns/vendors/<id>, owner pick C, 2026-10-30, board LirE6): its
+   * campaigns, its scorecard and its Settings, as tabs. The grid filtered to the vendor is the first.
+   */
+  vendorId?: string | null;
+  initialVendorTab?: VendorTab;
+  /** Source › Vendors (/app/campaigns/vendors, owner 2026-10-30): every vendor, to add, edit and delete. */
+  vendorsPage?: boolean;
+  children?: ReactNode;
 } = {}) {
   const router = useRouter();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -232,23 +264,41 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
   const [newCampaign, setNewCampaign] = useState<{ vendor_id: string; name: string; lead_type: string; product_code: string; total_spend: string; records_purchased: string; mixing_weight: string } | null>(null);
   const [creating, setCreating] = useState(false);
   /** The vendor picked on the left, or "all". */
-  const [vendorFilter, setVendorFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = useState(vendorId ?? "all");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState("all");
   /** "Screening down": just the campaigns the outage stopped. */
   const [onlyIds, setOnlyIds] = useState<Set<string> | null>(null);
   const [search, setSearch] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(0);
   /** The campaign open in the side panel. */
   const [openId, setOpenId] = useState<string | null>(null);
   /** Which section of it to show: a row opens its Numbers, the row's pen its Cost & weight. */
   const [panelTab, setPanelTab] = useState<{ tab: PanelTab; at: number }>({ tab: "numbers", at: 0 });
   const openPanel = (id: string, tab: PanelTab) => { setPanelTab((current) => ({ tab, at: current.at + 1 })); setOpenId(id); };
-  const [view, setView] = useState<View>("campaigns");
+  const [view, setView] = useState<View>(vendorsPage ? "vendors" : "campaigns");
+  const [vendorsTab, setVendorsTab] = useState<"manage" | "compare">("manage");
+  const [vendorListPage, setVendorListPage] = useState(1);
+  /** The grid's tabs (board LirN1): what needs you first, then live, drafts, everything. */
+  const [show, setShow] = useState<CardTab>("all");
+  const [focusTab, setFocusTab] = useState<FocusTab>(initialTab);
+  const [vendorTab, setVendorTab] = useState<VendorTab>(initialVendorTab);
+  const pickVendorTab = (tab: VendorTab) => {
+    setVendorTab(tab);
+    try { window.history.replaceState(null, "", tab === "campaigns" ? window.location.pathname : `?tab=${tab}`); } catch { /* the tab still changes */ }
+  };
+  /** Lists | Report | Settings on a campaign, kept in the address so a reload or a shared link opens the same view. */
+  const pickFocusTab = (tab: FocusTab) => {
+    setFocusTab(tab);
+    try { window.history.replaceState(null, "", tab === "lists" ? window.location.pathname : `?tab=${tab}`); } catch { /* the view still changes */ }
+  };
+  /** Lists (committed imports) per campaign; null before the campaigns read answers it. */
+  const [listCounts, setListCounts] = useState<Record<string, number> | null>(null);
   /** The vendor whose edit form is open from its scorecard. */
   const [editVendorId, setEditVendorId] = useState<string | null>(null);
   const inFrame = useInLeadsFrame();
+  // As many campaigns as fit the window (the pager takes the rest), like every other list table.
+  const gridPageSize = useFittingPageSize(360, 57);
   // Campaigns concept audit (LA-2 §5). Each is null when its migration is not applied, and the line
   // that shows it is then left out rather than drawn as a zero.
   const [progress, setProgress] = useState<Record<string, CampaignProgress> | null>(null);
@@ -286,6 +336,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
     setTargetStates(campaignBody.targetStates ?? null);
     setOutcomes(campaignBody.outcomes ?? null);
     setFunnel(campaignBody.funnel ?? null);
+    setListCounts(campaignBody.listCounts ?? null);
     setCanScrub(Boolean(campaignBody.canScrub));
     setFaults(Array.isArray(campaignBody.faults) ? campaignBody.faults : []);
     // LA-2.22 criterion 4: "every limited screen shows usage against the cap" — the Active
@@ -318,15 +369,14 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
     if (deletedId) {
       setVendorFilter((current) => (current === deletedId ? "all" : current));
       setEditVendorId((current) => (current === deletedId ? null : current));
+      // Deleted from its own page: back to the campaigns.
+      if (vendorId === deletedId) { router.push("/app/campaigns"); return; }
     }
     await load();
   });
 
-  const [refreshing, setRefreshing] = useState(false);
-  async function refresh() {
-    setRefreshing(true);
-    try { await load(); } finally { setRefreshing(false); }
-  }
+  // Board LirN1 has no Refresh button: "Try again" on a failed read reloads, and every action reloads after it.
+  async function refresh() { await load(); }
 
   const vendorName = useMemo(() => new Map(vendors.map((vendor) => [vendor.id, vendor.name])), [vendors]);
 
@@ -373,6 +423,8 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
     try {
       if (!(await deleteCampaign(campaign.campaign_id, campaign.name))) return;
       setOpenId(null);
+      // Deleted from its own page: back to the campaigns, not a "not found" for the one just removed.
+      if (focusId === campaign.campaign_id) { router.push("/app/campaigns"); return; }
       await load();
     } finally {
       setBusy(null);
@@ -488,10 +540,6 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
 
   const activeWeights = campaigns.filter((campaign) => campaign.status === "active");
   const weightTotal = activeWeights.reduce((sum, campaign) => sum + campaign.mixing_weight, 0);
-  const draftCampaigns = campaigns.filter((campaign) => campaign.status === "draft").length;
-  const spendCents = campaigns.reduce((sum, campaign) => sum + campaign.total_spend_cents, 0);
-  const spendingVendors = new Set(campaigns.filter((campaign) => campaign.total_spend_cents > 0).map((campaign) => campaign.vendor_id)).size;
-  const buyingVendors = rollup.filter((row) => row.active_campaign_count > 0).length;
   // Cost per dialable lead, headline: spend over usable records across the campaigns that have been
   // scrubbed — a sum over sums, never an average of each campaign's own rate, so a ten-record batch
   // cannot drag it. The per-row figures come from the database as they are.
@@ -499,8 +547,6 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
   const usableRecords = usableBasis.reduce((sum, campaign) => sum + (campaign.records_usable ?? 0), 0);
   const effectiveCostCents = usableRecords > 0 ? usableBasis.reduce((sum, campaign) => sum + campaign.total_spend_cents, 0) / usableRecords : null;
   const leadsInOf = (campaign: Campaign) => funnel?.[campaign.campaign_id]?.leads_received ?? progress?.[campaign.campaign_id]?.leads_received ?? null;
-  // A vendor "needs scrub" when one of its campaigns has its list in but not screened.
-  const needsScrub = new Set(campaigns.filter((campaign) => campaign.status !== "exhausted" && campaign.scrub_status !== "scrubbed" && (leadsInOf(campaign) ?? 0) > 0).map((campaign) => campaign.vendor_id));
 
   // The control bar: a search and the filters behind one button with a count; the vendor is the list on the left.
   const needle = search.trim().toLowerCase();
@@ -512,22 +558,34 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
     .filter((campaign) => !needle || `${campaign.name} ${vendorName.get(campaign.vendor_id) ?? ""} ${campaign.product_code ?? ""}`.toLowerCase().includes(needle))
     // Drafts first: a draft is the campaign that still needs something done before it can serve.
     .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.name.localeCompare(b.name));
-  const filterCount = statusFilter.size + (typeFilter === "all" ? 0 : 1) + (onlyIds ? 1 : 0);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // The grid's tabs (LirN1). "Needs you" is every campaign whose stage asks for a step (no list yet,
+  // the scrub, going live) or that is in trouble; a used-up campaign has "Order another" and is not.
+  /** Nobody can dial it: an active campaign the scrub holds back, or a scrub that failed or stopped. */
+  const blockedNow = (campaign: Campaign) => {
+    if (campaign.status === "exhausted") return false;
+    const stage = stageOf(campaign);
+    return stage.current === 1 && (stage.tone === "danger" || campaign.status === "active");
+  };
+  const needsYou = (campaign: Campaign) => {
+    if (campaign.status === "exhausted") return false;
+    const stage = stageOf(campaign);
+    return stage.current < 3 || stage.tone === "danger" || stage.tone === "warning" || hasNoWorkableLeads(progress?.[campaign.campaign_id] ?? null);
+  };
+  const inTab = (campaign: Campaign, tab: CardTab) => tab === "all" ? true
+    : tab === "needs" ? needsYou(campaign)
+    // "Active" counts what the menu counts (status active), so the two numbers agree.
+    : tab === "live" ? campaign.status === "active"
+    : campaign.status === "draft";
+  const tabCount = (tab: CardTab) => filtered.filter((campaign) => inTab(campaign, tab)).length;
+  // Nothing needs you: the grid opens on everything rather than on an empty tab.
+  const tabShown: CardTab = show === "needs" && tabCount("needs") === 0 && filtered.length > 0 ? "all" : show;
+  // Most urgent first (critique 2026-10-30): what nobody can dial, then what waits on a step, then the rest.
+  const urgency = (campaign: Campaign) => (blockedNow(campaign) ? 0 : needsYou(campaign) ? 1 : campaign.status === "active" ? 2 : 3);
+  const tabbed = filtered.filter((campaign) => inTab(campaign, tabShown)).sort((a, b) => urgency(a) - urgency(b));
+  const pageCount = Math.max(1, Math.ceil(tabbed.length / gridPageSize));
   const currentPage = Math.min(page, pageCount - 1);
-  const shown = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
-  const sumLeads = funnel || progress ? filtered.reduce((sum, campaign) => sum + (leadsInOf(campaign) ?? 0), 0) : null;
-  const sumDialable = funnel ? filtered.reduce((sum, campaign) => sum + (funnel[campaign.campaign_id]?.dialable_leads ?? 0), 0) : filtered.some((campaign) => campaign.records_usable !== null) ? filtered.reduce((sum, campaign) => sum + (campaign.records_usable ?? 0), 0) : null;
-  const sumContacts = funnel ? filtered.reduce((sum, campaign) => sum + (funnel[campaign.campaign_id]?.contacted_leads ?? 0), 0) : null;
-  const sumDialled = funnel ? filtered.reduce((sum, campaign) => sum + (funnel[campaign.campaign_id]?.dialed_leads ?? 0), 0) : null;
-  const sumSpend = filtered.reduce((sum, campaign) => sum + campaign.total_spend_cents, 0);
-  const sumUsable = filtered.reduce((sum, campaign) => sum + (campaign.records_usable ?? 0), 0);
-  const sumUsableSpend = filtered.filter((campaign) => (campaign.records_usable ?? 0) > 0).reduce((sum, campaign) => sum + campaign.total_spend_cents, 0);
-
-  function toggleStatus(status: string) {
-    setStatusFilter((current) => { const next = new Set(current); if (next.has(status)) next.delete(status); else next.add(status); return next; });
-    setPage(0);
-  }
+  const shown = tabbed.slice(currentPage * gridPageSize, currentPage * gridPageSize + gridPageSize);
+  const vendorRows = paginate(vendors, vendorListPage, gridPageSize);
 
   if (loading) return <PageLoading />;
 
@@ -535,7 +593,6 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
   const activeUsage = limits.find((item) => item.key === "max_active_campaigns") ?? null;
   const activeLimit = activeUsage && activeUsage.limit !== null ? activeUsage : null;
   const atActiveLimit = activeLimit !== null && activeLimit.usage >= (activeLimit.limit ?? 0);
-  const filtersOn = needle !== "" || filterCount > 0;
   const clearFilters = () => { setSearch(""); setStatusFilter(new Set()); setTypeFilter("all"); setOnlyIds(null); setPage(0); };
   const pickedVendor = vendorFilter === "all" ? null : vendors.find((vendor) => vendor.id === vendorFilter) ?? null;
   const takes = (vendorId: string | undefined) => Boolean(vendorId && vendorTakesCampaigns(vendors.find((vendor) => vendor.id === vendorId)?.status ?? ""));
@@ -547,10 +604,6 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
   };
   const openNewVendor = () => { setNewCampaign(null); setNewVendor(true); };
   const pickVendor = (vendorId: string) => { setVendorFilter(vendorId); setOpenId(null); setOnlyIds(null); setPage(0); setView("campaigns"); };
-  const tabs: { key: View; label: string; count: number }[] = [
-    { key: "campaigns", label: "Campaigns", count: campaigns.length },
-    { key: "vendors", label: "Compare Vendors", count: vendors.length },
-  ];
   // LA-2.3: a screening outage is said once, as a red badge in the top row; each stopped row says it too.
   const stopped = loadError ? [] : campaigns.filter((campaign) => scrubStoppedByOutage(scrubRuns?.[campaign.campaign_id]));
   const rollupFor = (vendor: Vendor): RosterRollup => rollup.find((row) => row.vendor_id === vendor.id) ?? {
@@ -579,9 +632,9 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
   // A campaign needs a vendor that takes campaigns (active or under review): a retired one never does.
   const noVendorForCampaign = locked ?? (vendors.length === 0 ? "Add a vendor first — a campaign belongs to one"
     : !vendors.some((vendor) => vendorTakesCampaigns(vendor.status)) ? "Set a vendor to active first — a retired vendor takes no new campaigns" : null);
-  const newCampaignFor = (vendor: Vendor | null) => {
+  const newCampaignFor = (vendor: Vendor | null, outline = false) => {
     const no = noVendorForCampaign ?? (vendor && !takes(vendor.id) ? `Set ${vendor.name} to active first to add a campaign from it` : null);
-    return <Button type="button" disabled={no !== null} title={no ?? (vendor ? `A new campaign from ${vendor.name}` : undefined)} onClick={() => openNewCampaign(vendor?.id)}><Plus aria-hidden="true" />New Campaign</Button>;
+    return <Button type="button" variant={outline ? "outline" : "default"} disabled={no !== null} title={no ?? (vendor ? `A new campaign from ${vendor.name}` : undefined)} onClick={() => openNewCampaign(vendor?.id)}><Plus aria-hidden="true" />New Campaign</Button>;
   };
   // At the plan's cap, Activate is held here rather than refused by the server after the click.
   const activateBlocked = locked ?? (atActiveLimit && activeLimit ? `Your plan allows ${activeLimit.limit} active campaign${activeLimit.limit === 1 ? "" : "s"}. Pause one, or see plans.` : null);
@@ -621,7 +674,11 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
   }
 
   /** The one action a campaign's stage needs; a live, healthy campaign has none, only its list. */
-  function stageAction(campaign: Campaign, stage: Stage): ReactNode {
+  function stageAction(campaign: Campaign, stage: Stage, primary = false, short = false): ReactNode {
+    // The Source table's short words (board LirS1: "Import", "Open"); the full words everywhere else.
+    const say = (full: string, brief: string) => (short ? brief : full);
+    // The next-up line shows a campaign's step as the page's one primary; on a card it is outline.
+    const look = primary ? {} : { variant: "outline" as const, size: "sm" as const };
     const id = campaign.campaign_id;
     const lead = progress?.[id] ?? null;
     const run = scrubRuns?.[id] ?? null;
@@ -629,21 +686,70 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
     const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
     if (campaign.status === "exhausted") {
       const no = locked ?? (takes(campaign.vendor_id) ? null : "Set this vendor to active to order more.");
-      return <Button type="button" variant="outline" size="sm" disabled={no !== null} title={no ?? "A new campaign from the same vendor — nothing is bought"} onClick={(event) => { stop(event); openNewCampaign(campaign.vendor_id, campaign.lead_type); }}><Plus aria-hidden="true" />Order another</Button>;
+      return <Button type="button" {...look} disabled={no !== null} title={no ?? "A new campaign from the same vendor — nothing is bought"} onClick={(event) => { stop(event); openNewCampaign(campaign.vendor_id, campaign.lead_type); }}><Plus aria-hidden="true" />{say("Order another", "Reorder")}</Button>;
     }
     if (stage.current === 0) return locked
-      ? <Button type="button" variant="outline" size="sm" disabled title={locked}><Upload aria-hidden="true" />Import its list</Button>
-      : <Button asChild variant="outline" size="sm"><Link href={importHref(id, campaign.product_code)} onClick={stop}><Upload aria-hidden="true" />Import its list</Link></Button>;
+      ? <Button type="button" {...look} disabled title={locked}><Upload aria-hidden="true" />{say("Import its list", "Import")}</Button>
+      : <Button asChild {...look}><Link href={importHref(id, campaign.product_code)} onClick={stop}><Upload aria-hidden="true" />{say("Import its list", "Import")}</Link></Button>;
     if (stage.current === 1) {
-      if (driving === id) return <Button type="button" variant="outline" size="sm" onClick={(event) => { stop(event); stopScrub(); }}><Pause aria-hidden="true" />Pause the scrub</Button>;
+      if (driving === id) return <Button type="button" {...look} onClick={(event) => { stop(event); stopScrub(); }}><Pause aria-hidden="true" />Pause the scrub</Button>;
       const resume = Boolean(run && run.status !== "scrubbed");
       const elsewhere = run?.status === "running" && !scrubRunIsStale(run) && !heldScrubToken(id);
       const cannot = locked ?? (!canScrub || scrubRuns === null ? "Ask an owner to run the scrub — it bills screening lookups." : elsewhere ? "Another window is running this scrub." : driving !== null ? "Another campaign is being scrubbed from this page." : null);
-      return <Button type="button" variant="outline" size="sm" disabled={cannot !== null} title={cannot ?? undefined} onClick={(event) => { stop(event); void runScrub(campaign); }}>{resume ? <Play aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}{resume ? "Resume" : "Run the scrub"}</Button>;
+      return <Button type="button" {...look} disabled={cannot !== null} title={cannot ?? undefined} onClick={(event) => { stop(event); void runScrub(campaign); }}>{resume ? <Play aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}{resume ? "Resume" : say("Run the scrub", "Scrub")}</Button>;
     }
-    if (stage.current === 2) return <Button type="button" variant="outline" size="sm" disabled={disabled || activateBlocked !== null} title={activateBlocked ?? undefined} onClick={(event) => { stop(event); activate(campaign); }}><Play aria-hidden="true" />Activate</Button>;
-    if (hasNoWorkableLeads(lead)) return <Button type="button" variant="outline" size="sm" disabled={disabled || locked !== null} title={locked ?? "No workable leads left"} onClick={(event) => { stop(event); void exhaust(campaign); }}><Archive aria-hidden="true" />Mark exhausted</Button>;
-    return <Link className="text-sm font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/lead-lists/${id}`} onClick={stop}>Open the list</Link>;
+    if (stage.current === 2) return <Button type="button" {...look} disabled={disabled || activateBlocked !== null} title={activateBlocked ?? undefined} onClick={(event) => { stop(event); activate(campaign); }}><Play aria-hidden="true" />Activate</Button>;
+    if (hasNoWorkableLeads(lead)) return <Button type="button" {...look} disabled={disabled || locked !== null} title={locked ?? "No workable leads left"} onClick={(event) => { stop(event); void exhaust(campaign); }}><Archive aria-hidden="true" />{say("Mark exhausted", "Used up")}</Button>;
+    return <Button asChild {...look}><Link href={`/app/campaigns/${id}`} onClick={stop}>Open</Link></Button>;
+  }
+
+  /**
+   * What a campaign needs next, in one plain sentence (critique 2026-10-30: say why, not just a chip).
+   * Null for a live campaign with leads to call: nothing to do.
+   */
+  function nextStepText(campaign: Campaign, stage: Stage): string | null {
+    const run = scrubRuns?.[campaign.campaign_id] ?? null;
+    const lead = progress?.[campaign.campaign_id] ?? null;
+    if (campaign.status === "exhausted") return "Used up. Order another to keep calling this vendor.";
+    if (stage.current === 0) return "No list yet. Import its list to start.";
+    if (stage.current === 1) {
+      if (scrubStoppedByOutage(run)) return "The Do Not Call check is down. Resume the scrub once it is back — nothing unchecked gets through.";
+      if (campaign.scrub_status === "failed" || run?.status === "failed") return "The scrub failed. Run it again so it can be dialed.";
+      if (run?.status === "running" || campaign.scrub_status === "scrubbing") return "Being scrubbed against Do Not Call lists.";
+      return "Not scrubbed yet. Run the scrub — nobody can dial it until then.";
+    }
+    if (stage.current === 2) return campaign.status === "paused" ? "Paused. Activate it to dial again." : "Scrubbed and ready. Activate it to start dialing.";
+    if (hasNoWorkableLeads(lead)) return "Every lead has been worked. Mark it exhausted, or recycle its leads.";
+    if (campaign.status === "paused") return "Paused. Activate it to dial again.";
+    return null;
+  }
+
+  /** The one word for where a campaign is, as its card's chip (board LirN1). */
+  function campaignChip(campaign: Campaign, stage: Stage): ReactNode {
+    const lead = progress?.[campaign.campaign_id] ?? null;
+    if (campaign.status === "exhausted") return <StatusChip tone="neutral">Used up</StatusChip>;
+    if (campaign.status === "paused") return <StatusChip tone="neutral">Paused</StatusChip>;
+    if (stage.current === 0) return <StatusChip tone="neutral">{campaign.status === "draft" ? "Draft" : "No list yet"}</StatusChip>;
+    if (stage.current === 1) {
+      if (stage.tone === "busy") return <StatusChip tone="info">Scrubbing</StatusChip>;
+      // Not scrubbed and active, or the scrub failed: nobody can dial it (scrubGateReason).
+      if (stage.tone === "danger" || campaign.status === "active") return <StatusChip tone="danger" title={`${campaign.name} ${scrubGateReason(campaign.scrub_status) ?? ""}`.trim()}>Can&apos;t be dialed</StatusChip>;
+      return <StatusChip tone="warning">Not scrubbed</StatusChip>;
+    }
+    if (stage.current === 2) return <StatusChip tone="neutral">Draft</StatusChip>;
+    if (hasNoWorkableLeads(lead)) return <StatusChip tone="warning">No leads left</StatusChip>;
+    return <StatusChip tone="good">Live</StatusChip>;
+  }
+
+  /**
+   * The campaign page's mark beside its name (owner 2026-10-30): an X where the grid says "Can't be
+   * dialed", the reason in its tooltip; every other state keeps its chip.
+   */
+  function focusMark(campaign: Campaign, stage: Stage): ReactNode {
+    const blocked = stage.current === 1 && stage.tone !== "busy" && (stage.tone === "danger" || campaign.status === "active");
+    if (!blocked) return campaignChip(campaign, stage);
+    const reason = `Can't be dialed. ${scrubGateReason(campaign.scrub_status) ?? ""}`.trim();
+    return <span role="img" aria-label={reason} title={reason} className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--error-surface)] text-[var(--error-ink)]"><XCircle className="size-4" aria-hidden="true" /></span>;
   }
 
   /** "Screening down": the stopped campaigns alone, the first one open. */
@@ -656,34 +762,130 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
     openPanel(stopped[0].campaign_id, "numbers");
   }
 
-  const viewTabs = <ViewTabs label="Campaigns and vendors" tabs={tabs} value={view} onChange={setView} idPrefix="campaigns-tab" controls={(key) => `campaigns-view-${key}`} />;
   const outage = stopped.length > 0 ? <button type="button" className="rounded-badge outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={showStopped} title={`${stopped.length === 1 ? stopped[0].name : `${stopped.length} campaigns`} stopped scrubbing because the Do Not Call check did not answer. Unchecked numbers are never let through, so nothing is lost — resume the scrub once the service is back. Show ${stopped.length === 1 ? "it" : "them"}.`}>
     <StatusChip tone="danger" dot={false}>Screening down · {stopped.length}</StatusChip>
   </button> : null;
-  const topRow = <>{viewTabs}{outage}</>;
   const openCampaign = openId ? campaigns.find((campaign) => campaign.campaign_id === openId) ?? null : null;
   const pickedForNew = newCampaign ? vendors.find((vendor) => vendor.id === newCampaign.vendor_id) : undefined;
   const newShare = newCampaign ? shareOf(newCampaign.mixing_weight, weightTotal) : null;
   const nameTaken = newCampaign ? duplicateName(newCampaign.vendor_id, newCampaign.name) : false;
 
+  // "Your own book" (Import, 2026-10-29) is the stand-in vendor for lists with no vendor: said so.
+  const ownBook = (vendorId: string) => isOwnBookVendor(vendorName.get(vendorId));
+  const vendorLine = (vendorId: string) => (ownBook(vendorId) ? "No vendor · your own book" : vendorName.get(vendorId) ?? "Unknown vendor");
+  const focused = focusId ? campaigns.find((campaign) => campaign.campaign_id === focusId) ?? null : null;
+
+  // Vendors live in the filter (board LirV1): pick one to see its campaigns, its cost beside it; adding
+  // one, or the full vendor view (scorecards, compare, edit, delete), one click from the same menu.
+  const vendorPicker = <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button type="button" variant="outline" aria-label="Filter by vendor">
+        {pickedVendor ? (isOwnBookVendor(pickedVendor.name) ? "No vendor" : pickedVendor.name) : "Vendor"}<ChevronDown aria-hidden="true" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start" className="max-h-[70vh] w-80 overflow-y-auto">
+      <DropdownMenuItem onSelect={() => pickVendor("all")} className={cn("flex h-auto items-center justify-between gap-3 py-2", vendorFilter === "all" && "bg-[var(--primary-soft)]")}>
+        <span className="font-semibold text-[var(--ink)]">All vendors</span>
+        <span className="shrink-0 text-xs text-[var(--ink)] tabular-nums">{campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}</span>
+      </DropdownMenuItem>
+      {vendors.map((vendor) => {
+        const figures = rollupFor(vendor);
+        const own = isOwnBookVendor(vendor.name);
+        return <DropdownMenuItem key={vendor.id} onSelect={() => pickVendor(vendor.id)} className={cn("flex h-auto items-center justify-between gap-3 py-2", vendorFilter === vendor.id && "bg-[var(--primary-soft)]")}>
+          <span className="min-w-0 truncate font-semibold text-[var(--ink)]">{own ? "No vendor · your own book" : vendor.name}</span>
+          <span className="shrink-0 text-xs text-[var(--ink)] tabular-nums">{figures.campaign_count} campaign{figures.campaign_count === 1 ? "" : "s"}</span>
+        </DropdownMenuItem>;
+      })}
+      <DropdownMenuSeparator />
+      <div className="flex items-center justify-between gap-2">
+        <DropdownMenuItem disabled={locked !== null} onSelect={openNewVendor} className="font-semibold text-[var(--accent-ink)]"><Plus aria-hidden="true" />Add a vendor</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => router.push("/app/campaigns/vendors")} className="font-semibold text-[var(--accent-ink)]">Manage vendors<ArrowRight aria-hidden="true" /></DropdownMenuItem>
+      </div>
+    </DropdownMenuContent>
+  </DropdownMenu>;
+
+  const tabChips = (["all", "live", "needs", "drafts"] as const).map((tab) => (
+    <ToggleChip key={tab} role="radio" selected={tabShown === tab} onClick={() => { setShow(tab); setPage(0); }} count={tabCount(tab)}>
+      {CARD_TAB_LABEL[tab]}
+    </ToggleChip>
+  ));
+  // The top row: the campaign open (LirF1), the vendor view, or the grid's search, vendor, tabs (LirN1).
+  // Board LirS1's figures, from what the campaigns read already returns.
+  const liveCount = campaigns.filter((campaign) => campaign.status === "active").length;
+  const spendAll = campaigns.reduce((sum, campaign) => sum + campaign.total_spend_cents, 0);
+  const issuedBasis = campaigns.filter((campaign) => (outcomes?.[campaign.campaign_id]?.issued ?? 0) > 0);
+  const issuedAll = issuedBasis.reduce((sum, campaign) => sum + (outcomes?.[campaign.campaign_id]?.issued ?? 0), 0);
+  const perIssued = issuedAll > 0 ? issuedBasis.reduce((sum, campaign) => sum + campaign.total_spend_cents, 0) / issuedAll : null;
+  const owedOf = (campaign: Campaign) => Math.max(0, (campaign.rejected_spend_cents ?? 0) - (campaign.credits_received_cents ?? 0));
+  const owedBack = campaigns.reduce((sum, campaign) => sum + owedOf(campaign), 0);
+  const owedCampaigns = campaigns.filter((campaign) => owedOf(campaign) > 0).length;
+  const vendorPage = vendorId ? vendors.find((vendor) => vendor.id === vendorId) ?? null : null;
+  const topRow = vendorId
+    ? <>
+      <Link href="/app/campaigns" className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">‹ All campaigns</Link>
+      {vendorPage && <span data-leads-crumb={isOwnBookVendor(vendorPage.name) ? "No vendor" : vendorPage.name} className="min-w-0 truncate text-xl font-semibold tracking-[-0.02em] text-[var(--ink)]">{isOwnBookVendor(vendorPage.name) ? "No vendor · your own book" : vendorPage.name}</span>}
+      {vendorPage && <StatusChip tone={vendorPage.status === "active" ? "good" : vendorPage.status === "under_review" ? "warning" : "neutral"}>{VENDOR_STATUS_LABEL[vendorPage.status as keyof typeof VENDOR_STATUS_LABEL] ?? vendorPage.status}</StatusChip>}
+      {vendorPage && <div className="ml-3 flex items-center gap-1.5" role="group" aria-label="Vendor sections">
+        {(["campaigns", "scorecard", "settings"] as const).map((tab) => <ToggleChip key={tab} selected={vendorTab === tab} onClick={() => pickVendorTab(tab)}>{tab === "campaigns" ? "Campaigns" : tab === "scorecard" ? "Scorecard" : "Settings"}</ToggleChip>)}
+      </div>}
+      {outage}
+    </>
+    : focusId
+    ? <>
+      {/* Owner 2026-10-30: a real button back, the name, and an X where "Can't be dialed" was. */}
+      <Button asChild variant="outline"><Link href="/app/campaigns"><ArrowLeft aria-hidden="true" />All campaigns</Link></Button>
+      {focused && <span data-leads-crumb={focused.name} className="min-w-0 truncate text-xl font-semibold tracking-[-0.02em] text-[var(--ink)]">{focused.name}</span>}
+      {focused && focusMark(focused, stageOf(focused))}
+    </>
+    : view === "vendors"
+      ? <>
+        <Link href="/app/campaigns" className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">‹ All campaigns</Link>
+        <span data-leads-crumb="Vendors" className="text-xl font-semibold tracking-[-0.02em] text-[var(--ink)]">Vendors</span>
+      </>
+      : <>
+        {/* Board LirS1: search, the tabs, the vendor filter, Vendors (add, edit, delete). */}
+        <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search campaigns" className="sm:w-64" />
+        <div className="flex items-center gap-1" role="radiogroup" aria-label="Show">{tabChips}</div>
+        {vendorPicker}
+      </>;
+  const gridRow = !focusId && !vendorId && view === "campaigns";
+  const focusStage = focused ? stageOf(focused) : null;
+  // A campaign's next-up line: its stage's step first, then its unowned leads, else all clear.
+  const focusNext: { tone: NextUpTone; text: ReactNode; action: ReactNode } | null = focused && focusStage ? (() => {
+    const text = nextStepText(focused, focusStage);
+    if (text) return { tone: blockedNow(focused) ? "danger" as const : "warning" as const, text, action: stageAction(focused, focusStage, true) };
+    if (assign && assign.count > 0) return { tone: "action" as const, text: <><strong>{count(assign.count)}</strong> {assign.count === 1 ? "lead has" : "leads have"} no owner yet. Assign them so they reach the dialer.</>, action: assign.node };
+    return { tone: "done" as const, text: <>Live, with <strong>{count(progress?.[focused.campaign_id]?.leads_workable ?? null)}</strong> leads left to call.</>, action: null };
+  })() : null;
+  // The corner: the one primary. New campaign on the grid; on a campaign, Edit beside "+ Import a list".
+  // On the Settings tab the form puts its own Save there.
+  const corner = vendorId
+    ? vendorTab === "campaigns" && vendorPage ? newCampaignFor(vendorPage) : null
+    : focusId
+    ? focused && focusStage && <>
+      {focusTab !== "settings" && <Button type="button" variant="outline" onClick={() => pickFocusTab("settings")}><Pencil aria-hidden="true" />Edit</Button>}
+      {/* Settings beside Edit, the same button with a gear (owner 2026-10-30); pressed while open. */}
+      <Button type="button" variant="outline" aria-pressed={focusTab === "settings"} onClick={() => pickFocusTab(focusTab === "settings" ? "lists" : "settings")} className={cn(focusTab === "settings" && "border-transparent bg-[var(--primary-soft)] text-[var(--accent-ink)] hover:bg-[var(--primary-soft)] dark:border-transparent dark:bg-[var(--primary-soft)] dark:text-[var(--accent-ink)] dark:hover:bg-[var(--primary-soft)]")}><SettingsIcon aria-hidden="true" />Settings</Button>
+      {/* The stage's own step is the next-up line's button (the page's one primary); this stays outline. */}
+      {focusTab !== "settings" && (locked
+        ? <Button type="button" variant="outline" disabled title={locked}><Plus aria-hidden="true" />Import a list</Button>
+        : <Button asChild variant="outline"><Link href={importHref(focused.campaign_id, focused.product_code)}><Plus aria-hidden="true" />Import a list</Link></Button>)}
+      {/* The settings form's Discard and Save land here (LeadsInSlot "continue"). */}
+      <span id="leads-in-continue" className="contents" />
+    </>
+    // The Vendors page's one primary is adding one.
+    : view === "vendors" ? <Button type="button" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Plus aria-hidden="true" />Add a vendor</Button>
+    // Board LirS1: "Vendors" (add, edit, delete them) beside "+ New campaign", the one primary.
+    : <><Button asChild variant="outline"><Link href="/app/campaigns/vendors" title="Add, edit and delete vendors"><Store aria-hidden="true" />Vendors</Link></Button>{newCampaignFor(pickedVendor)}</>;
+
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-4 text-[var(--ink)] lg:min-h-0 lg:flex-1">
     {!embedded && <PageHeader title="Vendors & campaigns" />}
-    {/* The view switch (and an outage badge) sit in the frame's top row, level with the rail. */}
-    {inFrame ? <LeadsInSlot slot="lead">{topRow}</LeadsInSlot> : <div className="flex flex-wrap items-center gap-3">{topRow}</div>}
-    <StatStrip label="Campaign totals" className="flex-none">
-      <StatTile label="Vendors" labelTitle={`${buyingVendors} buying now.`} value={vendors.length} valueTone={buyingVendors > 0 ? "info" : undefined} />
-      <StatTile
-        label="Active campaigns"
-        labelTitle={activeLimit ? `${activeLimit.usage} of ${activeLimit.limit} allowed on your plan · ${draftCampaigns} draft. Paused campaigns do not count.` : activeUsage ? `${activeUsage.usage} counted · no plan limit · ${draftCampaigns} draft.` : `${draftCampaigns} draft.`}
-        value={activeWeights.length}
-        unit={activeLimit ? ` / ${activeLimit.limit}` : undefined}
-        valueTone={atActiveLimit ? "danger" : activeWeights.length > 0 ? "good" : undefined}
-        // LA-2.22: an upgrade prompt that names the limit — Plan & billing is the owner's.
-        action={atActiveLimit ? <Link href="/app/settings#billing" className="font-semibold text-[var(--accent-ink)] hover:underline">See plans</Link> : undefined}
-      />
-      <StatTile label="Spend this period" labelTitle={`Across ${spendingVendors} vendor${spendingVendors === 1 ? "" : "s"}.`} value={money(spendCents)} />
-      <StatTile label="Cost per dialable lead" labelTitle="Spend over usable records, across the scrubbed campaigns — after suppression." value={money2(effectiveCostCents)} valueTone={effectiveCostCents === null ? undefined : "good"} />
-    </StatStrip>
+    {/* A campaign's own row sits in the step's column, level with the rail's top (owner 2026-10-30). */}
+    {inFrame && !focusId
+      ? <>{!gridRow && <LeadsInSlot slot="lead">{topRow}</LeadsInSlot>}{!gridRow && <LeadsInSlot slot="continue">{corner}</LeadsInSlot>}</>
+      : <div className="flex min-w-0 flex-wrap items-center gap-3">{topRow}<span className="ml-auto flex flex-wrap items-center gap-2">{corner}</span></div>}
+    {/* LA-2.22: usage against the cap, said where it bites — once the plan's limit is reached. */}
+    {!focusId && atActiveLimit && activeLimit && <Callout tone="warning" title={`${activeLimit.usage} of ${activeLimit.limit} active campaigns — your plan's limit.`}>Pause one to activate another, or <Link href="/app/settings#billing" className="font-semibold text-[var(--accent-ink)] hover:underline">see plans</Link>.</Callout>}
     {locked && <Callout tone="warning" title="Your plan is read-only. You can look at everything here; adding, importing and scrubbing are paused until it is active again." />}
     {/* Said once, at the top, rather than as a "—" in eleven cells that each look like a bug. */}
     {pending.length > 0 && <Callout tone="warning" title="Some measurements are not available yet">{pending.map((item) => item.detail).join(" ")}</Callout>}
@@ -691,8 +893,49 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
       <ul className="list-disc pl-5">{faults.map((fault) => <li key={fault}>{fault}</li>)}</ul>
     </Callout>}
 
+    {/* Source › a campaign (LirF1): its figures in one line, then its lists and the list's sections. */}
+    {focusId && (loadError
+      ? <ErrorState title="This campaign did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
+      : !focused
+        ? <EmptyState title="Campaign not found" hint="It may have been deleted." action={<Button asChild variant="outline"><Link href="/app/campaigns">All campaigns</Link></Button>} />
+        : focusTab === "settings" ? <CampaignSettings
+          campaign={focused}
+          vendors={vendors}
+          products={soldProducts ?? null}
+          isTest={testBatches === null ? null : testBatches[focused.campaign_id] ?? false}
+          savedStates={targetStates === null ? null : targetStates[focused.campaign_id] ?? []}
+          otherActiveWeight={weightTotal - (focused.status === "active" ? focused.mixing_weight : 0)}
+          busy={busy === focused.campaign_id}
+          locked={locked}
+          scrub={focusStage && focusStage.leadsIn !== 0 ? <ScrubLine campaign={focused} run={scrubRuns?.[focused.campaign_id] ?? null} canScrub={canScrub && scrubRuns !== null} driving={driving} leads={progress?.[focused.campaign_id]?.leads_received ?? null} error={scrubError?.campaignId === focused.campaign_id ? scrubError.message : null} onRun={() => void runScrub(focused)} onStop={stopScrub} /> : null}
+          statusChip={focusStage ? campaignChip(focused, focusStage) : null}
+          onSave={(body) => patchCampaign(focused.campaign_id, body, `${body.name ?? focused.name} saved`)}
+          onActivate={() => activate(focused)}
+          onPause={() => pause(focused)}
+          onExhaust={() => void exhaust(focused)}
+          deleteBlocked={focusStage ? campaignDeleteBlocked(focusStage.leadsIn) : null}
+          onDelete={() => void removeCampaign(focused)}
+        />
+        : <>
+          {focusNext && <NextUp tone={focusNext.tone} action={focusNext.action}>{focusNext.text}</NextUp>}
+          {/* The campaign's facts, labelled (owner 2026-10-30: "shown a bit better"). */}
+          <StatStrip label="Campaign facts">
+            <StatTile label="Vendor" valueSize="text" value={<Link href={`/app/campaigns/vendors/${focused.vendor_id}`} className="hover:underline">{vendorLine(focused.vendor_id)}</Link>} />
+            {/* Names, not codes ("Term Life", not "term_life"). */}
+            <StatTile label="Lead type" valueSize="text" value={LEAD_TYPE[focused.lead_type] ?? focused.lead_type} footnote={focused.product_code ? soldProducts?.find((product) => product.code === focused.product_code)?.name ?? focused.product_code : undefined} />
+            <StatTile label="Spent" value={money(focused.total_spend_cents)} footnote={focused.cost_per_usable_record_cents !== null ? `${money2(focused.cost_per_usable_record_cents)} per usable lead` : undefined} />
+            <StatTile label="Left to call" value={count(progress?.[focused.campaign_id]?.leads_workable ?? null)} footnote={outcomes?.[focused.campaign_id]?.costPerIssuedCents != null ? `${money2(outcomes[focused.campaign_id].costPerIssuedCents)} per issued policy` : undefined} />
+            {owedCents !== null && owedCents > 0 && <StatTile label="Owed back" value={money2(owedCents)} valueTone="warning" footnote="by the vendor" />}
+          </StatStrip>
+          {report && <div className="flex items-center gap-2" role="radiogroup" aria-label="Campaign view">
+            <ToggleChip role="radio" selected={focusTab === "lists"} onClick={() => pickFocusTab("lists")} count={listCounts?.[focused.campaign_id]}>Lists</ToggleChip>
+            <ToggleChip role="radio" selected={focusTab === "report"} onClick={() => pickFocusTab("report")}>Report</ToggleChip>
+          </div>}
+          {focusTab === "report" && report ? report : children}
+        </>)}
+
     {/* A new vendor is picked on the left, so its empty campaign table offers the next step: its first campaign. */}
-    {newVendor && <NewVendorPanel onClose={() => setNewVendor(false)} onCreated={async (created) => { await load(); if (created) pickVendor(created.id); }} />}
+    {newVendor && <NewVendorPanel onClose={() => setNewVendor(false)} onCreated={async (created) => { await load(); if (created) { if (vendorsPage) router.push(`/app/campaigns/vendors/${created.id}`); else pickVendor(created.id); } }} />}
 
     <Dialog open={newCampaign !== null} onOpenChange={(open) => { if (!open) setNewCampaign(null); }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl" aria-describedby={undefined}>
@@ -740,125 +983,88 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
       </DialogContent>
     </Dialog>
 
-    {view === "campaigns" && <div role="tabpanel" id="campaigns-view-campaigns" aria-labelledby="campaigns-tab-campaigns" className="grid min-w-0 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[224px_minmax(0,1fr)]">
-      <VendorList vendors={vendors} rollup={rollup} facts={facts} selected={vendorFilter} onSelect={pickVendor} campaignCount={campaigns.length} needsScrub={needsScrub} usableReference={effectiveCostCents} className="max-h-80 lg:max-h-none" />
-      <div className="flex min-w-0 flex-col gap-3 lg:min-h-0">
-        {pickedVendor && <VendorScorecard
-          key={pickedVendor.id}
-          vendor={pickedVendor}
-          rollup={rollup.find((row) => row.vendor_id === pickedVendor.id)}
-          fact={facts?.cards.find((card) => card.vendor_id === pickedVendor.id)}
-          facts={facts}
-          speed={speed.find((row) => row.vendor_id === pickedVendor.id)}
-          consent={consent.find((row) => row.vendor_id === pickedVendor.id)}
-          usableReference={effectiveCostCents}
-          onEdit={() => setEditVendorId(pickedVendor.id)}
-          onDelete={() => deleteVendor(pickedVendor.id)}
-          deleting={vendorDelete.busy}
-          onOrderAnother={() => openNewCampaign(pickedVendor.id, pickedVendor.lead_type)}
-        />}
-        <TableCard
-          className="portal-campaigns-table flex min-h-[360px] min-w-0 flex-1 flex-col lg:min-h-0 [&>div.overflow-x-auto]:min-h-0 [&>div.overflow-x-auto]:flex-1 [&>div.overflow-x-auto]:overflow-y-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1]"
-          toolbar={
-            <DataToolbar actions={<>
-              {filtersOn && <ClearFiltersButton onClick={clearFilters} />}
-              {createActions}
-              <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
-            </>}>
-              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search campaigns" className="sm:w-48" />
-              <FilterButton open={filtersOpen} controls="campaign-filters" onClick={() => setFiltersOpen((value) => !value)} count={filterCount} />
-            </DataToolbar>
-          }
-          filters={
-            // Inline under the toolbar (UI-CONSISTENCY §6a), not a popover over the rows.
-            <FilterPanel id="campaign-filters" open={filtersOpen}>
-              <div role="group" aria-labelledby="campaign-status-filter" className="grid gap-1.5">
-                <span id="campaign-status-filter" className="text-label text-[var(--body)]">Status</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {CAMPAIGN_STATUSES.map((status) => <ToggleChip key={status} selected={statusFilter.has(status)} onClick={() => toggleStatus(status)}>{STATUS_LABEL[status]}</ToggleChip>)}
-                </div>
-              </div>
-              <div className="grid gap-1.5">
-                <span id="campaign-type-filter" className="text-label text-[var(--body)]">Lead type</span>
-                <LeadTypeChoice any value={typeFilter} onChange={(next) => { setTypeFilter(next); setPage(0); }} labelledBy="campaign-type-filter" />
-              </div>
-              {onlyIds && <div className="grid gap-1.5">
-                <span className="text-label text-[var(--body)]">Showing</span>
-                <div className="flex flex-wrap gap-1.5"><ToggleChip onRemove={() => setOnlyIds(null)}>Stopped by the screening outage</ToggleChip></div>
-              </div>}
-            </FilterPanel>
-          }
-          footer={!loadError && filtered.length > 0 ? <Pager page={currentPage + 1} total={filtered.length} noun="campaigns" pageSize={PAGE_SIZE} onPage={(next) => setPage(next - 1)} suffix="drafts first" /> : undefined}
+    {/* Source (board LirN1): one card per campaign, what needs you first; a card opens its campaign. */}
+    {/* A vendor's Scorecard and Settings tabs (LirE6); its Campaigns tab is the grid below, filtered to it. */}
+    {vendorId && !vendorPage && !loading && !loadError && <EmptyState title="Vendor not found" hint="It may have been deleted." action={<Button asChild variant="outline"><Link href="/app/campaigns">All campaigns</Link></Button>} />}
+    {vendorPage && vendorTab === "scorecard" && <VendorScorecard
+      key={vendorPage.id}
+      vendor={vendorPage}
+      rollup={rollup.find((row) => row.vendor_id === vendorPage.id)}
+      fact={facts?.cards.find((card) => card.vendor_id === vendorPage.id)}
+      facts={facts}
+      speed={speed.find((row) => row.vendor_id === vendorPage.id)}
+      consent={consent.find((row) => row.vendor_id === vendorPage.id)}
+      usableReference={effectiveCostCents}
+      onEdit={() => pickVendorTab("settings")}
+      onDelete={() => deleteVendor(vendorPage.id)}
+      deleting={vendorDelete.busy}
+      onOrderAnother={() => openNewCampaign(vendorPage.id, vendorPage.lead_type)}
+    />}
+    {vendorPage && vendorTab === "settings" && <VendorSettings
+      key={vendorPage.id}
+      row={vendorPage}
+      locked={locked}
+      onSaved={load}
+      onDelete={() => deleteVendor(vendorPage.id)}
+      deleting={vendorDelete.busy}
+    />}
+    {!focusId && view === "campaigns" && (!vendorId || (vendorPage && vendorTab === "campaigns")) && <div role="region" aria-label="Campaigns" className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1">
+      {/* Search, tabs, the vendor filter, then Vendors and "+ New campaign" on the same line. */}
+      {gridRow && inFrame && <div className="flex min-w-0 flex-none flex-wrap items-center gap-2">{topRow}<span className="ml-auto flex items-center gap-2">{corner}</span></div>}
+      {/* Board LirS1's four figures. */}
+      {!vendorId && campaigns.length > 0 && <StatStrip label="Campaign totals" className="flex-none">
+        <StatTile label="Live campaigns" value={liveCount} labelTitle={activeLimit ? `${activeLimit.usage} of ${activeLimit.limit} active campaigns allowed on your plan.` : "Campaigns set to active."} valueTone={atActiveLimit ? "danger" : undefined} />
+        <StatTile label="Spend" value={money(spendAll)} labelTitle="What every campaign cost, as entered on each." />
+        <StatTile label="Cost per issued" value={money2(perIssued)} labelTitle={issuedAll > 0 ? `Spend over ${issuedAll.toLocaleString()} issued ${issuedAll === 1 ? "policy" : "policies"}, across the campaigns that issued any.` : "No policy issued from a campaign yet."} />
+        <StatTile label="Owed back" value={money2(owedBack)} valueTone={owedBack > 0 ? "warning" : undefined} labelTitle={owedCampaigns > 0 ? `Rows rejected at the scrub and not credited yet, on ${owedCampaigns} ${owedCampaigns === 1 ? "campaign" : "campaigns"}.` : "Nothing waiting to be claimed."} />
+      </StatStrip>}
+      {/* A vendor picked in the filter: one line to its own page (scorecard, settings, delete). */}
+      {pickedVendor && !vendorId && <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--ink)]">
+        <span>Showing <strong className="font-semibold">{isOwnBookVendor(pickedVendor.name) ? "No vendor" : pickedVendor.name}</strong>&apos;s campaigns</span>
+        <Link href={`/app/campaigns/vendors/${pickedVendor.id}`} className="font-semibold text-[var(--accent-ink)] hover:underline">Open the vendor →</Link>
+      </div>}
+      {loadError ? <ErrorState title="Campaigns did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
+        : campaigns.length === 0 ? (vendors.length === 0
+          ? <EmptyState title="No campaigns yet" hint="Add the vendor you buy from first." action={<Button type="button" variant="outline" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Store aria-hidden="true" />New Vendor</Button>} />
+          : <EmptyState title="No campaigns yet" hint="Add one before importing a list, so leads carry a cost." action={newCampaignFor(pickedVendor)} />)
+        : pickedVendor && vendorCampaigns.length === 0 ? <EmptyState title={`No campaigns from ${pickedVendor.name} yet`} hint="Add one before importing its list, so its leads carry a cost." action={newCampaignFor(pickedVendor)} />
+        : tabbed.length === 0 ? <NoMatches noun="campaigns" onClear={() => { clearFilters(); setShow("all"); }} />
+        : <TableCard
+          className={FILL_CARD}
+          footer={<Pager page={currentPage + 1} total={tabbed.length} noun="campaigns" pageSize={gridPageSize} onPage={(next) => setPage(next - 1)} />}
         >
-          {loadError ? <ErrorState title="Campaigns did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
-            : campaigns.length === 0 ? (vendors.length === 0
-              ? <EmptyState title="No campaigns yet" hint="Add the vendor you buy from first." action={<Button type="button" variant="outline" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Store aria-hidden="true" />New Vendor</Button>} />
-              : <EmptyState title="No campaigns yet" hint="Add one before importing a list, so leads carry a cost." action={newCampaignFor(pickedVendor)} />)
-            : pickedVendor && vendorCampaigns.length === 0 ? <EmptyState title={`No campaigns from ${pickedVendor.name} yet`} hint="Add one before importing its list, so its leads carry a cost." action={newCampaignFor(pickedVendor)} />
-            : filtered.length === 0 ? <NoMatches noun="campaigns" onClear={clearFilters} />
-            : <Table>
-                <TableHeader><TableRow>
-                  {/* Balanced widths across the table, Campaign read from the left and every other column centred
-                      under its title (owner 2026-10-29). `!` because globals.css sets th left, unlayered. */}
-                  <TableHead className="w-[28%] !text-left">Campaign</TableHead>
-                  <TableHead className="w-[16%] !text-center" title="Dialable leads, of the leads received">Dialable</TableHead>
-                  <TableHead className="w-[16%] !text-center" title="Cost per usable lead, and what the campaign cost">Per usable</TableHead>
-                  <TableHead className="w-[28%] !text-center" title="List in → scrubbed → live, and the one step it needs">Stage</TableHead>
-                  <TableHead className="w-[12%] !text-center"><span className="sr-only">Actions</span></TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                  {shown.map((campaign) => {
-                    const open = openId === campaign.campaign_id;
-                    const reach = funnel?.[campaign.campaign_id] ?? null;
-                    const stage = stageOf(campaign);
-                    const dialable = reach?.dialable_leads ?? campaign.records_usable;
-                    const vendor = vendorName.get(campaign.vendor_id) ?? "Unknown vendor";
-                    const contactRate = reach && reach.dialed_leads > 0 ? Math.round((100 * reach.contacted_leads) / reach.dialed_leads) : null;
-                    const openIt = () => openPanel(campaign.campaign_id, "numbers");
-                    return <TableRow key={campaign.campaign_id} className={`portal-campaigns-row${open ? " is-open" : ""}`} onClick={openIt}>
-                      {/* The full name and vendor, wrapping onto a second line rather than cut (owner 2026-10-29). */}
-                      <TableCell className="min-w-[9rem] !whitespace-normal">
-                        <button type="button" className="portal-campaigns-name block break-words" aria-haspopup="dialog" onClick={(event) => { event.stopPropagation(); openIt(); }}>{campaign.name}</button>
-                        {!pickedVendor && <span className="portal-campaigns-sub break-words">{vendor}</span>}
-                      </TableCell>
-                      {/* No list yet is a dash: "2,300 of 0" read as a bug, and the track already says it. */}
-                      {stage.leadsIn === 0
-                        ? <TableCell className="!text-center text-[var(--muted)]">—</TableCell>
-                        : <TableCell className="!text-center tabular-nums" title={reach && reach.dialed_leads > 0 ? `${reach.contacted_leads.toLocaleString()} contacts · ${contactRate}% of ${reach.dialed_leads.toLocaleString()} dialled` : undefined}>{count(dialable)}<span className="portal-campaigns-sub">of {count(stage.leadsIn)}</span></TableCell>}
-                      <TableCell className="!text-center tabular-nums"><span className={toneText(costTone(campaign.cost_per_usable_record_cents, effectiveCostCents))}>{money2(campaign.cost_per_usable_record_cents)}</span><span className="portal-campaigns-sub" title="Spend">{money(campaign.total_spend_cents)}</span></TableCell>
-                      <TableCell>
-                        <div className="flex flex-col items-center gap-1">
-                          {/* The track over its one action, on every row, so every row keeps one height and the
-                              table fits beside the rail and the vendor list at 1440px. */}
-                          <div className="flex flex-col items-center gap-1.5">
-                            <LifecycleTrack current={stage.current} tone={stage.tone} off={stage.off} className="flex-nowrap" />
-                            {stageAction(campaign, stage)}
-                          </div>
-                          {/* A stopped scrub's chip opens the panel on its status block. */}
-                          {stage.label === null ? null
-                            : scrubStoppedByOutage(scrubRuns?.[campaign.campaign_id])
-                              ? <button type="button" className="rounded-badge outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-haspopup="dialog" onClick={(event) => { event.stopPropagation(); openIt(); }}>{stage.label}</button>
-                              : <span className="text-center text-xs text-[var(--body)]">{stage.label}</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-px whitespace-nowrap !pl-1 text-center">
-                        <RowActions what="campaign" name={campaign.name} onEdit={() => openPanel(campaign.campaign_id, "cost")} onDelete={() => void removeCampaign(campaign)} deleteBlocked={locked ?? campaignDeleteBlocked(stage.leadsIn)} deleteDisabled={busy === campaign.campaign_id} />
-                      </TableCell>
-                    </TableRow>;
-                  })}
-                </TableBody>
-                <tfoot className="portal-campaigns-foot">
-                  <tr>
-                    <td>{filtered.length} campaign{filtered.length === 1 ? "" : "s"}</td>
-                    <td className="text-center tabular-nums" title={sumContacts !== null && sumDialled ? `${sumContacts.toLocaleString()} contacts · ${Math.round((100 * sumContacts) / sumDialled)}% of those dialled` : undefined}>{count(sumDialable)}<span className="portal-campaigns-sub">of {count(sumLeads)}</span></td>
-                    <td className="text-center tabular-nums">{money2(sumUsable > 0 ? sumUsableSpend / sumUsable : null)}<span className="portal-campaigns-sub">{money(sumSpend)}</span></td>
-                    <td />
-                    <td />
-                  </tr>
-                </tfoot>
-              </Table>}
-        </TableCard>
-      </div>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead className="w-[30%]">Campaign</TableHead>
+              <TableHead>Vendor</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Left to call</TableHead>
+              <TableHead className="text-right">Per usable</TableHead>
+              <TableHead className="w-px"><span className="sr-only">Next step</span></TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {shown.map((campaign) => {
+                const id = campaign.campaign_id;
+                const stage = stageOf(campaign);
+                const lists = listCounts?.[id];
+                const next = nextStepText(campaign, stage);
+                const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
+                return <TableRow key={id} className="cursor-pointer" onClick={() => router.push(`/app/campaigns/${id}`)}>
+                  <TableCell className="!whitespace-normal">
+                    <Link href={`/app/campaigns/${id}`} onClick={stop} className="block font-semibold text-[var(--ink)] hover:underline">{campaign.name}</Link>
+                    <span className="text-xs text-[var(--ink)]">{stage.leadsIn === 0 || lists === 0 ? "No list yet" : lists === undefined ? "" : `${lists} list${lists === 1 ? "" : "s"}`}</span>
+                  </TableCell>
+                  <TableCell className="max-w-[180px]"><Link href={`/app/campaigns/vendors/${campaign.vendor_id}`} onClick={stop} title={vendorLine(campaign.vendor_id)} className="block truncate text-[var(--ink)] hover:underline">{vendorLine(campaign.vendor_id)}</Link></TableCell>
+                  <TableCell><span title={next ?? undefined}>{campaignChip(campaign, stage)}</span></TableCell>
+                  <TableCell className="text-right tabular-nums">{stage.leadsIn === 0 ? "—" : count(progress?.[id]?.leads_workable ?? null)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money2(campaign.cost_per_usable_record_cents)}</TableCell>
+                  {/* One step per row; a campaign nobody can dial gets the green one (board: "Fix"). */}
+                  <TableCell className="w-px whitespace-nowrap text-right" title={next ?? undefined} onClick={stop}>{stageAction(campaign, stage, blockedNow(campaign), true)}</TableCell>
+                </TableRow>;
+              })}
+            </TableBody>
+          </Table>
+        </TableCard>}
     </div>}
 
     {openCampaign && campaignPanel(openCampaign)}
@@ -877,7 +1083,48 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
     {/* Compare vendors: speed to lead and consent evidence per vendor are LA-2.5/2.6's acceptance
         figures and appear nowhere else. The failure is checked before the empty case: "no vendor
         rows" and "could not look" are different facts. */}
-    {view === "vendors" && <div role="tabpanel" id="campaigns-view-vendors" aria-labelledby="campaigns-tab-vendors" className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">{loadError ? <TableCard><ErrorState title="Vendors did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} /></TableCard>
+    {/* Source › Vendors: the vendors to manage (add, edit, delete), and their comparison a tab away. */}
+    {vendorsPage && view === "vendors" && <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Vendor views">
+      <ToggleChip role="radio" selected={vendorsTab === "manage"} onClick={() => setVendorsTab("manage")} count={vendors.length}>Vendors</ToggleChip>
+      <ToggleChip role="radio" selected={vendorsTab === "compare"} onClick={() => setVendorsTab("compare")}>Compare</ToggleChip>
+    </div>}
+    {vendorsPage && view === "vendors" && vendorsTab === "manage" && <TableCard
+      className={FILL_CARD}
+      footer={!loadError && vendors.length ? <Pager page={vendorRows.current} total={vendors.length} noun="vendors" pageSize={gridPageSize} onPage={setVendorListPage} /> : undefined}
+    >
+      {loadError ? <ErrorState title="Vendors did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
+        : vendors.length === 0 ? <EmptyState title="No vendors yet" hint="Add the vendor you buy leads from." />
+        : <Table>
+          <TableHeader><TableRow>
+            <TableHead className="w-[34%]">Vendor</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Spend</TableHead>
+            <TableHead className="text-right">Per usable</TableHead>
+            <TableHead className="text-right">Return window</TableHead>
+            <TableHead className="w-px"><span className="sr-only">Edit or delete</span></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {vendorRows.rows.map((vendor) => {
+              const figures = rollupFor(vendor);
+              const own = isOwnBookVendor(vendor.name);
+              return <TableRow key={vendor.id} className="cursor-pointer" onClick={() => router.push(`/app/campaigns/vendors/${vendor.id}`)}>
+                <TableCell className="!whitespace-normal">
+                  <Link href={`/app/campaigns/vendors/${vendor.id}`} onClick={(event) => event.stopPropagation()} className="block font-semibold text-[var(--ink)] hover:underline">{own ? "No vendor · your own book" : vendor.name}</Link>
+                  <span className="text-xs text-[var(--ink)]">{figures.campaign_count} campaign{figures.campaign_count === 1 ? "" : "s"} · {figures.active_campaign_count} active</span>
+                </TableCell>
+                <TableCell><StatusChip tone={vendor.status === "active" ? "good" : vendor.status === "under_review" ? "warning" : "neutral"}>{VENDOR_STATUS_LABEL[vendor.status as keyof typeof VENDOR_STATUS_LABEL] ?? vendor.status}</StatusChip></TableCell>
+                <TableCell className="text-right tabular-nums">{money(figures.total_spend_cents)}</TableCell>
+                <TableCell className="text-right tabular-nums">{money2(figures.cost_per_usable_record_cents)}</TableCell>
+                <TableCell className="text-right tabular-nums">{own ? "—" : `${vendor.return_window_days} days`}</TableCell>
+                <TableCell className="w-px whitespace-nowrap">
+                  <RowActions what="vendor" name={own ? "No vendor" : vendor.name} onEdit={() => router.push(`/app/campaigns/vendors/${vendor.id}?tab=settings`)} onDelete={() => deleteVendor(vendor.id)} deleteBlocked={locked} deleteDisabled={vendorDelete.busy} />
+                </TableCell>
+              </TableRow>;
+            })}
+          </TableBody>
+        </Table>}
+    </TableCard>}
+    {view === "vendors" && (!vendorsPage || vendorsTab === "compare") && <div role="region" aria-label="Vendors" id="campaigns-view-vendors" className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">{loadError ? <TableCard><ErrorState title="Vendors did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} /></TableCard>
       : rollup.length === 0 ? (vendors.length === 0 && !loading && !loadError ? <TableCard><EmptyState title="No vendors yet" hint="Add the vendor you buy leads from." action={<Button type="button" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Store aria-hidden="true" />New Vendor</Button>} /></TableCard> : <TableCard><EmptyState title="No vendor figures yet" hint="Figures appear once a vendor has a campaign." action={newCampaignFor(null)} /></TableCard>)
       : <VendorRoster
       vendors={vendors}
@@ -887,10 +1134,10 @@ export function CampaignWorkspace({ embedded = false, readOnly = false }: {
       facts={facts}
       factsError={factsError}
       usableReference={effectiveCostCents}
-      actions={createActions}
+      actions={vendorsPage ? undefined : createActions}
       onChanged={load}
-      onShowCampaigns={pickVendor}
-      onEdit={setEditVendorId}
+      onShowCampaigns={(id: string) => router.push(`/app/campaigns/vendors/${id}`)}
+      onEdit={(id: string) => router.push(`/app/campaigns/vendors/${id}?tab=settings`)}
       onDelete={(row) => deleteVendor(row.vendor_id)}
       deleting={vendorDelete.busy}
     />}</div>}
@@ -1102,6 +1349,172 @@ function CampaignPanel({ tabRequest, campaign, vendor, lead, reach, outcome, isT
     <LeaveGuard dirty={dirty} scope={scope} onSave={save} onDiscard={discard} what={`${campaign.name}'s cost and targeting`} />
   </DetailPanel>;
   return createPortal(panel, document.body);
+}
+
+/**
+ * A campaign's Settings tab (owner pick C, 2026-10-30, board LirE5): every field it has, grouped —
+ * Details, Cost, Serving, Status — saved together by the one Save in the frame's corner. The same
+ * PATCH the side panel uses, plus its name, vendor and lead type. An unsaved change asks before a
+ * click away drops it.
+ */
+function CampaignSettings({ campaign, vendors, products, isTest, savedStates, otherActiveWeight, busy, locked, scrub, statusChip, onSave, onActivate, onPause, onExhaust, deleteBlocked, onDelete }: {
+  campaign: Campaign;
+  vendors: Vendor[];
+  products: Array<{ code: string; name: string }> | null;
+  isTest: boolean | null;
+  savedStates: string[] | null;
+  otherActiveWeight: number;
+  busy: boolean;
+  locked: string | null;
+  scrub: ReactNode;
+  statusChip: ReactNode;
+  onSave: (body: Record<string, unknown>) => Promise<boolean>;
+  onActivate: () => void;
+  onPause: () => void;
+  onExhaust: () => void;
+  deleteBlocked: string | null;
+  onDelete: () => void;
+}) {
+  const start = {
+    name: campaign.name,
+    vendor_id: campaign.vendor_id,
+    lead_type: campaign.lead_type,
+    product_code: campaign.product_code ?? "",
+    spend: (campaign.total_spend_cents / 100).toFixed(2),
+    records: String(campaign.records_purchased),
+    weight: String(campaign.mixing_weight),
+    test: isTest ?? false,
+    states: [...(savedStates ?? [])].sort(),
+  };
+  const [draft, setDraft] = useState(start);
+  const [stateText, setStateText] = useState("");
+  const [stateError, setStateError] = useState<string | null>(null);
+  const scope = useRef<HTMLDivElement>(null);
+  const uid = useId();
+  const field = (name: string) => `${uid}-${name}`;
+  const set = <K extends keyof typeof start>(key: K, value: (typeof start)[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const changed = (Object.keys(start) as Array<keyof typeof start>).filter((key) => JSON.stringify(draft[key]) !== JSON.stringify(start[key]));
+  const dirty = changed.length > 0;
+  const disabled = busy || locked !== null;
+  const discard = () => { setDraft(start); setStateText(""); setStateError(null); };
+
+  async function save(): Promise<boolean> {
+    const body: Record<string, unknown> = {};
+    if (changed.includes("name")) {
+      if (!draft.name.trim()) { notify.block("Give the campaign a name"); return false; }
+      body.name = draft.name.trim();
+    }
+    if (changed.includes("vendor_id")) body.vendor_id = draft.vendor_id;
+    if (changed.includes("lead_type")) body.lead_type = draft.lead_type;
+    if (changed.includes("product_code")) body.product_code = draft.product_code || null;
+    if (changed.includes("spend")) {
+      const cents = Math.round(Number(draft.spend.replace(/[$,\s]/g, "")) * 100);
+      if (!Number.isFinite(cents) || cents < 0) { notify.block("Enter a valid spend"); return false; }
+      body.total_spend_cents = cents;
+    }
+    if (changed.includes("records")) {
+      const purchased = Number(draft.records.replace(/[,\s]/g, ""));
+      if (!Number.isInteger(purchased) || purchased < 0) { notify.block("Enter a whole number of records"); return false; }
+      body.records_purchased = purchased;
+    }
+    if (changed.includes("weight")) {
+      const mixing = Number(draft.weight);
+      if (!Number.isInteger(mixing) || mixing < 1 || mixing > 100) { notify.block("Mixing weight must be between 1 and 100"); return false; }
+      body.mixing_weight = mixing;
+    }
+    if (changed.includes("test")) body.is_test_batch = draft.test;
+    if (changed.includes("states")) body.target_states = draft.states;
+    return onSave(body);
+  }
+
+  function addStates(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    const codes = [...new Set(stateText.toUpperCase().split(/[\s,;]+/).filter(Boolean))];
+    const bad = codes.filter((code) => !STATE_NAMES[code]);
+    if (bad.length) { setStateError(`Not a state: ${bad.join(", ")}`); return; }
+    setStateError(null);
+    set("states", [...new Set([...draft.states, ...codes])].sort());
+    setStateText("");
+  }
+
+  const share = shareOf(draft.weight, otherActiveWeight);
+  const takes = vendors.filter((vendor) => vendorTakesCampaigns(vendor.status) || vendor.id === campaign.vendor_id);
+  const label = (text: string) => <span className="text-xs font-semibold tracking-[0.06em] text-[var(--ink)] uppercase">{text}</span>;
+  const card = (children: ReactNode) => <div className={cn(cardSurface, "flex min-w-0 flex-col gap-6 p-5")}>{children}</div>;
+
+  return <div ref={scope} className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+    <LeadsInSlot slot="continue">
+      {dirty && <Button type="button" variant="outline" disabled={busy} onClick={discard}>Discard</Button>}
+      <Button type="button" disabled={!dirty || disabled} title={locked ?? undefined} onClick={() => void save()}>{busy ? "Saving…" : dirty ? `Save ${changed.length} change${changed.length === 1 ? "" : "s"}` : "Save changes"}</Button>
+    </LeadsInSlot>
+    {card(<>
+      <section aria-label="Details" className="flex flex-col gap-3">
+        {label("Details")}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Name" htmlFor={field("name")}><input id={field("name")} className={control} maxLength={160} value={draft.name} disabled={disabled} onChange={(event) => set("name", event.target.value)} /></Field>
+          <Field label="Vendor" htmlFor={field("vendor")} hint="Or “Your own book” for a list with no vendor">
+            <select id={field("vendor")} className={control} value={draft.vendor_id} disabled={disabled} onChange={(event) => set("vendor_id", event.target.value)}>
+              {takes.map((vendor) => <option key={vendor.id} value={vendor.id}>{isOwnBookVendor(vendor.name) ? "No vendor · your own book" : vendor.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1.5"><span id={field("type")} className="text-label text-[var(--ink)]">Lead type</span><LeadTypeChoice value={draft.lead_type} onChange={(next) => set("lead_type", next)} labelledBy={field("type")} /></div>
+          <Field label="Product" htmlFor={field("product")}>
+            <select id={field("product")} className={control} value={draft.product_code} disabled={disabled} onChange={(event) => set("product_code", event.target.value)}>
+              <option value="">Any product</option>
+              {(products ?? []).map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
+              {draft.product_code && !(products ?? []).some((product) => product.code === draft.product_code) && <option value={draft.product_code}>{draft.product_code}</option>}
+            </select>
+          </Field>
+        </div>
+      </section>
+      <section aria-label="Cost" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">{label("Cost")}<span className="text-xs text-[var(--ink)]">Credits come from vendor claims, not typed here</span></div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Total spend ($)" htmlFor={field("spend")}><input id={field("spend")} className={control} inputMode="decimal" value={draft.spend} disabled={disabled} onChange={(event) => set("spend", event.target.value)} /></Field>
+          <Field label="Records bought" htmlFor={field("records")}><input id={field("records")} className={control} inputMode="numeric" value={draft.records} disabled={disabled} onChange={(event) => set("records", event.target.value)} /></Field>
+          <div className="grid gap-1.5"><span className="text-label text-[var(--ink)]">Per record</span><span className="flex h-9 items-center text-sm font-semibold tabular-nums text-[var(--ink)]" aria-live="polite">{liveCostPerRecord(draft.spend, draft.records)}</span></div>
+        </div>
+      </section>
+    </>)}
+    {card(<>
+      <section aria-label="Serving" className="flex flex-col gap-3">
+        {label("Serving")}
+        <Field label="Mixing weight" htmlFor={field("weight")}>
+          <NumberStepper id={field("weight")} value={draft.weight} onChange={(next) => set("weight", next)} min={1} max={100} label="mixing weight" after={share === null ? null : `${share}% of serving${campaign.status === "active" ? "" : " once live"}`} />
+        </Field>
+        {isTest !== null && <ToggleRow id={field("test")} title="Test batch" checked={draft.test} disabled={disabled} onChange={(next) => set("test", next)} />}
+        {savedStates !== null && <div className="flex flex-col gap-2">
+          <span className="text-label text-[var(--ink)]">Target states</span>
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Target states">
+            {draft.states.length === 0 ? <span className="text-sm text-[var(--ink)]">Any state</span>
+              : draft.states.map((code) => <span key={code} title={STATE_NAMES[code] ?? code}><ToggleChip disabled={disabled} onRemove={() => set("states", draft.states.filter((item) => item !== code))}>{code}</ToggleChip></span>)}
+          </div>
+          <form className="flex items-end gap-2" onSubmit={addStates}>
+            <Field label="Add states" htmlFor={field("state")} className="flex-1" error={stateError}><input id={field("state")} className={control} value={stateText} disabled={disabled} onChange={(event) => { setStateText(event.target.value); setStateError(null); }} placeholder="TX, OK, LA" maxLength={240} /></Field>
+            <Button type="submit" variant="outline" disabled={!stateText.trim() || disabled} className={stateError ? "mb-6" : undefined}><Plus aria-hidden="true" />Add</Button>
+          </form>
+        </div>}
+        <Link href={`/app/settings?cadenceCampaign=${campaign.campaign_id}#cadence`} className="w-fit text-sm font-semibold text-[var(--accent-ink)] hover:underline">Its calling cadence →</Link>
+      </section>
+      <section aria-label="Status" className="flex flex-col gap-3">
+        {label("Status")}
+        {scrub}
+        <div className="flex flex-wrap items-center gap-2">
+          {statusChip}
+          {campaign.status === "active"
+            ? <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onPause}><Pause aria-hidden="true" />Pause</Button>
+            : campaign.status !== "exhausted" && <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onActivate}><Play aria-hidden="true" />Activate</Button>}
+          {campaign.status !== "exhausted" && <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onExhaust}><Archive aria-hidden="true" />Mark exhausted</Button>}
+          <span className="ml-auto inline-flex" title={deleteBlocked ?? "Delete campaign"}>
+            <Button type="button" variant="outline" size="sm" disabled={disabled || deleteBlocked !== null} onClick={onDelete}><Trash2 aria-hidden="true" />Delete</Button>
+          </span>
+        </div>
+      </section>
+    </>)}
+    <LeaveGuard dirty={dirty} scope={scope} onSave={save} onDiscard={discard} what={`${campaign.name}'s settings`} />
+  </div>;
 }
 
 /**

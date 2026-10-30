@@ -4,7 +4,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import { MoreHorizontal } from "lucide-react";
 
-import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Field, SettingsMeter, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
@@ -32,7 +33,6 @@ import { buildMonitorEntries, tenantsOverCount, tenantsOverLabel, type LimitStat
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const count = (value: number) => value.toLocaleString("en-US");
 
@@ -63,6 +63,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
 
   const [overOnly, setOverOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 57);
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -89,9 +90,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
   const entries = useMemo(() => buildMonitorEntries(monitor, seats, warn), [monitor, seats, warn]);
   const visible = useMemo(() => (overOnly ? entries.filter((entry) => entry.state !== "ok") : entries), [entries, overOnly]);
   const overCount = tenantsOverCount(entries);
-  const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pages);
-  const pageRows = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const { current: currentPage, rows: pageRows } = paginate(visible, page, pageSize);
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/admin/credits-limits");
@@ -312,6 +311,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
       <TableCard
         className="min-w-0"
         title="Usage monitor"
+        footer={visible.length ? <Pager page={currentPage} pageSize={pageSize} total={visible.length} noun={visible.length === 1 ? "limit" : "limits"} suffix="nearest the limit first" onPage={setPage} /> : undefined}
         toolbar={
           <DataToolbar
             actions={
@@ -355,17 +355,6 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
               <MonitorRow key={entry.key} entry={entry} onGrant={openGrant} />
             ))}
           </ul>
-        )}
-
-        {visible.length > PAGE_SIZE && (
-          <BoardTableFooter
-            page={currentPage}
-            pageSize={PAGE_SIZE}
-            total={visible.length}
-            itemLabel={visible.length === 1 ? "limit" : "limits"}
-            order="nearest the limit first"
-            onPageChange={setPage}
-          />
         )}
       </TableCard>
 
