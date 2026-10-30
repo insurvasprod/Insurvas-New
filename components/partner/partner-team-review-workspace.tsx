@@ -191,6 +191,9 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
   return <div className="m-stagger space-y-6">
     <PageHeader
       title="Team review"
+      description="Review submitted leads and member performance."
+      visible
+      infoDescription
       actions={<form className="flex flex-wrap items-center gap-2" onSubmit={apply}>
         <input type="date" aria-label="Review start date" className={toolbarControl} value={draftFrom} max={draftTo || undefined} onChange={(event) => setDraftFrom(event.target.value)} />
         <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>

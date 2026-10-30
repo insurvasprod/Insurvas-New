@@ -160,9 +160,9 @@ export async function statementCsv(tenantId: string, id: string): Promise<{ file
 // ─── the partner's side ───────────────────────────────────────────────────────────────────────
 // Every read here is filtered by the session's tenant AND partner, and by status: a draft does not exist for the partner.
 
-export async function partnerRuns(tenantId: string, partnerId: string) {
+export async function partnerRuns(tenantId: string, partnerId: string, limit = 120) {
   const { data, error } = await db().from("payout_run").select("id, period_start, period_end, status, net_cents, paid_on, published_at")
-    .eq("tenant_id", tenantId).eq("partner_id", partnerId).in("status", ["published", "paid"]).order("period_start", { ascending: false }).limit(120);
+    .eq("tenant_id", tenantId).eq("partner_id", partnerId).in("status", ["published", "paid"]).order("period_start", { ascending: false }).limit(Math.max(1, Math.min(120, Math.floor(limit))));
   if (error) fail(error);
   return ((data ?? []) as Loose[]).map((r) => ({ id: r.id as string, periodStart: r.period_start as string, periodEnd: r.period_end as string, status: r.status as "published" | "paid", netCents: Number(r.net_cents), paidOn: r.paid_on as string | null }));
 }

@@ -24,6 +24,8 @@ export type SelectMenuOption<K extends string> = {
   value: K;
   /** The name in the list. */
   label: string;
+  /** Secondary context shown smaller and muted (for example, a state name beside its code). */
+  description?: string;
   /** The name on the trigger when chosen, if it needs more words than the list ("With Aetna"). */
   triggerLabel?: string;
   /** Options with the same group sit under one heading, in the order given. */
@@ -40,10 +42,14 @@ export function SelectMenu<K extends string>({
   defaultValue,
   options,
   onChange,
+  disabled = false,
+  id,
+  ariaInvalid = false,
   icon,
   searchPlaceholder = "Search",
   className,
   panelClassName,
+  panelAlign = "end",
 }: {
   /** Accessible name of the control ("Show states"). */
   label: string;
@@ -52,11 +58,16 @@ export function SelectMenu<K extends string>({
   defaultValue?: K;
   options: ReadonlyArray<SelectMenuOption<K>>;
   onChange: (value: K) => void;
+  disabled?: boolean;
+  id?: string;
+  ariaInvalid?: boolean;
   icon?: ReactNode;
   searchPlaceholder?: string;
   /** The trigger's width and layout (e.g. "w-52"). */
   className?: string;
   panelClassName?: string;
+  /** The menu's anchor edge when its width differs from the trigger. */
+  panelAlign?: "start" | "center" | "end";
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -68,7 +79,7 @@ export function SelectMenu<K extends string>({
 
   const needle = query.trim().toLowerCase();
   const shown = useMemo(
-    () => options.filter((option) => !needle || option.label.toLowerCase().includes(needle) || option.group?.toLowerCase().includes(needle) || option.triggerLabel?.toLowerCase().includes(needle)),
+    () => options.filter((option) => !needle || option.label.toLowerCase().includes(needle) || option.description?.toLowerCase().includes(needle) || option.group?.toLowerCase().includes(needle) || option.triggerLabel?.toLowerCase().includes(needle)),
     [options, needle],
   );
   const pickable = shown.filter((option) => !option.disabled);
@@ -103,23 +114,39 @@ export function SelectMenu<K extends string>({
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <button
+          id={id}
           type="button"
-          aria-label={`${label}: ${chosen?.triggerLabel ?? chosen?.label ?? ""}`}
+          disabled={disabled}
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-invalid={ariaInvalid || undefined}
+          aria-label={`${label}: ${chosen?.triggerLabel ?? chosen?.label ?? ""}${chosen?.description ? `, ${chosen.description}` : ""}`}
           className={cn(
             "inline-flex h-9 min-w-0 items-center gap-2 rounded-md border px-3 text-left text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-color)]",
             tinted
               ? "border-[color-mix(in_srgb,var(--primary)_55%,var(--border))] bg-[var(--primary-soft)] font-medium text-[var(--ink)]"
               : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-alt)]",
+            disabled && "cursor-not-allowed opacity-45",
             className,
           )}
         >
           {icon && <span aria-hidden="true" className={cn("inline-flex shrink-0", tinted ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>{icon}</span>}
           {chosen?.dot && <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", chosen.dot)} />}
-          <span className="min-w-0 flex-1 truncate">{chosen?.triggerLabel ?? chosen?.label}</span>
+          <span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate">
+            <span className="shrink-0 truncate">{chosen?.triggerLabel ?? chosen?.label}</span>
+            {chosen?.description && <>
+              <span aria-hidden="true" className="shrink-0 text-xs font-normal text-[var(--muted)]">–</span>
+              <span className="min-w-0 truncate text-xs font-normal text-[var(--muted)]">{chosen.description}</span>
+            </>}
+          </span>
           <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", open && "rotate-180")} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className={cn("flex w-72 flex-col overflow-hidden p-0", panelClassName)}>
+      {/* Never taller than the room below the trigger, so the menu does not flip up over the form it
+          belongs to (owner, 2026-10-29); the list inside shrinks to fit rather than fixing its height. */}
+      <PopoverContent align={panelAlign} className={cn("flex w-72 max-h-[min(18rem,var(--radix-popover-content-available-height))] flex-col overflow-hidden p-0", panelClassName)}>
         <label className="relative flex shrink-0 items-center border-b border-[var(--border)]">
           <span className="sr-only">{searchPlaceholder}</span>
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 size-4 text-[var(--muted)]" />
@@ -138,7 +165,7 @@ export function SelectMenu<K extends string>({
             className="h-10 w-full bg-transparent pr-3 pl-9 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--muted)] [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
-        <div ref={listRef} id={listId} role="listbox" aria-label={label} className="max-h-80 overflow-y-auto overscroll-contain p-1">
+        <div ref={listRef} id={listId} role="listbox" aria-label={label} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
           {shown.length === 0 && <p className="m-0 px-3 py-6 text-center text-sm text-[var(--muted)]">Nothing matches “{query.trim()}”.</p>}
           {shown.map((option, at) => {
             // A heading where a group starts.
@@ -164,7 +191,13 @@ export function SelectMenu<K extends string>({
                   )}
                 >
                   {option.dot !== undefined && <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", option.dot)} />}
-                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                  <span className={cn(option.description ? "w-8 shrink-0" : "min-w-0 flex-1 truncate")}>{option.label}</span>
+                  {option.description && <>
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-normal text-[var(--muted)]">
+                      <span aria-hidden="true" className="shrink-0">–</span>
+                      <span className="min-w-0 truncate">{option.description}</span>
+                    </span>
+                  </>}
                   {option.count !== undefined && <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">{option.count}</span>}
                   <Check aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--accent-ink)]", !selected && "invisible")} />
                 </div>

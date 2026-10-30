@@ -8,12 +8,13 @@ import { requirePartner } from "@/lib/partnerAuth/requirePartner";
  * never another partner's. Scoped on the server to the session's tenant and partner. Partner admins
  * only: what the organisation is paid is not for every seat.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requirePartner(["partner_admin"]);
   if (auth instanceof NextResponse) return auth;
   const { context } = auth;
   try {
-    return NextResponse.json({ runs: await partnerRuns(context.tenantId, context.partnerId) }, { headers: { "Cache-Control": "no-store" } });
+    const limit = new URL(request.url).searchParams.get("limit") === "1" ? 1 : undefined;
+    return NextResponse.json({ runs: await partnerRuns(context.tenantId, context.partnerId, limit) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof PayoutError) return NextResponse.json({ error: error.status === 503 ? "Statements are not available yet." : error.message }, { status: error.status });
     console.error("[partner-payouts]", error);

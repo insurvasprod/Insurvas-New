@@ -247,7 +247,12 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
     : canLoadMore ? <><span>Showing {data.rows.length.toLocaleString()} of {data.total.toLocaleString()} leads</span>{loadMore}</> : undefined;
 
   return <div className="m-stagger space-y-6">
-    <PageHeader title="Lead pipeline" description={role === "partner_admin" ? undefined : "Only the leads you submitted."} />
+    <PageHeader
+      title="Pipeline"
+      description={role === "partner_admin" ? "Track leads submitted by your organization." : "Track the leads you submitted."}
+      visible
+      infoDescription
+    />
     {error && data && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
     {/* LA-1.17's counters, as on the partner home (lib/partnerLeads/counters.ts). */}
     <StatStrip label="Your leads">

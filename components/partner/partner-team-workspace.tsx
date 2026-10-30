@@ -180,7 +180,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
   if (role !== "partner_admin") {
     return (
       <div className="m-stagger space-y-6">
-        <PageHeader title="Team access" />
+        <PageHeader title="Team access" description="See who has access to your partner workspace." visible infoDescription />
         <p role="status" className="flex items-center gap-2 rounded-md border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]"><ShieldCheck className="size-4 shrink-0" aria-hidden="true" />Team access is managed by your partner admin.</p>
       </div>
     );
@@ -217,7 +217,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
 
   return (
     <div className="m-stagger space-y-6">
-      <PageHeader title="Team access" actions={<Button type="button" onClick={() => setInviteOpen(true)}><UserPlus aria-hidden="true" />Invite teammate</Button>} />
+      <PageHeader title="Team access" description="See who has access to your partner workspace." visible infoDescription actions={<Button type="button" onClick={() => setInviteOpen(true)}><UserPlus aria-hidden="true" />Invite teammate</Button>} />
       {error &&<p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team access could not be refreshed: {error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
 
       <StatStrip label="Team totals">

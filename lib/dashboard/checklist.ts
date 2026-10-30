@@ -97,9 +97,11 @@ const SETUP_STEPS = [
   { key: "states", module: "book", label: "Add your states", path: "/app/settings#carriers/carriers-states", action: "Add states",
     instruction: "Choose the states where you are licensed and appointed with each carrier.",
     why: "Insurvas uses your states to check where you can sell and which leads you can work." },
-  { key: "lead-sources", module: "inbound", label: "Add your lead sources", path: "/app/publishers", action: "Add lead sources", target: "publisher-add",
+  // The step key stays `lead-sources`: it is stored against every tenant's skipped/done marks, and
+  // renaming it would lose them. Only the wording follows the page (owner, 2026-10-29: Publishers).
+  { key: "lead-sources", module: "inbound", label: "Add your publishers", path: "/app/publishers", action: "Add publishers", target: "publisher-add",
     instruction: "Add each company that sends you leads or transfers calls to you, and how you pay them.",
-    why: "Cost per sale and lead-source scorecards are worked out per source." },
+    why: "Cost per sale and publisher scorecards are worked out per publisher." },
   { key: "campaign", module: "outbound", label: "Create a campaign", path: "/app/campaigns", action: "Create campaign",
     instruction: "Add the company selling you leads, then create a campaign for the leads you plan to import.",
     why: "Every imported lead needs a campaign so Insurvas can track its source and cost." },

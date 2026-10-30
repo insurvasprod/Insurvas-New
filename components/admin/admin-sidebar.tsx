@@ -60,7 +60,7 @@ import {
   type SidebarNode,
 } from "@/lib/adminNav/types";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-import { NavRail } from "@/components/portal/nav-rail";
+import { NavRail, type RailNode } from "@/components/portal/nav-rail";
 
 // Icon components are functions with methods and cannot cross the server->client boundary as props,
 // so the server sends a key and it is resolved here.
@@ -292,13 +292,14 @@ export function AdminSidebar({ nodes, adminName, roleLabel, footer }: Props) {
         </div>
       )}
 
-      {/* The desktop rail (redesign 2026-10-25, "sidebar as A"): the agent shell's icon rail with the
-          staff menu; a group's pages open beside it, and the staff card opens from the foot. */}
+      {/* The desktop rail uses the agent shell's labeled accordion and collapse control with the
+          staff's role-filtered menu in its original order. */}
       <NavRail
         label="Admin navigation"
         homeHref="/admin"
-        links={nodes.filter((node): node is SidebarLink => node.kind !== "group").map((node) => ({ key: node.href, label: node.label, href: node.href, icon: ICONS[node.icon] }))}
-        groups={nodes.filter((node): node is SidebarGroup => node.kind === "group").map((group) => ({ key: group.id, label: group.label, icon: ICONS[group.icon], items: group.links.map((entry) => ({ key: entry.href, label: entry.label, href: entry.href, icon: ICONS[entry.icon] })) }))}
+        items={nodes.map((node): RailNode => node.kind === "group"
+          ? { key: node.id, label: node.label, icon: ICONS[node.icon], items: node.links.map((entry) => ({ key: entry.href, label: entry.label, href: entry.href, icon: ICONS[entry.icon] })) }
+          : { key: node.href, label: node.label, href: node.href, icon: ICONS[node.icon] })}
         foot={[]}
         card={{ label: "Signed in as", icon: ShieldUser, body: <>{staffCard}{footer && <div className="portal-agent-sidebar-footer">{footer}</div>}</> }}
         isActive={isLinkActive}

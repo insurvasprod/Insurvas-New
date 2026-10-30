@@ -65,7 +65,9 @@ export function PageHeader({
           <div className="min-w-0 max-w-[44rem]">
             <div className="flex items-center gap-1.5">
               <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
-              {description && infoDescription && <InfoTip label={`About ${title}`} side="bottom">{description}</InfoTip>}
+              {/* To the right of the (i), not under it (owner, 2026-10-29): dropped below the title it
+                  spills back across the heading and the breadcrumb, which reads as a misplaced overlay. */}
+              {description && infoDescription && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
             </div>
             {description && !infoDescription && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
             {meta}
