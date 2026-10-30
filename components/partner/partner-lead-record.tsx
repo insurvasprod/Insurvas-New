@@ -43,6 +43,25 @@ function Progress({ detail }: { detail: PartnerLeadDetail }) {
   </ol>;
 }
 
+/** A group's name, and the pairs under it. */
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return <section className="mb-5 min-w-0 break-inside-avoid">
+    {/* Bigger and heavier than the pairs under it (owner, 30 Oct: "every text there is the same"),
+        with a rule, so a group reads as a heading rather than as another row. */}
+    <h3 className="mb-2 border-b border-border pb-1.5 text-card-title font-semibold text-foreground">{label}</h3>
+    {/* The label column is capped: full width put the value at the far edge of the card, a hand span
+        from the thing it belongs to. */}
+    <dl className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">{children}</dl>
+  </section>;
+}
+
+function Pair({ label, value }: { label: string; value: React.ReactNode }) {
+  return <Fragment>
+    <dt className="min-w-0 text-muted-foreground">{label}</dt>
+    <dd className="m-0 min-w-0 break-words font-medium text-foreground">{value}</dd>
+  </Fragment>;
+}
+
 /** The form as it was sent: grouped, ordered and formatted (lib/partnerLeads/view.ts). */
 function Submission({ detail }: { detail: PartnerLeadDetail }) {
   const groups = snapshotFields(detail.values);
@@ -51,25 +70,21 @@ function Submission({ detail }: { detail: PartnerLeadDetail }) {
       <Lock className="size-3.5 shrink-0" aria-hidden="true" />
       Form as submitted — cannot be edited in the partner portal
     </p>
-    {groups.map((group) => <section key={group.key} className="min-w-0">
-      <h3 className="mb-1.5 text-label text-muted-foreground">{group.label}</h3>
-      <dl className="m-0 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-x-3 gap-y-1.5 text-sm">
-        {group.fields.map((field) => <Fragment key={field.key}>
-          <dt className="min-w-0 truncate text-muted-foreground">{field.label}</dt>
-          <dd className="m-0 min-w-0 break-words font-medium text-foreground">{field.value}</dd>
-        </Fragment>)}
-      </dl>
-    </section>)}
-    {!groups.length && <p className="text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
-    <section className="min-w-0 border-t border-border pt-3">
-      <h3 className="mb-1.5 text-label text-muted-foreground">Submission</h3>
-      <dl className="m-0 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-x-3 gap-y-1.5 text-sm">
-        <dt className="text-muted-foreground">Submitted</dt><dd className="m-0 font-medium text-foreground">{when(detail.submittedAt)}</dd>
-        <dt className="text-muted-foreground">Submitted by</dt><dd className="m-0 font-medium text-foreground">{detail.submittedBy.name}</dd>
-        <dt className="text-muted-foreground">Last update</dt><dd className="m-0 font-medium text-foreground">{when(detail.updatedAt)}</dd>
-        <dt className="text-muted-foreground">Outcome</dt><dd className="m-0 font-medium text-foreground">{detail.outcome ?? "Awaiting update"}</dd>
-      </dl>
-    </section>
+    {/* Two columns from md up: one column left half the card empty and the page scrolling for a
+        form that fits on a screen (owner, 30 Oct). CSS columns rather than a grid, so a short group
+        beside a long one packs instead of leaving the row's height as dead space. */}
+    <div className="min-w-0 md:columns-2 md:gap-10">
+      {groups.map((group) => <Group key={group.key} label={group.label}>
+        {group.fields.map((field) => <Pair key={field.key} label={field.label} value={field.value} />)}
+      </Group>)}
+      {!groups.length && <p className="text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
+      <Group label="Submission">
+        <Pair label="Submitted" value={when(detail.submittedAt)} />
+        <Pair label="Submitted by" value={detail.submittedBy.name} />
+        <Pair label="Last update" value={when(detail.updatedAt)} />
+        <Pair label="Outcome" value={detail.outcome ?? "Awaiting update"} />
+      </Group>
+    </div>
   </div>;
 }
 

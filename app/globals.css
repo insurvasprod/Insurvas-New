@@ -669,6 +669,14 @@
   font: inherit; font-size: 10px; font-weight: 600; line-height: 1;
 }
 @media (max-width: 767px) { .portal-top-search { width: 100%; } .portal-top-search-keys { display: none; } }
+/* Phones: the 160px floor and the 24px gap together pushed the account chip off the right edge at
+   375 — the field read "Search t". The field gives way instead; it is still a field a person can
+   see and type in, which is the rule above, just a narrower one. */
+@media (max-width: 519px) {
+  .portal-top-bar { gap: .5rem; }
+  .portal-top-search { min-width: 0; }
+  .portal-top-search-input { padding-right: 12px; }
+}
 
 /* the right-hand controls */
 .portal-top-actions { position: relative; display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }

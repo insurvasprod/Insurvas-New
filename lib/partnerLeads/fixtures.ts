@@ -14,7 +14,7 @@ import { NOBODY_CLAIMED_LABEL } from "./lanes.ts";
 import { DEFAULT_AGE_THRESHOLDS } from "./view.ts";
 import type { PartnerLeadDetail, PartnerLeadRow, PartnerPipelinePayload, PartnerPipelineStage } from "./types.ts";
 
-export const SAMPLE_STATES = ["busy", "quiet", "sla", "many", "empty", "error"] as const;
+export const SAMPLE_STATES = ["busy", "crowded", "quiet", "sla", "many", "empty", "error"] as const;
 export type SampleState = (typeof SAMPLE_STATES)[number];
 
 export const SAMPLE_ROLES = ["partner_admin", "partner_user"] as const;
@@ -107,6 +107,17 @@ function busyRows(): RowSpec[] {
 
 function rowsFor(state: SampleState): RowSpec[] {
   if (state === "empty" || state === "error") return [];
+  // One lane far past the 20 a column shows, so the lane's pager can be exercised.
+  if (state === "crowded") {
+    return Array.from({ length: 64 }, (_, index) => ({
+      customer: `${NAMES[index % NAMES.length]} ${String.fromCharCode(65 + Math.floor(index / NAMES.length))}`,
+      product: PRODUCTS[index % PRODUCTS.length],
+      lane: (index < 52 ? "new" : "claimed") as PartnerLane,
+      age: 3 + index * 7,
+      stage: index < 52 ? "s-new" : "s-dialing",
+      by: TEAM[index % TEAM.length],
+    }));
+  }
   if (state === "quiet") return [{ customer: NAMES[0], product: "final_expense", lane: "new", age: 42, stage: "s-new", by: ME }];
   if (state === "sla") {
     return [

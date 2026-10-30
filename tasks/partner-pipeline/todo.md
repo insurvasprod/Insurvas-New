@@ -750,16 +750,16 @@ screens, the owner and this round all disagree.
 headings. The board stays a board from `md` up.
 
 **Acceptance criteria:**
-- [ ] Under `md`: stacked sections, each heading carrying its lane name and count, sticking while
+- [x] Under `md`: stacked sections, each heading carrying its lane name and count, sticking while
       its own leads scroll past
-- [ ] No horizontal scrolling at 320 wide; no fixed 420px column heights
-- [ ] An empty lane is one quiet line, not 420px of nothing
-- [ ] Cards keep name, product, toned age and agency stage; the whole card is the link
-- [ ] From `md` up the board is unchanged — same columns, same counts
+- [x] No horizontal scrolling at 320 wide; no fixed 420px column heights
+- [x] An empty lane is one quiet line, not 420px of nothing
+- [x] Cards keep name, product, toned age and agency stage; the whole card is the link
+- [x] From `md` up the board is unchanged — same columns, same counts
 
 **Verification:**
-- [ ] 320, 360, 375, 390, 430: one column, no sideways scroll, headings stick
-- [ ] 768 and 1536: the board is exactly as it was
+- [x] 320, 360, 375, 390, 430: one column, no sideways scroll, headings stick
+- [x] 768 and 1536: the board is exactly as it was
 
 **Dependencies:** Task 14
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -773,15 +773,15 @@ headings. The board stays a board from `md` up.
 and a compact toolbar bring the list up to where a thumb can reach it.
 
 **Acceptance criteria:**
-- [ ] Stat cards are 2×2 under `sm`, 4 across from `lg` — the same four figures, no content dropped
-- [ ] The toolbar is at most two rows at 375: search, then Filters with the view toggle and the
+- [x] Stat cards are 2×2 under `sm`, 4 across from `lg` — the same four figures, no content dropped
+- [x] The toolbar is at most two rows at 375: search, then Filters with the view toggle and the
       actions
-- [ ] Export CSV and Refresh may collapse to icon buttons under `sm`, with accessible names
-- [ ] The list card starts within the first screen and a half at 375 (was y=1536 of 812)
+- [x] Export CSV and Refresh may collapse to icon buttons under `sm`, with accessible names
+- [x] The list card starts within the first screen and a half at 375 (was y=1536 of 812)
 
 **Verification:**
-- [ ] Measure the list card's offset at 375 before and after; record both
-- [ ] The needs-you row, when present, is still the first thing under the figures
+- [x] Measure the list card's offset at 375 before and after; record both
+- [x] The needs-you row, when present, is still the first thing under the figures
 
 **Dependencies:** Task 18
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -795,15 +795,15 @@ and a compact toolbar bring the list up to where a thumb can reach it.
 is **shared with the agent app**, so this is the one task that can break a screen nobody asked about.
 
 **Acceptance criteria:**
-- [ ] At 320–430 the bar shows: menu, logo, a search **icon** that opens the search, the alert
+- [x] At 320–430 the bar shows: menu, logo, a search **icon** that opens the search, the alert
       icons, and the account chip — nothing clipped
-- [ ] The agent app's bar is unchanged from `md` up
-- [ ] ⌘K still opens search at every width
+- [x] The agent app's bar is unchanged from `md` up
+- [x] ⌘K still opens search at every width
 
 **Verification:**
-- [ ] `/partner/pipeline` **and** `/app/dashboard` at 320, 375, 430, 768, 1366, 1536 — screenshot
+- [x] `/partner/pipeline` **and** `/app/dashboard` at 320, 375, 430, 768, 1366, 1536 — screenshot
       both before and after
-- [ ] `/design/home` and `/design/shell` still render
+- [x] `/design/home` and `/design/shell` still render
 
 **Dependencies:** None
 **Files:** `components/app/app-top-bar.tsx`
@@ -812,9 +812,9 @@ is **shared with the agent app**, so this is the one task that can break a scree
 ---
 
 ### ✅ Checkpoint: the phone
-- [ ] `/partner/pipeline` usable end to end at 320 wide: find a lead, filter, open it, come back
-- [ ] The agent app shows no regression at any width
-- [ ] `npm test`, typecheck, lint green
+- [x] `/partner/pipeline` usable end to end at 320 wide: find a lead, filter, open it, come back
+- [x] The agent app shows no regression at any width
+- [x] `npm test`, typecheck, lint green
 
 ---
 
@@ -915,3 +915,58 @@ shipped screens and this round. It now names `SelectMenu`, points two-to-five ch
 `Segmented` and several-answers at `MultiPicker`, and records why the native date inputs stay.
 
 3408 pass / 20 fail (the same pre-existing 20); design rules 71/71; lint and types clean.
+
+---
+
+## Phase 8 — done 30 Oct
+
+Tasks 18–20, plus four things the owner asked for mid-phase (22–25 below).
+
+### The phone
+
+| | Before | After |
+|---|---|---|
+| First lead at 375 | y=**1536** (1.9 screens) | y=**551** (0.68 screens) |
+| Top bar | search read "Search t", account chip clipped, **4 nodes past the edge** | nothing clipped, bar does not overflow |
+| Toolbar search | ~70px, reading "Se" | **310px**, its own row |
+| Board | five 220px columns scrolled sideways | lanes stacked, headings stick, **no horizontal scroll** |
+| An empty lane | 420px of nothing | **86px**, one quiet line |
+| Stat cards | 4 stacked full-width | **2 across** |
+| Export / Refresh | full labels, wrapping | icon-only under `sm`, names kept on the controls |
+
+### The owner's mid-phase asks
+
+- **22 · Cards have tags.** Name, then the submitter (admins only), then a tag row — product as a
+  neutral `StatusChip`, the age badge with its tone — then the agency stage on its own line above a
+  hairline. Not an invented chip: a neutral `StatusChip` carries no dot, so it reads as a label.
+- **23 · The record is two columns and its headings are heavier.** "Every text there is the same"
+  — group names are now 15/600 with a rule, against 14/400 pairs, and the label column is capped at
+  9rem so a value sits beside its label rather than at the far edge of the card. CSS columns rather
+  than a grid, so a short group beside a long one packs instead of leaving the row's height empty.
+  **The record now fits the screen exactly: page height 826 against a viewport of 826, zero
+  scroll** (was 945).
+- **24 · The board paginates per lane.** A lane shows 20 and offers "Show 20 more". Verified on a
+  new `crowded` fixture: New=52, 20 cards drawn, the button appears.
+- **25 · The table already paginated.** "Showing 1–10 of 64 leads" with 7 pages, First/Previous.
+  It has been there since round 1 — with one lead in the database there is nothing for it to page.
+
+### Shared components touched, and what that risks
+
+Three changes reach beyond the partner portal, so each was checked on the agent side:
+
+- `app/globals.css` — phone rules for `.portal-top-bar` (8 lines).
+- `components/ui/data-toolbar.tsx` — below `sm` the search/filters row takes the full width and the
+  actions wrap under it; `RefreshButton` gained `className`/`labelClassName` so a narrow toolbar can
+  drop the word and keep the icon.
+
+**The agent app could not be opened directly** — this browser holds a partner session, so
+`/app/dashboard` redirects to `/partner`. Checked instead on the dev-only previews that render the
+agent shell without auth: `/design/home` and `/design/partners`, at 375 (no overflow, search 310px)
+and at 1536 (search back to 256px, toolbar one row, nothing moved). That is good evidence, not the
+same as the real agent app — worth a look when someone is signed in as an agent.
+
+### Still open
+
+The `InfoTip` (i) buttons remain 16×16 and 20×20, under WCAG 2.2's 24×24. Unchanged here because
+`InfoTip` is shared with the whole app; it is task 21's decision — grow them everywhere, or record
+the exception.

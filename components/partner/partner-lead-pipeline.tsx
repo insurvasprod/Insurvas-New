@@ -40,6 +40,8 @@ export type PipelinePreview = { data: PartnerPipelinePayload | null; error?: str
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
 const PAGE_SIZE = 10;
+/** How many cards a lane shows before it offers the rest: a busy agency can put hundreds in one. */
+const LANE_PAGE = 20;
 
 /** A board column's header ground and ink, by what being in that column means. */
 const COLUMN_TONE: Record<string, string> = {
@@ -70,24 +72,30 @@ function Age({ row, now, thresholds, className }: { row: PartnerLeadRow; now: nu
   </span>;
 }
 
-function LeadCard({ row, href, now, thresholds }: { row: PartnerLeadRow; href: string; now: number | null; thresholds?: AgeThresholds }) {
+function LeadCard({ row, href, now, thresholds, showSubmitter }: { row: PartnerLeadRow; href: string; now: number | null; thresholds?: AgeThresholds; showSubmitter?: boolean }) {
   const flagged = nobodyClaimedRow(row);
   return <Link
     href={href}
-    className="block w-full rounded-md border border-border bg-card p-3 text-left no-underline transition-colors hover:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+    className="group block w-full rounded-md border border-border bg-card p-3 text-left no-underline transition-colors hover:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
   >
-    <span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-foreground">{row.customer}</span><ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></span>
-    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-      <span className="truncate">{productLineLabel(row.product)}</span>
+    <span className="flex items-start justify-between gap-2">
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-foreground">{row.customer}</span>
+        {/* Who sent it, for an admin reading the whole organisation's board. */}
+        {showSubmitter && <span className="mt-0.5 block truncate text-[0.6875rem] text-muted-foreground">{row.submittedBy.name}</span>}
+      </span>
+      <ArrowRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+    </span>
+    {/* Tags rather than a run-on line (owner, 30 Oct): the product is a plain label, so it is a
+        neutral chip with no dot; the age carries its own tone and words. */}
+    <span className="mt-2 flex flex-wrap items-center gap-1.5">
+      <StatusChip tone="neutral">{productLineLabel(row.product)}</StatusChip>
       <Age row={row} now={now} thresholds={thresholds} />
+      {flagged && <StatusChip tone="warning">{NOBODY_CLAIMED_LABEL}</StatusChip>}
     </span>
     {/* The agency's own stage name is kept, it just no longer sorts the board. A flagged submission
-        has no stage name to show: the service has already replaced it with the SLA's own words. */}
-    <span className="mt-1.5 block">
-      {flagged
-        ? <StatusChip tone="warning">{NOBODY_CLAIMED_LABEL}</StatusChip>
-        : <span className="truncate text-xs text-muted-foreground">{row.stageName}</span>}
-    </span>
+        has none to show: the service has already replaced it with the SLA's own words. */}
+    {!flagged && <span className="mt-2 block truncate border-t border-border pt-1.5 text-xs text-muted-foreground">{row.stageName}</span>}
   </Link>;
 }
 
@@ -123,6 +131,8 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   /** Age and Submitted are the same instant read two ways, so one direction serves both columns. */
   const [sort, setSort] = useState<{ key: "age" | "submitted"; dir: "asc" | "desc" }>({ key: "submitted", dir: "desc" });
+  /** How many cards each lane is showing. A column only ever grows, and only when asked. */
+  const [laneShown, setLaneShown] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(!preview);
   // The first read draws the page skeleton; later reads (a filter change) keep the page and toolbar.
   const [firstLoad, setFirstLoad] = useState(!preview);
@@ -241,8 +251,10 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const toolbar = <DataToolbar
     actions={<>
       <Segmented label="View" options={[{ key: "board", label: "Board" }, { key: "table", label: "Table" }]} value={view} onChange={setView} />
-      <Button asChild variant="outline"><a href={exportHref}><Download aria-hidden="true" />Export CSV</a></Button>
-      <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} />
+      {/* The label is for the room it has: on a phone the icon carries it, with the name still on
+          the control for anyone listening rather than looking. */}
+      <Button asChild variant="outline" aria-label="Export CSV"><a href={exportHref}><Download aria-hidden="true" /><span className="hidden sm:inline">Export CSV</span></a></Button>
+      <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} labelClassName="hidden sm:inline" />
     </>}
   >
     <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search customer" />
@@ -372,21 +384,37 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   // Both views answer an empty result the same way: nothing submitted yet offers the action that
   // fills the page, a filter that matched nothing offers to clear itself (§8). The board used to
   // show four empty columns instead, which offered neither.
-  const board = !visibleRows.length ? empty : <div className="flex h-[max(420px,calc(100vh-420px))] gap-3 overflow-x-auto p-3">
+  // One markup, two layouts. From md up it is the board: columns side by side, each scrolling its
+  // own cards. Below md a five-column board on a 375px screen was five 220px columns scrolled
+  // sideways, mostly empty, so the lanes stack into one vertical read with their headings sticking
+  // as they pass (owner, 30 Oct).
+  const board = !visibleRows.length ? empty : <div className="flex flex-col gap-3 p-3 md:h-[max(420px,calc(100vh-420px))] md:flex-row md:overflow-x-auto">
     {columns.map((column) => {
       const rows = laneRows.get(column.key) ?? [];
       const total = laneTotal(column.key);
-      return <section key={column.key} data-stage={column.key} aria-label={column.label} className="flex min-h-0 w-0 min-w-[220px] max-w-[420px] flex-1 flex-col overflow-hidden rounded-md border border-border bg-[var(--canvas)]">
-        <header className={cn("flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm font-semibold", COLUMN_TONE[column.tone])} title={column.footnote}>
+      const limit = laneShown[column.key] ?? LANE_PAGE;
+      const shown = rows.slice(0, limit);
+      const more = rows.length - shown.length;
+      return <section key={column.key} data-stage={column.key} aria-label={column.label} className="flex min-w-0 flex-col overflow-hidden rounded-md border border-border bg-[var(--canvas)] md:min-h-0 md:w-0 md:min-w-[220px] md:max-w-[420px] md:flex-1">
+        <header className={cn("sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm font-semibold md:static", COLUMN_TONE[column.tone])} title={column.footnote}>
           <h3 className="truncate">{column.label}</h3>
           <span className="tabular-nums">{total.toLocaleString()}</span>
         </header>
-        <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto p-2">
-          {rows.map((row) => <LeadCard key={row.id} row={row} href={recordHref(row.id)} now={now} thresholds={data?.ageThresholds} />)}
-          {!rows.length && <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nothing here right now</p>}
+        <div className="grid content-start gap-2 p-2 md:min-h-0 md:flex-1 md:overflow-y-auto">
+          {shown.map((row) => <LeadCard key={row.id} row={row} href={recordHref(row.id)} now={now} thresholds={data?.ageThresholds} showSubmitter={role === "partner_admin"} />)}
+          {/* An empty lane is one quiet line on a phone, not 420px of nothing. */}
+          {!rows.length && <p className="px-2 py-2 text-center text-xs text-muted-foreground md:py-6">Nothing here right now</p>}
+          {/* A lane shows 20 at a time: a column of three hundred cards is a scroll, not a board. */}
+          {more > 0 && <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setLaneShown((current) => ({ ...current, [column.key]: limit + LANE_PAGE }))}
+          >Show {Math.min(LANE_PAGE, more)} more</Button>}
           {/* The count is every lead on the lane; the cards are the page that has been read. Say so
               where the gap shows, with the action, instead of sending the reader off to find it. */}
-          {rows.length > 0 && total > rows.length && <p className="flex flex-col items-center gap-1.5 px-2 py-2 text-center text-xs text-muted-foreground">
+          {more === 0 && rows.length > 0 && total > rows.length && <p className="flex flex-col items-center gap-1.5 px-2 py-2 text-center text-xs text-muted-foreground">
             <span>{rows.length} of {total.toLocaleString()} read</span>
             {loadMore}
           </p>}
@@ -448,7 +476,9 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
       had two different looks. The row's label says whose leads are being counted, which the page
       used to say only inside the header's (i).
     */}
-    <StatRow label={scopeLabel}>
+    {/* Two across on a phone, not four stacked: four full-width cards put the first lead 1.9
+        screens down (measured at 375 before this change). */}
+    <StatRow label={scopeLabel} className="grid-cols-2 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
       <StatCard
         icon={Send}
         label="Submitted today"
