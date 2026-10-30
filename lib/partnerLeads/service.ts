@@ -8,6 +8,9 @@ import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
 import { CONVERTED_WINDOW_MS, HELD_STATUSES, NOBODY_CLAIMED_LABEL, SALE_DISPOSITIONS, nobodyClaimed, partnerLane, type PartnerLaneCounts } from "./lanes";
 import { countersFromLanes, startOfTodayIn, submittedSinceFromBuckets } from "./counters";
 import { partnerBoardStages, type BoardCount, type BoardStage } from "./board";
+import { getQueueSlaSettings } from "@/lib/queueSla/service";
+import { DEFAULT_AGE_THRESHOLDS, type AgeThresholds } from "./view";
+import type { PartnerTerm } from "@/lib/partners/payout";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -187,6 +190,48 @@ async function partnerToldIds(
     .not("sla_partner_notified_at", "is", null);
   if (error) return new Set();
   return new Set(((data ?? []) as Array<{ id: string }>).map((row) => row.id));
+}
+
+/**
+ * The partner's own payout terms in force today — the rate behind "about $360.00 at $90.00 / sale"
+ * under the Converted figure. `partner_terms` is keyed by partner alone, and `partnerId` comes from
+ * the signed session, so this reads the caller's own row and no other's. A failure leaves the
+ * figure out rather than failing the page: the terms are a courtesy, never a gate.
+ */
+async function partnerTermInForce(
+  db: ReturnType<typeof getSupabaseServiceClient>,
+  partnerId: string,
+): Promise<PartnerTerm | null> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await db
+    .from("partner_terms")
+    .select("payout_model, rate_cents, rate_pct_bp, effective_from")
+    .eq("partner_id", partnerId)
+    .lte("effective_from", today)
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) { console.error(`[partner-pipeline] payout terms failed: ${error.message}`); return null; }
+  if (!data) return null;
+  return { payoutModel: data.payout_model, rateCents: data.rate_cents, ratePctBp: data.rate_pct_bp };
+}
+
+/**
+ * When a waiting submission is worth saying something about, in the tenant's own ladder rather than
+ * a number this page invented: amber at the partner rung — the point the agency itself has decided
+ * is late enough to tell the partner — and red at expiry. Falls back to the ladder's defaults.
+ */
+async function slaAgeThresholds(tenantId: string): Promise<AgeThresholds> {
+  try {
+    const settings = await getQueueSlaSettings(tenantId);
+    return {
+      warnSeconds: settings.partner_notify_after_seconds ?? DEFAULT_AGE_THRESHOLDS.warnSeconds,
+      dangerSeconds: settings.expire_after_seconds ?? DEFAULT_AGE_THRESHOLDS.dangerSeconds,
+    };
+  } catch (cause) {
+    console.error(`[partner-pipeline] SLA ladder read failed: ${cause instanceof Error ? cause.message : cause}`);
+    return DEFAULT_AGE_THRESHOLDS;
+  }
 }
 
 async function partnerLaneFigures(
@@ -426,11 +471,13 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   const modelOldest = Object.prototype.hasOwnProperty.call(payload, "oldest_open_at") ? (typeof payload.oldest_open_at === "string" ? payload.oldest_open_at : null) : undefined;
   const modelSubmitted = submittedSinceFromBuckets(payload.submitted_recent, since);
   const pageWorkItemIds = rows.map((row) => row.workItemId);
-  const [oldestOpenAt, lanes, submittedToday, told] = await Promise.all([
+  const [oldestOpenAt, lanes, submittedToday, told, terms, ageThresholds] = await Promise.all([
     !unfiltered ? Promise.resolve(null) : modelOldest !== undefined ? Promise.resolve(modelOldest) : oldestOpenQueuedAt(db, tenantId, partnerId, effectiveCloserId),
     partnerLaneFigures(db, tenantId, partnerId, effectiveCloserId, filters),
     modelSubmitted !== null ? Promise.resolve(modelSubmitted) : submittedSince(db, tenantId, partnerId, effectiveCloserId, filters, since),
     toldByModel ? Promise.resolve(toldByModel) : partnerToldIds(db, tenantId, partnerId, pageWorkItemIds),
+    partnerTermInForce(db, partnerId),
+    slaAgeThresholds(tenantId),
   ]);
   // LA-1.17-4: the four counters in the board's lanes (counters.ts). With a stage or outcome filter
   // the lanes are withheld, and the read model's own counters, which honour those filters, stand.
@@ -449,6 +496,8 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
     facets: { closers, products, outcomes },
     counters,
     oldestOpenAt,
+    terms,
+    ageThresholds,
     laneCounts: lanes.counts,
     total,
     nextOffset,

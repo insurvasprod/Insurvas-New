@@ -14,21 +14,21 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
+import type { PartnerLeadDetail, PartnerLeadRow, PartnerPipelinePayload, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { productLineLabel } from "@/lib/format/productLine";
-import { NOBODY_CLAIMED_LABEL, type PartnerLaneCounts } from "@/lib/partnerLeads/lanes";
+import { NOBODY_CLAIMED_LABEL } from "@/lib/partnerLeads/lanes";
 import { cn } from "@/lib/utils";
 
-type PipelineResponse = {
-  rows: PartnerLeadRow[];
-  stages: PartnerPipelineStage[];
-  facets: PartnerLeadFacets;
-  counters: { submittedToday: number; claimed: number; converted: number; stillOpen: number };
-  laneCounts?: PartnerLaneCounts | null;
-  total: number;
-  nextOffset: number | null;
-};
+type PipelineResponse = PartnerPipelinePayload;
+
+/**
+ * Sample data in place of the API, for `/design/pipeline` (development only). With it set the page
+ * neither fetches nor polls, so every state — busy, quiet, empty, erroring, SLA-flagged — can be
+ * drawn and checked. The dev database holds one lead; without this seam "verified" would only ever
+ * mean "the happy path with a single card".
+ */
+export type PipelinePreview = { data: PartnerPipelinePayload | null; error?: string; details?: Record<string, PartnerLeadDetail> };
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
 const PAGE_SIZE = 10;
@@ -96,9 +96,9 @@ function linkedState() {
   return { filters, view, lead: lead && /^[0-9a-f-]{36}$/i.test(lead) ? lead : null };
 }
 
-export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null }) {
+export function PartnerLeadPipeline({ role, preview }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null; preview?: PipelinePreview }) {
   const [linked] = useState(linkedState);
-  const [data, setData] = useState<PipelineResponse | null>(null);
+  const [data, setData] = useState<PipelineResponse | null>(preview?.data ?? null);
   const [filters, setFilters] = useState<Filters>(linked.filters);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"board" | "table">(linked.view);
@@ -106,16 +106,17 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
   const [selectedId, setSelectedId] = useState<string | null>(linked.lead);
   const [detail, setDetail] = useState<PartnerLeadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!preview);
   // The first read draws the page skeleton; later reads (a filter change) keep the page and toolbar.
-  const [firstLoad, setFirstLoad] = useState(true);
+  const [firstLoad, setFirstLoad] = useState(!preview);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(preview?.error ?? "");
   const [page, setPage] = useState(1);
   const loadedLimitRef = useRef(250);
 
   const query = useMemo(() => new URLSearchParams(Object.entries(filters).filter(([, value]) => Boolean(value))).toString(), [filters]);
   const load = useCallback(async (offset = 0, append = false) => {
+    if (preview) { setLoading(false); return; }
     if (append) setLoadingMore(true);
     try {
       const params = new URLSearchParams(query); params.set("limit", String(loadedLimitRef.current)); params.set("offset", String(offset));
@@ -134,18 +135,23 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load your lead pipeline"); }
     finally { setLoading(false); setLoadingMore(false); setFirstLoad(false); }
-  }, [query]);
+  }, [query, preview]);
   // Polls only while the tab is visible, catches up on return, and never stacks a tick on a slow one.
-  useEffect(() => { loadedLimitRef.current = 250; let polling = false; const poll = () => { if (document.visibilityState !== "visible" || polling) return; polling = true; void load(0).finally(() => { polling = false; }); }; const kickoff = window.setTimeout(() => { setData(null); setLoading(true); void load(); }, 0); const timer = window.setInterval(poll, 5000); document.addEventListener("visibilitychange", poll); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); }; }, [load]);
+  useEffect(() => { if (preview) return; loadedLimitRef.current = 250; let polling = false; const poll = () => { if (document.visibilityState !== "visible" || polling) return; polling = true; void load(0).finally(() => { polling = false; }); }; const kickoff = window.setTimeout(() => { setData(null); setLoading(true); void load(); }, 0); const timer = window.setInterval(poll, 5000); document.addEventListener("visibilitychange", poll); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); }; }, [load, preview]);
   useEffect(() => {
     if (!selectedId) return;
+    if (preview) return; // the sample record is derived during render, not fetched
     let cancelled = false;
     const kickoff = window.setTimeout(() => {
       setDetail(null); setDetailLoading(true);
       void fetch(`/api/partner/leads/${selectedId}`, { cache: "no-store" }).then(async (response) => ({ response, body: await response.json().catch(() => null) })).then(({ response, body }) => { if (cancelled) return; if (!response.ok) throw new Error(body?.error ?? "Could not load lead detail"); setDetail(body); }).catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Could not load lead detail"); }).finally(() => { if (!cancelled) setDetailLoading(false); });
     }, 0);
     return () => { cancelled = true; window.clearTimeout(kickoff); };
-  }, [selectedId]);
+  }, [selectedId, preview]);
+
+  // A sample record needs no fetch and no state: it is already in hand.
+  const shownDetail = preview ? (selectedId ? preview.details?.[selectedId] ?? null : null) : detail;
+  const shownDetailLoading = preview ? false : detailLoading;
 
   // Matches the customer's name, which is what the box says it searches. Product and submitter have
   // their own controls (the product select, and Filters › Submitted by).
@@ -263,7 +269,7 @@ export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active
     </StatStrip>
     <div className={cn("grid items-start gap-4", selectedId && "lg:grid-cols-[minmax(0,1fr)_minmax(300px,34%)]")}>
       <TableCard className="min-w-0" toolbar={toolbar} footer={footer}>{body}</TableCard>
-      {selectedId && <Preview detail={detail} loading={detailLoading} onClose={() => setSelectedId(null)} />}
+      {selectedId && <Preview detail={shownDetail} loading={shownDetailLoading} onClose={() => setSelectedId(null)} />}
     </div>
   </div>;
 }
