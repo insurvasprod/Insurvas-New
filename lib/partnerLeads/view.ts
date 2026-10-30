@@ -124,6 +124,24 @@ export function ageShort(value: string, now: number = Date.now()): string {
   return `${Math.round(minutes / (24 * 60))} d`;
 }
 
+/**
+ * Whether the Still open figure is worth painting amber: the longest-waiting open submission is
+ * past the ladder's expiry rung.
+ *
+ * Expiry, not the partner rung the rows are toned by. The partner rung is minutes (300s by
+ * default), so a card keyed to it would be amber for any partner with a lead older than five
+ * minutes — permanent amber says nothing. A card shouts when something has run out of time.
+ */
+export function oldestOpenIsStuck(
+  oldestOpenAt: string | null | undefined,
+  now: number,
+  thresholds: AgeThresholds = DEFAULT_AGE_THRESHOLDS,
+): boolean {
+  if (!oldestOpenAt) return false;
+  const seconds = (now - new Date(oldestOpenAt).getTime()) / 1000;
+  return Number.isFinite(seconds) && seconds >= thresholds.dangerSeconds;
+}
+
 /* ── The submitted form, as a person reads it ────────────────────────────────────────────────── */
 
 export type SnapshotField = { key: string; label: string; value: string };

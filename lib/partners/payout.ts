@@ -61,3 +61,18 @@ export function expectedEarningsLabel(count: number, term: PartnerTerm | null): 
   const cents = expectedEarnings(count, term);
   return cents === null ? rate : `about ${formatCentsAsCurrency(cents)} at ${rate}`;
 }
+
+/**
+ * The Converted card's footer fact: a short label on the left, the figure on the right.
+ *
+ * With nothing converted yet, or on a revenue share, the rate itself is the figure — a partner who
+ * has converted nothing is exactly the one who wants to know what converting is worth. Once there
+ * is an amount to show, the amount takes the slot and the rate moves behind the card's (i): three
+ * things plus a link do not fit a card footer at 1536 (measured).
+ */
+export function expectedEarningsFact(count: number, term: PartnerTerm | null): { label: string; value: string } | null {
+  const rate = termLabel(term);
+  if (!rate) return null;
+  const cents = expectedEarnings(count, term);
+  return cents === null ? { label: "Your rate", value: rate } : { label: "Estimated payout", value: `about ${formatCentsAsCurrency(cents)}` };
+}

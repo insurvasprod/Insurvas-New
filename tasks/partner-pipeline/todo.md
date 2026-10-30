@@ -116,23 +116,23 @@ card-for-card. Spend the new footer slots on the two things the strip could not 
 oldest open lead is, and what the converted ones are worth.
 
 **Acceptance criteria:**
-- [ ] Four `StatCard`s in one `StatRow`, same four figures, each linking to the rows behind it
+- [x] Four `StatCard`s in one `StatRow`, same four figures, each linking to the rows behind it
       (as Overview's do); **no** `StatTile` left on the page (the `mixed-stat` ratchet stays at 0)
-- [ ] **Still open** shows "Oldest: N days" from `oldestOpenAt`, and takes `tone="warn"` past the
+- [x] **Still open** shows "Oldest: N days" from `oldestOpenAt`, and takes `tone="warn"` past the
       Task 1 threshold — at most one amber card in the row
-- [ ] **Converted** shows the earnings fact: *"about $360 at $90.00 / sale"* for per-item models;
+- [x] **Converted** shows the earnings fact: *"about $360 at $90.00 / sale"* for per-item models;
       the rate alone for revenue share; **nothing** when terms are null — never `$0`
-- [ ] "about … before your agency's statement" is behind the card's (i); the card's action links to
+- [x] "about … before your agency's statement" is behind the card's (i); the card's action links to
       `/partner/payouts`
-- [ ] `LiveStamp` in the header actions beside a primary **Submit a lead**
-- [ ] The `StatRow` label states the scope in words: "Your leads" / "Your organisation's leads"
+- [x] `LiveStamp` in the header actions beside a primary **Submit a lead**
+- [x] The `StatRow` label states the scope in words: "Your leads" / "Your organisation's leads"
 
 **Verification:**
-- [ ] On `/design/pipeline`: warn tone fires on the SLA state and not on quiet; the earnings line
+- [x] On `/design/pipeline`: warn tone fires on the SLA state and not on quiet; the earnings line
       appears for the per-item fixture, shows only a percentage for revenue share, and is absent
       when terms are null
-- [ ] Overview and Pipeline sit side by side with the same card treatment
-- [ ] `npm test` — `mixed-stat` and `local-surface` ratchets unchanged
+- [x] Overview and Pipeline sit side by side with the same card treatment
+- [x] `npm test` — `mixed-stat` and `local-surface` ratchets unchanged
 
 **Dependencies:** Task 1, Task 2, Task 3
 **Files:** `components/partner/partner-lead-pipeline.tsx`
@@ -431,5 +431,37 @@ measurements — then the polish playbook, then the docs.
   four tracked edits and re-running — identical counts. They are SQL-text assertions failing on
   CRLF line endings in this Windows checkout, in modules this work does not touch.
 
-**Found while building, for later tasks:** `ErrorState`'s action renders as "Try Again" though the
-code passes "Try again" — a title-case wrapper. Sentence case per §6; fold into Task 12.
+**Correction to that note:** "Try Again" is not a defect. `Button` title-cases every label by
+design (`components/ui/title-case.tsx`, applied at `components/ui/button.tsx:65`), so every button
+in the app reads that way — "Submit a Lead", "Export CSV". Nothing to fix.
+
+---
+
+## Phase 2 — done 30 Oct
+
+Task 4 shipped: four glossy `StatCard`s replace the `StatStrip`, the oldest-open figure earns an
+amber card, and the partner's payout rate reaches the page. Verified on `/design/pipeline` at
+1536×826, 1366×657 and 375: 4 → 4 → 1 columns, no page overflow, no clipped text (the five
+"clipped" nodes a scan reports are four 1px `sr-only` spans and the InfoTip icon button).
+
+| Figure | Footer | Checked |
+|---|---|---|
+| Submitted today | Since midnight, your time | ✅ |
+| With a closer | Claimed, or on a call now | ✅ |
+| Converted | Estimated payout · about $810.00 | ✅ per-item; "Your rate · 12.5% revenue share" on a share; "Became business" with no terms — never $0 |
+| Still open | oldest 8 hours, **amber** | ✅ amber past expiry only; quiet state stays default; exactly one amber card |
+
+Scope is now on screen as the row's label: "Your organisation's leads" / "Your leads".
+
+**Two deviations from the plan, both measured:**
+
+1. **Only Converted carries a footer action — and then none.** The plan had every card linking to
+   the rows behind it. "With a closer" and "Still open" are lane figures, and lane filtering does
+   not exist until Task 6, so linking them now would mean faking a filter. They carry their fact
+   and no action; the links land with Task 6.
+2. **No Payouts link on the Converted card.** Three footer items clipped the label at 1536
+   (measured twice, with "At $90.00 / sale" and again with "Estimated payout"). The fact carries a
+   label and a value, so it takes the footer alone; the rate moved behind the card's (i). Statements
+   is in the sidebar under Organisation — **for `partner_admin` only**
+   (`partner-sidebar.tsx:62`). Whether a `partner_user` can reach `/partner/payouts` at all is
+   unverified; worth settling before anyone adds that link back.

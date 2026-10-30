@@ -2,21 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, ExternalLink, LayoutGrid, List, Lock, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, Download, ExternalLink, Hand, Inbox, LayoutGrid, List, Lock, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { LiveStamp, useClockSeconds } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import type { PartnerLeadDetail, PartnerLeadRow, PartnerPipelinePayload, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { productLineLabel } from "@/lib/format/productLine";
+import { oldestOpenLabel } from "@/lib/format/age";
+import { expectedEarningsFact, termLabel } from "@/lib/partners/payout";
+import { oldestOpenIsStuck } from "@/lib/partnerLeads/view";
 import { NOBODY_CLAIMED_LABEL } from "@/lib/partnerLeads/lanes";
 import { cn } from "@/lib/utils";
 
@@ -96,7 +100,7 @@ function linkedState() {
   return { filters, view, lead: lead && /^[0-9a-f-]{36}$/i.test(lead) ? lead : null };
 }
 
-export function PartnerLeadPipeline({ role, preview }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null; preview?: PipelinePreview }) {
+export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null; preview?: PipelinePreview }) {
   const [linked] = useState(linkedState);
   const [data, setData] = useState<PipelineResponse | null>(preview?.data ?? null);
   const [filters, setFilters] = useState<Filters>(linked.filters);
@@ -171,6 +175,21 @@ export function PartnerLeadPipeline({ role, preview }: { partnerStatus: "draft" 
   const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setPage(1); };
   const tablePage = paginate(visibleRows, page, PAGE_SIZE);
   const canLoadMore = Boolean(data && data.rows.length < data.total);
+
+  // A relative age needs a "now" that the server does not have: null until the clock is read, so
+  // the markup hydrates against itself and the oldest-open line appears a tick later.
+  const clockSeconds = useClockSeconds();
+  const now = clockSeconds === null ? null : clockSeconds * 1000;
+  const counters = data?.counters;
+  /** Never a 0 for a figure that was not read: an unread number is a dash. */
+  const figure = (value: number | undefined) => (data && value !== undefined ? value : "—");
+  const scopeLabel = role === "partner_admin" ? "Your organisation's leads" : "Your leads";
+  const earningsFact = expectedEarningsFact(counters?.converted ?? 0, data?.terms ?? null);
+  const rate = termLabel(data?.terms ?? null);
+  const earningsHelp = rate
+    ? `Your rate is ${rate}. The figure here is that rate on the conversions above; your agency's published statement is what is actually paid.`
+    : "Conversions in the last 30 days. Your agency's published statement is what is actually paid.";
+  const stuck = now !== null && oldestOpenIsStuck(data?.oldestOpenAt, now, data?.ageThresholds);
 
   if (firstLoad) return <PageLoading />;
 
@@ -258,15 +277,50 @@ export function PartnerLeadPipeline({ role, preview }: { partnerStatus: "draft" 
       description={role === "partner_admin" ? "Track leads submitted by your organization." : "Track the leads you submitted."}
       visible
       infoDescription
+      actions={<>
+        {data && <LiveStamp updatedAt={data.generatedAt} staleAfterSeconds={45} />}
+        {partnerStatus === "active" && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a lead</a></Button>}
+      </>}
     />
     {error && data && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
-    {/* LA-1.17's counters, as on the partner home (lib/partnerLeads/counters.ts). */}
-    <StatStrip label="Your leads">
-      <StatTile label="Submitted today" value={data ? data.counters.submittedToday : "—"} footnote="since 00:00 your time" />
-      <StatTile label="Claimed" value={data ? data.counters.claimed : "—"} footnote="with a closer or on a call" />
-      <StatTile label="Converted" value={data ? data.counters.converted : "—"} footnote="last 30 days" />
-      <StatTile label="Still open" value={data ? data.counters.stillOpen : "—"} footnote="not yet finished" />
-    </StatStrip>
+    {/*
+      The counters in the board's own lanes (lib/partnerLeads/counters.ts), as the v3 stat cards
+      (UI-CONSISTENCY §4a) the partner home already uses — the same four figures, one click apart,
+      had two different looks. The row's label says whose leads are being counted, which the page
+      used to say only inside the header's (i).
+    */}
+    <StatRow label={scopeLabel}>
+      <StatCard
+        icon={Send}
+        label="Submitted today"
+        period="today"
+        value={figure(counters?.submittedToday)}
+        fact={{ label: "Since midnight, your time" }}
+      />
+      <StatCard
+        icon={Hand}
+        label="With a closer"
+        value={figure(counters?.claimed)}
+        fact={{ label: "Claimed, or on a call now" }}
+      />
+      <StatCard
+        icon={CheckCircle2}
+        label="Converted"
+        period="30 days"
+        labelTitle={earningsHelp}
+        value={figure(counters?.converted)}
+        /* The fact carries a label and a value, so it takes the footer alone: a third item clipped
+           the label at 1536 (measured). Statements is in the sidebar under Organisation. */
+        fact={earningsFact ?? { label: "Became business" }}
+      />
+      <StatCard
+        icon={Inbox}
+        label="Still open"
+        value={figure(counters?.stillOpen)}
+        tone={stuck ? "warn" : "default"}
+        fact={{ label: now === null ? "Not yet finished" : oldestOpenLabel(counters?.stillOpen ?? 0, data?.oldestOpenAt, now) }}
+      />
+    </StatRow>
     <div className={cn("grid items-start gap-4", selectedId && "lg:grid-cols-[minmax(0,1fr)_minmax(300px,34%)]")}>
       <TableCard className="min-w-0" toolbar={toolbar} footer={footer}>{body}</TableCard>
       {selectedId && <Preview detail={shownDetail} loading={shownDetailLoading} onClose={() => setSelectedId(null)} />}
