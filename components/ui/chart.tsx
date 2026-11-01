@@ -67,6 +67,7 @@ export function BarSeries({
   format = count,
   unit,
   max,
+  barMaxWidth,
   className,
   minHeight = 132,
 }: {
@@ -77,6 +78,8 @@ export function BarSeries({
   unit?: string;
   /** Override the scale's top — for two charts that must share an axis. */
   max?: number;
+  /** Keep sparse series readable by capping each bar while its grid cell keeps the time slot. */
+  barMaxWidth?: number;
   className?: string;
   minHeight?: number;
 }) {
@@ -107,7 +110,7 @@ export function BarSeries({
             const height = top > 0 ? (bar.value / top) * 100 : 0;
             const accentShare = bar.accent !== undefined && bar.value > 0 ? (bar.accent / bar.value) * 100 : null;
             return (
-              <li key={bar.key} className="flex h-full flex-col justify-end" title={`${bar.label}: ${format(bar.value)}${unit ? ` ${unit}` : ""}${bar.partial ? " (so far)" : ""}`}>
+              <li key={bar.key} className={cn("flex h-full flex-col justify-end", barMaxWidth && "items-center")} title={`${bar.label}: ${format(bar.value)}${unit ? ` ${unit}` : ""}${bar.partial ? " (so far)" : ""}`}>
                 <span
                   className={cn(
                     "m-bar-rise flex flex-col justify-end overflow-hidden rounded-t-[4px] rounded-b-[2px]",
@@ -115,7 +118,7 @@ export function BarSeries({
                     bar.partial && "opacity-60",
                   )}
                   // A bar with something in it is never invisible: 2% is the thinnest mark that still reads.
-                  style={{ height: `${Math.max(bar.value > 0 ? 2 : 0, height)}%` }}
+                  style={{ height: `${Math.max(bar.value > 0 ? 2 : 0, height)}%`, width: barMaxWidth ? "100%" : undefined, maxWidth: barMaxWidth }}
                 >
                   {accentShare !== null && <span className={cn("block", CHART_TONES.strong)} style={{ height: `${accentShare}%` }} />}
                 </span>
@@ -127,7 +130,7 @@ export function BarSeries({
 
       <div aria-hidden="true" className="grid pt-1.5 text-xs leading-none tabular-nums text-muted-foreground" style={{ paddingRight: gutter, gridTemplateColumns: `repeat(${bars.length}, minmax(0, 1fr))` }}>
         {bars.map((bar, index) => (
-          <span key={bar.key} className={cn("whitespace-nowrap", index === 0 ? "text-left" : index === bars.length - 1 ? "text-right" : "text-center")}>
+          <span key={bar.key} className={cn("whitespace-nowrap", bars.length === 1 ? "text-center" : index === 0 ? "text-left" : index === bars.length - 1 ? "text-right" : "text-center")}>
             {labelAt.has(index) ? bar.label : ""}
           </span>
         ))}

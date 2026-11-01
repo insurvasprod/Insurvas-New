@@ -205,6 +205,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
     label: shortPeriod(run.periodStart, run.periodEnd),
     value: run.netCents / 100,
   }));
+  const statementScaleMax = statementBars.length ? Math.max(...statementBars.map((bar) => bar.value)) * 1.4 : undefined;
   const statementDetail = statements === undefined ? "Statements"
     : statements === null ? "Statements unavailable"
     : latestStatement === null ? "No statements yet"
@@ -382,8 +383,10 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
               ) : (
                 <BarSeries
                   bars={statementBars}
-                  summary={`Net paid per statement period: ${statementBars.map((bar) => `${bar.label} ${dollars(bar.value)}`).join(", ")}`}
+                  summary={`Net payable by statement period: ${statementBars.map((bar) => `${bar.label} ${dollars(bar.value)}`).join(", ")}`}
                   format={dollars}
+                  max={statementScaleMax}
+                  barMaxWidth={48}
                   className="flex-1"
                   minHeight={112}
                 />

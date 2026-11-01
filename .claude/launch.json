@@ -2,6 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "dev-foundation",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/Admin/Desktop/Repository/Insurvas-New/.claude/worktrees/foundation-v3",
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
       "name": "dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
