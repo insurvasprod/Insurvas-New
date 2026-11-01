@@ -7,6 +7,7 @@ import {
   BarChart3,
   Building2,
   ChevronDown,
+  ClipboardList,
   Home,
   Menu,
   MessageSquare,
@@ -28,6 +29,9 @@ const workspaceItems: PartnerNavItem[] = [
   { label: "Overview", path: "/partner", icon: Home },
   { label: "Submit lead", path: "/partner/submit-lead", icon: Send },
   { label: "Pipeline", path: "/partner/pipeline", icon: BarChart3 },
+  // Next to Pipeline, because both answer "where are my leads?" — Pipeline over a range, Deal flow
+  // for one day. The agent menu uses the same icon for its own Daily deal flow (sell.deal-flow).
+  { label: "Deal flow", path: "/partner/deal-flow", icon: ClipboardList },
   { label: "Messages", path: "/partner/messages", icon: MessageSquare },
 ];
 

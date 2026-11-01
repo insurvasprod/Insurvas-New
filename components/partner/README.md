@@ -74,11 +74,56 @@ Check a change on `/design/overview` (busy, quiet, empty, error; both roles; thr
 and `/design/organization` (Team review and Statements). Team access and Settings have no preview:
 their figures are the shared cards and their data is a single list.
 
+## Daily deal flow (2026-11-01)
+
+`partner-deal-flow.tsx` — what the agency did with this partner's leads, over a range that defaults
+to today.
+
+**It is the agent app's `/app/deal-flow`, same design** (owner, 1 Nov: "exactly the same design").
+`components/app/deal-flow-workspace.tsx` is the reference: the same header row, the same four
+figures with the same icons and Show actions, the same toolbar of search / from / to / Today, the
+same inline filter panel, the same 40px head and 44px rows (`st` from
+[`settings/primitives`](../app/settings/primitives.tsx)), the same `PremiumBar`, the same pager.
+**Change one and look at the other.**
+
+Two differences, both the owner's own earlier decisions rather than design choices:
+
+- **Read-only.** No edit dialog, no "Add deal update", no detail panel. The agency records what
+  happened to a lead and the partner reads it; `/api/partner/deal-flow` has no write method.
+- **None of the agency's own columns.** No campaign, vendor, owner or notes — who worked a lead and
+  where the agency bought it is not the partner's business
+  ([`PARTNER_DEAL_FLOW_COLUMNS`](../../lib/partnerDealFlow/types.ts)). Those four are replaced by
+  carrier, product and, for an admin, which of their people submitted it.
+
+The dropdowns are the agent's **native `<select>`** (owner, 1 Nov), which makes this the one page
+in the portal with one — see Controls below.
+
+- **No access decision in the component or the service.** `effectiveCloser` and `canSeeLead` from
+  [`lib/partnerLeads/scope.ts`](../../lib/partnerLeads/scope.ts) decide it, so this page and
+  Pipeline cannot drift apart. `lib/partnerDealFlow/isolation.test.mjs` fails the build if the
+  service starts branching on the role itself.
+- **The arithmetic is pure and lives apart.** The local-date boundary is
+  [`localDay.ts`](../../lib/partnerDealFlow/localDay.ts) — `deal_flow.local_date` is a local date,
+  and a UTC read is off by one for part of every day — and the four figures are
+  [`figures.ts`](../../lib/partnerDealFlow/figures.ts). Change the arithmetic there, not here.
+  "In progress" ages from the lead's **submission** to the end of the range.
+- **A row opens the lead record** at `/partner/pipeline/[leadId]` — one record surface in the
+  portal, already scoped and already masked.
+
+Check a change on `/design/deal-flow` (busy, quiet, empty, error; both roles) at 1536×826,
+1366×657 and 375 wide. Note that the entrance animation (`m-stagger`) stalls while the browser pane
+is backgrounded, so a screenshot taken then catches it mid-fade and the page looks blank — read the
+accessibility tree or computed styles instead, or disable animations before the shot.
+
 ## Controls (2026-10-30)
 
-The portal has **no native `<select>` left**. Every dropdown is `SelectMenu` — the searchable one
-the owner approved on 2026-10-29 — a two-way choice is a `Segmented`, and picking several people is
-`MultiPicker`. UI-CONSISTENCY §5b carries the rule. Native date inputs remain, for the reason §5b
-gives.
+Every dropdown is `SelectMenu` — the searchable one the owner approved on 2026-10-29 — a two-way
+choice is a `Segmented`, and picking several people is `MultiPicker`. UI-CONSISTENCY §5b carries
+the rule. Native date inputs remain, for the reason §5b gives.
 
-Do not: introduce partner-only colours, controls or table styles, or a native `<select>`.
+**One exception, owner 2026-11-01:** Daily deal flow's filter panel uses native `<select>`, because
+that page is held to the agent app's design rather than to this portal's own. It is the only native
+`<select>` in the portal; do not take it as licence for another.
+
+Do not: introduce partner-only colours, controls or table styles, or a native `<select>` anywhere
+but Daily deal flow.

@@ -1,0 +1,76 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { listPartnerDealFlow } from "@/lib/partnerDealFlow/service";
+import { partnerDealFlowCsv } from "@/lib/partnerDealFlow/csv";
+import { resolveDay } from "@/lib/partnerDealFlow/localDay";
+import { DEAL_FLOW_STAGE_TYPES, type DealFlowStageType, type PartnerDealFlowFilters } from "@/lib/partnerDealFlow/types";
+
+/**
+ * Daily deal flow for the signed-in partner (plan `tasks/partner-daily-deal-flow`).
+ *
+ * Open to both roles and read-only: there is no POST, PATCH or DELETE here, because the agency
+ * records what it did with a lead and the partner reads it. Who sees which rows is decided by
+ * `effectiveCloser` inside the service, exactly as on the pipeline route — a partner user is
+ * pinned to their own submissions whatever `?submitted_by=` says, and an admin may use it to
+ * narrow to one person in their organisation.
+ *
+ * `tenant_id` and `partner_id` come from the signed session. A `?partner_id=` that is not the
+ * caller's is refused rather than ignored, so a wrong link fails loudly instead of quietly showing
+ * the caller their own day under somebody else's name.
+ */
+
+function stageType(value: string | null): DealFlowStageType | null {
+  return value && (DEAL_FLOW_STAGE_TYPES as readonly string[]).includes(value) ? (value as DealFlowStageType) : null;
+}
+
+function filtersFrom(request: NextRequest): PartnerDealFlowFilters {
+  const params = request.nextUrl.searchParams;
+  return {
+    stageType: stageType(params.get("stage_type")),
+    product: params.get("product") || null,
+    submittedBy: params.get("submitted_by") || null,
+    search: params.get("search") || null,
+  };
+}
+
+function checkPartnerParam(request: NextRequest, partnerId: string) {
+  const requested = request.nextUrl.searchParams.get("partner_id");
+  return !requested || requested === partnerId;
+}
+
+export async function GET(request: NextRequest) {
+  const auth = await requirePartner();
+  if (auth instanceof NextResponse) return auth;
+  const { context } = auth;
+  if (!checkPartnerParam(request, context.partnerId)) {
+    return NextResponse.json({ error: "You cannot access another partner's deal flow" }, { status: 403 });
+  }
+  // A missing, malformed or future day lands on today in the partner's own timezone rather than
+  // erroring: the date inputs are capped at today, so a future day is a stale link.
+  const params = request.nextUrl.searchParams;
+  const from = resolveDay(params.get("from"), context.partnerTimezone);
+  const to = resolveDay(params.get("to"), context.partnerTimezone);
+  try {
+    const payload = await listPartnerDealFlow(
+      context.tenantId,
+      context.partnerId,
+      { from, to, timezone: context.partnerTimezone, filters: filtersFrom(request) },
+      { userId: context.userId, role: context.role },
+    );
+    if (params.get("format") === "csv") {
+      const name = payload.from === payload.to ? payload.from : `${payload.from}_${payload.to}`;
+      return new NextResponse(partnerDealFlowCsv(payload.rows), {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename=deal-flow-${name}.csv`,
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+    return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load the daily deal flow" }, { status: 400 });
+  }
+}
