@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { ArrowLeft, CircleDot, FileText, Info, Loader2, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Plus, Search, SendHorizontal, Users, X } from "lucide-react";
+import { ArrowLeft, CircleDot, FileText, Info, Loader2, MessageCircle, Mic, MicOff, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { ComposerFiles } from "@/components/app/partner-chat/attachments";
@@ -12,6 +12,7 @@ import { useDictation } from "@/components/app/dialer/use-dictation";
 import { MultiPicker } from "@/components/app/multi-picker";
 import { ChatThread } from "@/components/partner/chat-message";
 import { Button } from "@/components/ui/button";
+import { ChatComposer } from "@/components/ui/chat-composer";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -353,22 +354,25 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
 
               <ChatThread messages={shownMessages} viewerId={viewerId} nameOf={nameOf} zone={zone} othersReadAt={selected.othersReadAt} emptyTitle={selected.messages.length ? "No messages match" : "No messages yet"} emptyHint={selected.messages.length ? "Try another tab or clear your search." : "Send the first update to this conversation."} />
 
-              <form className="shrink-0 px-3 pt-1 pb-3 sm:px-4" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-                <div className="rounded-xl border border-input bg-background transition-shadow focus-within:border-[var(--primary)] focus-within:shadow-[0_0_0_3px_var(--primary-soft)]">
-                  <ComposerFiles files={files} onRemove={(file) => setFiles((current) => current.filter((item) => item !== file))} />
-                  <div className="flex min-w-0 items-end gap-1 p-1.5">
-                    <label className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground" title="Attach up to three files: pictures, PDF, Word, Excel or text">
-                      <Paperclip className="size-4" aria-hidden="true" /><span className="sr-only">Attach files</span>
-                      <input className="sr-only" type="file" multiple disabled={files.length >= 3} accept="image/jpeg,image/png,image/gif,application/pdf,text/plain,.docx,.xlsx" onChange={(event) => { setFiles((current) => [...current, ...Array.from(event.target.files ?? [])].slice(0, 3)); event.target.value = ""; }} />
-                    </label>
-                    <textarea aria-label="Write a message" rows={1} maxLength={PARTNER_CHAT_MESSAGE_MAX} placeholder={dictation.listening ? "Listening… speak your message" : `Message ${selected.name}`} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} className="min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-sm leading-normal text-foreground outline-none placeholder:text-muted-foreground" />
-                    {draft.length > PARTNER_CHAT_MESSAGE_MAX * 0.9 && <span className="shrink-0 self-center px-1 text-xs tabular-nums text-muted-foreground">{composerCountLabel(draft.length)}</span>}
-                    {dictation.supported && <Button type="button" size="icon" variant={dictation.listening ? "destructive" : "ghost"} disabled={dictation.transcribing} aria-pressed={dictation.listening} aria-label={dictation.listening ? "Stop dictating" : "Dictate a message"} title={dictation.listening ? "Stop dictating" : "Dictate a message"} onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}>{dictation.transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}</Button>}
-                    <Button type="submit" size="icon" disabled={busy || (!draft.trim() && files.length === 0)} aria-label={busy ? "Sending" : "Send message"} title="Send (Enter)"><SendHorizontal aria-hidden="true" /></Button>
-                  </div>
-                </div>
+              <div className="shrink-0 px-3 pt-1 pb-3 sm:px-4">
+                <ComposerFiles files={files} onRemove={(file) => setFiles((current) => current.filter((item) => item !== file))} />
+                <ChatComposer
+                  value={draft}
+                  onChange={setDraft}
+                  onSubmit={() => { void send(); }}
+                  files={files}
+                  onFilesChange={setFiles}
+                  busy={busy}
+                  placeholder={dictation.listening ? "Listening… speak your message" : `Message ${selected.name}`}
+                  maxLength={PARTNER_CHAT_MESSAGE_MAX}
+                  accept="image/jpeg,image/png,image/gif,application/pdf,text/plain,.docx,.xlsx"
+                  maxFiles={3}
+                  countLabel={composerCountLabel}
+                  className="rounded-xl border border-input bg-background p-1.5 transition-shadow focus-within:border-[var(--primary)] focus-within:shadow-[0_0_0_3px_var(--primary-soft)]"
+                  trailingControl={dictation.supported ? <Button type="button" size="icon" variant={dictation.listening ? "destructive" : "ghost"} disabled={dictation.transcribing} aria-pressed={dictation.listening} aria-label={dictation.listening ? "Stop dictating" : "Dictate a message"} title={dictation.listening ? "Stop dictating" : "Dictate a message"} onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}>{dictation.transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}</Button> : undefined}
+                />
                 {dictation.listening ? <p role="status" aria-live="polite" className="m-0 mt-1.5 text-xs text-[var(--body)]">{dictation.engine === "device" ? `Recording ${Math.floor(dictation.seconds / 60)}:${String(dictation.seconds % 60).padStart(2, "0")} · press the microphone again to write it` : dictation.heard || "Listening… say your message, then press Send."}</p> : dictation.transcribing ? <p role="status" className="m-0 mt-1.5 text-xs text-[var(--body)]">{dictation.download !== null && dictation.download < 100 ? `Getting the speech model ready · ${dictation.download}%` : "Writing what you said…"}</p> : dictation.problem ? <p role="alert" className="m-0 mt-1.5 text-xs text-[var(--error-ink)]">{dictation.problem}</p> : <p className="m-0 mt-1.5 hidden text-xs text-muted-foreground sm:block">Enter to send · Shift + Enter for a new line{dictation.supported ? " · the microphone dictates" : ""}</p>}
-              </form>
+              </div>
             </>
           ) : (
             <div className="m-auto flex flex-col items-center gap-2 px-4 py-8 text-center">
