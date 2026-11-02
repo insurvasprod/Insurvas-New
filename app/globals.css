@@ -3851,14 +3851,14 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-partner-submit-screening-intro p { max-width: 42rem; margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
 .portal-partner-submit-step-count { flex: none; padding-bottom: 2px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .portal-partner-submit-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0; list-style: none; }
-.portal-partner-submit-steps > li { position: relative; display: grid; min-width: 0; grid-template-columns: 28px minmax(0, 1fr); align-items: start; column-gap: 11px; padding: 14px 18px 0 0; border-top: 1px solid var(--border); }
-.portal-partner-submit-steps > li:not(:last-child)::after { position: absolute; top: 27px; right: 14px; left: 28px; height: 1px; background: var(--border); content: ""; }
+.portal-partner-submit-steps > li { position: relative; display: grid; min-width: 0; grid-template-columns: 28px minmax(0, 1fr); grid-template-rows: 28px auto; align-items: start; column-gap: 11px; row-gap: 8px; padding: 0 14px 0 0; }
+.portal-partner-submit-steps > li:not(:last-child)::after { position: absolute; top: 13px; right: -14px; left: 28px; height: 1px; background: var(--border); content: ""; }
 .portal-partner-submit-steps > li.is-complete:not(:last-child)::after { background: var(--success); }
-.portal-partner-submit-step-number { position: relative; z-index: 1; display: grid; width: 28px; height: 28px; flex: none; place-items: center; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.portal-partner-submit-step-number { position: relative; z-index: 1; grid-column: 1; grid-row: 1; display: grid; width: 28px; height: 28px; flex: none; place-items: center; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .portal-partner-submit-step-number svg { width: 15px; height: 15px; }
 .portal-partner-submit-steps > li.is-current .portal-partner-submit-step-number { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
 .portal-partner-submit-steps > li.is-complete .portal-partner-submit-step-number { border-color: var(--success); background: var(--success); color: var(--on-primary); }
-.portal-partner-submit-step-copy { display: grid; min-width: 0; gap: 5px; padding-top: 3px; }
+.portal-partner-submit-step-copy { display: grid; min-width: 0; grid-column: 1 / -1; grid-row: 2; gap: 5px; }
 .portal-partner-submit-step-copy strong { color: var(--ink); font-size: 13px; line-height: 1.35; font-weight: 600; }
 .portal-partner-submit-step-copy small { color: var(--muted); font-size: 12px; line-height: 1.45; }
 .portal-partner-submit-steps > li.is-upcoming .portal-partner-submit-step-copy strong { color: var(--body); }
@@ -3874,8 +3874,9 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .portal-partner-submit-page { min-height: 0; }
   .portal-partner-submit-screening-intro { flex: none; }
   .portal-partner-submit-steps { grid-template-columns: minmax(0, 1fr); }
-  .portal-partner-submit-steps > li { min-height: 0; }
-  .portal-partner-submit-steps > li:not(:last-child)::after { top: 42px; right: auto; left: 13px; width: 1px; height: calc(100% - 28px); }
+  .portal-partner-submit-steps > li { min-height: 0; grid-template-rows: auto; row-gap: 0; padding: 10px 0; }
+  .portal-partner-submit-steps > li:not(:last-child)::after { top: 38px; right: auto; bottom: -24px; left: 13px; width: 1px; height: auto; }
+  .portal-partner-submit-step-copy { grid-column: 2; grid-row: 1; padding-top: 2px; }
   .portal-partner-submit-product-row.has-markets { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .portal-partner-submit-screening-control { grid-column: 1 / -1; }
   .portal-partner-submit-body { grid-template-columns: minmax(0, 1fr); }
