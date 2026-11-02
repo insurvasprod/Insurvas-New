@@ -37,6 +37,18 @@ function getServerTheme(): Theme {
   return "system";
 }
 
+function applyThemeToRoot(theme: Theme, prefersDark: boolean) {
+  const isDark = theme === "dark" || (theme === "system" && prefersDark);
+  const root = document.documentElement;
+  if (root.classList.contains("dark") === isDark && root.style.colorScheme === (isDark ? "dark" : "light")) return;
+
+  root.classList.add("theme-switching");
+  root.classList.toggle("dark", isDark);
+  root.style.colorScheme = isDark ? "dark" : "light";
+  void root.offsetHeight;
+  requestAnimationFrame(() => root.classList.remove("theme-switching"));
+}
+
 /**
  * Mounts the theme without rendering an inline script from a client component.
  *
@@ -51,18 +63,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const applyTheme = () => {
-      const isDark = theme === "dark" || (theme === "system" && media.matches);
-      const root = document.documentElement;
-      // The class lands after first paint (see above), and every control carries a 120ms colour
-      // transition — so without this, a dark-mode load visibly fades each button, link and field
-      // from light to dark. Transitions are switched off for the one frame the class changes in.
-      root.classList.add("theme-switching");
-      root.classList.toggle("dark", isDark);
-      root.style.colorScheme = isDark ? "dark" : "light";
-      void root.offsetHeight; // commit the new colours before transitions come back
-      requestAnimationFrame(() => root.classList.remove("theme-switching"));
-    };
+    const applyTheme = () => applyThemeToRoot(theme, media.matches);
 
     applyTheme();
     media.addEventListener("change", applyTheme);
@@ -73,6 +74,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     theme,
     setTheme: (nextTheme) => {
       window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+      applyThemeToRoot(nextTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
       window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
     },
   }), [theme]);

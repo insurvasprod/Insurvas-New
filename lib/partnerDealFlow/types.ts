@@ -26,7 +26,6 @@ export const PARTNER_DEAL_FLOW_COLUMNS = [
   "product_type",
   "monthly_premium_cents",
   "face_amount_cents",
-  "draft_date",
   "disposition_at",
   "updated_at",
 ] as const;
@@ -73,6 +72,7 @@ export type PartnerDealFlowRow = {
   productType: string | null;
   monthlyPremiumCents: number | null;
   faceAmountCents: number | null;
+  /** The lead's creation day in the partner's timezone (shown under the legacy "Draft date" heading). */
   draftDate: string | null;
   /** The partner-facing outcome label, as the Pipeline words it. */
   outcome: string | null;
@@ -102,6 +102,12 @@ export type PartnerDealFlowFilters = {
   product?: string | null;
   submittedBy?: string | null;
   search?: string | null;
+  customer?: string | null;
+  carrier?: string | null;
+  annualisedPremiumMinCents?: number | null;
+  annualisedPremiumMaxCents?: number | null;
+  draftDateFrom?: string | null;
+  draftDateTo?: string | null;
 };
 
 export type PartnerDealFlowPayload = {
@@ -119,6 +125,7 @@ export type PartnerDealFlowPayload = {
   stageCounts: Record<DealFlowStageType, number>;
   facets: {
     products: string[];
+    carriers: Array<string | null>;
     submitters: Array<{ id: string; name: string }>;
   };
   /**

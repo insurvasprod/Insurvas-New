@@ -44,7 +44,7 @@ export default async function MessagesDesignPage({ searchParams }: { searchParam
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
-          <PartnerChatPanel key={`${state}-${role}`} role={role} sample={sampleChat(state)} />
+          <PartnerChatPanel key={`${state}-${role}`} sample={sampleChat(state)} />
         </div>
       </main>
     </div>

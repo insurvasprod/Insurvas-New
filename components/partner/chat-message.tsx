@@ -160,6 +160,8 @@ export function ChatThread({
   zone = "UTC",
   othersReadAt = null,
   className,
+  emptyTitle = "No messages yet",
+  emptyHint = "Send the first update to this conversation.",
 }: {
   messages: readonly PartnerMessage[];
   /** The signed-in user, so their own messages take the sent side. Null until the channels land. */
@@ -169,6 +171,8 @@ export function ChatThread({
   /** Latest read cursor from another member of this conversation. */
   othersReadAt?: string | null;
   className?: string;
+  emptyTitle?: string;
+  emptyHint?: string;
 }) {
   const scroller = useRef<HTMLDivElement | null>(null);
   /** Whether the reader is at the newest message. Starts true: that is where a thread opens. */
@@ -212,8 +216,8 @@ export function ChatThread({
       {items.length === 0 ? (
         <div className="m-auto flex flex-col items-center gap-2 px-4 text-center">
           <MessageCircle className="size-6 text-muted-foreground" aria-hidden="true" />
-          <h3 className="m-0 text-card-title font-semibold text-foreground">No messages yet</h3>
-          <p className="m-0 text-sm text-muted-foreground">Send the first update to this conversation.</p>
+          <h3 className="m-0 text-card-title font-semibold text-foreground">{emptyTitle}</h3>
+          <p className="m-0 text-sm text-muted-foreground">{emptyHint}</p>
         </div>
       ) : items.map((item) => {
         if (item.kind === "day") return <DaySeparator key={item.key} label={item.label} />;

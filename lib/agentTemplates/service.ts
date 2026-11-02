@@ -2404,7 +2404,7 @@ export async function deleteFormDraft(
 /* ── LA-1.6-5: a partner user's list of started forms, each addressed by id ─────────────────────── */
 
 const DRAFT_COLUMNS =
-  "id, tenant_id, partner_id, user_id, product_code, tenant_template_id, definition_version, partner_submission_profile_id, partner_submission_profile_revision, carrier_id, carrier_state, partner_market_access_profile_id, partner_market_access_profile_revision, payload, created_at, updated_at";
+  "id, tenant_id, partner_id, user_id, product_code, tenant_template_id, definition_version, partner_submission_profile_id, partner_submission_profile_revision, carrier_id, carrier_state, partner_market_access_profile_id, partner_market_access_profile_revision, payload, pause_reason, pause_notes, screening_result_id, screening_submission_id, screening_snapshot, created_at, updated_at";
 
 export type PartnerDraftSummary = {
   id: string;
@@ -2416,6 +2416,8 @@ export type PartnerDraftSummary = {
   /** The last four digits of the phone typed so far, or null. */
   phone_last4: string | null;
   answered: number;
+  pause_reason: string | null;
+  pause_notes: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -2426,6 +2428,8 @@ export function summarizePartnerDraft(row: {
   carrier_id?: string | null;
   carrier_state?: string | null;
   payload: unknown;
+  pause_reason?: string | null;
+  pause_notes?: string | null;
   created_at: string;
   updated_at: string;
 }): PartnerDraftSummary {
@@ -2444,6 +2448,8 @@ export function summarizePartnerDraft(row: {
     answered: Object.values(payload).filter(
       (value) => value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0),
     ).length,
+    pause_reason: row.pause_reason ?? null,
+    pause_notes: row.pause_notes ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -2453,17 +2459,20 @@ export async function listPartnerFormDrafts(
   tenantId: string,
   userId: string,
   partnerId: string,
-): Promise<PartnerDraftSummary[]> {
-  const { data, error } = await getSupabaseServiceClient()
+  page = 1,
+  pageSize = 50,
+): Promise<{ drafts: PartnerDraftSummary[]; total: number }> {
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await getSupabaseServiceClient()
     .from("form_drafts")
-    .select("id, product_code, carrier_id, carrier_state, payload, created_at, updated_at")
+    .select("id, product_code, carrier_id, carrier_state, payload, pause_reason, pause_notes, created_at, updated_at", { count: "exact" })
     .eq("tenant_id", tenantId)
     .eq("user_id", userId)
     .eq("partner_id", partnerId)
     .order("updated_at", { ascending: false })
-    .limit(50);
+    .range(from, from + pageSize - 1);
   if (error) throw new Error(`Could not load drafts: ${error.message}`);
-  return (data ?? []).map(summarizePartnerDraft);
+  return { drafts: (data ?? []).map(summarizePartnerDraft), total: count ?? 0 };
 }
 
 export async function loadPartnerFormDraftById(
@@ -2528,6 +2537,7 @@ export async function savePartnerFormDraftSlot(
   return data as unknown as string;
 }
 
+/** Submission consumes its matching draft after the lead is safely created. */
 export async function deletePartnerFormDraftById(
   tenantId: string,
   userId: string,
@@ -2645,7 +2655,7 @@ export async function createPartnerLead(
     affiliateLinkId?: string | null;
     affiliateCampaign?: string | null;
     market?: {
-      carrier_id: string;
+      carrier_id: string | null;
       state: string;
       profile_id: string | null;
       revision: number | null;

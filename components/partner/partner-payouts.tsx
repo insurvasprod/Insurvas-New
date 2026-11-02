@@ -7,7 +7,7 @@ import { Building2, CheckCircle2, Clock3, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -35,7 +35,11 @@ const money = (c: number) => formatCentsAsCurrency(c);
  */
 const period = (start: string, end: string) => `${dayMonth(start)} – ${dayMonthYear(end)}`;
 
-function Statement({ id, onClose }: { id: string; onClose: () => void }) {
+function StatementMeta({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return <div className="min-w-0 self-end"><p className="m-0 text-xs font-medium text-muted-foreground">{label}</p><p className={`m-0 mt-1 truncate text-sm font-medium text-foreground ${mono ? "font-mono" : ""}`} title={value}>{value}</p></div>;
+}
+
+function Statement({ id, onClose, partnerName }: { id: string; onClose: () => void; partnerName?: string }) {
   const [s, setS] = useState<PartnerStatement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dispute, setDispute] = useState<{ itemId: string | null; reason: string; amount: string } | null>(null);
@@ -75,23 +79,37 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
         <DialogHeader className="border-b border-border px-6 py-5 pr-14">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <DialogTitle>{s ? `Statement · ${period(s.periodStart, s.periodEnd)}` : "Statement details"}</DialogTitle>
-              <DialogDescription className="mt-1">Review your published payout, its line items, and any disputes.</DialogDescription>
+              <DialogTitle>{s ? `Commission statement · ${period(s.periodStart, s.periodEnd)}` : "Commission statement"}</DialogTitle>
+              <DialogDescription className="mt-1">Payout summary and itemized transfers for this statement period.</DialogDescription>
             </div>
             {s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid${s.paidOn ? ` · ${dayMonthYear(s.paidOn)}` : ""}` : "Published"}</StatusChip> : null}
           </div>
-          {s ? <div className="mt-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-3">
-            <div><p className="m-0 text-xs font-medium text-muted-foreground">Net payable</p><p className="m-0 mt-1 text-2xl font-semibold tabular-nums text-foreground">{money(s.totals.netCents)}</p></div>
-            <p className="m-0 text-sm text-muted-foreground">{s.items.length} {s.items.length === 1 ? "transfer" : "transfers"} in this statement</p>
+          {s ? <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-3 sm:grid-cols-4">
+            <div className="col-span-2 sm:col-span-1"><p className="m-0 text-xs font-medium text-muted-foreground">Net payable</p><p className="m-0 mt-1 text-2xl font-semibold tabular-nums text-foreground">{money(s.totals.netCents)}</p></div>
+            <StatementMeta label="Transfers" value={`${s.items.length} ${s.items.length === 1 ? "item" : "items"}`} />
+            <StatementMeta label="Statement period" value={period(s.periodStart, s.periodEnd)} />
+            <StatementMeta label="Published" value={s.publishedAt ? dayMonthYear(s.publishedAt) : "—"} />
+            <StatementMeta label="Statement ref" value={s.id.slice(0, 8).toUpperCase()} mono />
           </div> : null}
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {error ? <p role="alert" className="mb-4 rounded-md border border-[var(--error)]/30 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p> : null}
           {!s ? <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground" aria-live="polite">{error ? "Statement details could not be loaded." : "Loading statement details…"}</div> : (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)]">
+            <div className="flex min-w-0 flex-col gap-5">
+              <section className="grid min-w-0 gap-4 rounded-lg border border-border bg-[var(--surface-alt)]/55 p-4 sm:grid-cols-2" aria-label="Statement parties">
+                <div className="min-w-0">
+                  <p className="m-0 text-xs font-medium text-muted-foreground">Issued by</p>
+                  <div className="mt-2 flex items-start gap-2.5"><Building2 size={17} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true"/><div className="min-w-0"><p className="m-0 font-semibold text-foreground">{s.from?.name || "Agency"}</p>{s.from?.addressLines.length ? <address className="mt-1 text-sm not-italic leading-5 text-muted-foreground">{s.from.addressLines.map((line, index) => <span key={`${index}-${line}`} className="block">{line}</span>)}</address> : null}</div></div>
+                </div>
+                <div className="min-w-0 border-t border-border pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                  <p className="m-0 text-xs font-medium text-muted-foreground">Prepared for</p>
+                  <p className="m-0 mt-2 font-semibold text-foreground">{partnerName || "Partner"}</p>
+                  <p className="m-0 mt-1 text-sm text-muted-foreground">Commission statement recipient</p>
+                </div>
+              </section>
               <div className="flex min-w-0 flex-col gap-6">
                 <section aria-labelledby="statement-summary-heading">
-                  <h3 id="statement-summary-heading" className="mb-3 text-sm font-semibold">Statement summary</h3>
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 id="statement-summary-heading" className="m-0 text-base font-semibold">Payout breakdown</h3><span className="text-sm text-muted-foreground">{s.items.length} {s.items.length === 1 ? "transfer" : "transfers"}</span></div>
                   <TableCard>
                     <Table>
                       <TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="w-20 text-right">Count</TableHead><TableHead className="w-28 text-right">Rate</TableHead><TableHead className="w-32 text-right">Amount</TableHead></TableRow></TableHeader>
@@ -107,21 +125,18 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
                   </TableCard>
                   {s.rejectedCount ? <p className="mt-2 text-xs text-muted-foreground">Transfers rejected at the agency&apos;s compliance check are not billable. The count identifies records you may want to review.</p> : null}
                 </section>
-                <section aria-labelledby="statement-transfers-heading">
-                  <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="statement-transfers-heading" className="m-0 text-sm font-semibold">Transfers in this statement</h3><span className="text-xs text-muted-foreground">{s.items.length} {s.items.length === 1 ? "item" : "items"}</span></div>
-                  <TableCard>
-                    <Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Transfer</TableHead><TableHead className="w-32 text-right">Amount</TableHead><TableHead className="w-24 text-right"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
-                      <TableBody>{s.items.map((i) => <TableRow key={i.id}><TableCell className="whitespace-nowrap text-muted-foreground">{dayMonth(i.occurredOn)}</TableCell><TableCell className="font-medium">{i.label}{i.reference ? <span className="block text-xs font-normal text-muted-foreground">Reference {i.reference}</span> : null}{i.disputed ? <span className="block text-xs font-medium text-[var(--warning-ink)]">Dispute submitted</span> : null}</TableCell><TableCell className="text-right tabular-nums">{money(i.amountCents)}</TableCell><TableCell className="text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</TableCell></TableRow>)}</TableBody>
-                    </Table>
-                  </TableCard>
-                </section>
                 {s.disputes.length ? <section aria-labelledby="statement-disputes-heading" className="border-t border-border pt-4"><h3 id="statement-disputes-heading" className="mb-3 text-sm font-semibold">Disputes</h3><div className="flex flex-col gap-2">{s.disputes.map((d) => <div key={d.id} className="rounded-md border border-border px-3 py-2 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{d.reason}</span><StatusChip tone={d.status === "open" ? "warning" : "neutral"}>{d.status === "open" ? "Under review" : d.status}</StatusChip></div><p className="mb-0 mt-1 text-xs text-muted-foreground">Raised by {d.raisedBy} · {money(d.amountCents)}{d.resolutionNote ? ` · ${d.resolutionNote}` : ""}</p></div>)}</div></section> : null}
                 {s.footer ? <p className="m-0 border-t border-border pt-4 text-xs text-muted-foreground">{s.footer}</p> : null}
               </div>
-              <aside className="flex min-w-0 flex-col gap-4">
-                {s.from?.name ? <section className="rounded-lg border border-border p-4" aria-labelledby="statement-from-heading"><div className="mb-2 flex items-center gap-2 text-muted-foreground"><Building2 size={16} aria-hidden="true"/><h3 id="statement-from-heading" className="m-0 text-sm font-semibold text-foreground">Issued by</h3></div><p className="m-0 font-medium">{s.from.name}</p>{s.from.addressLines.map((line) => <p key={line} className="m-0 text-sm text-muted-foreground">{line}</p>)}</section> : null}
-                {dispute ? <section className="rounded-lg border border-border p-4" aria-labelledby="statement-dispute-form-heading"><h3 id="statement-dispute-form-heading" className="mb-1 text-sm font-semibold">Tell the agency what needs review</h3><p className="mb-3 text-xs text-muted-foreground">{dispute.itemId ? "This dispute is linked to the selected transfer." : "Your message will be attached to this statement."}</p><label className="flex flex-col gap-1 text-sm">What is wrong?<input className={toolbarControl} value={dispute.reason} onChange={(e) => setDispute({ ...dispute, reason: e.target.value })} autoFocus /></label><label className="mt-3 flex flex-col gap-1 text-sm">Amount you believe is owed<input className={toolbarControl} inputMode="decimal" placeholder="0.00" value={dispute.amount} onChange={(e) => setDispute({ ...dispute, amount: e.target.value })} /><span className="text-xs text-muted-foreground">Enter dollars and cents. Leave blank if you are not disputing an amount.</span></label></section> : null}
-              </aside>
+              <section aria-labelledby="statement-transfers-heading">
+                <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="statement-transfers-heading" className="m-0 text-sm font-semibold">Transfers in this statement</h3><span className="text-xs text-muted-foreground">{s.items.length} {s.items.length === 1 ? "item" : "items"}</span></div>
+                <TableCard>
+                  <Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Transfer</TableHead><TableHead className="w-32 text-right">Amount</TableHead><TableHead className="w-24 text-right"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+                    <TableBody>{s.items.length ? s.items.map((i) => <TableRow key={i.id}><TableCell className="whitespace-nowrap text-muted-foreground">{dayMonth(i.occurredOn)}</TableCell><TableCell className="font-medium">{i.label}{i.reference ? <span className="block text-xs font-normal text-muted-foreground">Reference {i.reference}</span> : null}{i.disputed ? <span className="block text-xs font-medium text-[var(--warning-ink)]">Dispute submitted</span> : null}</TableCell><TableCell className="text-right tabular-nums">{money(i.amountCents)}</TableCell><TableCell className="text-right">{!i.disputed && !dispute ? <Button size="sm" variant="ghost" onClick={() => setDispute({ itemId: i.id, reason: "", amount: "" })}>Dispute</Button> : null}</TableCell></TableRow>) : <TableRow><TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">No transfers in this statement.</TableCell></TableRow>}</TableBody>
+                  </Table>
+                </TableCard>
+              </section>
+              {dispute ? <section className="rounded-lg border border-border p-4" aria-labelledby="statement-dispute-form-heading"><h3 id="statement-dispute-form-heading" className="mb-1 text-sm font-semibold">Tell the agency what needs review</h3><p className="mb-3 text-xs text-muted-foreground">{dispute.itemId ? "This dispute is linked to the selected transfer." : "Your message will be attached to this statement."}</p><label className="flex flex-col gap-1 text-sm">What is wrong?<input className={toolbarControl} value={dispute.reason} onChange={(e) => setDispute({ ...dispute, reason: e.target.value })} autoFocus /></label><label className="mt-3 flex flex-col gap-1 text-sm">Amount you believe is owed<input className={toolbarControl} inputMode="decimal" placeholder="0.00" value={dispute.amount} onChange={(e) => setDispute({ ...dispute, amount: e.target.value })} /><span className="text-xs text-muted-foreground">Enter dollars and cents. Leave blank if you are not disputing an amount.</span></label></section> : null}
             </div>
           )}
         </div>
@@ -137,7 +152,7 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 /** Sample statements for `/design/organization`; a partner's own page never passes them. */
-export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
+export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; partnerName?: string }) {
   const [runs, setRuns] = useState<RunRow[] | null>(sample ?? null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -200,12 +215,11 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
   const setStatus = (value: "all" | RunRow["status"]) => { setStatusFilter(value); setPage(1); };
   const setFrom = (value: string) => { setPeriodFrom(value); setPage(1); };
   const setTo = (value: string) => { setPeriodTo(value); setPage(1); };
-  const hasFilters = statusFilter !== "all" || Boolean(periodFrom || periodTo);
-  const noMatchBySearch = Boolean(searchTerm && !hasFilters);
 
   return (
     <>
-      <StatRow label="Statement totals" className="mb-4">
+      <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
+      <StatRow label="Statement totals">
         <StatCard
           icon={WalletCards}
           label="Latest statement"
@@ -228,6 +242,8 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
       </StatRow>
 
       <TableCard
+        className="flex min-h-[24rem] flex-1 flex-col md:min-h-0"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
         toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search statements" />
           <FilterButton open={filtersOpen} controls="partner-payout-filters" onClick={() => setFiltersOpen((value) => !value)} count={activeFilters.length} />
@@ -253,23 +269,19 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
         </>}
         footer={filteredRuns.length ? <Pager page={paged.current} total={filteredRuns.length} noun={filteredRuns.length === 1 ? "statement" : "statements"} pageSize={pageSize} onPage={setPage} /> : undefined}
       >
-        {error ? <EmptyState title="Statements are not available" hint={error} /> : runs === null ? <SectionLoading rows={4} columns={4} /> : runs.length === 0 ? (
-          <EmptyState title="No statements yet" hint="When the agency publishes a payout statement for you, it appears here." />
-        ) : filteredRuns.length === 0 ? (
-          <NoMatches noun="statements" by={noMatchBySearch ? "search" : "filters"} onClear={clearAll} />
-        ) : (
-          <Table>
+        {error ? <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="Statements are not available" hint={error} /></div> : runs === null ? <SectionLoading rows={4} columns={4} /> : (
+          <Table className="min-h-full table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Statement period</TableHead>
-                <TableHead className="w-[160px] text-right">Net payable</TableHead>
-                <TableHead className="w-[150px]">Status</TableHead>
-                <TableHead className="w-[150px]">Paid on</TableHead>
-                <TableHead className="w-[90px] text-right"><span className="sr-only">Open</span></TableHead>
+                <TableHead className="w-[30%]">Statement period</TableHead>
+                <TableHead className="w-[19%] text-right">Net payable</TableHead>
+                <TableHead className="w-[17%]">Status</TableHead>
+                <TableHead className="w-[22%]">Paid on</TableHead>
+                <TableHead className="w-[12%] text-right"><span className="sr-only">Open</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paged.rows.map((r) => (
+              {runs.length === 0 ? <TableRow><TableCell colSpan={5} className="h-64 text-center align-middle"><div className="mx-auto max-w-md"><p className="m-0 font-semibold text-foreground">No statements yet</p><p className="mb-0 mt-1 text-sm text-muted-foreground">When the agency publishes a payout statement for you, it appears here.</p></div></TableCell></TableRow> : filteredRuns.length === 0 ? <TableRow><TableCell colSpan={5} className="h-64 text-center align-middle"><div className="mx-auto max-w-md"><p className="m-0 font-semibold text-foreground">No statements match these filters</p><p className="mb-0 mt-1 text-sm text-muted-foreground">Try a different search or clear your filters.</p><Button type="button" variant="link" className="mt-1" onClick={clearAll}>Clear filters</Button></div></TableCell></TableRow> : paged.rows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium text-foreground">{period(r.periodStart, r.periodEnd)}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.netCents)}</TableCell>
@@ -282,7 +294,8 @@ export function PartnerPayouts({ sample }: { sample?: RunRow[] }) {
           </Table>
         )}
       </TableCard>
-      {open ? <Statement key={open} id={open} onClose={() => setOpen(null)} /> : null}
+      {open ? <Statement key={open} id={open} onClose={() => setOpen(null)} partnerName={partnerName} /> : null}
+      </div>
     </>
   );
 }

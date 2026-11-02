@@ -7,6 +7,36 @@ export const PRODUCT_OPTIONS = [
   { value: "supplemental", label: "Supplemental benefits" },
 ] as const;
 
+export const BUSINESS_FOCUS_OPTIONS = [
+  { key: "life", label: "Life" },
+  { key: "health", label: "Health" },
+  { key: "both", label: "Life + health" },
+  { key: "other", label: "Other" },
+] as const;
+
+export type BusinessFocus = (typeof BUSINESS_FOCUS_OPTIONS)[number]["key"] | "";
+
+const LIFE_PRODUCT_CODES = new Set(["life", "annuities"]);
+const HEALTH_PRODUCT_CODES = new Set(["health", "medicare", "supplemental"]);
+
+export function productsForBusinessFocus(focus: BusinessFocus): string[] {
+  if (focus === "life") return [...LIFE_PRODUCT_CODES];
+  if (focus === "health") return [...HEALTH_PRODUCT_CODES];
+  if (focus === "both") return [...LIFE_PRODUCT_CODES, ...HEALTH_PRODUCT_CODES];
+  if (focus === "other") return ["property_casualty"];
+  return [];
+}
+
+export function inferBusinessFocus(products: readonly string[]): BusinessFocus {
+  if (!products.length) return "";
+  const hasLife = products.some((product) => LIFE_PRODUCT_CODES.has(product));
+  const hasHealth = products.some((product) => HEALTH_PRODUCT_CODES.has(product));
+  if (hasLife && hasHealth) return "both";
+  if (hasLife) return "life";
+  if (hasHealth) return "health";
+  return "other";
+}
+
 export const VOLUME_OPTIONS = [
   { value: "0_25", label: "0–25 applications / month" },
   { value: "26_100", label: "26–100 applications / month" },

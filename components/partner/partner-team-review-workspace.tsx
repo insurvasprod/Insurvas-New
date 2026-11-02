@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, FileCheck2, Hourglass, Percent, Send, Timer, Users } from "lucide-react";
+import { ArrowRight, Download, FileCheck2, Hourglass, Send, Users } from "lucide-react";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { HELD_STATUSES, SALE_DISPOSITIONS } from "@/lib/partnerLeads/lanes";
 import { localDay, parseDay, shiftDay, spanDays, trendSeries } from "@/lib/partnerLeads/trend";
 import type { PartnerLeadRow } from "@/lib/partnerLeads/types";
-import { durationLabel } from "@/lib/partnerTeamReview/pulse";
 import { Sheet } from "@/components/ui/sheet";
 
 type PartnerUser = { user_id: string; name: string; email: string; role: "partner_admin" | "partner_user"; status: "active" | "revoked"; accepted_at: string | null; last_login_at: string | null };
@@ -77,7 +76,6 @@ function rangeLabel(from: string, to: string, now: Date) {
 }
 
 type Figures = ReturnType<typeof figures>;
-type Pulse = { averageResponseMinutes: number | null; responses: number; pendingFollowUps: number };
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 /**
@@ -98,7 +96,7 @@ function rangeFromUrl(): { from: string; to: string } | null {
  * What `/design/organization` hands the board instead of four endpoints. The partner's own page
  * never passes it; with it set the board reads nothing (lib/partnerLeads/fixtures.ts).
  */
-export type PartnerTeamReviewSample = { rows: PartnerLeadRow[]; previousRows: PartnerLeadRow[]; users: PartnerUser[]; pulse: Pulse | null };
+export type PartnerTeamReviewSample = { rows: PartnerLeadRow[]; previousRows: PartnerLeadRow[]; users: PartnerUser[] };
 
 export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerName: string; sample?: PartnerTeamReviewSample }) {
   const sampled = Boolean(sample);
@@ -112,7 +110,6 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
   const [users, setUsers] = useState<PartnerUser[]>(sample?.users ?? []);
   const [rows, setRows] = useState<PartnerLeadRow[]>(sample?.rows ?? []);
   const [previous, setPrevious] = useState<Figures | null>(sample ? figures(sample.previousRows) : null);
-  const [pulse, setPulse] = useState<Pulse | null>(sample?.pulse ?? null);
   const [loading, setLoading] = useState(!sample);
   // The first read draws the page skeleton; a new range keeps the page and its date controls.
   const [loaded, setLoaded] = useState(sampled);
@@ -135,16 +132,13 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
       leads(range.from, range.to),
       leads(previousFrom, previousTo),
       fetch("/api/partner/users", { cache: "no-store", signal: AbortSignal.timeout(15000) }),
-      fetch(`/api/partner/team-review/pulse?${new URLSearchParams({ from: range.from, to: range.to })}`, { cache: "no-store", signal: AbortSignal.timeout(15000) }),
-    ]).then(async ([currentResponse, previousResponse, usersResponse, pulseResponse]) => {
-      const [current, before, members, pulseBody] = await Promise.all([currentResponse, previousResponse, usersResponse, pulseResponse].map((response) => response.json().catch(() => null)));
+    ]).then(async ([currentResponse, previousResponse, usersResponse]) => {
+      const [current, before, members] = await Promise.all([currentResponse, previousResponse, usersResponse].map((response) => response.json().catch(() => null)));
       if (cancelled) return;
       if (!currentResponse.ok || !usersResponse.ok) { setError(current?.error ?? members?.error ?? "Could not load team review"); return; }
       setRows(Array.isArray(current?.rows) ? current.rows : []);
       setPrevious(previousResponse.ok && Array.isArray(before?.rows) ? figures(before.rows) : null);
       setUsers(Array.isArray(members?.users) ? members.users : []);
-      // The pulse is a side card: if it fails, the page still stands and the card says so.
-      setPulse(pulseResponse.ok && pulseBody ? pulseBody as Pulse : null);
       setError(null);
     }).catch(() => { if (!cancelled) setError("Could not load team review. Check your connection and try again."); }).finally(() => { if (!cancelled) { setLoading(false); setLoaded(true); } });
     return () => { cancelled = true; };
@@ -176,6 +170,8 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
   const members = users.filter((user) => user.status === "active" && user.accepted_at);
   const activeInPeriod = members.filter((user) => (memberStats.find((item) => item.user.user_id === user.user_id)?.stats.submitted ?? 0) > 0).length;
   const invitesOutstanding = users.filter((user) => user.status === "active" && !user.accepted_at).length;
+  const deactivated = users.filter((user) => user.status !== "active").length;
+  const rosterTotal = members.length + invitesOutstanding + deactivated;
   const rangeInvalid = !draftFrom || !draftTo || draftTo < draftFrom || spanDays(draftFrom, draftTo) > 366;
   function toggleDetail(userId: string) { if (detailOpen && selected?.user.user_id === userId) { setDetailOpen(false); setSelectedUserId(null); } else { setSelectedUserId(userId); setDetailOpen(true); } }
   function apply(event: FormEvent) {
@@ -185,13 +181,12 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     setRange({ from: draftFrom, to: draftTo });
   }
 
-  const conversionChange = metrics.conversion !== null && previous?.conversion !== null && previous?.conversion !== undefined ? metrics.conversion - previous.conversion : null;
   const reload = () => { setError(null); setLoading(true); setRetryToken((value) => value + 1); };
   const visible = paginate(memberStats, page, pageSize);
 
   if (!loaded) return <PageLoading />;
 
-  return <div className="m-stagger space-y-6">
+  return <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
     <PageHeader
       title="Team performance"
       description="Review submitted leads and member performance."
@@ -208,7 +203,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" onClick={reload}>Try again</Button></p>}
     {/* Six figures read as two rows of three, not five and a stray. */}
-    <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         icon={Send}
         label="Leads submitted"
@@ -230,22 +225,6 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         fact={loading || !previous ? undefined : { label: changeLabel(metrics.applications, previous.applications, days) }}
       />
       <StatCard
-        icon={Percent}
-        label="Conversion rate"
-        value={loading || metrics.conversion === null ? "—" : metrics.conversion.toFixed(1)}
-        unit={loading || metrics.conversion === null ? undefined : "%"}
-        // Points, not a percentage of a percentage: a rate that goes 20% → 25% rose five points.
-        delta={conversionChange === null || loading ? undefined : { value: Math.round(conversionChange * 10) / 10, unit: " pts", goodWhen: "up" }}
-        fact={loading ? undefined : { label: `${metrics.applications} of ${metrics.submitted}`, value: conversionChange === null ? undefined : `vs previous ${days} days` }}
-      />
-      <StatCard
-        icon={Timer}
-        label="Avg response time"
-        labelTitle={pulse?.responses ? `Over ${pulse.responses} ${pulse.responses === 1 ? "reply" : "replies"} to your agent` : undefined}
-        value={loading ? "—" : pulse?.averageResponseMinutes != null ? durationLabel(pulse.averageResponseMinutes) : pulse ? "No replies yet" : "Unavailable"}
-        fact={loading ? undefined : { label: pulse ? `${pulse.pendingFollowUps} pending follow-up${pulse.pendingFollowUps === 1 ? "" : "s"}` : "pending follow-ups unavailable" }}
-      />
-      <StatCard
         icon={Users}
         label="Active members"
         value={loading ? "—" : activeInPeriod}
@@ -253,24 +232,53 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         fact={loading ? undefined : { label: `of ${members.length} · ${invitesOutstanding} invite${invitesOutstanding === 1 ? "" : "s"} outstanding` }}
       />
     </StatRow>
-    <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"} · ${rangeLabel(range.from, range.to, new Date(now))}`} className="min-h-[14rem]">
-      {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
-        : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
-        : <BarSeries
-            bars={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
-            summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
-            unit="leads"
-            className="flex-1"
-            minHeight={150}
-          />}
-    </HomePanel>
+    <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.7fr)]">
+      <HomePanel title="Team access" period="roster" link={{ label: "Manage access", href: "/partner/team" }} className="min-h-[19rem]">
+        <p className="mb-4 text-sm text-muted-foreground">People and invitations behind this performance report.</p>
+        {loading ? <SectionLoading rows={3} columns={1} label="Loading team access" />
+          : rosterTotal === 0 ? <div className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">No team members or invitations yet.</div>
+          : <div className="flex flex-1 flex-col justify-center gap-4" aria-label={`${rosterTotal} total team members and invitations`}>
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--surface-alt)]" role="img" aria-label={`Team access: ${members.length} active, ${invitesOutstanding} pending invitations, ${deactivated} deactivated`}>
+              {[
+                { label: "Active members", count: members.length, color: "bg-[var(--success-ink)]" },
+                { label: "Pending invitations", count: invitesOutstanding, color: "bg-[var(--warning-ink)]" },
+                { label: "Deactivated", count: deactivated, color: "bg-muted-foreground" },
+              ].map((item) => item.count > 0 ? <span key={item.label} className={item.color} style={{ width: `${(item.count / rosterTotal) * 100}%` }} /> : null)}
+            </div>
+            <dl className="m-0 flex flex-col divide-y divide-border">
+              {[
+                { label: "Active members", count: members.length, hint: `${activeInPeriod} active in this period`, color: "bg-[var(--success-ink)]" },
+                { label: "Pending invitations", count: invitesOutstanding, hint: "Waiting to join", color: "bg-[var(--warning-ink)]" },
+                { label: "Deactivated", count: deactivated, hint: "Access turned off", color: "bg-muted-foreground" },
+              ].map((item) => <div key={item.label} className="flex items-center gap-3 py-3 first:pt-1 last:pb-1">
+                <span className={`size-2 shrink-0 rounded-full ${item.color}`} aria-hidden="true" />
+                <dt className="min-w-0 flex-1 text-sm text-foreground">{item.label}<span className="ml-2 text-xs text-muted-foreground">{item.hint}</span></dt>
+                <dd className="m-0 shrink-0 font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-foreground">{item.count}</dd>
+              </div>)}
+            </dl>
+          </div>}
+      </HomePanel>
+      <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"} · ${rangeLabel(range.from, range.to, new Date(now))}`} className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
+          : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
+          : <BarSeries
+              bars={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
+              summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
+              unit="leads"
+              className="flex-1"
+              minHeight={180}
+            />}
+      </HomePanel>
+    </div>
     <TableCard
+      className="flex min-h-[18rem] flex-1 flex-col"
+      bodyClassName="flex min-h-0 flex-1 flex-col"
       title="Partner performance"
       action={<RefreshButton onClick={reload} refreshing={loading} />}
       footer={!loading && memberStats.length ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
     >
       {loading ? <SectionLoading rows={5} columns={6} />
-        : !memberStats.length ? <EmptyState title="No partner users yet" hint="Invite teammates from Team access." action={<Button asChild variant="outline"><Link href="/partner/team">Team access</Link></Button>} />
+        : !memberStats.length ? <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="No partner users yet" hint="Invite teammates from Team access." action={<Button asChild variant="outline"><Link href="/partner/team">Team access</Link></Button>} /></div>
         : <Table>
           <TableHeader><TableRow>
             <TableHead>Member</TableHead>

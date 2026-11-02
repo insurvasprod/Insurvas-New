@@ -13,6 +13,7 @@
  */
 import { dayMonthYear } from "../format/dates.ts";
 import { NOBODY_CLAIMED_LABEL, PARTNER_LANES, type PartnerLane } from "./lanes.ts";
+import type { TemplateField, TemplateFormDefinition } from "../templates/constants.ts";
 
 /* ── The board's columns ─────────────────────────────────────────────────────────────────────── */
 
@@ -252,8 +253,31 @@ export function snapshotValue(key: string, value: unknown): string {
 }
 
 /** The submission, grouped and formatted. Empty groups are left out. */
-export function snapshotFields(values: Record<string, unknown> | null | undefined): SnapshotGroup[] {
+export function snapshotFields(
+  values: Record<string, unknown> | null | undefined,
+  configured?: { fields: TemplateField[]; form_definition: TemplateFormDefinition },
+): SnapshotGroup[] {
   const entries = Object.entries(values ?? {}).filter(([key]) => !HIDDEN.has(key.toLowerCase()));
+  if (configured?.form_definition.sections.length) {
+    const labels = new Map(configured.fields.map((field) => [field.field_key, field.label]));
+    const taken = new Set<string>();
+    const groups: SnapshotGroup[] = [];
+    const sections = [...configured.form_definition.sections].sort((a, b) => a.sort_order - b.sort_order);
+    for (const section of sections) {
+      const fields: SnapshotField[] = [];
+      for (const configuredField of section.fields) {
+        const entry = entries.find(([key]) => key === configuredField.field_key);
+        if (!entry || taken.has(entry[0])) continue;
+        taken.add(entry[0]);
+        fields.push({ key: entry[0], label: labels.get(entry[0]) || humanise(entry[0]), value: snapshotValue(entry[0], entry[1]) });
+      }
+      if (fields.length) groups.push({ key: section.section_key, label: section.label, fields });
+    }
+    const unplaced = entries.filter(([key]) => !taken.has(key));
+    if (unplaced.length) groups.push({ ...OTHER, fields: unplaced.map(([key, value]) => ({ key, label: labels.get(key) || humanise(key), value: snapshotValue(key, value) })) });
+    return groups;
+  }
+
   const taken = new Set<string>();
   const groups: SnapshotGroup[] = [];
   for (const group of GROUPS) {

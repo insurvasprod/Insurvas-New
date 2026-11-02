@@ -8,7 +8,10 @@ export type PartnerLeadFilters = {
   product?: string;
   stageId?: string;
   outcome?: string;
+  pipelineId?: string;
 };
+
+export type PartnerPipelineChoice = { id: string; name: string };
 
 export type PartnerPipelineStage = {
   id: string;
@@ -35,6 +38,7 @@ export type PartnerLeadRow = {
   submittedAt: string;
   updatedAt: string;
   product: string;
+  language: string | null;
   stageId: string;
   stageName: string;
   stageType: string;
@@ -50,6 +54,8 @@ export type PartnerLeadRow = {
 
 export type PartnerLeadDetail = PartnerLeadRow & {
   values: Record<string, unknown>;
+  groups: import("./view").SnapshotGroup[];
+  notes: Array<{ at: string; body: string }>;
   timeline: Array<{ type: string; label: string; at: string; detail?: string | null }>;
 };
 
@@ -61,6 +67,7 @@ export type PartnerLeadDetail = PartnerLeadRow & {
 export type PartnerPipelinePayload = {
   rows: PartnerLeadRow[];
   stages: PartnerPipelineStage[];
+  pipelines: PartnerPipelineChoice[];
   facets: PartnerLeadFacets;
   counters: { submittedToday: number; claimed: number; converted: number; stillOpen: number };
   /** When the longest-waiting open submission was queued. Null while any filter narrows the page,

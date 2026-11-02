@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Paperclip, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ export function ChatComposer({
   accept,
   maxFiles = 3,
   countLabel,
+  trailingControl,
   captureTyping = true,
   className,
 }: {
@@ -54,6 +55,8 @@ export function ChatComposer({
   maxFiles?: number;
   /** How the count reads when it is close enough to the cap to matter. */
   countLabel?: (length: number) => string;
+  /** Optional control between the message field and Send, such as dictation. */
+  trailingControl?: ReactNode;
   /** Typing anywhere on the page starts a message here. Off for a composer that shares a page. */
   captureTyping?: boolean;
   className?: string;
@@ -191,6 +194,8 @@ export function ChatComposer({
           onKeyDown={onKeyDown}
           className="min-w-0 flex-1 resize-none self-center bg-transparent py-2 text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
         />
+
+        {trailingControl}
 
         <Button type="submit" size="icon" disabled={blocked} aria-label={busy ? "Sending" : "Send message"} className="shrink-0">
           <Send aria-hidden="true" />
