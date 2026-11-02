@@ -467,7 +467,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
 
   return <div className="m-stagger space-y-6">
     <PageHeader
-      title="Pipeline"
+      title="Lead pipeline"
       description={role === "partner_admin" ? "Track leads submitted by your organization." : "Track the leads you submitted."}
       visible
       infoDescription

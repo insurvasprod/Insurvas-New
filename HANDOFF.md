@@ -114,10 +114,42 @@ Built so far: the read (`lib/partnerDealFlow/`, with pure `localDay.ts` and `fig
 route, the page, the sidebar entry and the `/design/deal-flow` preview. **Not yet verified:** the
 day stepper's fetch and the CSV download, both of which need a signed-in session.
 
+## Agency dashboard redesign (2 Nov, in progress)
+
+`/app/agency` rebuilt as an analytics front door. Spec, plan and tasks in
+`tasks/agency-dashboard-redesign/`. Phases 1–4 done, Phase 5 (docs and the signed-in walkthrough)
+in progress.
+
+The research that shaped it: this page is the agency module's **front door**, not its analytics —
+`book-scorecards` already owns persistency, chargeback ratios and true cost per sale, and
+`/app/producer-scorecards` owns per-producer profitability. So the page answers one question and
+every figure is a door. Separately, it was **discarding six figures the system already computes
+for it** (`leadSpendCents`, `costPerIssued`, `costPerPersisting`, `chargebackTax`, `m13`,
+`chargebackCents`) — the route returns `readDashboard` unchanged and the client had never typed
+them, so the new "At risk" card and money split needed no API change at all.
+
+What changed: the `<h1>` names the page rather than the agency; four cards (Written, Your
+override, At risk, Needs you) with month-over-month change, Seats removed from the strip; a
+ranked producer standing as a `BarSeries` beside a `ShareBar` of where the money went; the
+producers table ranked with month-13 alongside month-4; and a new agency that reads as new rather
+than broken.
+
+Two shared components gained something rather than being copied: **`BarSeries` has a categorical
+label mode** (`labels="all"` — its axis only ever drew first, middle and last, which is wrong when
+every bar is a person), and the arithmetic lives in **`lib/agency/dashboardCore.ts`**, pure and
+tested, beside the `*Core` / `*Store` pairs the module already uses.
+
+**Not verified:** the page has never been opened signed in. It needs an agency-typed plan and a
+session; `scripts/seed-qa-agency.mjs` seeds exactly that on the LA-1.25 Alert Demo tenant, and
+`npm run session -- tenant --email demo.agent@insurvas.test --js` mints the cookie.
+
 ## Relevant Files
 
 | File | Why |
 |---|---|
+| `tasks/agency-dashboard-redesign/SPEC.md` | The agency dashboard's audit, the information-architecture research, and the decisions |
+| `lib/agency/dashboardCore.ts` | `periodChange`, `standing`, `moneySplit` — the dashboard's arithmetic, pure and tested |
+| `app/design/agency/page.tsx` | Dev-only preview; the live agency is empty, so this is the only place the page can be seen with data |
 | `tasks/partner-daily-deal-flow/plan.md` | Daily deal flow: the decisions, what was cut from the agency's version, and why |
 | `lib/partnerDealFlow/types.ts` | `PARTNER_DEAL_FLOW_COLUMNS` — the literal allow-list that keeps the agency's notes, closers and vendors off the partner's page |
 | `lib/partnerDealFlow/localDay.ts` | The local-date boundary; `deal_flow.local_date` is local, and a UTC read is off by one for part of every day |
