@@ -22,9 +22,9 @@ export const NAV_GROUPS: readonly { section: string; icon: string }[] = [
   { section: "Team", icon: "users" },
   { section: "Leads", icon: "contact-round" },
   { section: "Sales", icon: "file-check" },
+  { section: "Book of business", icon: "folder-input" },
   { section: "Book", icon: "book-open" },
   { section: "Commissions", icon: "receipt" },
-  { section: "Data in", icon: "folder-input" },
   { section: "Accounting", icon: "landmark" },
   // Its own icon (2026-10-25): on the icon rail two groups cannot share one.
   { section: "Partners", icon: "handshake" },
@@ -80,7 +80,7 @@ export const NAV_AREAS: readonly { label: string; icon: string; sections: readon
   { label: "Leads", icon: "users", sections: ["Leads"] },
   // Its own area (owner 2026-10-28): partners are not a kind of lead.
   { label: "Partners", icon: "handshake", sections: ["Partners"] },
-  { label: "Book", icon: "book-open", sections: ["Book", "Data in"] },
+  { label: "Book", icon: "book-open", sections: ["Book of business", "Book"] },
   { label: "Money", icon: "dollar-sign", sections: ["Commissions", "Accounting"] },
   { label: "Team", icon: "building", sections: ["Team", "Reports"] },
   { label: "Compliance", icon: "shield-check", sections: ["Compliance"] },

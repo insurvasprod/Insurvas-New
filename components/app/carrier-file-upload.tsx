@@ -10,33 +10,51 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, MAX_UPLOAD_BYTES, carrierFileKind, fileDay, type CarrierFileType } from "@/lib/ingestion/constants";
 import { prefillFromFilename, type CarrierChoice } from "@/lib/ingestion/path";
+import { fileHref } from "@/lib/ingestion/trace";
 import { notify } from "@/lib/notify";
 
 const selectClass = `${toolbarControl} w-full`;
 
 type Outcome =
-  | { outcome: "registered"; status: "received" | "failed"; errorDetail: string | null; supersededFileId: string | null }
-  | { outcome: "skipped" };
+  | { outcome: "registered"; fileId: string; status: "received" | "failed"; errorDetail: string | null; supersededFileId: string | null }
+  | { outcome: "skipped" | "restored"; fileId: string };
+
+/** A file's carrier, type, day and agency, filled in for a corrected file or a missing one. */
+export type UploadPreset = { carrierId?: string | null; fileType?: CarrierFileType | null; fileDate?: string | null; agency?: string | null };
 
 /**
  * LA-4.1 (Notion sprint) · the upload door. The agent drops a carrier's file and says which carrier,
  * which kind of file and which day it is — filled in from the file name when the name says so. The
  * file is never opened to decide those; it is stored as it came and registered.
+ *
+ * Round 2 (owner 2026-11-02): the one Upload pop-up everywhere. `preset` fills the fields (Replace with a
+ * corrected file: the same carrier, type and day, so the new file supersedes the old one; Missing › Upload
+ * it: the carrier). When the file is in, "Open the file" opens its page.
  */
-export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carriers: CarrierChoice[]; autoOpen?: boolean }) {
+export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "Upload a file", variant, size, preset, title, openWhenDone = false }: {
+  carriers: CarrierChoice[];
+  autoOpen?: boolean;
+  label?: string;
+  variant?: "default" | "outline";
+  size?: "default" | "sm";
+  preset?: UploadPreset;
+  title?: string;
+  /** End on "Open the file" (the Files area) instead of "Done". */
+  openWhenDone?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(autoOpen);
   const [file, setFile] = useState<File | null>(null);
-  const [carrierId, setCarrierId] = useState("");
-  const [fileType, setFileType] = useState<CarrierFileType | "">("");
-  const [fileDate, setFileDate] = useState("");
-  const [agency, setAgency] = useState("");
+  const [carrierId, setCarrierId] = useState(preset?.carrierId ?? "");
+  const [fileType, setFileType] = useState<CarrierFileType | "">(preset?.fileType ?? "");
+  const [fileDate, setFileDate] = useState(preset?.fileDate ?? "");
+  const [agency, setAgency] = useState(preset?.agency ?? "");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState<Outcome | null>(null);
 
   function reset() {
-    setFile(null); setCarrierId(""); setFileType(""); setFileDate(""); setAgency(""); setProblem(null); setDone(null);
+    setFile(null); setCarrierId(preset?.carrierId ?? ""); setFileType(preset?.fileType ?? ""); setFileDate(preset?.fileDate ?? ""); setAgency(preset?.agency ?? ""); setProblem(null); setDone(null);
   }
 
   function choose(next: File | undefined) {
@@ -47,9 +65,10 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
     if (next.size > MAX_UPLOAD_BYTES) { setFile(null); setProblem(`That file is larger than ${MAX_UPLOAD_BYTES / 1_000_000} MB. Have it dropped into the agency's bucket instead, or split it.`); return; }
     setFile(next);
     const filled = prefillFromFilename(next.name, carriers);
-    if (filled.carrierId) setCarrierId(filled.carrierId);
-    if (filled.fileType) setFileType(filled.fileType);
-    if (filled.fileDate) setFileDate(filled.fileDate);
+    // A preset (a corrected file, a missing one) wins over what the name suggests.
+    if (filled.carrierId && !preset?.carrierId) setCarrierId(filled.carrierId);
+    if (filled.fileType && !preset?.fileType) setFileType(filled.fileType);
+    if (filled.fileDate && !preset?.fileDate) setFileDate(filled.fileDate);
   }
 
   async function submit() {
@@ -76,7 +95,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
       // and a refusal stays in the dialog beside the fields to fix, so it ends without one.
       const data = await notify.promise(send, {
         loading: `Uploading ${file.name}…`,
-        done: (result) => result.outcome === "skipped" ? "Already received, not stored again"
+        done: (result) => result.outcome !== "registered" ? "Same file as before · skipped, nothing changed"
           : result.status === "failed" ? { title: "Received, but it cannot be read", treatment: "warn", detail: result.errorDetail ?? undefined }
           : `Uploaded ${file.name}`,
         fail: null,
@@ -94,7 +113,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}>Upload a file</Button>
+      <Button type="button" variant={variant} size={size} title={title} onClick={() => setOpen(true)}>{label}</Button>
       <Dialog open={open} onOpenChange={(next) => { if (busy) return; setOpen(next); if (!next) reset(); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -104,8 +123,8 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
 
           {done ? (
             <div role="status" className="grid gap-2 text-sm">
-              {done.outcome === "skipped" ? (
-                <p className="text-[var(--body)]">This exact file was already received, so it was not stored again.</p>
+              {done.outcome !== "registered" ? (
+                <p className="text-[var(--body)]">This exact file was already received, so it was not stored again. Nothing changed.</p>
               ) : done.status === "failed" ? (
                 <p className="text-[var(--error-ink)]">Received, but it cannot be read: {done.errorDetail}</p>
               ) : (
@@ -152,7 +171,9 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
             {done ? (
               <>
                 <Button type="button" variant="outline" onClick={reset}>Upload another</Button>
-                <Button type="button" onClick={() => { setOpen(false); reset(); }}>Done</Button>
+                {openWhenDone
+                  ? <Button type="button" onClick={() => { const id = done.fileId; setOpen(false); reset(); if (id) router.push(fileHref(id)); }}>Open the file</Button>
+                  : <Button type="button" onClick={() => { setOpen(false); reset(); }}>Done</Button>}
               </>
             ) : (
               <>

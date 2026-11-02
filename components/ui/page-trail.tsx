@@ -7,7 +7,7 @@ import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { LEADS_IN_STEPS, leadsInStepLabel, leadsInStepOf } from "@/lib/leadSources/steps";
 import { COMPLIANCE_STEPS, complianceStepLabel, complianceStepOf } from "@/lib/compliance/steps";
 import { REPORTS_VIEWS, reportsViewLabel, reportsViewOf } from "@/lib/reports/views";
-import { DATA_IN_STEPS, dataInStepLabel, dataInStepOf } from "@/lib/dataIn/steps";
+import { BOOK_AREA_LABEL, DATA_IN_STEPS, bookAreaOf, dataInStepLabel } from "@/lib/dataIn/steps";
 import { accountingStepLabel, accountingStepOf } from "@/lib/accounting/steps";
 import { commissionsStepLabel, commissionsStepOf } from "@/lib/commissions/steps";
 import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
@@ -96,11 +96,14 @@ export function PageTrail({ title }: { title: string }) {
     const below = view && pathname !== view.href && title.trim() && title !== label;
     return <Breadcrumbs crumbs={[{ label: "Reports" }, { label, href: view?.href }, ...(below ? [{ label: title }] : [])]} />;
   }
-  // A Data in step (2026-11-02): Data in › the step, named as the rail names it.
-  const dataInStep = dataInStepOf(pathname);
+  // A Book of business step (2026-11-02): Book of business › the step, named as the rail names it, and › the
+  // record it has open (a file, an item, a policy, a rule).
+  const dataInStep = bookAreaOf(pathname);
   if (dataInStep) {
     const stepHref = DATA_IN_STEPS.find((step) => step.key === dataInStep)?.href;
-    return <Breadcrumbs crumbs={[{ label: "Data in", href: DATA_IN_STEPS[0]?.href }, { label: dataInStepLabel(dataInStep), href: stepHref }]} />;
+    const label = dataInStepLabel(dataInStep);
+    const below = pathname !== stepHref && title.trim() && title !== label;
+    return <Breadcrumbs crumbs={[{ label: BOOK_AREA_LABEL, href: DATA_IN_STEPS[0]?.href }, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
   }
   // An Accounting step (2026-11-02): Accounting › the step (My balance on its own address).
   const accountingStep = accountingStepOf(pathname);

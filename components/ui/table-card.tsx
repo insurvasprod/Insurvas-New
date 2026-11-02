@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/utils";
 import { titleCaseNode } from "@/components/ui/title-case";
+import { TableCardLayout } from "@/components/ui/table-card-layout";
 
 /**
  * A list page's one object: a card whose table runs edge to edge.
@@ -48,7 +49,9 @@ export function TableCard({
       data-slot="table-card"
       className={cn(
         // m-glass: the frosted surface shared with Card and StatStrip (app/globals.css, glass layer).
-        "m-glass rounded-lg border border-border",
+        // A column, so when TableCardLayout stretches the card to the screen's foot the table takes the
+        // room and the footer (the pager) sits on the bottom line.
+        "m-glass flex flex-col rounded-lg border border-border",
         "[&>*:first-child]:rounded-t-[15px] [&>*:last-child]:rounded-b-[15px]",
         className
       )}
@@ -79,7 +82,8 @@ export function TableCard({
           border-b sits above them. Empty when neither is showing. */}
       {filters && <div data-slot="table-card-filters" className="bg-[var(--surface-alt)]/40">{filters}</div>}
 
-      <div className="overflow-x-auto">{children}</div>
+      {/* The table foundation (2026-11-02): full height when last on the page, columns spread evenly. */}
+      <div className="flex-1 overflow-x-auto">{children}<TableCardLayout /></div>
 
       {footer && (
         /* The footer sits on the page grey, not the card white: it is the card's plinth, and a

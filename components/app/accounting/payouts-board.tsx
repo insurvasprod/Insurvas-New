@@ -311,11 +311,11 @@ export function PayoutsBoard({ runs, partners, readOnly, openId, partnerFixed = 
   return (
     <>
       {/* Payout runs A5 (2026-10-25): three glass tiles, the run docked beside the table. */}
-      <section aria-label="Payout totals" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatTile className="m-glass rounded-xl border border-border" label="Drafts to review" value={String(drafts.length)} valueTone={drafts.length ? "warning" : undefined} footnote="the partner cannot see these" />
-        <StatTile className="m-glass rounded-xl border border-border" label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} run${owed.length === 1 ? "" : "s"} owed`} />
-        <StatTile className="m-glass rounded-xl border border-border" label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} run${paid.length === 1 ? "" : "s"}`} />
-      </section>
+      <StatStrip label="Payout totals">
+        <StatTile label="Drafts to review" value={String(drafts.length)} valueTone={drafts.length ? "warning" : undefined} footnote="the partner cannot see these" />
+        <StatTile label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} run${owed.length === 1 ? "" : "s"} owed`} />
+        <StatTile label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} run${paid.length === 1 ? "" : "s"}`} />
+      </StatStrip>
       <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start">
       <TableCard
         className="min-w-0 flex-1"

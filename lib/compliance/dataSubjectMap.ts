@@ -117,6 +117,9 @@ export const DATA_SUBJECT_MAP: Record<string, SubjectTable> = {
   policy_match: { action: "keep", reason: "The link between a policy and its sale: ids only, part of the policy record." },
   application_review: { action: "keep", reason: "AG-1.11 · a review of a producer's paperwork: ids, error types and the reviewer's note to the producer; the application it points at is anonymised with it." },
   commission_entry: { action: "keep", reason: "Commission ledger: amounts and policy numbers, no personal identifiers." },
+  // Setup › Pipeline rules (20261102100000): what a rule did to a card. lead_id is set null when the lead goes.
+  pipeline_rule_evaluation: { action: "keep", reason: "What a pipeline rule did to a card: ids, stages, policy numbers, amounts and the rule's own note wording; no name, number or birth date." },
+  pipeline_rule_hold: { action: "keep", reason: "Two pipeline rules that disagreed about a card: ids, stages and policy numbers only." },
   commission_account_entry: { action: "keep", reason: "Commission account ledger: amounts only." },
   commission_discrepancy: { action: "keep", reason: "Commission discrepancies: amounts and policy numbers, part of the financial record." },
   lead_queue: { action: "keep", reason: "Assignment row with no personal data; vendor and agent figures count it." },

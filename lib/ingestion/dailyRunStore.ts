@@ -12,6 +12,7 @@ import { pollBucketDrops } from "./registry";
 import type { ParsedFile, ReprocessFile } from "./reprocess";
 import { filePolicyNumbers, linkFilePolicies, storeFileSnapshots } from "./snapshotStore";
 import { REPROCESS_STAGES } from "./stages";
+import { runPipelineRules } from "@/lib/pipelineRules/store";
 
 /**
  * LA-4.19 (Notion sprint) · the server side of the orchestrated run: what is pending, the run and
@@ -203,7 +204,16 @@ const deps: RunDeps = {
     const ids = [...new Set(((files ?? []) as Loose[]).map((f) => f.file_id))];
     if (ids.length) await db().from("agent_findings").update({ run_id: runId }).eq("tenant_id", tenantId).is("run_id", null).in("file_id", ids);
     const { count } = await db().from("agent_findings").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "open");
-    return { status: "succeeded", rowsIn: ids.length, findings: count ?? 0, note: "Boards and scorecards are computed when they are opened. The written summary waits for an AI provider." };
+    // Setup › Pipeline rules (2026-11-02): once the run's files are in, the agency's rules that are on look
+    // at what changed. Guarded inside (no tables, no rule on, engine off: nothing), and never fails the run.
+    let rules = "";
+    try {
+      const outcome = await runPipelineRules(tenantId, "file");
+      if (outcome.ran) rules = ` Pipeline rules: ${outcome.moved} moved, ${outcome.wouldMove} would move (forecast), ${outcome.held} held${outcome.capped.live || outcome.capped.forecast ? ", stopped at the run cap" : ""}.`;
+    } catch (error) {
+      console.error("[daily-run] the pipeline rules could not run", tenantId, error);
+    }
+    return { status: "succeeded", rowsIn: ids.length, findings: count ?? 0, note: `Boards and scorecards are computed when they are opened. The written summary waits for an AI provider.${rules}` };
   },
 };
 

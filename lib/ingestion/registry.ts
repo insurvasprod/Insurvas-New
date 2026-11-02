@@ -344,6 +344,8 @@ export type CarrierFileRow = {
    * while none of its policies were in the book.)
    */
   unfinished: UnfinishedStep | null;
+  /** Every step after reading finished (pipeline_completed_at); true before that column exists. Round 2's stage strip reads it. */
+  completed: boolean;
 };
 
 export type UnfinishedStep = { stage: string; error: string | null };
@@ -403,6 +405,7 @@ export async function listCarrierFiles(tenantId: string, limit = 500): Promise<C
       parserVersion: row.parser_version ?? null,
       heldRows: row.held_row_count ?? 0,
       unfinished: unfinished.get(row.id) ?? null,
+      completed: "pipeline_completed_at" in row ? Boolean(row.pipeline_completed_at) : true,
     })),
     skips: (skips.data ?? []).map((row: Loose) => ({ id: row.id, originalFileId: row.original_file_id, originalFilename: row.original_filename, source: row.source, skippedAt: row.skipped_at })),
   };

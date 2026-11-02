@@ -1,16 +1,14 @@
-import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { columnLetter } from "@/lib/ingestion/grid";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { fileHref } from "@/lib/ingestion/trace";
+import { loadFileHead } from "@/lib/ingestion/fileOutcomeStore";
 import { headerLine, loadWholeFile, shownSheet } from "@/lib/ingestion/wholeFile";
-import { CarrierFileDownload } from "@/components/app/carrier-file-download";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import { FileFrame } from "@/components/app/book/files/file-frame";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -23,6 +21,8 @@ import { ViewTabs } from "@/components/ui/view-tabs";
  * every sheet (hidden ones too) and every line of the chosen sheet, title lines above the header
  * included, one column per spreadsheet column (A, B, C…). A PDF shows the original itself and every
  * line of its text. Ten lines a page. Owner and bookkeeper. Opening it writes nothing.
+ *
+ * Round 2 (owner 2026-11-02): the file page's Whole file tab, in the same frame as its other tabs.
  */
 const LINES_PER_PAGE = 10;
 
@@ -33,26 +33,16 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
   const { fileId } = await params;
   if (!isRecordUuid(fileId)) notFound();
   const { page, sheet: asked } = await searchParams;
-  const file = await loadWholeFile(guard.context.tenantId, fileId);
-  if (!file) notFound();
-
-  const header = (
-    <PageHeader
-      title={file.name}
-      description="The whole file, exactly as the carrier sent it."
-      actions={<>
-        <Button asChild variant="outline"><Link href={fileHref(file.id)}>Back to the file</Link></Button>
-        <CarrierFileDownload fileId={file.id} />
-      </>}
-    />
-  );
+  const [file, head] = await Promise.all([loadWholeFile(guard.context.tenantId, fileId), loadFileHead(guard.context.tenantId, fileId)]);
+  if (!file || !head) notFound();
+  const readOnly = guard.entitlement.access === "read_only";
+  const frame = (children: ReactNode) => <FileFrame head={head} tab="whole" readOnly={readOnly}>{children}</FileFrame>;
 
   if (file.problem) {
     return (
-      <div className="m-stagger flex flex-col gap-6">
-        {header}
+      frame(<>
         <TableCard><EmptyState title="The file can't be shown" hint={file.problem} /></TableCard>
-      </div>
+      </>)
     );
   }
 
@@ -69,8 +59,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
     }, []);
     const shown = numbered.slice((at - 1) * LINES_PER_PAGE, at * LINES_PER_PAGE);
     return (
-      <div className="m-stagger flex flex-col gap-6">
-        {header}
+      frame(<>
         <TableCard title="The PDF">
           <iframe src={`/api/app/carrier-files/${file.id}/view`} title={`${file.name}, the carrier's PDF`} className="block h-[80vh] w-full border-0" />
         </TableCard>
@@ -100,7 +89,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
             </table>
           )}
         </TableCard>
-      </div>
+      </>)
     );
   }
 
@@ -119,8 +108,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
   const readNote = workbook ? (file.sheetRead ? `The rows were read from the sheet "${file.sheetRead}".` : "No sheet has been read yet.") : null;
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      {header}
+    frame(<>
       {workbook && sheets.length > 0 && (
         <ViewTabs
           label="Sheets"
@@ -164,6 +152,6 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
           </table>
         )}
       </TableCard>
-    </div>
+    </>)
   );
 }

@@ -11,6 +11,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/app/book-of-business-views";
+import { StageStrip } from "@/components/app/book/files/stage-strip";
 import {
   FILE_SOURCE_LABELS,
   FILE_STATUS_LABELS,
@@ -21,6 +22,7 @@ import {
   type CarrierFileStatus,
   type CarrierFileType,
 } from "@/lib/ingestion/constants";
+import type { FileStageView } from "@/lib/ingestion/fileStages";
 import { fileHref } from "@/lib/ingestion/trace";
 import type { CarrierFileRow } from "@/lib/ingestion/registry";
 
@@ -32,38 +34,71 @@ const STATUS_TONE: Record<CarrierFileStatus, StatusTone> = {
   superseded: "neutral",
 };
 
+type Where = "all" | "needs" | "failed" | "waiting" | "running" | "done" | "replaced";
+const WHERE_LABELS: Record<Exclude<Where, "all">, string> = {
+  needs: "Needs you",
+  failed: "Failed",
+  waiting: "Waiting for a layout",
+  running: "Still going",
+  done: "Done",
+  replaced: "Replaced",
+};
+
+const PERIODS = { all: "Any time", "7": "Last 7 days", "30": "Last 30 days", "90": "Last 90 days" } as const;
+
 /**
  * LA-4.1 (Notion sprint) · every carrier file the agency holds, however it arrived. A failed file
  * stays on the list with the reason; a replaced one stays too, marked as replaced, with its original
  * still downloadable. Nothing here is ever deleted.
+ *
+ * Round 2 (owner 2026-11-02): each file shows its eight stages as a strip and where it is ("3 need you ·
+ * Linked", "Read failed", "Done"), and opens its page. `stages` comes from the server (fileOutcomeStore);
+ * without it the old status chip shows.
  */
-export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: CarrierFileRow[]; emptyTitle: string; emptyHint: string }) {
+export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint }: { files: CarrierFileRow[]; stages?: Record<string, FileStageView>; emptyTitle: string; emptyHint: string }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [query, setQuery] = useState("");
   const [carrier, setCarrier] = useState("");
   const [type, setType] = useState<"all" | CarrierFileType>("all");
-  const [status, setStatus] = useState<"all" | "waiting" | CarrierFileStatus>("all");
+  const [where, setWhere] = useState<Where>("all");
   const [source, setSource] = useState<"all" | CarrierFileSource>("all");
+  const [period, setPeriod] = useState<keyof typeof PERIODS>("all");
   const [page, setPage] = useState(1);
+  // "Last N days" counts back from when the list was opened.
+  const [openedAt] = useState(() => Date.now());
   const [opening, setOpening] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const pageSize = useFittingPageSize(420, 49);
 
+  const whereOf = (file: CarrierFileRow): Exclude<Where, "all"> => {
+    if (file.status === "superseded") return "replaced";
+    if (file.waitingForLayout) return "waiting";
+    const view = stages?.[file.id];
+    if (view?.stages.some((s) => s.state === "failed") || file.status === "failed") return "failed";
+    if (view?.stages.some((s) => s.state === "needs")) return "needs";
+    if (view?.stages.some((s) => s.state === "pending") || file.status === "received" || file.status === "parsing") return "running";
+    return "done";
+  };
+
   const carriers = useMemo(() => [...new Set(files.map((file) => file.carrierName).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b)), [files]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const since = period === "all" ? null : openedAt - Number(period) * 86_400_000;
     return files.filter((file) =>
       (!needle || `${file.originalFilename} ${file.carrierName ?? ""} ${file.agency ?? ""} ${file.emailFrom ?? ""} ${file.uploadedByName ?? ""}`.toLowerCase().includes(needle)) &&
       (!carrier || file.carrierName === carrier) &&
       (type === "all" || file.fileType === type) &&
-      (status === "all" || (status === "waiting" ? file.waitingForLayout : file.status === status && !(status === "failed" && file.waitingForLayout))) &&
-      (source === "all" || file.source === source),
+      (where === "all" || whereOf(file) === where) &&
+      (source === "all" || file.source === source) &&
+      (since === null || new Date(file.receivedAt).getTime() >= since),
     );
-  }, [files, query, carrier, type, status, source]);
+    // whereOf reads `stages`, listed below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, stages, query, carrier, type, where, source, period, openedAt]);
   const { current, rows } = paginate(visible, page, pageSize);
-  const filtered = Boolean(query.trim() || carrier || type !== "all" || status !== "all" || source !== "all");
-  const clear = () => { setQuery(""); setCarrier(""); setType("all"); setStatus("all"); setSource("all"); setPage(1); };
+  const filtered = Boolean(query.trim() || carrier || type !== "all" || where !== "all" || source !== "all" || period !== "all");
+  const clear = () => { setQuery(""); setCarrier(""); setType("all"); setWhere("all"); setSource("all"); setPeriod("all"); setPage(1); };
 
   async function download(id: string) {
     setOpening(id);
@@ -88,23 +123,25 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
           {filtered && <ClearFiltersButton onClick={clear} />}
           <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
         </>}>
-          <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search files" />
+          <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="File, carrier or sender" />
           <select aria-label="Filter files by carrier" className={toolbarControl} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }}>
-            <option value="">All carriers</option>
+            <option value="">Every carrier</option>
             {carriers.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
           <select aria-label="Filter files by type" className={toolbarControl} value={type} onChange={(event) => { setType(event.target.value as typeof type); setPage(1); }}>
-            <option value="all">All types</option>
+            <option value="all">Policies and commissions</option>
             {(Object.keys(FILE_TYPE_LABELS) as CarrierFileType[]).map((key) => <option key={key} value={key}>{FILE_TYPE_LABELS[key]}</option>)}
           </select>
-          <select aria-label="Filter files by status" className={toolbarControl} value={status} onChange={(event) => { setStatus(event.target.value as typeof status); setPage(1); }}>
-            <option value="all">All statuses</option>
-            {(Object.keys(FILE_STATUS_LABELS) as CarrierFileStatus[]).map((key) => <option key={key} value={key}>{FILE_STATUS_LABELS[key]}</option>)}
-            <option value="waiting">Waiting for a layout</option>
+          <select aria-label="Filter files by where they are" className={toolbarControl} value={where} onChange={(event) => { setWhere(event.target.value as Where); setPage(1); }}>
+            <option value="all">Any stage</option>
+            {(Object.keys(WHERE_LABELS) as Array<Exclude<Where, "all">>).map((key) => <option key={key} value={key}>{WHERE_LABELS[key]}</option>)}
           </select>
           <select aria-label="Filter files by how they arrived" className={toolbarControl} value={source} onChange={(event) => { setSource(event.target.value as typeof source); setPage(1); }}>
             <option value="all">Every door</option>
             {(Object.keys(FILE_SOURCE_LABELS) as CarrierFileSource[]).map((key) => <option key={key} value={key}>{FILE_SOURCE_LABELS[key]}</option>)}
+          </select>
+          <select aria-label="Filter files by when they arrived" className={toolbarControl} value={period} onChange={(event) => { setPeriod(event.target.value as keyof typeof PERIODS); setPage(1); }}>
+            {(Object.keys(PERIODS) as Array<keyof typeof PERIODS>).map((key) => <option key={key} value={key}>{PERIODS[key]}</option>)}
           </select>
         </DataToolbar>
       }
@@ -116,64 +153,54 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
       ) : visible.length === 0 ? (
         <NoMatches noun="files" onClear={clear} />
       ) : (
-        <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
+        <table className="portal-lead-table w-full min-w-[1040px] text-left text-sm">
           <thead>
             <tr>
-              <th className="w-[104px]">File date</th>
-              <th className="w-[160px]">Carrier</th>
+              <th className="w-[96px]">Date</th>
+              <th className="w-[150px]">Carrier</th>
               <th className="w-[104px]">Type</th>
               <th>File</th>
-              <th className="w-[140px]">Arrived</th>
               <th className="w-[64px] text-right">Rows</th>
-              <th className="w-[150px]">Status</th>
-              <th className="w-[100px] text-right"><span className="sr-only">Actions</span></th>
+              <th className="w-[184px]">Stages</th>
+              <th className="w-[180px]">Where it is</th>
+              <th className="w-[176px] text-right"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody className="m-seq">
             {rows.map((file) => {
               const from = file.source === "upload" ? file.uploadedByName ?? "A former member" : file.source === "email" ? file.emailFrom ?? "Unknown sender" : file.agency ?? "A script";
+              const view = stages?.[file.id];
               return (
                 <tr key={file.id} className="m-row">
-                  <td className="tabular-nums">{fileDay(file.fileDate)}</td>
-                  <td>{file.carrierName ? <span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{file.carrierName}</span> : <span className="text-muted-foreground">Not known</span>}</td>
-                  <td>{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">Not known</span>}</td>
+                  <td className="tabular-nums" title={`Arrived ${fileDay(file.receivedAt)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{fileDay(file.fileDate)}</td>
+                  <td>{file.carrierName ? <span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{file.carrierName}</span> : <span className="text-muted-foreground">No carrier yet</span>}</td>
+                  <td>{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">—</span>}</td>
                   <td>
-                    <Link href={fileHref(file.id)} className="block max-w-[200px] truncate text-foreground hover:underline" title={`${file.originalFilename} · ${fileSize(file.fileBytes)} · open its rows`}>{file.originalFilename}</Link>
-                    {file.status === "failed" && file.errorDetail && <span className={`block max-w-[200px] truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{file.errorDetail}</span>}
-                    {file.status !== "failed" && file.rawError && <span className="block max-w-[200px] truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
-                  </td>
-                  <td title={`${FILE_SOURCE_LABELS[file.source]} · ${from} · ${fileDay(file.receivedAt)}`}>
-                    <span className="block tabular-nums">{fileDay(file.receivedAt)}</span>
-                    <span className="block max-w-[130px] truncate text-xs text-muted-foreground">{FILE_SOURCE_LABELS[file.source]} · {from}</span>
+                    <Link href={fileHref(file.id)} className="block max-w-[240px] truncate text-foreground hover:underline" title={`${file.originalFilename} · ${fileSize(file.fileBytes)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{file.originalFilename}</Link>
+                    {file.status === "failed" && file.errorDetail && <span className={`block max-w-[240px] truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{file.errorDetail}</span>}
+                    {file.status !== "failed" && file.rawError && <span className="block max-w-[240px] truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
                   </td>
                   <td
                     className="text-right tabular-nums"
                     title={file.rowCount !== null ? "Rows kept exactly as they arrived" : file.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout once one is published" : file.rawError ?? (file.status === "failed" ? undefined : "Waiting to be read")}
                   >
                     {file.rowCount !== null ? file.rowCount.toLocaleString("en-US") : <span className="text-muted-foreground">—</span>}
-                    {file.heldRows > 0 && <span className="block text-xs text-[var(--warning-ink)]" title="Held until Insurvas maps the carrier's status word">{file.heldRows.toLocaleString("en-US")} held</span>}
                   </td>
+                  <td>{view ? <StageStrip stages={view.stages} /> : <span className="text-muted-foreground">—</span>}</td>
                   <td>
-                    {file.waitingForLayout ? (
-                      <StatusChip tone="info">Waiting for a layout</StatusChip>
-                    ) : file.status === "failed" && !file.carrierId && file.rowCount === null ? (
-                      // Owner request 2026-10-14: came in without a carrier; its page suggests who sent it, a person confirms.
-                      <Link href={fileHref(file.id)} className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" title="Open the file to say who sent it">
-                        <StatusChip tone="action">Needs a check</StatusChip>
-                      </Link>
-                    ) : file.unfinished ? (
-                      // 2026-10-14: read, but a later step failed (an Aetna file's policies never reached the book).
-                      <Link href={fileHref(file.id)} className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" title={`The ${file.unfinished.stage} step failed. Open the file and press Read again to finish it.`}>
-                        <StatusChip tone="warning">Not finished</StatusChip>
-                      </Link>
+                    {view ? (
+                      <StatusChip tone={view.where.tone}>{view.where.label}</StatusChip>
                     ) : (
                       <StatusChip tone={STATUS_TONE[file.status]}>{file.status === "parsed" && file.parserVersion ? `${FILE_STATUS_LABELS.parsed} · v${file.parserVersion}` : FILE_STATUS_LABELS[file.status]}</StatusChip>
                     )}
                   </td>
                   <td className="text-right">
-                    <Button type="button" variant="outline" size="sm" disabled={opening === file.id} onClick={() => void download(file.id)}>
-                      {opening === file.id ? "Opening…" : "Download"}
-                    </Button>
+                    <span className="inline-flex items-center gap-2">
+                      <Button type="button" variant="outline" size="sm" disabled={opening === file.id} onClick={() => void download(file.id)}>
+                        {opening === file.id ? "Opening…" : "Download"}
+                      </Button>
+                      <Button asChild size="sm" variant="outline"><Link href={fileHref(file.id)} aria-label={`Open ${file.originalFilename}`}>Open</Link></Button>
+                    </span>
                   </td>
                 </tr>
               );

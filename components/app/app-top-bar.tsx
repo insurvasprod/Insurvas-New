@@ -111,7 +111,16 @@ export type TopBarAlert = {
  * `/api/admin/notifications`. A shell that passes `null` gets a bar with search and an account
  * menu and no bell — the honest rendering of "there is nothing to notify you about here".
  */
+/**
+ * Something that must be done now (owner 2026-11-02): an overdue regulator complaint. Not a strip on the
+ * page — a red warning icon beside the bell on every page, and the first row of the Inbox. It has no
+ * close and no "mark read": it clears only when the thing behind it is done.
+ */
+export type TopBarUrgent = { id: string; text: string; href: string; action: string };
+
 export type TopBarFeed = {
+  /** What must be done now: pinned first in the Inbox, with the red icon in the bar (TopBarUrgent). */
+  urgent?: TopBarUrgent[];
   notifications: TopBarNotification[];
   alerts: TopBarAlert[];
   /** Marks exactly these ids read. The bar passes notification ids only — alerts are never marked read. */
@@ -543,11 +552,25 @@ export function TopBarShell({
 
   // The Inbox (Navigation A): one button, the two lists as tabs. It opens on alerts only when there
   // is nothing addressed to you and something is wrong with the queue.
-  const inboxCount = notifications.length + alerts.length;
+  const urgent = feed?.urgent ?? [];
+  const inboxCount = notifications.length + alerts.length + urgent.length;
   function toggleInbox() {
     if (bellOpen || alertsOpen) { close(); return; }
-    toggle(!notifications.length && alerts.length ? "alerts" : "notifications");
+    toggle(urgent.length || (!notifications.length && alerts.length) ? "alerts" : "notifications");
   }
+  const urgentText = urgent.map((item) => item.text).join(" ");
+  // Pinned above either list, never scrolled away, never marked read.
+  const urgentRows = urgent.length ? (
+    <div className="portal-top-urgent-list" role="alert">
+      {urgent.map((item) => (
+        <a key={item.id} href={item.href} onClick={close} className="portal-top-urgent-row">
+          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+          <span className="portal-top-urgent-text">{item.text}</span>
+          <span className="portal-top-urgent-action">{item.action}</span>
+        </a>
+      ))}
+    </div>
+  ) : null;
   const inboxTabs = inbox && feed ? (
     <div className="portal-top-inbox-tabs">
       <ViewTabs
@@ -556,7 +579,7 @@ export function TopBarShell({
         onChange={(key) => { setQuery(""); setMenu(key); }}
         tabs={[
           { key: "notifications", label: "Notifications", count: notifications.length || null },
-          { key: "alerts", label: "Alerts", count: alerts.length || null, tone: "danger" },
+          { key: "alerts", label: "Alerts", count: alerts.length + urgent.length || null, tone: "danger" },
         ]}
       />
     </div>
@@ -660,9 +683,11 @@ export function TopBarShell({
         {/* Light / dark, the landing page's switch and reveal, in front of the bell (owner, 2026-10-13). */}
         {!inbox && <ThemeSwitch compact />}
         {feed?.doNotDisturb && <span className="hidden text-xs leading-[1.5] font-semibold text-[var(--warning-ink)] sm:inline" title="Sound and browser alerts are muted. Escalation emails are still sent.">Do not disturb</span>}
+        {/* One icon for notifications and alerts (owner 2026-11-02): what must be done now rides on the bell's
+            count and opens first in the Inbox; no second button beside it. */}
         {feed && inbox && <button
           type="button"
-          aria-label={`Inbox${notifications.length ? `, ${notifications.length} unread` : ""}${alerts.length ? `, ${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"} open` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
+          aria-label={`Inbox${urgent.length ? `, needs action now: ${urgentText}` : ""}${notifications.length ? `, ${notifications.length} unread` : ""}${alerts.length ? `, ${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"} open` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
           aria-haspopup="true"
           aria-expanded={bellOpen || alertsOpen}
           onClick={toggleInbox}
@@ -715,12 +740,14 @@ export function TopBarShell({
         {feed?.renderNotifications && menu === "notifications" && (
           <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
             {inboxTabs}
+            {urgentRows}
             {feed.renderNotifications({ close, openPreferences: feed.preferences ? () => openPreferences("notifications") : null })}
           </section>
         )}
         {feed && !feed.renderNotifications && menu === "notifications" && (
           <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
             {inboxTabs}
+            {urgentRows}
             <header className="portal-top-panel-head">
               <span>Notifications</span>
               <span>{notifications.length ? `${notifications.length} unread` : "Nothing unread"}</span>
@@ -772,6 +799,7 @@ export function TopBarShell({
         {feed && menu === "alerts" && (
           <section aria-label="Alerts" className={`portal-top-panel m-swap ${inbox ? "portal-top-panel-notif" : "portal-top-panel-alerts"}`}>
             {inboxTabs}
+            {urgentRows}
             <header className="portal-top-panel-head">
               <span>Alerts</span>
               <span>Clears when fixed, not when read</span>
@@ -1015,13 +1043,15 @@ function PlanLine({ plan, onNavigate }: { plan: TopBarPlan; onNavigate?: () => v
   );
 }
 
-export function AppTopBar({ user, userId, plan, menu }: {
+export function AppTopBar({ user, userId, plan, menu, urgent }: {
   user: TopBarUser;
   /** Keys this browser's snoozes to the person. */
   userId?: string;
   plan?: TopBarPlan;
   /** The same server-filtered menu as the sidebar: the breadcrumb and the New menu read it. */
   menu?: MenuSection[];
+  /** What must be done now (an overdue regulator complaint): the red icon and the Inbox's first row. */
+  urgent?: TopBarUrgent[];
 }) {
   const source = useAgentAlertFeed();
   const lists = useMemo(() => agentFeedLists(source.alerts), [source.alerts]);
@@ -1031,6 +1061,7 @@ export function AppTopBar({ user, userId, plan, menu }: {
   const centre = useBellCentre(personal, userId, source.markRead);
   const feed: TopBarFeed = {
     ...lists,
+    urgent,
     notifications: lists.notifications.filter((item) => centre.badgeIds.has(item.id)),
     renderNotifications: ({ close, openPreferences }) => <NotificationCentrePanel centre={centre} close={close} openPreferences={openPreferences} />,
     markRead: source.markRead,

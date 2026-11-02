@@ -55,11 +55,11 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
   }
 
   return (
-    // Commissions › Reconciliation (2026-11-02): the one Commissions page draws the title; the period stays here.
+    // Commissions › Reconciliation (2026-11-02): the one Commissions page draws the title.
     <div className="flex flex-col gap-6">
-      <div className="flex justify-end"><Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "last", label: "Last month" }, { key: "this", label: "This month" }]} /></div>
       <TableCard toolbar={
-        <DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />}>
+        // The period sits on the Refresh line (owner 2026-11-02): the toolbar's controls, one row.
+        <DataToolbar actions={<><Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "last", label: "Last month" }, { key: "this", label: "This month" }]} /><RefreshButton onClick={reload} refreshing={refreshing} /></>}>
           <ToolbarCheckbox checked={overOnly} onChange={(value) => { setOverOnly(value); setPage(1); }} label="Over the threshold only" />
         </DataToolbar>
       } footer={data && rows.length ? <Pager page={shown.current} total={rows.length} noun="producers" pageSize={pageSize} onPage={setPage} /> : undefined}>

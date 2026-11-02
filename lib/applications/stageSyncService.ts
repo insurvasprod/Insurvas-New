@@ -123,8 +123,12 @@ async function caseById(tenantId: string, caseId: string): Promise<CaseRow | nul
   return q.error ? null : ((q.data as CaseRow | null) ?? null);
 }
 
-/** Move the lead to a stage: lead, queue row and deal row, then one history row. Only if the lead is still where we read it. */
-async function moveLead(tenantId: string, input: { leadId: string; fromPipelineId: string | null; fromStageId: string | null; toPipelineId: string; toStageId: string; actorUserId: string | null; applicationId?: string | null }) {
+/**
+ * Move the lead to a stage: lead, queue row and deal row, then one history row. Only if the lead is still where we read it.
+ * Exported for Setup › Pipeline rules (lib/pipelineRules/store.ts), which moves a card the same way with
+ * source `pipeline_rule` (20261102100000 adds it to the history's source check).
+ */
+export async function moveLead(tenantId: string, input: { leadId: string; fromPipelineId: string | null; fromStageId: string | null; toPipelineId: string; toStageId: string; actorUserId: string | null; applicationId?: string | null; source?: "application_sync" | "pipeline_rule" }) {
   const client = db();
   const now = new Date().toISOString();
   let update = client.from("agent_leads").update({ pipeline_id: input.toPipelineId, stage_id: input.toStageId, updated_at: now }).eq("tenant_id", tenantId).eq("id", input.leadId);
@@ -138,7 +142,7 @@ async function moveLead(tenantId: string, input: { leadId: string; fromPipelineI
   ]);
   const event = await client.from("tenant_lead_stage_events").insert({
     tenant_id: tenantId, lead_id: input.leadId, from_pipeline_id: input.fromPipelineId, from_stage_id: input.fromStageId,
-    to_pipeline_id: input.toPipelineId, to_stage_id: input.toStageId, disposition_key: null, source: "application_sync", actor_user_id: input.actorUserId,
+    to_pipeline_id: input.toPipelineId, to_stage_id: input.toStageId, disposition_key: null, ...(input.source === "pipeline_rule" ? { source: "pipeline_rule" } : { source: "application_sync" }), actor_user_id: input.actorUserId,
     // 20261030200000 (live 2026-10-30): the attempt whose change moved the card.
     application_id: input.applicationId ?? null,
   });

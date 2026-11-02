@@ -144,7 +144,6 @@ export const AGENT_MENU: MenuSection[] = [
     id: "book",
     label: "Book",
     items: [
-      item("Book", { key: "book.policies", label: "Policies", path: "/app/policies", icon: "book-user", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "bookkeeper"], blurb: "The book you already have" }),
       item("Book", { key: "retention.lapse-risk", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"] }),
       // LA-5.3 · predicted, not observed: kept apart from Lapse risk so a guess never sits beside an emergency.
       item("Book", { key: "retention.save-queue", label: "Save queue", path: "/app/save-queue", icon: "life-buoy", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Policies paying fine today that the radar says will stop, and the fix." }),
@@ -197,13 +196,15 @@ export const AGENT_MENU: MenuSection[] = [
   },
   {
     id: "data",
-    label: "Data in",
+    label: "Book of business",
     items: [
-      // One Data in link (owner 2026-11-02, as Reports): groupLink, no dropdown; each later page stands in for the one before.
-      item("Data in", { key: "book.carrier_files", groupLink: true, label: "Carrier files", path: "/app/carrier-files", icon: "files", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Every policy and commission file a carrier sent, however it arrived: uploaded, emailed in or dropped by a script." }),
-      item("Data in", { key: "book.import", groupLink: true, sidebar_fallback_for: "book.carrier_files", label: "Import your book", path: "/app/book-import", icon: "import", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Your latest policy file from each carrier portal: your book, on day one." }),
-      item("Data in", { key: "book.policy_matching", groupLink: true, sidebar_fallback_for: "book.import", label: "Policy matching", path: "/app/policy-matching", icon: "link", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Which client and agent each carrier policy belongs to, and the ones waiting for a person to decide." }),
-      item("Data in", { key: "book.exceptions", groupLink: true, sidebar_fallback_for: "book.policy_matching", label: "Exceptions", path: "/app/exceptions", icon: "circle-alert", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Policies with no sale, sales with no policy, and clients who may be one person — each with an owner and an age." }),
+      // One Book of business link (owner 2026-11-02, round 2; it was Data in): groupLink, no dropdown; each later
+      // step stands in for the one before, so a producer (no Files) still gets the one link. Policy matching,
+      // Exceptions and Import your book keep their addresses inside Needs you and Setup.
+      item("Book of business", { key: "book.carrier_files", groupLink: true, label: "Files", path: "/app/carrier-files", icon: "files", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Every policy and commission file a carrier sent, and where each one is: read, linked, moved, paid." }),
+      item("Book of business", { key: "book.needs_you", groupLink: true, sidebar_fallback_for: "book.carrier_files", label: "Needs you", path: "/app/needs-you", icon: "circle-alert", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Every decision the carrier files left for a person: a client to pick, a sale no carrier has, money that doesn't match." }),
+      item("Book of business", { key: "book.policies", groupLink: true, sidebar_fallback_for: "book.needs_you", label: "Policies", path: "/app/policies", icon: "book-user", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "bookkeeper"], blurb: "The book you already have" }),
+      item("Book of business", { key: "book.setup", groupLink: true, sidebar_fallback_for: "book.policies", label: "Setup", path: "/app/book-setup", icon: "settings", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Rates, carrier rules, pipeline rules, agent codes and your existing book." }),
     ],
   },
   {
@@ -308,7 +309,7 @@ export function menuRoleAdmits(required: readonly MemberRole[] | undefined, role
  */
 export const AGENCY_OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
   "leads.import", "leads.lists", "leads.nurture", "leads.duplicates", "leads.campaigns",
-  "book.exceptions", "insight.vendor-returns", "insight.scoring", "insight.true-cpa", "partners.review",
+  "book.needs_you", "insight.vendor-returns", "insight.scoring", "insight.true-cpa", "partners.review",
   "compliance.dashboard", "compliance.tcpa", "compliance.consent", "compliance.complaints", "compliance.deletions", "compliance.litigation",
 ]);
 

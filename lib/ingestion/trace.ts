@@ -36,6 +36,7 @@ export type TracedSource = keyof typeof TRACED_SOURCES;
 export const TRACE_SCREENS: Record<string, { label: string; sources: TracedSource[] }> = {
   "app/app/(shell)/policies/page.tsx": { label: "Policies", sources: ["policy_current"] },
   "app/app/(shell)/policies/carrier/[carrierId]/[policyNumber]/page.tsx": { label: "Policy page", sources: ["policy_current", "commission_entry", "expected_commission"] },
+  "app/app/(shell)/policies/carrier/[carrierId]/[policyNumber]/client/page.tsx": { label: "Policy › Change client", sources: ["policy_current", "commission_entry"] },
   "app/app/(shell)/ledger/page.tsx": { label: "Commission ledger", sources: ["commission_entry"] },
   "app/app/(shell)/rate-card/page.tsx": { label: "Rate card", sources: ["expected_commission"] },
   "app/app/(shell)/discrepancies/page.tsx": { label: "Discrepancies", sources: ["commission_discrepancy", "commission_entry", "expected_commission"] },
@@ -50,6 +51,10 @@ export const TRACE_SCREENS: Record<string, { label: string; sources: TracedSourc
   "app/app/(shell)/policy-matching/page.tsx": { label: "Policy matching", sources: ["policy_current"] },
   "app/app/(shell)/exceptions/page.tsx": { label: "Exceptions", sources: ["policy_current", "commission_entry"] },
   "app/app/(shell)/book-import/page.tsx": { label: "Book import", sources: ["policy_current"] },
+  // Book of business › Setup (2026-11-02, round 2): the rate card, carrier rules and agent codes, as tabs.
+  "app/app/(shell)/book-setup/page.tsx": { label: "Setup › Rate card", sources: ["expected_commission"] },
+  "app/app/(shell)/book-setup/carrier-rules/page.tsx": { label: "Setup › Carrier rules", sources: ["policy_current"] },
+  "app/app/(shell)/book-setup/agent-codes/page.tsx": { label: "Setup › Agent codes", sources: ["policy_current"] },
 };
 
 /** A store module that reads carrier-derived figures: a page importing one must be registered above. */

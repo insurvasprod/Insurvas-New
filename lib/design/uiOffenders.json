@@ -21,6 +21,7 @@
   "pill-button": {},
   "hand-filter-panel": {},
   "mixed-stat": {},
+  "loose-stat-tile": {},
   "local-surface": {},
   "window-confirm": {},
   "hand-tablist": {
@@ -42,13 +43,11 @@
   "caps-label": {},
   "glow": {},
   "magic-icon": {},
-  "pill-control": {},
   "hand-callout": {
     "app/admin/(protected)/carrier-guidance/page.tsx": 1,
     "app/admin/(protected)/carrier-rules/page.tsx": 1,
     "app/admin/(protected)/servicing-guides/page.tsx": 1,
     "app/app/(shell)/book-import/page.tsx": 1,
-    "app/app/(shell)/carrier-files/page.tsx": 3,
     "app/app/(shell)/discrepancies/page.tsx": 1,
     "app/app/(shell)/exceptions/page.tsx": 1,
     "app/app/(shell)/ledger/page.tsx": 7,
@@ -103,5 +102,6 @@
   "hand-button": {},
   "short-control": {
     "components/app/partner-chat-workspace.tsx": 1
-  }
+  },
+  "pill-control": {}
 }

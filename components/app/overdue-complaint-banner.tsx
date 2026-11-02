@@ -1,22 +1,18 @@
-import Link from "next/link";
-import { TriangleAlert } from "lucide-react";
-
-import { PageAlert } from "@/components/ui/page-alert";
+import type { TopBarUrgent } from "@/components/app/app-top-bar";
 
 /**
- * LA-6.4 · an overdue regulator complaint is the single loudest thing in the product: an alert on
- * every page that cannot be dismissed, until the complaint is answered. A missed DOI deadline is an
- * escalation toward losing the licence. It sits on the page title's line (owner 2026-11-02), red.
+ * LA-6.4 · an overdue regulator complaint is the single loudest thing in the product: a missed DOI
+ * deadline is an escalation toward losing the licence. Owner 2026-11-02: not a strip on the page, an
+ * alert in the top bar — a red warning icon beside the bell on every page, and the first thing in the
+ * Inbox, until the complaint is answered. It cannot be dismissed or marked read: it clears only when the
+ * count does.
  */
-export function OverdueComplaintBanner({ count }: { count: number }) {
+export function overdueComplaintAlert(count: number): TopBarUrgent | null {
   if (count <= 0) return null;
-  return (
-    <PageAlert
-      role="alert"
-      tone="error"
-      icon={<TriangleAlert />}
-      text={`${count === 1 ? "A regulator complaint is past its response deadline." : `${count} regulator complaints are past their response deadline.`} A missed deadline puts the licence at risk.`}
-      action={<Link href="/app/complaints">Respond now</Link>}
-    />
-  );
+  return {
+    id: "overdue-regulator-complaint",
+    text: `${count === 1 ? "A regulator complaint is past its response deadline." : `${count} regulator complaints are past their response deadline.`} A missed deadline puts the licence at risk.`,
+    href: "/app/complaints",
+    action: "Respond now",
+  };
 }

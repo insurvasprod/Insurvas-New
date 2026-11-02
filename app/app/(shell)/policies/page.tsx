@@ -4,7 +4,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyBook } from "@/components/app/policy-book";
 import { PolicyEntryActions } from "@/components/app/policy-entry-actions";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { Button } from "@/components/ui/button";
 import { NextStepLine } from "@/components/app/next-step-line";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -33,11 +33,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const rows = [...(book.available ? book.rows : []), ...hand, ...issued];
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Policies"
-        actions={<PolicyEntryActions canAdd={canAdd} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />}
-      />
+    <DataInPage step="policies" actions={<PolicyEntryActions canAdd={canAdd} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />}>
       {/* LA-4.13: the share of the book no rate can check, and the one place to fix it. */}
       {book.available && book.unpriced && (
         <NextStepLine action={guard.role !== "producer" ? <Button asChild size="sm"><Link href="/app/rate-card">Add rates</Link></Button> : undefined}>
@@ -50,6 +46,6 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
       {(book.available || hand.length > 0 || issued.length > 0) && (
         <PolicyBook rows={rows} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={guard.role === "producer"} readOnly={readOnly} />
       )}
-    </div>
+    </DataInPage>
   );
 }

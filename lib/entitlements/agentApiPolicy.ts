@@ -216,12 +216,18 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/carrier-files/reprocess/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/carrier-files/runs/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/carrier-files/bucket/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  // Book of business round 2 (2026-11-02) · Files › Download problem rows, and a file's Rows › Export rows (CSV, read-only).
+  { sourceFile: "app/api/app/carrier-files/rows-export/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.17 · carrier rules and settings (windows, triggers, payout and tolerance).
   { sourceFile: "app/api/app/policy-matching/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/exceptions/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/book-import/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/policy-book/route.ts", featureKey: "book_of_business", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/rate-card/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  // Book of business round 2 (2026-11-02) · Setup › Carrier rules: the agency's own dated rules beside Insurvas's (owner decision 4).
+  { sourceFile: "app/api/app/carrier-rules/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  // Book of business round 2 (2026-11-02) · Setup › Pipeline rules: write, preview, forecast, live, undo, holds.
+  { sourceFile: "app/api/app/pipeline-rules/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/carrier-accounts/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/commission-discrepancies/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/commission-discrepancies/disputes/[id]/pdf/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
@@ -451,6 +457,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // that branch additionally passes the book_of_business write gate the policies PATCH uses.
   { sourceFile: "app/api/app/policies/lapse-risk/signals/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/policies/route.ts", featureKey: "book_of_business", allowedRoles: ["owner", "producer", "bookkeeper"] },
+  // Book of business round 2 · Policy › Client › Change client: record_policy_match, as Policy matching's writes.
+  { sourceFile: "app/api/app/policies/client-link/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/signup/route.ts", featureKey: null },
   { sourceFile: "app/api/app/templates/[id]/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/templates/assignment/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
