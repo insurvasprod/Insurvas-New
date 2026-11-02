@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import Link from "next/link";
+import { LayoutGrid, List } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -191,4 +192,38 @@ export function Segmented<K extends string>({
       ))}
     </div>
   );
+}
+
+/** Compact two-view switch for dense list and board pages. */
+export function IconViewSwitch<K extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  options: ReadonlyArray<{ key: K; label: string; icon: "grid" | "list" }>;
+  value: K;
+  onChange: (key: K) => void;
+  disabled?: boolean;
+}) {
+  return <div role="group" aria-label={label} className="inline-flex h-9 items-center rounded-md border border-border bg-card p-0.5">
+    {options.map((option) => {
+      const Icon = option.icon === "grid" ? LayoutGrid : List;
+      const selected = value === option.key;
+      return <button
+        key={option.key}
+        type="button"
+        aria-label={option.label}
+        aria-pressed={selected}
+        disabled={disabled}
+        onClick={() => onChange(option.key)}
+        className={cn(
+          "grid size-8 place-items-center rounded-[5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+          selected ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground",
+        )}
+      ><Icon aria-hidden="true" className="size-4" /></button>;
+    })}
+  </div>;
 }

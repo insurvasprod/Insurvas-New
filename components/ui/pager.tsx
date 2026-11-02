@@ -36,6 +36,7 @@ export function Pager({
   disabled = false,
   approximate = false,
   compact = false,
+  layout = "standard",
 }: {
   page: number;
   total: number;
@@ -52,6 +53,8 @@ export function Pager({
   approximate?: boolean;
   /** A narrow card (the Dialer's queue, 2026-10-29): the phone layout at every width, so the pager stays one line. */
   compact?: boolean;
+  /** Three-part control for a board lane: previous, centred page fraction, next. */
+  layout?: "standard" | "stepper";
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(Math.max(1, page), pages);
@@ -59,6 +62,14 @@ export function Pager({
   const end = Math.min(current * pageSize, total);
   const hrefFor = pageHref === undefined ? undefined : (to: number) => withPage(pageHref, to);
   const go = (to: number) => ({ to, off: disabled || to < 1 || to > pages || to === current });
+
+  if (layout === "stepper") return pages > 1 ? (
+    <nav aria-label={`${noun} pages`} className="flex w-full items-center justify-between gap-2">
+      <Step {...go(current - 1)} label="Previous page" hrefFor={hrefFor} onPage={onPage} className="size-8 min-w-8 px-0"><ChevronLeft className="size-4" aria-hidden="true" /></Step>
+      <span aria-live="polite" className="px-2 text-xs font-semibold tabular-nums text-foreground"><span className="sr-only">Page </span>{current} / {pages}<span className="sr-only"> pages</span></span>
+      <Step {...go(current + 1)} label="Next page" hrefFor={hrefFor} onPage={onPage} className="size-8 min-w-8 px-0"><ChevronRight className="size-4" aria-hidden="true" /></Step>
+    </nav>
+  ) : null;
 
   return (
     <>

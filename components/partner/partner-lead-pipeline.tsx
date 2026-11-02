@@ -2,13 +2,13 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Download, Hand, Inbox, Send } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleAlert, Clock3, Hand, Inbox, Languages, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Field } from "@/components/ui/field";
 import { SelectMenu } from "@/components/ui/select-menu";
-import { Segmented } from "@/components/ui/view-tabs";
+import { IconViewSwitch } from "@/components/ui/view-tabs";
 import { LiveStamp, useClockSeconds } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -25,6 +25,7 @@ import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
 import { productLineLabel } from "@/lib/format/productLine";
 import { oldestOpenLabel } from "@/lib/format/age";
 import { expectedEarningsFact, termLabel } from "@/lib/partners/payout";
+import { countersFromLanes } from "@/lib/partnerLeads/counters";
 import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
 import { NOBODY_CLAIMED_LABEL, type PartnerLane } from "@/lib/partnerLeads/lanes";
 import { cn } from "@/lib/utils";
@@ -38,16 +39,16 @@ type PipelineResponse = PartnerPipelinePayload;
  * mean "the happy path with a single card".
  */
 export type PipelinePreview = { data: PartnerPipelinePayload | null; error?: string };
-type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
-const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
+type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string; pipeline_id: string };
+const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "", pipeline_id: "" };
 /** How many cards a lane shows before it offers the rest: a busy agency can put hundreds in one. */
 const LANE_PAGE = 20;
 
 /** A board column's header ground and ink, by what being in that column means. */
 const COLUMN_TONE: Record<string, string> = {
-  open: "bg-[var(--surface-alt)] text-[var(--body)]",
-  won: "bg-[var(--success-surface)] text-[var(--success-ink)]",
-  closed: "bg-[var(--surface-alt)] text-muted-foreground",
+  open: "border-t-2 border-t-[var(--border-strong)] text-[var(--ink)]",
+  won: "border-t-2 border-t-[var(--success)] text-[var(--success-ink)]",
+  closed: "border-t-2 border-t-[var(--muted)] text-muted-foreground",
 };
 
 /** An age worth remarking on is a badge, on the ground its ink is paired with (UI-CONSISTENCY §12). */
@@ -76,7 +77,7 @@ function LeadCard({ row, href, now, thresholds, showSubmitter }: { row: PartnerL
   const flagged = nobodyClaimedRow(row);
   return <Link
     href={href}
-    className="group block w-full rounded-md border border-border bg-card p-3 text-left no-underline transition-colors hover:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+    className="group block w-full rounded-md border border-border bg-card p-3 text-left no-underline transition-colors hover:border-[var(--primary)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
   >
     <span className="flex items-start justify-between gap-2">
       <span className="min-w-0">
@@ -86,16 +87,16 @@ function LeadCard({ row, href, now, thresholds, showSubmitter }: { row: PartnerL
       </span>
       <ArrowRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
     </span>
-    {/* Tags rather than a run-on line (owner, 30 Oct): the product is a plain label, so it is a
-        neutral chip with no dot; the age carries its own tone and words. */}
+    {/* Product and customer language are quiet descriptors; the SLA age keeps its semantic tone. */}
     <span className="mt-2 flex flex-wrap items-center gap-1.5">
-      <StatusChip tone="neutral">{productLineLabel(row.product)}</StatusChip>
-      <Age row={row} now={now} thresholds={thresholds} />
-      {flagged && <StatusChip tone="warning">{NOBODY_CLAIMED_LABEL}</StatusChip>}
+      <StatusChip tone="neutral" className="border border-border">{productLineLabel(row.product)}</StatusChip>
+      {row.language && <StatusChip tone="neutral" className="border border-border"><span className="inline-flex items-center gap-1.5" aria-label={`Customer language: ${row.language}`}><Languages aria-hidden="true" className="size-3.5" />{row.language}</span></StatusChip>}
     </span>
-    {/* The agency's own stage name is kept, it just no longer sorts the board. A flagged submission
-        has none to show: the service has already replaced it with the SLA's own words. */}
-    {!flagged && <span className="mt-2 block truncate border-t border-border pt-1.5 text-xs text-muted-foreground">{row.stageName}</span>}
+    {/* The agency's stage and the waiting time stay together, with an explicit SLA label when raised. */}
+    <span className="mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-border pt-1.5">
+      {flagged ? <StatusChip tone="warning">{NOBODY_CLAIMED_LABEL}</StatusChip> : <span className="min-w-0 truncate text-xs text-muted-foreground">{row.stageName}</span>}
+      <Age row={row} now={now} thresholds={thresholds} className="shrink-0" />
+    </span>
   </Link>;
 }
 
@@ -131,8 +132,8 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   /** Age and Submitted are the same instant read two ways, so one direction serves both columns. */
   const [sort, setSort] = useState<{ key: "age" | "submitted"; dir: "asc" | "desc" }>({ key: "submitted", dir: "desc" });
-  /** How many cards each lane is showing. A column only ever grows, and only when asked. */
-  const [laneShown, setLaneShown] = useState<Record<string, number>>({});
+  /** Each pipeline lane pages independently so one busy stage doesn't affect the others. */
+  const [lanePages, setLanePages] = useState<Partial<Record<PartnerLane, number>>>({});
   const [loading, setLoading] = useState(!preview);
   // The first read draws the page skeleton; later reads (a filter change) keep the page and toolbar.
   const [firstLoad, setFirstLoad] = useState(!preview);
@@ -167,18 +168,19 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   // Polls only while the tab is visible, catches up on return, and never stacks a tick on a slow one.
   useEffect(() => { if (preview) return; loadedLimitRef.current = 250; let polling = false; const poll = () => { if (document.visibilityState !== "visible" || polling) return; polling = true; void load(0).finally(() => { polling = false; }); }; const kickoff = window.setTimeout(() => { setData(null); setLoading(true); void load(); }, 0); const timer = window.setInterval(poll, 5000); document.addEventListener("visibilitychange", poll); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); }; }, [load, preview]);
   const allRows = useMemo(() => data?.rows ?? [], [data]);
-  /** The submissions the SLA ladder has already told this partner nobody claimed. */
-  const flaggedRows = useMemo(() => allRows.filter(nobodyClaimedRow), [allRows]);
-
   // Search matches the customer's name, which is what the box says it searches. Product and
   // submitter have their own controls in the filter panel.
+  const pipelineByStage = useMemo(() => new Map((data?.stages ?? []).map((stage) => [stage.id, stage.pipelineId])), [data?.stages]);
+  const pipelineRows = useMemo(() => filters.pipeline_id
+    ? allRows.filter((row) => pipelineByStage.get(row.stageId) === filters.pipeline_id)
+    : allRows, [allRows, filters.pipeline_id, pipelineByStage]);
   const visibleRows = useMemo(() => {
     const value = search.trim().toLowerCase();
-    return allRows.filter((row) =>
+    return pipelineRows.filter((row) =>
       (!value || row.customer.toLowerCase().includes(value))
       && (!lane || laneOf(row) === lane)
       && (!onlyFlagged || nobodyClaimedRow(row)));
-  }, [allRows, search, lane, onlyFlagged]);
+  }, [pipelineRows, search, lane, onlyFlagged]);
 
   const sortedRows = useMemo(() => [...visibleRows].sort((a, b) => {
     const newestFirst = Date.parse(b.submittedAt) - Date.parse(a.submittedAt);
@@ -196,7 +198,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   }, [visibleRows]);
   const columns = boardColumns((laneRows.get("closed")?.length ?? 0) > 0);
   /** Anything narrowing the page client-side: the column then counts what it matched. */
-  const narrowed = Boolean(search.trim() || lane || onlyFlagged);
+  const narrowed = Boolean(search.trim() || lane || onlyFlagged || filters.pipeline_id);
   const laneTotal = (key: PartnerLane) => {
     const loaded = laneRows.get(key)?.length ?? 0;
     if (narrowed || key === "closed" || !data?.laneCounts) return loaded;
@@ -207,59 +209,86 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   // markup hydrates against itself and a relative time never causes a mismatch.
   const clockSeconds = useClockSeconds();
   const now = clockSeconds === null ? null : clockSeconds * 1000;
-  const counters = data?.counters;
+  const previewCounters = preview && filters.pipeline_id
+    ? (() => {
+        const counts = { new: 0, claimed: 0, verification: 0, converted: 0 };
+        for (const row of pipelineRows) { const key = laneOf(row); if (key !== "closed") counts[key] += 1; }
+        const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+        return countersFromLanes(counts, pipelineRows.filter((row) => Date.parse(row.submittedAt) >= midnight.getTime()).length);
+      })()
+    : null;
+  const counters = previewCounters ?? data?.counters;
   /** Never a 0 for a figure that was not read: an unread number is a dash. */
   const figure = (value: number | undefined) => (data && value !== undefined ? value : "—");
-  const scopeLabel = role === "partner_admin" ? "Your organisation's leads" : "Your leads";
+  const scopeLabel = role === "partner_admin" ? "Your team and your leads" : "Your leads";
   const earningsFact = expectedEarningsFact(counters?.converted ?? 0, data?.terms ?? null);
   const rate = termLabel(data?.terms ?? null);
   const earningsHelp = rate
     ? `Your rate is ${rate}. The figure here is that rate on the conversions above; your agency's published statement is what is actually paid.`
     : "Conversions in the last 30 days. Your agency's published statement is what is actually paid.";
   const stuck = now !== null && oldestOpenIsStuck(data?.oldestOpenAt, now, data?.ageThresholds);
-  const oldestFlaggedAt = flaggedRows.length
-    ? flaggedRows.reduce((oldest, row) => (row.submittedAt < oldest ? row.submittedAt : oldest), flaggedRows[0].submittedAt)
-    : null;
 
   /** Where a lead's record lives, carrying the view so Back returns to the list as it was. */
-  const recordHref = (id: string) => `/partner/pipeline/${id}${view === "table" ? "?view=table" : ""}`;
+  const recordHref = (id: string) => {
+    const params = new URLSearchParams();
+    if (view === "table") params.set("view", "table");
+    if (filters.pipeline_id) params.set("pipeline_id", filters.pipeline_id);
+    return `/partner/pipeline/${id}${params.size ? `?${params}` : ""}`;
+  };
   const stageById = new Map((data?.stages ?? []).map((stage) => [stage.id, stage]));
   const manyPipelines = new Set((data?.stages ?? []).map((stage) => stage.pipelineId)).size > 1;
-  const filterCount = [filters.stage_id, filters.closer_id, filters.outcome, filters.product, lane, onlyFlagged || null, filters.date_from || filters.date_to].filter(Boolean).length;
-  const exportHref = `/api/partner/leads/export${query ? `?${query}` : ""}`;
+  const filterCount = [filters.pipeline_id, filters.stage_id, filters.closer_id, filters.outcome, filters.product, lane, onlyFlagged || null, filters.date_from || filters.date_to].filter(Boolean).length;
   const hasFilters = Object.values(filters).some(Boolean) || Boolean(lane) || onlyFlagged;
-  const setFilter = (key: keyof Filters, value: string) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
-  const narrowTo = (next: PartnerLane | "") => { setLane(next); setOnlyFlagged(false); setPage(1); };
-  const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setLane(""); setOnlyFlagged(false); setPage(1); };
+  const setFilter = (key: keyof Filters, value: string) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); setLanePages({}); };
+  const setPipeline = (pipelineId: string) => { setFilters((current) => ({ ...current, pipeline_id: pipelineId, stage_id: "" })); setPage(1); setLanePages({}); };
+  const narrowTo = (next: PartnerLane | "") => { setLane(next); setOnlyFlagged(false); setPage(1); setLanePages({}); };
+  const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setLane(""); setOnlyFlagged(false); setPage(1); setLanePages({}); };
   const tablePage = paginate(sortedRows, page, pageSize);
   const canLoadMore = Boolean(data && data.rows.length < data.total);
+  const turnLanePage = (key: PartnerLane, nextPage: number) => {
+    setLanePages((current) => ({ ...current, [key]: nextPage }));
+    if (data && data.rows.length < nextPage * LANE_PAGE && data.nextOffset != null && !loadingMore) {
+      void load(data.nextOffset, true);
+    }
+  };
 
   /** Every narrowing in force, as removable chips under the panel (UI-CONSISTENCY §6a). */
   const chips: ActiveFilter[] = [
+    filters.pipeline_id && { key: "pipeline", label: "Pipeline", value: data?.pipelines.find((item) => item.id === filters.pipeline_id)?.name ?? "Pipeline", onRemove: () => setPipeline("") },
     filters.product && { key: "product", label: "Product", value: productLineLabel(filters.product), onRemove: () => setFilter("product", "") },
     filters.stage_id && { key: "stage", label: "Stage", value: stageById.get(filters.stage_id)?.name ?? "Stage", onRemove: () => setFilter("stage_id", "") },
     filters.closer_id && { key: "closer", label: "Submitted by", value: data?.facets.closers.find((item) => item.id === filters.closer_id)?.name ?? "Someone", onRemove: () => setFilter("closer_id", "") },
     filters.outcome && { key: "outcome", label: "Outcome", value: data?.facets.outcomes.find((item) => item.key === filters.outcome)?.label ?? "Outcome", onRemove: () => setFilter("outcome", "") },
-    lane && { key: "lane", label: "Where it is", value: columns.find((column) => column.key === lane)?.label ?? lane, onRemove: () => setLane("") },
-    onlyFlagged && { key: "flagged", label: "Needs you", value: NOBODY_CLAIMED_LABEL, onRemove: () => setOnlyFlagged(false) },
-    (filters.date_from || filters.date_to) && { key: "dates", label: "Submitted", value: `${filters.date_from || "any"} to ${filters.date_to || "today"}`, onRemove: () => { setFilters((current) => ({ ...current, date_from: "", date_to: "" })); setPage(1); } },
+    lane && { key: "lane", label: "Where it is", value: columns.find((column) => column.key === lane)?.label ?? lane, onRemove: () => { setLane(""); setLanePages({}); } },
+    onlyFlagged && { key: "flagged", label: "Needs you", value: NOBODY_CLAIMED_LABEL, onRemove: () => { setOnlyFlagged(false); setLanePages({}); } },
+    (filters.date_from || filters.date_to) && { key: "dates", label: "Submitted", value: `${filters.date_from || "any"} to ${filters.date_to || "today"}`, onRemove: () => { setFilters((current) => ({ ...current, date_from: "", date_to: "" })); setPage(1); setLanePages({}); } },
   ].filter(Boolean) as ActiveFilter[];
 
   if (firstLoad) return <PageLoading />;
 
-  // §6: search, then one Filters button, then the actions. No individual facet in the toolbar row
-  // (§6a) — the product select moved into the panel with the rest.
+  // The context selector leads the search; the view, inline filter and refresh controls match the
+  // ordering in the manager's reference image.
   const toolbar = <DataToolbar
     actions={<>
-      <Segmented label="View" options={[{ key: "board", label: "Board" }, { key: "table", label: "Table" }]} value={view} onChange={setView} />
+      <IconViewSwitch label="Pipeline view" options={[{ key: "board", label: "Board view", icon: "grid" }, { key: "table", label: "Table view", icon: "list" }]} value={view} onChange={setView} />
+      <FilterButton open={moreFilters} controls="partner-lead-filters" onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
       {/* The label is for the room it has: on a phone the icon carries it, with the name still on
           the control for anyone listening rather than looking. */}
-      <Button asChild variant="outline" aria-label="Export CSV"><a href={exportHref}><Download aria-hidden="true" /><span className="hidden sm:inline">Export CSV</span></a></Button>
       <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} labelClassName="hidden sm:inline" />
     </>}
   >
-    <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search customer" />
-    <FilterButton open={moreFilters} controls="partner-lead-filters" onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
+    <SelectMenu
+      label="Pipeline"
+      value={filters.pipeline_id}
+      defaultValue=""
+      onChange={setPipeline}
+      searchPlaceholder="Search pipelines"
+      className="w-full sm:w-48"
+      matchTriggerWidth
+      panelAlign="start"
+      options={[{ value: "", label: "All pipelines" }, ...(data?.pipelines ?? []).map((item) => ({ value: item.id, label: item.name }))]}
+    />
+    <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); setLanePages({}); }} placeholder="Search customer" />
   </DataToolbar>;
 
   // §6a: the panel opens inside the card, under the toolbar, as a grid of labelled fields.
@@ -267,7 +296,6 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   // choice is the kit's searchable SelectMenu (owner, 2026-10-29: the native dropdowns were "so
   // plain", and a long list needs a search at the top) — never a native <select>, whose menu the
   // operating system draws in its own colours.
-  const menuPanel = "w-72 max-w-[calc(100vw-2rem)]";
   const filterPanel = <>
     <FilterPanel id="partner-lead-filters" open={moreFilters}>
       <Field label="Where it is" htmlFor="partner-lead-lane">
@@ -279,7 +307,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
           onChange={(next) => narrowTo(next)}
           searchPlaceholder="Search stages"
           className="w-full"
-          panelClassName={menuPanel}
+          matchTriggerWidth
           panelAlign="start"
           options={[
             { value: "" as PartnerLane | "", label: "Anywhere" },
@@ -300,7 +328,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
           onChange={(next) => setFilter("product", next)}
           searchPlaceholder="Search products"
           className="w-full"
-          panelClassName={menuPanel}
+          matchTriggerWidth
           panelAlign="start"
           options={[
             { value: "", label: "All products" },
@@ -317,7 +345,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
           onChange={(next) => setFilter("stage_id", next)}
           searchPlaceholder="Search stages"
           className="w-full"
-          panelClassName={menuPanel}
+          matchTriggerWidth
           panelAlign="start"
           options={[
             { value: "", label: "All stages" },
@@ -336,7 +364,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
           onChange={(next) => setFilter("closer_id", next)}
           searchPlaceholder="Search your team"
           className="w-full"
-          panelClassName={menuPanel}
+          matchTriggerWidth
           panelAlign="start"
           options={[
             { value: "", label: "Anyone on your team" },
@@ -353,7 +381,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
           onChange={(next) => setFilter("outcome", next)}
           searchPlaceholder="Search outcomes"
           className="w-full"
-          panelClassName={menuPanel}
+          matchTriggerWidth
           panelAlign="start"
           options={[
             { value: "", label: "Any outcome" },
@@ -371,9 +399,11 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
     <ActiveFilters filters={chips} onClear={clearAll} />
   </>;
 
-  const empty = search.trim() || hasFilters
-    ? <NoMatches noun="leads" onClear={clearAll} />
-    : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline"><a href="/partner/submit-lead">Submit a lead</a></Button>} />;
+  const empty = <div className="flex min-h-[24rem] flex-1 items-center justify-center">
+    {search.trim() || hasFilters
+      ? <NoMatches noun="leads" onClear={clearAll} />
+      : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline"><a href="/partner/submit-lead">Submit a lead</a></Button>} />}
+  </div>;
 
   const loadMore = canLoadMore && data
     ? <Button type="button" variant="outline" size="sm" disabled={loadingMore || data.nextOffset == null} aria-busy={loadingMore} onClick={() => void load(data.nextOffset ?? data.rows.length, true)}>Load more</Button>
@@ -385,41 +415,30 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   // Both views answer an empty result the same way: nothing submitted yet offers the action that
   // fills the page, a filter that matched nothing offers to clear itself (§8). The board used to
   // show four empty columns instead, which offered neither.
-  // One markup, two layouts. From md up it is the board: columns side by side, each scrolling its
-  // own cards. Below md a five-column board on a 375px screen was five 220px columns scrolled
-  // sideways, mostly empty, so the lanes stack into one vertical read with their headings sticking
-  // as they pass (owner, 30 Oct).
-  const board = !visibleRows.length ? empty : <div className="flex flex-col gap-3 p-3 md:h-[max(420px,calc(100vh-420px))] md:flex-row md:overflow-x-auto">
+  // The page owns vertical scrolling. A stage shows up to 20 naturally sized cards, then its own
+  // pager advances to the next set. Never constrain a lane's card list to a scrollable viewport:
+  // that made a handful of leads scroll inside a column while also showing pagination.
+  // Below md the lanes stack into one vertical read; on wider screens they sit side by side.
+  const board = !visibleRows.length ? empty : <div className="flex min-h-[24rem] flex-1 flex-col gap-3 overflow-x-auto p-3 md:flex-row">
     {columns.map((column) => {
       const rows = laneRows.get(column.key) ?? [];
       const total = laneTotal(column.key);
-      const limit = laneShown[column.key] ?? LANE_PAGE;
-      const shown = rows.slice(0, limit);
-      const more = rows.length - shown.length;
-      return <section key={column.key} data-stage={column.key} aria-label={column.label} className="flex min-w-0 flex-col overflow-hidden rounded-md border border-border bg-[var(--canvas)] md:min-h-0 md:w-0 md:min-w-[220px] md:max-w-[420px] md:flex-1">
-        <header className={cn("sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm font-semibold md:static", COLUMN_TONE[column.tone])} title={column.footnote}>
+      const lanePage = paginate(rows, lanePages[column.key] ?? 1, LANE_PAGE);
+      const needsMoreRows = (lanePage.current - 1) * LANE_PAGE >= rows.length && total > rows.length && loadingMore;
+      return <section key={column.key} data-stage={column.key} aria-label={column.label} className="flex min-w-0 flex-col rounded-md border border-border bg-[var(--canvas)] md:w-0 md:min-w-[220px] md:max-w-[420px] md:flex-1">
+        <header className={cn("sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2 text-sm font-semibold md:static", COLUMN_TONE[column.tone])} title={column.footnote}>
           <h3 className="truncate">{column.label}</h3>
-          <span className="tabular-nums">{total.toLocaleString()}</span>
+          <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--surface-alt)] px-2 py-0.5 text-xs tabular-nums text-[var(--body)]">{total.toLocaleString()}</span>
         </header>
-        <div className="grid content-start gap-2 p-2 md:min-h-0 md:flex-1 md:overflow-y-auto">
-          {shown.map((row) => <LeadCard key={row.id} row={row} href={recordHref(row.id)} now={now} thresholds={data?.ageThresholds} showSubmitter={role === "partner_admin"} />)}
+        <div className="grid content-start gap-2 p-2">
+          {lanePage.rows.map((row) => <LeadCard key={row.id} row={row} href={recordHref(row.id)} now={now} thresholds={data?.ageThresholds} showSubmitter={role === "partner_admin"} />)}
           {/* An empty lane is one quiet line on a phone, not 420px of nothing. */}
           {!rows.length && <p className="px-2 py-2 text-center text-xs text-muted-foreground md:py-6">Nothing here right now</p>}
-          {/* A lane shows 20 at a time: a column of three hundred cards is a scroll, not a board. */}
-          {more > 0 && <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => setLaneShown((current) => ({ ...current, [column.key]: limit + LANE_PAGE }))}
-          >Show {Math.min(LANE_PAGE, more)} more</Button>}
-          {/* The count is every lead on the lane; the cards are the page that has been read. Say so
-              where the gap shows, with the action, instead of sending the reader off to find it. */}
-          {more === 0 && rows.length > 0 && total > rows.length && <p className="flex flex-col items-center gap-1.5 px-2 py-2 text-center text-xs text-muted-foreground">
-            <span>{rows.length} of {total.toLocaleString()} read</span>
-            {loadMore}
-          </p>}
+          {needsMoreRows && <p className="px-2 py-3 text-center text-xs text-muted-foreground" role="status">Loading leads…</p>}
         </div>
+        {total > LANE_PAGE && <div className="border-t border-border bg-[var(--surface-alt)]/60 px-3 py-2">
+          <Pager page={lanePage.current} total={total} noun={`${column.label.toLowerCase()} leads`} pageSize={LANE_PAGE} onPage={(nextPage) => turnLanePage(column.key, nextPage)} disabled={loadingMore} layout="stepper" />
+        </div>}
       </section>;
     })}
   </div>;
@@ -465,10 +484,10 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
     ? <Pager page={tablePage.current} total={sortedRows.length} noun="leads" pageSize={pageSize} onPage={turnTablePage} disabled={loadingMore} suffix={canLoadMore ? `${data.rows.length.toLocaleString()} of ${data.total.toLocaleString()} loaded` : undefined} />
     : canLoadMore ? <><span>Showing {data.rows.length.toLocaleString()} of {data.total.toLocaleString()} leads</span>{loadMore}</> : undefined;
 
-  return <div className="m-stagger space-y-6">
+  return <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
     <PageHeader
       title="Lead pipeline"
-      description={role === "partner_admin" ? "Track leads submitted by your organization." : "Track the leads you submitted."}
+      description={role === "partner_admin" ? "Track leads submitted by you and your team." : "Track the leads you submitted."}
       visible
       infoDescription
       actions={<>
@@ -517,23 +536,6 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
         fact={{ label: now === null ? "Not yet finished" : oldestOpenLabel(counters?.stillOpen ?? 0, data?.oldestOpenAt, now) }}
       />
     </StatRow>
-    {/*
-      The one thing on this page a partner can act on: the SLA ladder has told them nobody claimed
-      these. It used to be grey text inside a stage column, weighted like every other row. Nothing
-      flagged means no row at all — not an empty card, not "all caught up" (UI-CONSISTENCY §3).
-    */}
-    {flaggedRows.length > 0 && <button
-      type="button"
-      onClick={() => { setOnlyFlagged(true); setLane(""); setPage(1); }}
-      className="flex w-full min-w-0 items-center gap-3 rounded-lg border border-[var(--warning)]/35 bg-[var(--warning-surface)] px-3.5 py-2.5 text-left text-sm text-[var(--warning-ink)] hover:border-[var(--warning)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-    >
-      <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate">
-        <strong className="font-semibold">{flaggedRows.length} {flaggedRows.length === 1 ? "lead" : "leads"} nobody has claimed yet</strong>
-        {now !== null && <span className="ml-2 opacity-80">{oldestOpenLabel(flaggedRows.length, oldestFlaggedAt, now)}</span>}
-      </span>
-      <span className="shrink-0 font-semibold">Show {flaggedRows.length === 1 ? "it" : "them"}<ArrowUpRight className="ml-1 inline size-3.5" aria-hidden="true" /></span>
-    </button>}
-    <TableCard className="min-w-0" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
+    <TableCard className="flex min-h-[28rem] min-w-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
   </div>;
 }

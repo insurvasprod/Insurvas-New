@@ -24,6 +24,8 @@ export function LeaveGuard({
   scope,
   onSave,
   onDiscard,
+  mode = "confirm",
+  onPause,
   what = "this page",
 }: {
   dirty: boolean;
@@ -31,12 +33,18 @@ export function LeaveGuard({
   scope?: RefObject<HTMLElement | null>;
   onSave?: () => Promise<boolean> | boolean;
   onDiscard: () => void;
+  /** Autosaved forms ask for pause context on in-app navigation; browser close stays best-effort. */
+  mode?: "confirm" | "autosaved-draft";
+  onPause?: (reason: string, notes: string) => Promise<boolean> | boolean;
   /** Named in the question: "You changed {what} and have not saved it yet." */
   what?: string;
 }) {
   const replaying = useRef(false);
   const [leaving, setLeaving] = useState<HTMLElement | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!dirty) return;
@@ -52,13 +60,13 @@ export function LeaveGuard({
       event.stopPropagation();
       setLeaving(target);
     };
-    window.addEventListener("beforeunload", beforeUnload);
+    if (mode !== "autosaved-draft") window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", onClick, true);
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", onClick, true);
     };
-  }, [dirty, scope]);
+  }, [dirty, scope, mode]);
 
   function leaveNow() {
     const target = leaving;
@@ -73,12 +81,37 @@ export function LeaveGuard({
     <Dialog open={leaving !== null} onOpenChange={(open) => { if (!open && !saving) setLeaving(null); }}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>Save your changes?</DialogTitle>
-          <DialogDescription className="text-[var(--body)]">You changed {what} and have not saved it yet.</DialogDescription>
+        <DialogTitle>{mode === "autosaved-draft" ? "Save this draft and leave?" : "Save your changes?"}</DialogTitle>
+        <DialogDescription className="text-[var(--body)]">{mode === "autosaved-draft" ? `Your answers are saved automatically. Add a reason and notes so you can pick up ${what} later.` : `You changed ${what} and have not saved it yet.`}</DialogDescription>
         </DialogHeader>
+      {mode === "autosaved-draft" && (
+        <div className="grid gap-3">
+          <label className="grid gap-1.5 text-sm font-medium" htmlFor="autosaved-draft-reason">Reason for pausing
+            <input id="autosaved-draft-reason" required maxLength={120} value={reason} onChange={(event) => setReason(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 font-normal" placeholder="For example, waiting for customer details" />
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium" htmlFor="autosaved-draft-notes">Notes
+            <textarea id="autosaved-draft-notes" required maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-24 rounded-md border border-input bg-background px-3 py-2 font-normal" placeholder="Add anything you’ll want to remember when you resume" />
+          </label>
+          {saveError && <p role="alert" className="text-sm text-[var(--color-danger)]">{saveError}</p>}
+        </div>
+      )}
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={saving} onClick={() => setLeaving(null)}>Stay</Button>
-          <Button type="button" variant="outline" disabled={saving} onClick={() => { onDiscard(); leaveNow(); }}>Discard changes</Button>
+        {mode !== "autosaved-draft" && <Button type="button" variant="outline" disabled={saving} onClick={() => { onDiscard(); leaveNow(); }}>Discard changes</Button>}
+        {mode === "autosaved-draft" && onPause && (
+          <Button type="button" disabled={saving || !reason.trim() || !notes.trim()} onClick={() => {
+            setSaving(true);
+            setSaveError(null);
+            void Promise.resolve(onPause(reason.trim(), notes.trim())).then((ok) => {
+              setSaving(false);
+              if (ok) { setReason(""); setNotes(""); leaveNow(); }
+              else setSaveError("The draft could not be saved. Check your connection and try again.");
+            }).catch(() => {
+              setSaving(false);
+              setSaveError("The draft could not be saved. Check your connection and try again.");
+            });
+          }}>{saving ? "Saving draft…" : "Save draft and leave"}</Button>
+        )}
           {onSave && (
             <Button
               type="button"

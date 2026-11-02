@@ -4,19 +4,16 @@
  * A team is the members whose `partner_users.partner_admin_user_id` points at that admin: the
  * reporting line the agency already sets in its Partners panel (migration 20260915190000, with a
  * trigger that forbids self-assignment and requires the target to be a `partner_admin` in the same
- * organisation). It has been a live, managed concept that governed nothing anyone could see.
+ * organisation). It is a live, managed reporting line used to scope partner-facing lead lists.
  *
  * ## Where this rule applies, and where it does not
  *
- * **Daily deal flow only** (owner, 2 Nov). Pipeline, the lead record, the CSV export, Overview and
- * Team review keep showing a `partner_admin` the whole partner organisation, which is
- * `lib/partnerLeads/scope.ts`' job and is deliberately left alone.
+ * **Daily deal flow and Lead Pipeline** (owner, 2 Nov). A `partner_admin` sees their own submissions
+ * and members assigned to them. Lead Pipeline and its export use this boundary in their read model;
+ * other partner surfaces remain governed by `lib/partnerLeads/scope.ts` until their scope is changed.
  *
- * So an admin will see a lead on Pipeline that is absent from Daily deal flow. That is the
- * decision, not a bug. An earlier attempt applied this rule across the portal by editing
- * `scope.ts`, which rescoped five surfaces at once; it was reverted. Consume this module from the
- * deal-flow service and nowhere else until somebody decides otherwise — and if that day comes,
- * Pipeline needs a migration, because its read model takes one closer id in SQL.
+ * For Pipeline this runs in SQL before paging, counts and facets; its read model accepts the
+ * server-computed visible submitter ids. Do not replace that list with a request-supplied filter.
  *
  * ## Why it is its own module
  *
@@ -45,12 +42,12 @@ export type PartnerViewer = { userId: string; role: PartnerRole };
  *   `partner_admin_user_id` null on every admin row, so there is no chain to walk and no cycle to
  *   guard: admins are peers. Admin A therefore does not see admin B's own submissions, which is
  *   the owner's intent — "their team, and their own" — not an oversight.
- * - **An unassigned member belongs to no admin** (owner, 1 Nov, reaffirmed 2 Nov). On this page
- *   their deals reach no admin at all. They remain visible to admins everywhere else in the
- *   portal, which is why this gap did not warrant warning the agency.
- * - **The list always holds the viewer, so it is never empty.** A caller turns it into
- *   `.in("agent_leads.created_by", ids)`, where `[]` matches nothing — or worse, invites a future
- *   caller to read "empty" as "no filter" and open the organisation. Asserted in the tests.
+ * - **An unassigned member belongs to no admin.** On Daily deal flow and Lead Pipeline their
+ *   submissions reach no admin at all. They remain visible on organization-wide partner surfaces
+ *   that use `scope.ts`.
+ * - **The list always holds the viewer, so it is never empty.** Routes pass it to their data read
+ *   model, where an empty list must match nothing rather than mean "no filter" and open the
+ *   organisation. Asserted in the tests.
  *
  * `members` is required rather than optional: an admin handed no members would silently narrow to
  * themselves, which fails closed but looks like a data problem instead of the missing argument it

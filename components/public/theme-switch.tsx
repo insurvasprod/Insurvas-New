@@ -16,7 +16,7 @@ type ViewTransitionDocument = Document & {
  * Where the browser has view transitions, the new theme spreads out from the button as a growing
  * circle; elsewhere, or with reduced motion, it switches at once. The class is applied inside the
  * transition callback so the browser captures the new frame; ThemeProvider then saves the choice
- * and re-applies the same class.
+ * and persists the resulting choice through ThemeProvider.
  *
  * `compact` (2026-10-13) is the same switch for the product top bars (/app, /admin, /partner): the
  * 36px square of the bar's other icon buttons (.portal-top-icon) and a 16px icon, beside the bell.
@@ -28,11 +28,7 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
   const toggle = (event: React.MouseEvent<HTMLButtonElement>) => {
     const root = document.documentElement;
     const next = root.classList.contains("dark") ? "light" : "dark";
-    const apply = () => {
-      root.classList.toggle("dark", next === "dark");
-      root.style.colorScheme = next;
-      setTheme(next);
-    };
+    const apply = () => setTheme(next);
 
     const doc = document as ViewTransitionDocument;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

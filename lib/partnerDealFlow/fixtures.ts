@@ -189,6 +189,7 @@ export function sampleDealFlow(options: { state?: SampleDealFlowState; role?: Sa
     },
     facets: {
       products: [...new Set(rows.map((row) => row.productLine))].sort(),
+      carriers: [...new Set(rows.map((row) => row.carrier))].sort((a, b) => a === null ? -1 : b === null ? 1 : a.localeCompare(b)),
       // From the rows the boundary returned, as the service builds them — so the menu can never
       // name somebody whose deals the page would then refuse to show.
       submitters: [...new Map(rows.filter((row) => row.submittedBy.id).map((row) => [row.submittedBy.id as string, { id: row.submittedBy.id as string, name: row.submittedBy.name }])).values()]

@@ -4,7 +4,7 @@ import { partnerTeamMembers, requirePartner } from "@/lib/partnerAuth/requirePar
 import { visibleSubmitters } from "@/lib/partnerAuth/team";
 import { listPartnerDealFlow } from "@/lib/partnerDealFlow/service";
 import { partnerDealFlowCsv } from "@/lib/partnerDealFlow/csv";
-import { resolveDay } from "@/lib/partnerDealFlow/localDay";
+import { isValidDay, resolveDay } from "@/lib/partnerDealFlow/localDay";
 import { DEAL_FLOW_STAGE_TYPES, type DealFlowStageType, type PartnerDealFlowFilters } from "@/lib/partnerDealFlow/types";
 
 /**
@@ -31,6 +31,16 @@ function stageType(value: string | null): DealFlowStageType | null {
   return value && (DEAL_FLOW_STAGE_TYPES as readonly string[]).includes(value) ? (value as DealFlowStageType) : null;
 }
 
+function cents(value: string | null): number | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function filterDay(value: string | null): string | null {
+  return isValidDay(value) ? value : null;
+}
+
 function filtersFrom(request: NextRequest): PartnerDealFlowFilters {
   const params = request.nextUrl.searchParams;
   return {
@@ -38,6 +48,12 @@ function filtersFrom(request: NextRequest): PartnerDealFlowFilters {
     product: params.get("product") || null,
     submittedBy: params.get("submitted_by") || null,
     search: params.get("search") || null,
+    customer: params.get("customer") || null,
+    carrier: params.get("carrier") || null,
+    annualisedPremiumMinCents: cents(params.get("annualised_premium_min")),
+    annualisedPremiumMaxCents: cents(params.get("annualised_premium_max")),
+    draftDateFrom: filterDay(params.get("draft_date_from")),
+    draftDateTo: filterDay(params.get("draft_date_to")),
   };
 }
 

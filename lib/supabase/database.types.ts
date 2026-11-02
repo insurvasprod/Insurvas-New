@@ -1871,6 +1871,11 @@ export type Database = {
           partner_market_access_profile_id: string | null;
           partner_market_access_profile_revision: number | null;
           payload: Json;
+          pause_reason: string | null;
+          pause_notes: string | null;
+          screening_result_id: string | null;
+          screening_submission_id: string | null;
+          screening_snapshot: Json | null;
           created_at: string;
           updated_at: string;
           owner_key: string;
@@ -1890,6 +1895,11 @@ export type Database = {
           partner_market_access_profile_id?: string | null;
           partner_market_access_profile_revision?: number | null;
           payload?: Json;
+          pause_reason?: string | null;
+          pause_notes?: string | null;
+          screening_result_id?: string | null;
+          screening_submission_id?: string | null;
+          screening_snapshot?: Json | null;
           created_at?: string;
           updated_at?: string;
           owner_key?: string;
@@ -1907,6 +1917,11 @@ export type Database = {
           partner_market_access_profile_id?: string | null;
           partner_market_access_profile_revision?: number | null;
           payload?: Json;
+          pause_reason?: string | null;
+          pause_notes?: string | null;
+          screening_result_id?: string | null;
+          screening_submission_id?: string | null;
+          screening_snapshot?: Json | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -6345,10 +6360,12 @@ export type Database = {
           p_offset?: number;
           p_outcome?: string | null;
           p_partner_id: string;
+          p_pipeline_id?: string | null;
           p_product?: string | null;
           p_stage_id?: string | null;
           p_tenant_id: string;
           p_timezone?: string;
+          p_visible_submitter_ids?: string[] | null;
         };
         Returns: Json;
       };

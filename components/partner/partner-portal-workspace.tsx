@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useState,
@@ -10,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,11 +21,11 @@ import {
   CardTitle,
   cardSurface,
 } from "@/components/ui/card";
-import { Check, CheckCircle2, ChevronRight, FileText, Send, Users } from "lucide-react";
+import { CheckCircle2, FileText, Send, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
-import { Sheet } from "@/components/ui/sheet";
 import { confirmAction } from "@/components/ui/confirm-dialog";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PartnerChatPanel } from "@/components/partner/partner-chat-panel";
 import { PartnerLeadPipeline } from "@/components/partner/partner-lead-pipeline";
 import { PartnerPortalOverview } from "@/components/partner/partner-portal-overview";
@@ -65,8 +63,15 @@ type PartnerMarket = {
   carrier_name: string;
   state: string;
 };
+type PartnerSubmissionMarket = { state: string };
 
 const US_STATE_NAME_BY_CODE = Object.fromEntries(US_STATES) as Record<string, string>;
+
+function isCustomerStateField(field: TemplateField) {
+  const key = field.field_key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return /^(state|customer_state|applicant_state|insured_state|policyholder_state)$/.test(key) ||
+    /^(customer|applicant|insured|policyholder)\s+state$/i.test(field.label.trim());
+}
 
 // The submission's retry key, per draft, in this browser (LA-1 audit: it was regenerated on every
 // mount, so a resumed draft lost its number-entry screening link and its replay protection).
@@ -270,6 +275,7 @@ export function PartnerLeadForm({
   market,
   draftId: resumeDraftId = null,
   onDraftChange,
+  setupControls,
   preview,
 }: {
   productCode: string;
@@ -280,11 +286,13 @@ export function PartnerLeadForm({
   agencyName?: string | null;
   onFormVersion?: (version: number | null) => void;
   onHasAnswersChange?: (hasAnswers: boolean) => void;
-  market: PartnerMarket;
+  market: PartnerSubmissionMarket;
   /** LA-1.6-5: the saved draft this form resumes; null starts a new form. */
   draftId?: string | null;
   /** Told the draft's id after each save (null once it has been submitted). */
   onDraftChange?: (draftId: string | null) => void;
+  /** Product and market selectors share one header row with the phone gate. */
+  setupControls?: ReactNode;
   /** Settings → Form templates renders this same form from the owner's unsaved draft. */
   preview?: PartnerFormPreviewSource;
 }) {
@@ -299,6 +307,7 @@ export function PartnerLeadForm({
     phone: string | null;
     cached?: boolean;
     checked_at?: string;
+    blocked?: boolean;
   };
   type RejectionNotice = { code: string; count: number; script: string };
   const [template, setTemplate] = useState<FormTemplate | null>(null);
@@ -308,7 +317,7 @@ export function PartnerLeadForm({
   // The draft this form writes to. It starts as the resumed draft (or none) and is set by the first
   // save of a new form, so every later save updates that one draft instead of starting another.
   const draftIdRef = useRef<string | null>(resumeDraftId);
-  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const valuesRef = useRef<Record<string, unknown>>({});
   const dirtyRef = useRef(false);
   // Bumped on every edit. A save only clears `dirty` when nothing was typed while it was in flight;
@@ -317,6 +326,7 @@ export function PartnerLeadForm({
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [status, setStatus] = useState("Loading form…");
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [screening, setScreening] = useState<ScreeningState | null>(null);
@@ -331,20 +341,12 @@ export function PartnerLeadForm({
     Array<{ matchedOn: string[] }>
   >([]);
   const [duplicateJustification, setDuplicateJustification] = useState("");
-  const [sectionIndex, setSectionIndex] = useState(0);
-  const [reviewStep, setReviewStep] = useState(false);
   const [formRefresh, setFormRefresh] = useState(0);
   // The rest of the form opens once the number has been screened (and a DNC warning acknowledged).
   // After that it stays open: changing the number re-screens it in place, as the board draws it.
   const [formOpened, setFormOpened] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
   const consentRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!formOpened) return;
-    document
-      .getElementById(reviewStep ? `partner-review-${productCode}` : `partner-section-${productCode}`)
-      ?.focus();
-  }, [formOpened, productCode, sectionIndex, reviewStep]);
   const [screenedAt, setScreenedAt] = useState<number | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const [duplicateCheck, setDuplicateCheck] = useState<{
@@ -353,7 +355,6 @@ export function PartnerLeadForm({
     /** The newest match: when, whether this team sent it, and (only then) how it ended. */
     latest?: { submittedAt: string; yours: boolean; outcome: string | null } | null;
   } | null>(null);
-  const router = useRouter();
   // "18 seconds ago" has to keep counting while the page is open.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -436,6 +437,10 @@ export function PartnerLeadForm({
                 draft.draft.payload as Record<string, unknown>,
               )
             : {};
+        const customerStateField = nextTemplate.template.fields.find(isCustomerStateField);
+        if (customerStateField && !nextValues[customerStateField.field_key]) {
+          nextValues[customerStateField.field_key] = market.state;
+        }
         setTemplate(nextTemplate);
         onFormVersion?.(nextTemplate.assignment.definition_version);
         const savedAt =
@@ -446,6 +451,60 @@ export function PartnerLeadForm({
         setValues(nextValues);
         onHasAnswersChange?.(Object.values(nextValues).some((value) => !isEmpty(value)));
         valuesRef.current = nextValues;
+        const phoneField = nextTemplate.template.fields.find(isPhoneTemplateField);
+        const restoredPhone = String((phoneField && nextValues[phoneField.field_key]) ?? "");
+        const restoredScreening = draftResponse.ok && draft?.resume_screening && typeof draft.resume_screening === "object"
+          ? draft.resume_screening as Record<string, unknown>
+          : null;
+        if (draftResponse.ok && draft?.draft && draftIdRef.current) {
+          const restoredSubmissionId = restoredScreening?.screened === true && typeof draft.screening_submission_id === "string"
+            ? draft.screening_submission_id
+            : crypto.randomUUID();
+          submissionId.current = restoredSubmissionId;
+          rememberSubmissionId(draftIdRef.current, restoredSubmissionId);
+        }
+        const restoredWarning = restoredScreening?.warning && typeof restoredScreening.warning === "object"
+          ? restoredScreening.warning as { code?: string; message?: string }
+          : null;
+        if (restoredScreening?.screened === true && restoredPhone) {
+          const checkedAt = typeof restoredScreening.checked_at === "string" ? restoredScreening.checked_at : undefined;
+          const restoredId = typeof draft?.screening_submission_id === "string" ? draft.screening_submission_id : null;
+          if (restoredId) {
+            submissionId.current = restoredId;
+            rememberSubmissionId(draftIdRef.current, restoredId);
+          }
+          lastScreenedPhone.current = restoredPhone;
+          setScreening({
+            outcome: restoredScreening.verdict === "cleared" ? "clear" : "blocked",
+            warning: restoredWarning?.code === "dnc" || restoredWarning?.code === "internal_dq"
+              ? { code: restoredWarning.code, message: String(restoredWarning.message ?? "") }
+              : null,
+            phone: restoredPhone,
+            checked_at: checkedAt,
+            blocked: restoredScreening.blocked === true,
+          });
+          if (restoredScreening.blocked === true) {
+            setRejectionNotice({
+              code: String(restoredScreening.code ?? "compliance_screening"),
+              count: Number(restoredScreening.blocked_count ?? 0),
+              script: String(restoredScreening.neutral_end_call_script ?? ""),
+            });
+            setScreeningError(String(restoredScreening.error ?? "Screening is complete. The number requires review before submission."));
+          } else {
+            setRejectionNotice(null);
+            setScreeningError(null);
+          }
+          setScreenedAt(checkedAt ? Date.parse(checkedAt) : null);
+          setDncAcknowledged(false);
+          setFormOpened(true);
+        } else {
+          setScreening(null);
+          setScreenedAt(null);
+          setFormOpened(false);
+          setRejectionNotice(null);
+          setScreeningError(null);
+          setDncAcknowledged(false);
+        }
         // A reload (the tab regaining focus) can bring back answers without the number that was
         // screened. The screening result belongs to that number, so it does not survive the swap.
         const reloadedPhoneKey = nextTemplate.template.fields.find(isPhoneTemplateField)?.field_key;
@@ -461,7 +520,9 @@ export function PartnerLeadForm({
         }
         setStatus(
           draftResponse.ok && draft?.draft
-            ? "Draft resumed — screen the phone number to continue"
+            ? restoredScreening?.screened === true
+              ? "Draft resumed — continue where you left off"
+              : "Draft resumed — screen the phone number to continue"
             : "Enter a phone number to begin screening",
         );
       })
@@ -471,18 +532,18 @@ export function PartnerLeadForm({
     return () => {
       cancelled = true;
     };
-  }, [productCode, formRefresh, onFormVersion, onDraftChange, onHasAnswersChange, preview]);
+  }, [productCode, market.state, formRefresh, onFormVersion, onDraftChange, onHasAnswersChange, preview]);
 
   const persistDraft = useCallback(
-    (visibleStatus = true) => {
+    (visibleStatus = true, pause?: { reason: string; notes: string }) => {
     const saveDraftNow = async () => {
-      if (!template) return;
+      if (!template) return false;
       // What is sent is what is on screen when this save actually runs (saves are queued).
       const payload = valuesRef.current;
       const sentRevision = editRevision.current;
       if (preview) {
         if (visibleStatus) setStatus("Preview: drafts are not saved");
-        return;
+        return false;
       }
       setSaving(true);
       try {
@@ -493,37 +554,45 @@ export function PartnerLeadForm({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               payload,
-              carrier_id: market.carrier_id,
               carrier_state: market.state,
               draft_id: draftIdRef.current,
+              submission_id: submissionId.current,
+              ...(pause ? { pause_reason: pause.reason, pause_notes: pause.notes } : {}),
             }),
           },
         );
         const saved = (await response.json().catch(() => null)) as { id?: string; error?: string; code?: string } | null;
         if (response.ok) {
+          setSaveFailed(false);
           if (editRevision.current === sentRevision) dirtyRef.current = false;
           if (saved?.id && saved.id !== draftIdRef.current) draftIdRef.current = saved.id;
           rememberSubmissionId(draftIdRef.current, submissionId.current);
           onDraftChange?.(draftIdRef.current);
           setDraftSavedAt(Date.now());
           if (visibleStatus) setStatus("Draft saved");
+          return true;
         } else if (response.status === 404 && draftIdRef.current) {
           // The draft was submitted or discarded in another tab: the next save starts a new one.
           draftIdRef.current = null;
           onDraftChange?.(null);
           if (visibleStatus) setStatus(saved?.error ?? "Draft could not be saved");
+          setSaveFailed(true);
+          return false;
         } else {
-          // Say why (e.g. "You have 25 drafts open. Submit or discard one…"), not just that it failed.
-          // A draft limit is shown even on a background autosave, since only the partner can clear it.
+          // Keep the failure visible so the partner can retry without losing the form.
           const message = saved?.error ?? "Draft could not be saved";
+          setSaveFailed(true);
           if (visibleStatus || saved?.code === "form_draft_limit_reached") setStatus(message);
           if (visibleStatus) notify.fail(message);
+          return false;
         }
       } catch {
+        setSaveFailed(true);
         if (visibleStatus) {
           setStatus("Draft could not be saved");
           notify.fail("Draft could not be saved");
         }
+        return false;
       } finally {
         setSaving(false);
       }
@@ -538,15 +607,15 @@ export function PartnerLeadForm({
   );
 
   useEffect(() => {
-    if (!template || !dirtyRef.current || preview) return;
+    if (!template || !dirtyRef.current || preview || !formOpened || !screening) return;
     const timer = window.setTimeout(() => {
       void persistDraft();
     }, 750);
     return () => window.clearTimeout(timer);
-  }, [values, template, productCode, persistDraft, preview]);
+  }, [values, template, productCode, persistDraft, preview, formOpened, screening]);
 
   useEffect(() => {
-    if (!template || preview) return;
+    if (!template || preview || !formOpened || !screening) return;
     const flush = () => {
       if (dirtyRef.current) void persistDraft(false);
     };
@@ -562,9 +631,9 @@ export function PartnerLeadForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             payload: valuesRef.current,
-            carrier_id: market.carrier_id,
             carrier_state: market.state,
             draft_id: draftIdRef.current,
+            submission_id: submissionId.current,
           }),
           keepalive: true,
         },
@@ -578,7 +647,7 @@ export function PartnerLeadForm({
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [template, productCode, market, persistDraft, preview]);
+  }, [template, productCode, market, persistDraft, preview, formOpened, screening]);
 
   const fields = template
     ? new Map(template.template.fields.map((field) => [field.field_key, field]))
@@ -785,7 +854,9 @@ export function PartnerLeadForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             phone: valuesRef.current[phoneField.field_key],
+            payload: valuesRef.current,
             submission_id: submissionId.current,
+            draft_id: draftIdRef.current,
             // LA-6.2: the calling-hours check needs the state the transfer is for.
             carrier_state: market?.state ?? null,
           }),
@@ -811,6 +882,11 @@ export function PartnerLeadForm({
         );
         return;
       }
+      if (typeof body.draft_id === "string") {
+        draftIdRef.current = body.draft_id;
+        rememberSubmissionId(body.draft_id, submissionId.current);
+        onDraftChange?.(body.draft_id);
+      }
       setRejectionNotice(null);
       lastScreenedPhone.current = phoneValue;
       setScreening(body);
@@ -823,10 +899,10 @@ export function PartnerLeadForm({
           ? "Review the compliance warning to continue"
           : "Screening passed — complete the form",
       );
-    } catch {
+    } catch (error) {
       setScreening(null);
       setScreeningError(
-        "Phone screening could not be completed. Check your connection and try again.",
+        error instanceof Error ? error.message : "Phone screening could not be completed. Check your connection and try again.",
       );
       setStatus("Screening failed");
     } finally {
@@ -938,6 +1014,7 @@ export function PartnerLeadForm({
     partnerStatus === "active" &&
     consentGiven &&
     screening &&
+    !screening.blocked &&
     (!screening.warning ||
       screening.warning.code !== "dnc" ||
       dncAcknowledged) &&
@@ -955,26 +1032,23 @@ export function PartnerLeadForm({
     duplicateReasonMissing: !duplicateReasonReady,
     consentGiven,
   });
-  async function saveAndClose() {
-    if (preview) return;
-    await persistDraft();
-    // persistDraft clears the dirty flag only when the server stored the draft.
-    if (!dirtyRef.current) router.push("/partner");
+  async function saveAndPause(reason: string, notes: string) {
+    if (preview) return false;
+    return persistDraft(true, { reason, notes });
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
     const errors = validateAll();
     if (Object.keys(errors).length) {
-      const first = sections.findIndex((section) =>
-        section.fields.some((item) => errors[item.field_key]),
-      );
-      if (first >= 0) {
-        setReviewStep(false);
-        setSectionIndex(first);
-      }
       setFieldErrors(errors);
       setSubmitError("Complete the highlighted fields before submitting");
       setStatus("Complete the highlighted fields");
+      const first = sections.flatMap((section) => section.fields).find((item) => errors[item.field_key]);
+      if (first) window.setTimeout(() => {
+        const control = document.getElementById(`partner-field-${productCode}-${first.field_key}`);
+        control?.scrollIntoView({ behavior: "smooth", block: "center" });
+        control?.focus();
+      }, 0);
       return;
     }
     if (!screening) {
@@ -1000,7 +1074,6 @@ export function PartnerLeadForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           product_code: productCode,
-          carrier_id: market.carrier_id,
           carrier_state: market.state,
           values: valuesRef.current,
           submission_id: submissionId.current,
@@ -1056,7 +1129,6 @@ export function PartnerLeadForm({
       draftIdRef.current = null;
       onDraftChange?.(null);
       submissionId.current = crypto.randomUUID();
-      setSectionIndex(0);
       setStatus(body?.replayed ? "Already submitted" : "Submitted");
       notify.win(
         body?.replayed
@@ -1071,6 +1143,18 @@ export function PartnerLeadForm({
       setStatus("Submission failed");
       notify.fail("Could not submit lead");
     }
+  }
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!formOpened) {
+      void screenPhone(event);
+      return;
+    }
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if ((submitter as HTMLElement | null)?.id !== `submit-lead-${productCode}`) {
+      event.preventDefault();
+      return;
+    }
+    void submit(event);
   }
   const loading = status.startsWith("Loading");
   if (!template)
@@ -1094,8 +1178,7 @@ export function PartnerLeadForm({
       </p>
     );
   const dncPending = screening?.warning?.code === "dnc" && !dncAcknowledged;
-  const activeSection = sections[sectionIndex] ?? sections[0];
-  const visibleRequired = (section: typeof activeSection) =>
+  const visibleRequired = (section: (typeof sections)[number]) =>
     section.fields.filter((item) => {
       const field = fields.get(item.field_key);
       return (
@@ -1104,45 +1187,14 @@ export function PartnerLeadForm({
         (field.is_required || item.is_required)
       );
     });
-  const requiredLeft = (section: typeof activeSection) =>
+  const requiredLeft = (section: (typeof sections)[number]) =>
     visibleRequired(section).filter((item) => validateField(item.field_key, values)).length;
-  // Green only when genuinely satisfied: a section nobody has touched is not complete, even when it
-  // has no required fields.
-  const sectionComplete = (section: typeof activeSection) =>
-    Boolean(
-      section &&
-      section.fields.some(
-        (item) =>
-          templateFormFieldVisible(item, values) &&
-          !isEmpty(values[item.field_key]),
-      ) &&
-      visibleRequired(section).every(
-        (item) => !validateField(item.field_key, values),
-      ),
-    );
-  const steps = [
-    ...sections.map((section, index) => ({
-      key: section.section_key,
-      label: section.label,
-      left: formOpened ? requiredLeft(section) : 0,
-      current: formOpened && !reviewStep && index === sectionIndex,
-      complete: formOpened && (reviewStep || index !== sectionIndex) && sectionComplete(section),
-      select: () => { setReviewStep(false); setSectionIndex(index); },
-    })),
-    {
-      key: "review-consent",
-      label: "Review & consent",
-      left: 0,
-      current: formOpened && reviewStep,
-      complete: consentGiven,
-      select: () => setReviewStep(true),
-    },
-  ];
-  const compactStepNavigation = steps.length > 5;
   const phoneHint = screeningBusy
     ? "Screening this number…"
     : screening
-      ? `Screened on blur. ${
+      ? screening.blocked
+        ? `Screening completed — review required${screenedAt ? ` — checked ${agoLabel(screenedAt, now)}` : ""}.`
+        : `Screened on blur. ${
           screening.warning
             ? screening.warning.code === "dnc"
               ? dncAcknowledged
@@ -1155,6 +1207,8 @@ export function PartnerLeadForm({
   const phoneTone: ChipTone =
     screeningBusy || !screening
       ? "neutral"
+      : screening.blocked
+        ? "warning"
       : screening.warning
         ? "warning"
         : "success";
@@ -1162,6 +1216,8 @@ export function PartnerLeadForm({
     ? "Screening…"
     : !screening
       ? "Not yet"
+      : screening.blocked
+        ? "Review required"
       : screening.warning
         ? screening.warning.code === "dnc"
           ? dncAcknowledged
@@ -1169,6 +1225,7 @@ export function PartnerLeadForm({
             : "Needs acknowledgement"
           : "Internal warning"
         : "DNC/TCPA clear";
+  const phoneScreenComplete = screening?.outcome === "clear";
   const duplicateTone: ChipTone =
     duplicateMatches.length || duplicateState === "match"
       ? "warning"
@@ -1237,9 +1294,13 @@ export function PartnerLeadForm({
       </p>
     </div>
   );
-  const renderField = (formField: (typeof activeSection.fields)[number]) => {
+  const hasDraftAnswers = sections.some((section) => section.fields.some((item) => {
+    const field = fields.get(item.field_key);
+    return Boolean(field && !isCustomerStateField(field) && !isEmpty(values[item.field_key]));
+  }));
+  const renderField = (formField: (typeof sections)[number]["fields"][number]) => {
     const field = fields.get(formField.field_key);
-    if (!field || !templateFormFieldVisible(formField, values)) return null;
+    if (!field || isCustomerStateField(field) || isPhoneTemplateField(field) || !templateFormFieldVisible(formField, values)) return null;
     const error = fieldErrors[field.field_key];
     const fieldId = `partner-field-${productCode}-${field.field_key}`;
     const fieldLabelId = `${fieldId}-label`;
@@ -1289,262 +1350,106 @@ export function PartnerLeadForm({
   };
   return (
     <>
-      {!formOpened ? (
-        <ol className="portal-partner-submit-gate" aria-label="Lead submission steps">
-          <li aria-current="step">
-            <span className="portal-partner-submit-step-dot">1</span>
-            <span><strong>Screen the phone</strong><small>Check the number before the form opens</small></span>
-          </li>
-          <li aria-hidden="true" className="portal-partner-submit-gate-line" />
-          <li>
-            <span className="portal-partner-submit-step-dot">2</span>
-            <span><strong>Complete the lead</strong><small>Enter the details and confirm consent</small></span>
-          </li>
-        </ol>
-      ) : (
-        <>
-          <ol
-            className={`portal-partner-submit-stepper${compactStepNavigation ? " is-many" : ""}`}
-            aria-label="Form progress"
-          >
-            {steps.map((step, index) => (
-              <Fragment key={step.key}>
-                {index > 0 && (
-                  <li
-                    aria-hidden="true"
-                    className={`portal-partner-submit-step-line${steps[index - 1].complete ? " is-complete" : ""}`}
-                  />
-                )}
-                <li>
-                  <button
-                    type="button"
-                    className={
-                      step.current
-                        ? "is-current"
-                        : step.complete
-                          ? "is-complete"
-                          : undefined
-                    }
-                    aria-current={step.current ? "step" : undefined}
-                    onClick={step.select}
-                  >
-                    <span className="portal-partner-submit-step-dot">
-                      {step.complete ? <Check aria-hidden="true" strokeWidth={3} /> : index + 1}
-                    </span>
-                    <span>
-                      {step.label}
-                    </span>
-                    {step.complete && <span className="sr-only"> (complete)</span>}
-                  </button>
-                </li>
-              </Fragment>
-            ))}
-          </ol>
-          {sections.length > 0 && (
-            <div className="portal-partner-submit-stepper-compact" role="group" aria-label="Form section navigation">
-              <div className="portal-partner-submit-stepper-current">
-                <span>Step {reviewStep ? sections.length + 1 : sectionIndex + 1} of {steps.length}</span>
-                <strong>{reviewStep ? "Review & consent" : activeSection?.label}</strong>
-                {!reviewStep && activeSection && requiredLeft(activeSection) > 0 && (
-                  <small>{requiredLeft(activeSection)} required {requiredLeft(activeSection) === 1 ? "field" : "fields"} left</small>
-                )}
-              </div>
-              <div className="portal-partner-submit-stepper-select">
-                <SelectMenu
-                  label="Go to a form step"
-                  value={String(reviewStep ? sections.length : sectionIndex)}
-                  onChange={(next) => steps[Number(next)]?.select()}
-                  searchPlaceholder="Search sections"
-                  className="w-full"
-                  panelClassName="w-72 max-w-[calc(100vw-2rem)]"
-                  panelAlign="end"
-                  options={steps.map((step, index) => ({
-                    value: String(index),
-                    label: step.label,
-                    description: step.complete ? "Complete" : step.left ? `${step.left} required left` : "In progress",
-                  }))}
-                />
-              </div>
+      <LeaveGuard dirty={!preview && formOpened && Boolean(screening) && hasDraftAnswers} mode="autosaved-draft" onPause={saveAndPause} onDiscard={() => undefined} what="this lead" />
+      <div className="portal-partner-submit-product-bar" role="group" aria-labelledby="partner-lead-details-label">
+        <h2 id="partner-lead-details-label" className="sr-only">Lead setup</h2>
+        <div className="portal-partner-submit-product-row has-markets">
+          {setupControls}
+          <div className="portal-partner-submit-screening-control">
+            <label htmlFor={`screen-phone-${productCode}`}>Phone screening · {phoneField.label}<span className="portal-partner-submit-required"> *</span></label>
+            <div className="portal-partner-submit-screening-input">
+              <PartnerField
+                id={`screen-phone-${productCode}`}
+                field={phoneField}
+                value={values[phoneField.field_key]}
+                error={fieldErrors[phoneField.field_key]}
+                onChange={(value) => updateValue(phoneField.field_key, value)}
+                onBlur={() => { void runScreening(); }}
+              />
+              <Button type="button" disabled={screeningBusy || Boolean(screening && lastScreenedPhone.current === String(values[phoneField.field_key] ?? ""))} onClick={() => void runScreening()}>
+                {screeningBusy ? "Screening…" : screening ? "Screened" : "Screen"}
+              </Button>
             </div>
-          )}
-        </>
-      )}
+            <small>{screening ? phoneLabel : phoneHint}</small>
+            {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
+            {fieldErrors[phoneField.field_key] && <p className="portal-partner-submit-error" role="alert">{fieldErrors[phoneField.field_key]}</p>}
+          </div>
+        </div>
+      </div>
       <div className="portal-partner-submit-body">
         <form
+          id={`partner-form-${productCode}`}
           className="portal-partner-submit-main"
-          onSubmit={(event) => (formOpened ? submit(event) : screenPhone(event))}
+          onSubmit={handleFormSubmit}
         >
           <p className="sr-only" role="status">
             {status}
           </p>
-          {!formOpened ? (
-          <section className="portal-partner-submit-phone-gate">
-              <div className="portal-partner-submit-panel-head">
-                <h2>Screen the customer’s phone</h2>
-                <p>
-                  We check the number against DNC and TCPA lists first. Once it
-                  clears screening, the lead form opens.
-                </p>
-              </div>
-              <div className="portal-partner-submit-fields portal-partner-submit-phone-fields">
-                <div className="portal-partner-submit-phone-row">
-                  <div className="portal-partner-submit-field">
-                    <label htmlFor={`screen-phone-${productCode}`}>
-                      {phoneField.label}
-                      <span className="portal-partner-submit-required"> *</span>
-                    </label>
-                    <PartnerField
-                      id={`screen-phone-${productCode}`}
-                      field={phoneField}
-                      value={values[phoneField.field_key]}
-                      error={fieldErrors[phoneField.field_key]}
-                      onChange={(value) => updateValue(phoneField.field_key, value)}
-                      onBlur={() => {
-                        void runScreening();
-                      }}
-                    />
-                  </div>
-                  <Button type="submit" disabled={screeningBusy}>
-                    {screeningBusy ? "Screening…" : "Screen phone number"}
-                  </Button>
+          {!formOpened && (
+            <section className="portal-partner-submit-screening-intro" aria-labelledby={`partner-submit-start-${productCode}`}>
+              <div className="portal-partner-submit-screening-intro-head">
+                <div>
+                  <h2 id={`partner-submit-start-${productCode}`}>Start with a phone screen</h2>
+                  <p>Screen the customer’s number to open the application. Your answers save automatically as you work.</p>
                 </div>
-                <small>{phoneHint}</small>
-                {fieldErrors[phoneField.field_key] && (
-                  <p className="portal-partner-submit-error" role="alert">
-                    {fieldErrors[phoneField.field_key]}
-                  </p>
-                )}
+                <span className="portal-partner-submit-step-count">Step {phoneScreenComplete ? 2 : 1} of 3</span>
               </div>
-              {screeningError && (
-                <p className="portal-partner-submit-error" role="alert">
-                  {screeningError}
-                </p>
+              <ol className="portal-partner-submit-steps" aria-label="Lead submission steps">
+                <li className={phoneScreenComplete ? "is-complete" : "is-current"} aria-current={phoneScreenComplete ? undefined : "step"}>
+                  <span className="portal-partner-submit-step-number">{phoneScreenComplete ? <CheckCircle2 aria-hidden="true" /> : "1"}</span>
+                  <span className="portal-partner-submit-step-copy"><strong>Screen phone</strong><small>{screening ? screening.outcome === "clear" ? "Screening complete" : "Needs review before continuing" : screeningBusy ? "Checking the number…" : "Check DNC/TCPA eligibility"}</small></span>
+                </li>
+                <li className={phoneScreenComplete ? "is-current" : "is-upcoming"} aria-current={phoneScreenComplete ? "step" : undefined}>
+                  <span className="portal-partner-submit-step-number">2</span>
+                  <span className="portal-partner-submit-step-copy"><strong>Complete application</strong><small>Enter the customer and coverage details</small></span>
+                </li>
+                <li className="is-upcoming">
+                  <span className="portal-partner-submit-step-number">3</span>
+                  <span className="portal-partner-submit-step-copy"><strong>Review and submit</strong><small>Check the answers and confirm consent</small></span>
+                </li>
+              </ol>
+              {sections.length > 0 && (
+                <div className="portal-partner-submit-section-preview" aria-labelledby={`partner-submit-sections-${productCode}`}>
+                  <div className="portal-partner-submit-section-preview-head">
+                    <h3 id={`partner-submit-sections-${productCode}`}>Your application sections</h3>
+                    <span>{sections.length} {sections.length === 1 ? "section" : "sections"}</span>
+                  </div>
+                  <ul>{sections.map((item, index) => <li key={item.section_key}>
+                    <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                    <strong>{item.label}</strong>
+                  </li>)}</ul>
+                </div>
               )}
+            </section>
+          )}
+          {!formOpened && (screeningError || rejectionNotice || dncPending) && (
+            <div className="portal-partner-submit-phone-feedback">
+              {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
               {rejectionBlock}
               {warningBlock}
-            </section>
-          ) : reviewStep ? (
-            <section
-              className="portal-partner-submit-review"
-              aria-labelledby={`partner-review-${productCode}`}
-            >
-              <div className="portal-partner-submit-panel-head">
-                <h2 id={`partner-review-${productCode}`} tabIndex={-1}>Review & consent</h2>
-                <p>Check the details below, then confirm the customer’s consent to submit.</p>
-              </div>
-              <section className={`${cardSurface} portal-partner-submit-review-summary`} aria-label="Application details">
-                <div className="portal-partner-submit-review-summary-head">
-                  <div>
-                    <span>Application</span>
-                    <strong>{productName}</strong>
-                  </div>
-                  <StatusChip>Form v{template.assignment.definition_version}</StatusChip>
-                </div>
-                <dl className="portal-partner-submit-review-context">
-                  <div><dt>Carrier</dt><dd>{market.carrier_name}</dd></div>
-                  <div><dt>State</dt><dd>{market.state}{US_STATE_NAME_BY_CODE[market.state.toUpperCase()] ? ` – ${US_STATE_NAME_BY_CODE[market.state.toUpperCase()]}` : ""}</dd></div>
-                  <div><dt>Customer phone</dt><dd>{isEmpty(values[phoneField.field_key]) ? "Not entered" : String(values[phoneField.field_key])}</dd></div>
-                </dl>
-              </section>
-              <div className="portal-partner-submit-review-answers">
-                <div className="portal-partner-submit-review-answers-head">
-                  <h3>Your answers</h3>
-                  <span>{sections.length} {sections.length === 1 ? "section" : "sections"}</span>
-                </div>
-                <div className="portal-partner-submit-review-sections">
-                {sections.map((section, index) => {
-                  const answers = section.fields.flatMap((item) => {
-                    const field = fields.get(item.field_key);
-                    const value = values[item.field_key];
-                    if (!field || !templateFormFieldVisible(item, values) || isEmpty(value)) return [];
-                    const sensitive = /(account|routing|social|tax.?id|password|secret)/i.test(`${field.field_key} ${field.label}`);
-                    const display = sensitive
-                      ? `•••• ${String(value).slice(-4)}`
-                      : Array.isArray(value)
-                        ? value.join(", ")
-                        : typeof value === "boolean"
-                          ? value ? "Yes" : "No"
-                          : String(value);
-                    return [{ label: field.label, value: display }];
-                  });
-                  return (
-                    <section key={section.section_key} className={`${cardSurface} portal-partner-submit-review-section`}>
-                      <div className="portal-partner-submit-review-section-head">
-                        <div>
-                          <h4>{section.label}</h4>
-                          <span>{answers.length} {answers.length === 1 ? "answer" : "answers"}</span>
-                        </div>
-                        <Button type="button" variant="ghost" aria-label={`Edit ${section.label} answers`} onClick={() => { setReviewStep(false); setSectionIndex(index); }}>Edit</Button>
-                      </div>
-                      {answers.length ? (
-                        <dl>{answers.map((answer) => <div key={answer.label}><dt>{answer.label}</dt><dd>{answer.value}</dd></div>)}</dl>
-                      ) : <p className="portal-partner-submit-muted">No answers in this section.</p>}
-                    </section>
-                  );
-                })}
-                </div>
-              </div>
-              <section
-                className={`${cardSurface} portal-partner-submit-consent portal-partner-submit-review-consent`}
-                aria-labelledby={`partner-consent-heading-${productCode}`}
-              >
-                <div className="portal-partner-submit-review-consent-head">
-                  <div>
-                    <h3 id={`partner-consent-heading-${productCode}`}>Customer consent</h3>
-                    <p>Required before this lead can be submitted.</p>
-                  </div>
-                  <StatusChip tone={consentGiven ? "good" : "warning"}>{consentGiven ? "Confirmed" : "Required"}</StatusChip>
-                </div>
-                <label>
-                  <input
-                    ref={consentRef}
-                    id={`partner-consent-${productCode}`}
-                    type="checkbox"
-                    checked={consentGiven}
-                    onChange={(event) => setConsentGiven(event.target.checked)}
-                  />
-                  <span>
-                    The customer gave express written consent to be contacted by a
-                    licensed agent at the number above, by phone and by SMS, about
-                    insurance products. I hold documentation of that consent and
-                    understand every submission is audit logged.
-                  </span>
-                </label>
-                <p>Consent is never pre-selected. We record the confirmation time with the lead.</p>
-              </section>
-            </section>
-          ) : (
-            activeSection && (
-              <section
-                className="portal-partner-submit-active-section"
-                aria-labelledby={`partner-section-${productCode}`}
-              >
-                <div className="portal-partner-submit-panel-head">
-                  <h2 id={`partner-section-${productCode}`} tabIndex={-1}>
-                    {activeSection.label}
-                  </h2>
-                  <p>
-                    {(() => {
-                      const total = visibleRequired(activeSection).length;
-                      const left = requiredLeft(activeSection);
-                      return total === 0 ? "No required fields in this section." : left ? `${left} required ${left === 1 ? "field" : "fields"} left in this section. Required fields are marked *.` : "Required fields complete.";
-                    })()}
-                  </p>
-                </div>
-                <div className="portal-partner-submit-fields">
-                  {activeSection.fields.map(renderField)}
-                </div>
-                {screeningError && (
-                  <p className="portal-partner-submit-error" role="alert">
-                    {screeningError}
-                  </p>
-                )}
-                {rejectionBlock}
-                {dncPending && warningBlock}
-              </section>
-            )
+            </div>
           )}
-          {formOpened && reviewStep && duplicateFlagged && (
+          {formOpened && (screeningError || rejectionNotice || dncPending) && (
+            <div className="portal-partner-submit-phone-feedback">
+              {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
+              {rejectionBlock}
+              {dncPending && warningBlock}
+            </div>
+          )}
+          {formOpened && sections.map((section) => (
+            <section key={section.section_key} className="portal-partner-submit-active-section" aria-labelledby={`partner-section-${productCode}-${section.section_key}`}>
+              <div className="portal-partner-submit-panel-head">
+                <h2 id={`partner-section-${productCode}-${section.section_key}`}>{section.label}</h2>
+                <p>{(() => {
+                  const total = visibleRequired(section).length;
+                  const left = requiredLeft(section);
+                  return total === 0 ? "No required fields in this section." : left ? `${left} required ${left === 1 ? "field" : "fields"} left. Required fields are marked *.` : "Required fields complete.";
+                })()}</p>
+              </div>
+              <div className="portal-partner-submit-fields">{section.fields.map(renderField)}</div>
+            </section>
+          ))}
+          {formOpened && duplicateFlagged && (
             <div className="portal-partner-submit-callout is-warning">
               <p className="font-medium">
                 {matchLatest
@@ -1577,67 +1482,38 @@ export function PartnerLeadForm({
               </p>
             </div>
           )}
+          {formOpened && (
+            <section className={`${cardSurface} portal-partner-submit-consent`} aria-labelledby={`partner-consent-heading-${productCode}`}>
+              <div className="portal-partner-submit-review-consent-head">
+                <div><h3 id={`partner-consent-heading-${productCode}`}>Customer consent</h3><p>Required before this lead can be submitted.</p></div>
+                <StatusChip tone={consentGiven ? "good" : "warning"}>{consentGiven ? "Confirmed" : "Required"}</StatusChip>
+              </div>
+              <label><input ref={consentRef} id={`partner-consent-${productCode}`} type="checkbox" checked={consentGiven} onChange={(event) => setConsentGiven(event.target.checked)} />
+                <span>The customer gave express written consent to be contacted by a licensed agent at the number above, by phone and by SMS, about insurance products. I hold documentation of that consent and understand every submission is audit logged.</span>
+              </label>
+              <p>Consent is never pre-selected. We record the confirmation time with the lead.</p>
+            </section>
+          )}
           {submitError && (
             <p className="portal-partner-submit-error" role="alert">
               {submitError}
             </p>
           )}
           <div className="portal-partner-submit-actions">
-            {formOpened && (sectionIndex > 0 || reviewStep) && (
+            <span className="portal-partner-submit-save-status" role="status">
+              {saving ? "Saving draft…" : draftSavedAt ? `Saved ${agoLabel(draftSavedAt, now)}` : "Changes save automatically"}
+            </span>
+            {saveFailed && <Button type="button" variant="outline" disabled={saving} onClick={() => void persistDraft()}>Retry save</Button>}
+            {formOpened && (
               <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  if (reviewStep) setReviewStep(false);
-                  else setSectionIndex((index) => Math.max(0, index - 1));
-                }}
+                id={`submit-lead-${productCode}`}
+                type="submit"
+                disabled={saving || !canSubmit}
+                aria-describedby={!canSubmit && outstanding.length ? `partner-outstanding-${productCode}` : undefined}
               >
-                Back
+                Submit lead
               </Button>
             )}
-            <span>
-              {formOpened && !reviewStep && sectionIndex < sections.length - 1 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSectionIndex((index) => Math.min(sections.length - 1, index + 1))}
-                >
-                  Continue
-                </Button>
-              )}
-              {formOpened && !reviewStep && sectionIndex === sections.length - 1 && (
-                <Button type="button" onClick={() => setReviewStep(true)}>
-                  Review & consent
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={saving}
-                onClick={() => void persistDraft()}
-              >
-                Save draft
-              </Button>
-              {formOpened && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={saving}
-                  onClick={() => void saveAndClose()}
-                >
-                  Save and close
-                </Button>
-              )}
-              {formOpened && reviewStep && (
-                <Button
-                  type="submit"
-                  disabled={saving || !canSubmit}
-                  aria-describedby={!canSubmit && outstanding.length ? `partner-outstanding-${productCode}` : undefined}
-                >
-                  Submit lead
-                </Button>
-              )}
-            </span>
           </div>
           {formOpened && !canSubmit && outstanding.length > 0 && (
             <p id={`partner-outstanding-${productCode}`} className="portal-partner-submit-muted">
@@ -1654,7 +1530,7 @@ export function PartnerLeadForm({
             <p>Here’s what still needs attention.</p>
           </div>
           <div className="portal-partner-submit-progress">
-            <div><span>{formOpened ? "Form progress" : "Current step"}</span><strong>{formOpened ? `Step ${reviewStep ? sections.length + 1 : sectionIndex + 1} of ${steps.length} · ${progressPercent == null ? "—" : `${progressPercent}%`}` : "Phone screening · 1 of 2"}</strong></div>
+            <div><span>{formOpened ? "Form progress" : "Current step"}</span><strong>{formOpened ? `${progressPercent == null ? "—" : `${progressPercent}%`} required fields complete` : "Phone screening"}</strong></div>
             {formOpened && (
               <div
                 className="portal-partner-submit-progress-track"
@@ -1745,6 +1621,8 @@ type PartnerDraftRow = {
   label: string | null;
   phone_last4: string | null;
   answered: number;
+  pause_reason: string | null;
+  pause_notes: string | null;
   updated_at: string;
 };
 
@@ -1767,106 +1645,37 @@ function LegacyPartnerPortalWorkspace({
   section,
   partnerName,
   agencyName,
+  initialDraftId,
 }: {
   role: PartnerRole;
   partnerStatus: "draft" | "active" | "paused" | "offboarded";
   section: PartnerPortalSection;
   partnerName?: string;
   agencyName?: string | null;
+  initialDraftId?: string | null;
 }) {
   const [error, setError] = useState<string | null>(null);
   // Until the product list answers, the page cannot say "no products": it says it is loading.
   const [productsLoaded, setProductsLoaded] = useState(false);
-  const [formVersion, setFormVersion] = useState<number | null>(null);
   const [approvedProducts, setApprovedProducts] = useState<ApprovedProduct[]>(
     [],
   );
   const [selectedProduct, setSelectedProduct] = useState("");
   const [markets, setMarkets] = useState<PartnerMarket[]>([]);
-  const [selectedCarrierId, setSelectedCarrierId] = useState("");
   const [selectedState, setSelectedState] = useState("");
-  // LA-1.6-5: every started form, and which one the form below is working on. resumeDraftId picks
-  // what the form loads (and remounts it); activeDraftId only follows its saves.
-  const [drafts, setDrafts] = useState<PartnerDraftRow[]>([]);
-  const [draftsLoadedAt, setDraftsLoadedAt] = useState(0);
+  const pendingDraftState = useRef<string | null>(null);
   const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
-  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
-  const [draftsOpen, setDraftsOpen] = useState(false);
   const [formHasAnswers, setFormHasAnswers] = useState(false);
-  const [formNonce, setFormNonce] = useState(0);
-  const loadDrafts = useCallback(() => {
-    void fetch("/api/partner/drafts", { cache: "no-store" })
-      .then(async (response) => (response.ok ? ((await response.json().catch(() => null)) as { drafts?: PartnerDraftRow[] } | null) : null))
-      .then((body) => {
-        if (!body?.drafts) return;
-        setDrafts(body.drafts);
-        setDraftsLoadedAt(Date.now());
-      })
-      .catch(() => undefined);
-  }, []);
-  useEffect(() => {
-    if (section === "submit") loadDrafts();
-  }, [section, loadDrafts]);
-  const onDraftChange = useCallback((id: string | null) => {
-    setActiveDraftId(id);
-    loadDrafts();
-  }, [loadDrafts]);
+  const initialDraftHandled = useRef(false);
   async function confirmLeadReset() {
     if (!formHasAnswers) return true;
     return confirmAction({
       title: "Change this lead setup?",
-      description: "Changing the product, carrier, or state clears answers from this form. Saved drafts remain available in View drafts.",
+      description: "Changing the product or customer state clears answers from this form. The saved draft remains available from Drafts.",
       confirmLabel: "Clear answers",
       cancelLabel: "Keep answers",
     });
   }
-  async function startNewForm() {
-    if (!(await confirmLeadReset())) return;
-    setDraftsOpen(false);
-    setFormHasAnswers(false);
-    setResumeDraftId(null);
-    setActiveDraftId(null);
-    setFormNonce((value) => value + 1);
-  }
-  async function resumeDraft(draft: PartnerDraftRow) {
-    if (!(await confirmLeadReset())) return;
-    setFormHasAnswers(false);
-    const market = markets.find((item) => item.carrier_id === draft.carrier_id && item.state === draft.carrier_state);
-    setSelectedProduct(draft.product_code);
-    setFormVersion(null);
-    if (market) {
-      setSelectedCarrierId(market.carrier_id);
-      setSelectedState(market.state);
-    }
-    setResumeDraftId(draft.id);
-    setActiveDraftId(draft.id);
-    setFormNonce((value) => value + 1);
-    setDraftsOpen(false);
-  }
-  async function discardDraft(draft: PartnerDraftRow) {
-    const confirmed = await confirmAction({
-      title: "Discard this draft?",
-      description: "This saved lead and its answers will be permanently deleted.",
-      confirmLabel: "Discard draft",
-      cancelLabel: "Keep draft",
-    });
-    if (!confirmed) return;
-    const response = await fetch(`/api/partner/drafts?draft_id=${encodeURIComponent(draft.id)}`, { method: "DELETE" }).catch(() => null);
-    if (!response?.ok) {
-      notify.fail("That draft could not be discarded");
-      return;
-    }
-    notify.win("Draft discarded");
-    if (draft.id === activeDraftId) {
-      setFormHasAnswers(false);
-      setDraftsOpen(false);
-      setResumeDraftId(null);
-      setActiveDraftId(null);
-      setFormNonce((value) => value + 1);
-    }
-    loadDrafts();
-  }
-
   useEffect(() => {
     let cancelled = false;
     const productRequest =
@@ -1897,7 +1706,7 @@ function LegacyPartnerPortalWorkspace({
         if (productResponse) {
           if (productResponse.ok) {
             setApprovedProducts(productBody?.products ?? []);
-            setSelectedProduct(productBody?.products?.[0]?.code ?? "");
+            setSelectedProduct((current) => current || productBody?.products?.[0]?.code || "");
           } else
             setError(productBody?.error ?? "Could not load approved products");
         }
@@ -1905,8 +1714,11 @@ function LegacyPartnerPortalWorkspace({
           if (marketResponse.ok) {
             const next = marketBody?.markets ?? [];
             setMarkets(next);
-            setSelectedCarrierId(next[0]?.carrier_id ?? "");
-            setSelectedState(next[0]?.state ?? "");
+            const restoredState = pendingDraftState.current;
+            const nextState = restoredState && next.some((market: PartnerMarket) => market.state === restoredState)
+              ? restoredState
+              : next[0]?.state ?? "";
+            setSelectedState((current) => current || nextState);
           } else
             setError(marketBody?.error ?? "Could not load available markets");
         }
@@ -1920,9 +1732,58 @@ function LegacyPartnerPortalWorkspace({
       cancelled = true;
     };
   }, [section]);
+  useEffect(() => {
+    if (!initialDraftId || section !== "submit" || !productsLoaded || initialDraftHandled.current) return;
+    if (!markets.length) return;
+    initialDraftHandled.current = true;
+    void fetch(`/api/partner/drafts?draft_id=${encodeURIComponent(initialDraftId)}`, { cache: "no-store" })
+      .then(async (response) => ({ response, body: await response.json().catch(() => null) as { drafts?: PartnerDraftRow[]; error?: string } | null }))
+      .then(({ response, body }) => {
+        const draft = body?.drafts?.[0];
+        if (!response.ok || !draft) { setError(body?.error ?? "That saved draft could not be opened"); return; }
+        if (!approvedProducts.some((product) => product.code === draft.product_code)) { setError("This draft's product is no longer available"); return; }
+        if (!markets.some((market) => market.state === draft.carrier_state)) { setError("This draft's customer state is no longer available"); return; }
+        pendingDraftState.current = draft.carrier_state;
+        setSelectedProduct(draft.product_code);
+        setSelectedState(draft.carrier_state ?? "");
+        setResumeDraftId(draft.id);
+      })
+      .catch(() => setError("That saved draft could not be opened"));
+  }, [initialDraftId, section, productsLoaded, markets, approvedProducts]);
+
+  const marketStates = Array.from(new Set(markets.map((market) => market.state)));
+  const selectedSubmissionMarket = selectedState && marketStates.includes(selectedState)
+    ? { state: selectedState }
+    : null;
+  const setupControls = (
+    <>
+      <div className="portal-partner-submit-select">
+        <span>Product</span>
+        <SelectMenu label="Product" value={selectedProduct} onChange={async (productCode) => {
+          if (!(await confirmLeadReset())) return;
+          pendingDraftState.current = null;
+          setFormHasAnswers(false);
+          setSelectedProduct(productCode);
+          setResumeDraftId(null);
+        }} searchPlaceholder="Search products" className="w-full" panelClassName="w-[var(--radix-popover-trigger-width)]" options={approvedProducts.map((product) => ({ value: product.code, label: productLineLabel(product.code) }))} />
+      </div>
+      <div className="portal-partner-submit-select is-narrow">
+        <span>Customer state</span>
+        {marketStates.length > 1 ? (
+          <SelectMenu label="Customer state" value={selectedState} onChange={async (state) => {
+            if (!(await confirmLeadReset())) return;
+            pendingDraftState.current = null;
+            setFormHasAnswers(false);
+            setSelectedState(state);
+            setResumeDraftId(null);
+          }} searchPlaceholder="Search states" className="w-full" panelClassName="w-[var(--radix-popover-trigger-width)]" panelAlign="start" options={marketStates.map((state) => ({ value: state, label: state, description: US_STATES.find(([code]) => code === state)?.[1] ?? state }))} />
+        ) : <div className="portal-partner-submit-state-value">{marketStates[0] ? `${marketStates[0]} · ${US_STATE_NAME_BY_CODE[marketStates[0]] ?? marketStates[0]}` : "No state available"}</div>}
+      </div>
+    </>
+  );
 
   return (
-    <div className={section === "messages" ? "m-stagger mx-auto flex min-h-0 w-full flex-1 flex-col" : "m-stagger mx-auto w-full max-w-7xl space-y-8"}>
+    <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
       {section === "overview" && (
         <section id="overview" className="scroll-mt-6">
           {/* The one page header (UI-CONSISTENCY §2): no eyebrow, the 24px title. */}
@@ -1999,6 +1860,7 @@ function LegacyPartnerPortalWorkspace({
             description="Start a new application for your customer."
             visible
             infoDescription
+            actions={<Button asChild variant="outline"><Link href="/partner/submit-lead/drafts"><FileText aria-hidden="true" />Drafts</Link></Button>}
           />
           {!productsLoaded ? (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -2007,175 +1869,19 @@ function LegacyPartnerPortalWorkspace({
           ) : approvedProducts.length > 0 ? (
             <>
               <div className={`${cardSurface} portal-partner-submit-workspace`}>
-              {drafts.length > 0 && (
-                <div className="portal-partner-submit-drafts-summary">
-                  <FileText aria-hidden="true" className="size-5 shrink-0 text-[var(--accent-ink)]" />
-                  <strong>{drafts.length} saved {drafts.length === 1 ? "draft" : "drafts"}</strong>
-                  <span aria-hidden="true" className="portal-partner-submit-drafts-divider" />
-                  <span className="portal-partner-submit-drafts-latest">
-                    {(() => {
-                      const draft = drafts.find((item) => item.id === activeDraftId) ?? drafts[0];
-                      return `${productLineLabel(draft.product_code)}${draft.carrier_state ? ` · ${draft.carrier_state}` : ""} · saved ${agoLabel(Date.parse(draft.updated_at), draftsLoadedAt)}`;
-                    })()}
-                  </span>
-                  <Button type="button" variant="outline" onClick={() => setDraftsOpen(true)}>
-                    View drafts <ChevronRight aria-hidden="true" />
-                  </Button>
-                </div>
-              )}
-              {draftsOpen && (
-                <Sheet
-                  title="Saved drafts"
-                  subtitle="Resume a lead where you left off."
-                  onClose={() => setDraftsOpen(false)}
-                  footer={<Button type="button" onClick={() => void startNewForm()}>Start a new form</Button>}
-                >
-                  {drafts.length ? (
-                    <ul className="portal-partner-submit-draft-list">
-                      {drafts.map((draft) => (
-                        <li key={draft.id} className="portal-partner-submit-draft-item">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[var(--ink)]">{draft.label ?? "Customer name not entered yet"}</p>
-                          <p className="portal-partner-submit-muted">
-                            {productLineLabel(draft.product_code)}
-                            {draft.carrier_state ? ` · ${draft.carrier_state}` : ""}
-                            {draft.phone_last4 ? ` · phone ending ${draft.phone_last4}` : ""}
-                            {` · ${draft.answered} ${draft.answered === 1 ? "answer" : "answers"} · saved ${agoLabel(Date.parse(draft.updated_at), draftsLoadedAt)}`}
-                          </p>
-                        </div>
-                        <span className="portal-partner-submit-draft-actions">
-                          {draft.id === activeDraftId ? (
-                            <StatusChip tone="good">Open below</StatusChip>
-                          ) : (
-                            <Button type="button" variant="outline" onClick={() => void resumeDraft(draft)}>Resume</Button>
-                          )}
-                          <Button type="button" variant="outline" onClick={() => void discardDraft(draft)}>Discard</Button>
-                        </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className="portal-partner-submit-muted">No saved drafts.</p>}
-                </Sheet>
-              )}
-              <div className="portal-partner-submit-product-bar" role="group" aria-labelledby="partner-lead-details-label">
-                <h2 id="partner-lead-details-label" className="sr-only">Lead details</h2>
-                <div className={`portal-partner-submit-product-row ${markets.length > 1 ? "has-markets" : "product-only"}`}>
-                  <div className="portal-partner-submit-select">
-                    <span>Product</span>
-                    <SelectMenu
-                      label="Product"
-                      value={selectedProduct}
-                      onChange={async (productCode) => {
-                        if (!(await confirmLeadReset())) return;
-                        setFormHasAnswers(false);
-                        setSelectedProduct(productCode);
-                        setFormVersion(null);
-                        setResumeDraftId(null);
-                        setActiveDraftId(null);
-                      }}
-                      searchPlaceholder="Search products"
-                      className="w-full"
-                      panelClassName="w-[var(--radix-popover-trigger-width)]"
-                      options={approvedProducts.map((product) => ({
-                        value: product.code,
-                        label: productLineLabel(product.code),
-                      }))}
-                    />
-                  </div>
-                  {markets.length > 1 && (
-                    <>
-                    <div className="portal-partner-submit-select">
-                      <span>Carrier</span>
-                      <SelectMenu
-                        label="Carrier"
-                        value={selectedCarrierId}
-                        onChange={async (carrierId) => {
-                          if (!(await confirmLeadReset())) return;
-                          setFormHasAnswers(false);
-                          setSelectedCarrierId(carrierId);
-                          setResumeDraftId(null);
-                          setActiveDraftId(null);
-                          setSelectedState(
-                            markets.find(
-                              (market) => market.carrier_id === carrierId,
-                            )?.state ?? "",
-                          );
-                        }}
-                        searchPlaceholder="Search carriers"
-                        className="w-full"
-                        panelClassName="w-[var(--radix-popover-trigger-width)]"
-                        options={[
-                          { value: "", label: "Select carrier", disabled: true },
-                          ...Array.from(
-                            new Map(
-                              markets.map((market) => [
-                                market.carrier_id,
-                                market.carrier_name,
-                              ]),
-                            ).entries(),
-                          ).map(([carrierId, carrierName]) => ({
-                            value: carrierId,
-                            label: carrierName,
-                          })),
-                        ]}
-                      />
-                    </div>
-                    <div className="portal-partner-submit-select is-narrow">
-                      <span>Carrier state</span>
-                      <SelectMenu
-                        label="Carrier state"
-                        value={selectedState}
-                        onChange={async (state) => {
-                          if (!(await confirmLeadReset())) return;
-                          setFormHasAnswers(false);
-                          setSelectedState(state);
-                          setResumeDraftId(null);
-                          setActiveDraftId(null);
-                        }}
-                        disabled={!selectedCarrierId}
-                        searchPlaceholder="Search states"
-                        className="w-full"
-                        panelClassName="w-56"
-                        panelAlign="start"
-                        options={[
-                          { value: "", label: "Select state", disabled: true },
-                          ...markets.filter(
-                            (market) => market.carrier_id === selectedCarrierId,
-                          ).map((market) => ({
-                            value: market.state,
-                            label: market.state,
-                            description: US_STATES.find(([code]) => code === market.state)?.[1] ?? market.state,
-                          })),
-                        ]}
-                      />
-                    </div>
-                    </>
-                  )}
-                  {formVersion !== null && (
-                    <StatusChip className="portal-partner-submit-form-version">
-                      Form v{formVersion}
-                    </StatusChip>
-                  )}
-                </div>
-              </div>
-              {selectedProduct && selectedCarrierId && selectedState && (
+              {selectedProduct && selectedSubmissionMarket && (
                 <div className="portal-partner-submit-flow">
                 <PartnerLeadForm
-                  key={`${selectedProduct}:${selectedCarrierId}:${selectedState}:${resumeDraftId ?? "new"}:${formNonce}`}
+                  key={`${selectedProduct}:${selectedState}:${resumeDraftId ?? "new"}`}
                   draftId={resumeDraftId}
-                  onDraftChange={onDraftChange}
                   productCode={selectedProduct}
                   productName={productLineLabel(selectedProduct)}
                   partnerStatus={partnerStatus}
                   partnerName={partnerName}
                   agencyName={agencyName}
-                  onFormVersion={setFormVersion}
                   onHasAnswersChange={setFormHasAnswers}
-                  market={markets.find(
-                    (market) =>
-                      market.carrier_id === selectedCarrierId &&
-                      market.state === selectedState,
-                  )!}
+                  market={selectedSubmissionMarket}
+                  setupControls={setupControls}
                 />
                 </div>
               )}
@@ -2216,7 +1922,7 @@ function LegacyPartnerPortalWorkspace({
       )}
       {section === "messages" && (
         <section id="messages" className="flex min-h-0 flex-1 flex-col scroll-mt-6">
-          <PartnerChatPanel role={role} />
+          <PartnerChatPanel />
         </section>
       )}
       {section === "settings" && (
@@ -2271,6 +1977,7 @@ export function PartnerPortalWorkspace({
   partnerTimezone,
   agencyName,
   section = "overview",
+  initialDraftId,
 }: {
   role: PartnerRole;
   partnerStatus: "draft" | "active" | "paused" | "offboarded";
@@ -2279,6 +1986,7 @@ export function PartnerPortalWorkspace({
   partnerTimezone?: string;
   agencyName?: string | null;
   section?: PartnerPortalSection;
+  initialDraftId?: string | null;
 }) {
   useEffect(() => {
     const destinations: Record<string, string> = {
@@ -2327,6 +2035,7 @@ export function PartnerPortalWorkspace({
       section={section}
       partnerName={partnerName}
       agencyName={agencyName}
+      initialDraftId={initialDraftId}
     />
   );
 }

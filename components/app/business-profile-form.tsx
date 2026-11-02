@@ -12,7 +12,8 @@ import { MultiPicker } from "@/components/app/multi-picker";
 import { StatePicker } from "@/components/app/state-picker";
 import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
 import { Button } from "@/components/ui/button";
-import { LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, VOLUME_OPTIONS } from "@/lib/signup/constants";
+import { Segmented } from "@/components/ui/view-tabs";
+import { BUSINESS_FOCUS_OPTIONS, inferBusinessFocus, LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, productsForBusinessFocus, type BusinessFocus, VOLUME_OPTIONS } from "@/lib/signup/constants";
 import { checkPhone, phoneCountry, splitPhone } from "@/lib/signup/phone";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ const AGENCY_INFO = {
   name: "Your agency's legal name, or the DBA your clients know you by.",
   state: "The main state your agency will operate in. Type its name or two-letter code.",
   sell: "Every product line your agency writes. Pick as many as apply.",
+  focus: "Choose Life, Health, or both. Existing non-Life/Health work can use Other. Product choices stay broad and customizable.",
   volume: "Roughly how many applications the whole agency submits a month.",
   sources: "Where your leads come from today. Pick all that apply.",
   phone: "The number we reach you on about your account. Never shown to your clients.",
@@ -41,6 +43,7 @@ const AGENT_INFO: Record<InfoKey, string> = {
   name: "The name you do business under, if you have one. Leave it empty to use your own name.",
   state: "The main state you sell in. Type its name or two-letter code.",
   sell: "Every product line you write. Pick as many as apply.",
+  focus: "Choose Life, Health, or both. Existing non-Life/Health work can use Other. Product choices stay broad and customizable.",
   volume: "Roughly how many applications you submit a month.",
   sources: "Where your leads come from today. Pick all that apply.",
   phone: AGENCY_INFO.phone,
@@ -124,6 +127,7 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
   const label = (id: InfoKey, text: string, end = false): ReactNode => <FieldLabel id={id} label={text} info={info[id]} end={end} />;
   const [primaryState, setPrimaryState] = useState(initial?.primaryState ?? "");
   const [products, setProducts] = useState<string[]>(initial?.productsSold ?? []);
+  const [businessFocus, setBusinessFocus] = useState<BusinessFocus>(() => inferBusinessFocus(initial?.productsSold ?? []));
   const [volume, setVolume] = useState(initial?.monthlyVolumeRange ?? "");
   const [leadSources, setLeadSources] = useState<string[]>(initial?.leadSources ?? []);
   const [leadSourceOther, setLeadSourceOther] = useState(initial?.leadSourceOther ?? "");
@@ -136,6 +140,13 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
   // One agent without a business name does business under their own.
   // One agent does business under their own name (no business-name field for them).
   const sentBusinessName = solo ? fullName : businessName.trim();
+  const focusProductCodes = productsForBusinessFocus(businessFocus);
+  const focusProducts = products.filter((product) => focusProductCodes.includes(product));
+  const businessFocusProducts = businessFocus === "life" ? ["life"]
+    : businessFocus === "health" ? ["health"]
+      : businessFocus === "both" ? ["life", "health"]
+        : businessFocus === "other" ? ["property_casualty"] : [];
+  const productsForSubmit = [...new Set([...businessFocusProducts, ...focusProducts])];
 
   const missing = [
     !firstName.trim() && "first name",
@@ -143,7 +154,8 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
     !phoneCheck.ok && "phone number",
     !solo && sentBusinessName.length < 2 && "agency name",
     !primaryState && "primary state",
-    products.length === 0 && "a product",
+    !businessFocus && "a business focus",
+    focusProducts.length === 0 && "a product",
     !volume && "monthly applications",
     leadSources.length === 0 && "a lead source",
     leadSources.includes("other") && !leadSourceOther.trim() && "the other lead source",
@@ -159,7 +171,7 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
       const response = await fetch("/api/app/onboarding/business-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phoneCheck.ok ? phoneCheck.e164 : undefined, businessName: sentBusinessName, primaryState, productsSold: products, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phoneCheck.ok ? phoneCheck.e164 : undefined, businessName: sentBusinessName, primaryState, productsSold: productsForSubmit, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Could not save your business profile"); return; }
@@ -234,8 +246,22 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
             <StatePicker value={primaryState} onChange={setPrimaryState} />
           </div>
           <div>
-            {label("sell", "What you sell", !solo)}
-            <MultiPicker label="What you sell" placeholder="Choose products" options={PRODUCT_OPTIONS} value={products} onChange={setProducts} />
+            {label("focus", "Business focus")}
+            <div className="mt-1.5">
+              <Segmented label="Business focus" options={BUSINESS_FOCUS_OPTIONS} value={businessFocus} onChange={setBusinessFocus} />
+            </div>
+            {businessFocus && (
+              <div className="mt-3">
+                {label("sell", "What you sell", !solo)}
+                <MultiPicker
+                  label="What you sell"
+                  placeholder="Choose products"
+                  options={PRODUCT_OPTIONS.filter((option) => focusProductCodes.includes(option.value))}
+                  value={focusProducts}
+                  onChange={(next) => setProducts((current) => [...current.filter((product) => !focusProductCodes.includes(product)), ...next])}
+                />
+              </div>
+            )}
           </div>
           {/* Lead sources beside the monthly volume (2026-10-28: the step fits a 1366×657 laptop window).
               The five volume chips fill the column, each as wide as its words, at the field height. */}

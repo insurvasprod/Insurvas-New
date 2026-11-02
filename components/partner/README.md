@@ -26,8 +26,16 @@ The agency's own stage name is **not** lost: it is on every card, is a column in
 is still a filter. It stopped being the thing that sorts the board, nothing more.
 `lib/partnerLeads/board.test.mjs` holds both halves of that.
 
-Check a change on `/design/pipeline` (development only): busy, quiet, SLA-flagged, many pipelines,
-empty and error, for both roles and three payout models, at 1536×826, 1366×657 and 375 wide.
+The toolbar's pipeline selector lists every live pipeline configured by the partner's agency; its
+selection scopes the server read, counters, stages and returning record links. Pipeline names are
+agency configuration, while lead rows remain limited to this partner's submissions: a publisher
+user sees only their own, and a partner admin sees their own plus the members assigned to them. The
+same boundary applies to CSV export, counters and facets. The toolbar uses the shared searchable
+`SelectMenu`, compact `IconViewSwitch`, then Filters and Refresh in that order.
+
+Check a change on `/design/pipeline` (development only): busy, crowded (per-lane pagination), quiet,
+SLA-flagged, many pipelines, empty and error, for both roles and three payout models, at 1536×826,
+1366×657 and 375 wide.
 
 ## Messages (2026-10-30)
 
@@ -37,12 +45,13 @@ A messenger, built from the kit — not a document with a form under it.
   [`lib/partnerChat/thread.ts`](../../lib/partnerChat/thread.ts) returns: days, then runs of
   messages from one sender. That module is pure and tested; the component only draws it. Change
   *what groups with what* there, not here.
-- **The composer** is the shared [`ChatComposer`](../ui/chat-composer.tsx): one bar, paperclip
-  inside on the left, send on the right. Enter sends, Shift+Enter breaks the line.
-- **Two panes, not three.** Conversation details is a `Sheet` (§11) opened from the thread's
-  header. Below `md` it is one pane: the list, then the conversation, with a back control.
-- **No avatars for channels** (§10). A Lucide glyph says agent channel, direct message or team
-  channel.
+- **The composer** follows the agent Partner Chat: attachments, message input, dictation and send
+  share one compact bar. Enter sends; Shift+Enter starts a new line.
+- **The same pane structure.** Conversations and the thread are side by side; details uses the shared
+  `DetailPanel` (§8), matching the agent chat. Below `md` it is one pane: the list, then the
+  conversation, with a back control.
+- **Conversation controls** follow the agent chat: searchable list, count chips, message/update tabs,
+  in-thread search, options and details. Labels and data remain publisher-specific.
 - **No page CSS.** The 147 `.portal-agent-chat-*` rules are gone (§9). Keep it that way.
 
 `viewerId` comes from `/api/partner/chat` — the caller's own id, from the session. Without it the
@@ -81,8 +90,8 @@ to today.
 
 **It is the agent app's `/app/deal-flow`, same design** (owner, 1 Nov: "exactly the same design").
 `components/app/deal-flow-workspace.tsx` is the reference: the same header row, the same four
-figures with the same icons and Show actions, the same toolbar of search / from / to / Today, the
-same inline filter panel, the same 40px head and 44px rows (`st` from
+figures with the same icons and Show actions, the worked-date range at the header's right and
+search in the table toolbar, the same inline filter panel, the same 40px head and 44px rows (`st` from
 [`settings/primitives`](../app/settings/primitives.tsx)), the same `PremiumBar`, the same pager.
 **Change one and look at the other.**
 
@@ -95,8 +104,10 @@ Two differences, both the owner's own earlier decisions rather than design choic
   ([`PARTNER_DEAL_FLOW_COLUMNS`](../../lib/partnerDealFlow/types.ts)). Those four are replaced by
   carrier, product and, for an admin, which of their people submitted it.
 
-The dropdowns are the agent's **native `<select>`** (owner, 1 Nov), which makes this the one page
-in the portal with one — see Controls below.
+Each filter opens from the inline panel and uses the portal's searchable `SelectMenu`, including its
+search field at the top. The panel has four columns on desktop and covers every data field: customer,
+status, product, carrier, annualised premium, draft date, and (for admins) submitter. Worked dates
+remain native date inputs in the page header; draft date is a separate range in the filter panel.
 
 - **This page is deliberately narrower than the rest of the portal.** A `partner_user` sees the
   deals on leads they submitted; a `partner_admin` sees **their own team's and their own** — the
@@ -104,21 +115,19 @@ in the portal with one — see Controls below.
   [`lib/partnerAuth/team.ts`](../../lib/partnerAuth/team.ts): the route works the id list out from
   the session and hands the service ids, so neither the component nor the service ever sees a role.
 
-  Everywhere else an admin still sees the **whole partner organisation** —
-  [`lib/partnerLeads/scope.ts`](../../lib/partnerLeads/scope.ts) is untouched, and Pipeline, the
-  lead record, the CSV export, Overview and Team review are unchanged. So an admin can open a lead
-  on Pipeline that is absent from here. **That is the decision, not a bug to fix.** Bringing
-  Pipeline into line would take a migration — `partner_lead_pipeline_page` takes one `p_closer_id`,
-  not a list — which is why the two are out of step rather than both moved at once. If the rule
-  ever does spread, it spreads from `team.ts`; editing `scope.ts` silently rescopes five surfaces,
-  which is what had to be reverted on 1 Nov.
+  The Lead Pipeline now uses this same team boundary (owner, 2 Nov), enforced before its page,
+  counter and facet calculations. Its pipeline selector independently lists the agency's live
+  configured pipelines, so an empty pipeline still appears and opens to its configured stages.
+  The lead record, Overview and Team review remain governed by
+  [`lib/partnerLeads/scope.ts`](../../lib/partnerLeads/scope.ts); editing that module would silently
+  rescope those other surfaces.
 
   `lib/partnerAuth/team.test.mjs` holds the rule and `lib/partnerDealFlow/isolation.test.mjs` holds
   the wiring — including that `scope.ts` still opens the organisation to an admin, so a future edit
-  cannot quietly take Pipeline with it.
-- **A member nobody has assigned reaches no admin here.** With a null `partner_admin_user_id` they
-  are on no team, so on this page their deals go to no admin at all. They stay visible to an admin
-  on every other partner surface, which is why the agency is not warned about it.
+  cannot quietly take other surfaces with it.
+- **A member nobody has assigned reaches no admin on these team-scoped pages.** With a null
+  `partner_admin_user_id` they are on no team, so their leads do not appear in Daily Deal Flow or
+  Lead Pipeline for an admin. They remain visible on organization-wide surfaces using `scope.ts`.
 - **The page says "your team", not "your organisation".** Two strings depend on the scope: the
   Deals worked card's footer and the empty state's hint. No test asserts copy against the scope, so
   if the boundary moves again, read them.
@@ -151,9 +160,5 @@ Every dropdown is `SelectMenu` — the searchable one the owner approved on 2026
 choice is a `Segmented`, and picking several people is `MultiPicker`. UI-CONSISTENCY §5b carries
 the rule. Native date inputs remain, for the reason §5b gives.
 
-**One exception, owner 2026-11-01:** Daily deal flow's filter panel uses native `<select>`, because
-that page is held to the agent app's design rather than to this portal's own. It is the only native
-`<select>` in the portal; do not take it as licence for another.
-
-Do not: introduce partner-only colours, controls or table styles, or a native `<select>` anywhere
-but Daily deal flow.
+Do not: introduce partner-only colours, controls or table styles, or add native `<select>` controls
+for searchable filter options.

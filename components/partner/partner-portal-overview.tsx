@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowUpRight, CheckCircle2, CircleAlert, Hand, Inbox, LineChart, MessageSquare, Send, Users, WalletCards } from "lucide-react";
 
@@ -8,6 +8,7 @@ import { HomePanel, PanelFact } from "@/components/app/home/home-panel";
 import { HomeShortcuts, ShortcutLink } from "@/components/app/home/home-extras";
 import { Button } from "@/components/ui/button";
 import { BarSeries, ShareBar, type ChartTone, type ShareSegment } from "@/components/ui/chart";
+import { toolbarControl } from "@/components/ui/data-toolbar";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
 import { DeltaChip } from "@/components/ui/stat";
@@ -17,7 +18,7 @@ import { formatCentsAsCurrency } from "@/lib/money";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import type { PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import { laneShares } from "@/lib/partnerLeads/overview";
-import { bestBucket, compareTail, localDay, shiftDay, trendSeries } from "@/lib/partnerLeads/trend";
+import { bestBucket, compareTail, localDay, shiftDay, spanDays, trendSeries } from "@/lib/partnerLeads/trend";
 import { termLabel, type PartnerTerm } from "@/lib/partners/payout";
 import { durationLabel } from "@/lib/partnerTeamReview/pulse";
 
@@ -51,6 +52,13 @@ const STATEMENT_BARS = 8;
 /** Today as YYYY-MM-DD in the viewer's calendar, for the pipeline's "From" filter. */
 function todayIso() {
   return new Date().toLocaleDateString("en-CA");
+}
+
+function rangeLabel(from: string, to: string) {
+  const format = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const start = format.format(new Date(`${from}T12:00:00`));
+  const end = format.format(new Date(`${to}T12:00:00`));
+  return from === to ? start : `${start} – ${end}`;
 }
 
 const dollars = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`;
@@ -98,7 +106,17 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
   const [statements, setStatements] = useState<Statement[] | null | undefined>(sample ? sample.statements : isAdmin ? undefined : null);
 
   // Fixed for the life of the page, so the chart's bars do not shuffle under a 15-second poll.
-  const [range] = useState(() => { const to = localDay(new Date())!; return { from: shiftDay(to, -(WINDOW_DAYS - 1)), to }; });
+  const [range, setRange] = useState(() => { const to = localDay(new Date())!; return { from: shiftDay(to, -(WINDOW_DAYS - 1)), to }; });
+  const [draftRange, setDraftRange] = useState(range);
+  const rangeDays = spanDays(range.from, range.to);
+  const rangeText = rangeLabel(range.from, range.to);
+  const rangeInvalid = !draftRange.from || !draftRange.to || draftRange.to < draftRange.from || spanDays(draftRange.from, draftRange.to) > 366;
+
+  function applyRange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (rangeInvalid || (draftRange.from === range.from && draftRange.to === range.to)) return;
+    setRange(draftRange);
+  }
 
   const load = useCallback(async () => {
     try {
@@ -221,13 +239,19 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
   const reviewHref = `${TEAM_REVIEW}?from=${range.from}&to=${range.to}`;
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
+    <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4">
       <PageHeader
         title="Overview"
         description="Your submissions and pipeline at a glance."
         visible
         infoDescription
         actions={<>
+          <form className="flex flex-wrap items-center gap-2" onSubmit={applyRange}>
+            <input type="date" aria-label="Report start date" className={toolbarControl} value={draftRange.from} max={draftRange.to || undefined} onChange={(event) => setDraftRange((current) => ({ ...current, from: event.target.value }))} />
+            <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>
+            <input type="date" aria-label="Report end date" className={toolbarControl} value={draftRange.to} min={draftRange.from || undefined} onChange={(event) => setDraftRange((current) => ({ ...current, to: event.target.value }))} />
+            <Button type="submit" variant="outline" disabled={rangeInvalid || (draftRange.from === range.from && draftRange.to === range.to)}>Apply</Button>
+          </form>
           {updatedAt !== null && <LiveStamp updatedAt={updatedAt} staleAfterSeconds={stale ? 0 : 45} />}
           {canSubmit && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button>}
         </>}
@@ -260,13 +284,13 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
 
           <HomePanel
             title="Submissions"
-            period={`${WINDOW_DAYS} days`}
+            period={rangeText}
             link={{ label: "Team performance", href: reviewHref }}
             className="min-h-[296px] @4xl:col-span-8"
             bodyClassName="pt-1"
             footer={<>
               {best && <PanelFact label="Best day" value={`${best.label} · ${best.count}`} />}
-              {trend && <PanelFact label={`Total · ${WINDOW_DAYS} days`} value={trend.total} />}
+              {trend && <PanelFact label={`Total · ${rangeDays} ${rangeDays === 1 ? "day" : "days"}`} value={trend.total} />}
             </>}
           >
             {windowRows === undefined ? (
@@ -277,7 +301,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
               <Unavailable what="submission history" />
             ) : trend && trend.total === 0 ? (
               <Nothing
-                title="No submissions in the last 30 days"
+                title="No submissions in this range"
                 detail={canSubmit ? "Send one and it appears here within a minute." : "Your organisation is not able to submit at the moment."}
               />
             ) : trend && (
@@ -294,7 +318,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
                 </div>
                 <BarSeries
                   bars={trend.buckets.map((bucket, index) => ({ key: bucket.key, label: bucket.label, value: bucket.count, partial: index === trend.buckets.length - 1 }))}
-                  summary={`Leads submitted per ${trend.step === 1 ? "day" : "week"} over ${WINDOW_DAYS} days: ${trend.total} in all`}
+                  summary={`Leads submitted per ${trend.step === 1 ? "day" : "week"} from ${range.from} to ${range.to}: ${trend.total} in all`}
                   unit="leads"
                   className="flex-1"
                 />
@@ -304,14 +328,14 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
 
           <HomePanel
             title="Where they end up"
-            period={`${WINDOW_DAYS} days`}
+            period={rangeText}
             link={{ label: "View pipeline", href: PIPELINE }}
             className="min-h-[296px] @4xl:col-span-4"
             bodyClassName="pt-1"
             // The conversion rate is the Converted row of the breakdown itself, so it is not repeated
             // here: two roundings of one figure side by side is how a page contradicts itself.
             footer={<>
-              <PanelFact label={`Submitted · ${WINDOW_DAYS} days`} value={windowRows ? windowRows.length : "—"} />
+              <PanelFact label={`Submitted · ${rangeDays} ${rangeDays === 1 ? "day" : "days"}`} value={windowRows ? windowRows.length : "—"} />
               <PanelFact label="Stopped by screening" value={figure(extras?.rejectedCompliance)} />
             </>}
           >
@@ -323,10 +347,10 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
             ) : windowRows === null ? (
               <Unavailable what="outcomes" />
             ) : !windowRows.length ? (
-              <Nothing title="Nothing to break down yet" detail="Outcomes appear once leads have been sent." />
+              <Nothing title="Nothing to break down yet" detail="No submissions fall in this date range." />
             ) : (
               <div className="flex min-h-0 flex-1 flex-col justify-center gap-4 py-2">
-                <ShareBar segments={shares!} unit="leads" summary={`Where the last ${WINDOW_DAYS} days of submissions stand: ${shares!.map((share) => `${share.label} ${share.value}`).join(", ")}`} />
+                <ShareBar segments={shares!} unit="leads" summary={`Where submissions from ${range.from} to ${range.to} stand: ${shares!.map((share) => `${share.label} ${share.value}`).join(", ")}`} />
               </div>
             )}
           </HomePanel>

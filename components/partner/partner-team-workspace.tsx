@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { PageLoading } from "@/components/ui/page-loading";
-import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -180,7 +179,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
 
   if (role !== "partner_admin") {
     return (
-      <div className="m-stagger space-y-6">
+      <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
         <PageHeader title="Team access" description="See who has access to your partner workspace." visible infoDescription />
         <p role="status" className="flex items-center gap-2 rounded-md border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]"><ShieldCheck className="size-4 shrink-0" aria-hidden="true" />Team access is managed by your partner admin.</p>
       </div>
@@ -217,7 +216,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
   const labelText = "text-sm font-semibold text-[var(--body)]";
 
   return (
-    <div className="m-stagger space-y-6">
+    <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
       <PageHeader title="Team access" description="See who has access to your partner workspace." visible infoDescription actions={<Button type="button" onClick={() => setInviteOpen(true)}><UserPlus aria-hidden="true" />Invite teammate</Button>} />
       {error &&<p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team access could not be refreshed: {error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
 
@@ -246,6 +245,8 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
       {invite && <PartnerInviteResultPanel result={invite} />}
 
       <TableCard
+        className="flex min-h-[24rem] min-w-0 flex-1 flex-col"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search members" label="Search members by name or email" />
@@ -253,9 +254,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
         }
         footer={users.length ? <Pager page={visible.current} total={shown.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
       >
-        {users.length === 0 ? <EmptyState title="No team members yet" hint="Invite the first teammate to start working leads together." action={<Button type="button" variant="outline" onClick={() => setInviteOpen(true)}>Invite teammate</Button>} />
-          : shown.length === 0 ? <NoMatches noun="members" onClear={() => setSearch("")} />
-          : <Table>
+        <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Member</TableHead>
@@ -266,7 +265,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.rows.map((user) => {
+              {users.length === 0 ? <TableRow><TableCell colSpan={5} className="h-64 text-center align-middle"><div className="mx-auto max-w-md"><p className="m-0 font-semibold text-foreground">No team members yet</p><p className="mb-0 mt-1 text-sm text-muted-foreground">Invite the first teammate to start working leads together.</p><Button type="button" variant="link" className="mt-1" onClick={() => setInviteOpen(true)}>Invite teammate</Button></div></TableCell></TableRow> : shown.length === 0 ? <TableRow><TableCell colSpan={5} className="h-64 text-center align-middle"><div className="mx-auto max-w-md"><p className="m-0 font-semibold text-foreground">No members match this search</p><Button type="button" variant="link" className="mt-1" onClick={() => setSearch("")}>Clear search</Button></div></TableCell></TableRow> : visible.rows.map((user) => {
                 const pendingInvite = user.status === "active" && !user.accepted_at;
                 const status = user.status !== "active" ? "deactivated" : pendingInvite ? "invited" : "active";
                 return <TableRow key={user.id}>
@@ -286,7 +285,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
                 </TableRow>;
               })}
             </TableBody>
-          </Table>}
+        </Table>
       </TableCard>
 
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>

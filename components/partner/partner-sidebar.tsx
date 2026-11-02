@@ -31,7 +31,7 @@ const workspaceItems: PartnerNavItem[] = [
   { label: "Lead pipeline", path: "/partner/pipeline", icon: BarChart3 },
   // Next to Pipeline, because both answer "where are my leads?" — Pipeline over a range, Deal flow
   // for one day. The agent menu uses the same icon for its own Daily deal flow (sell.deal-flow).
-  { label: "Deal flow", path: "/partner/deal-flow", icon: ClipboardList },
+  { label: "Daily Deal Flow", path: "/partner/deal-flow", icon: ClipboardList },
   { label: "Messages", path: "/partner/messages", icon: MessageSquare },
 ];
 

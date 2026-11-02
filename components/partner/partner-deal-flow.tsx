@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { BadgeCheck, Download, Handshake, Hourglass, XCircle } from "lucide-react";
+import { BadgeCheck, Handshake, Hourglass, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -13,12 +13,13 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { PremiumBar } from "@/components/ui/premium-bar";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { TableCard } from "@/components/ui/table-card";
 import { st } from "@/components/app/settings/primitives";
-import { when } from "@/components/partner/lead-format";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { productLineLabel } from "@/lib/format/productLine";
 import { dayLabel } from "@/lib/partnerDealFlow/localDay";
+import { NO_CARRIER_FILTER } from "@/lib/partnerDealFlow/filters";
 import { DEAL_FLOW_STAGE_TYPES, STAGE_TYPE_LABEL, type DealFlowStageType, type PartnerDealFlowPayload } from "@/lib/partnerDealFlow/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ import { cn } from "@/lib/utils";
  *
  * **The same page as the agent app's `/app/deal-flow`** (owner, 1 Nov: "exactly the same design"):
  * the same header row, the same four figures with the same icons and Show actions, the same
- * toolbar of search, from/to and Today, the same inline filter panel, the same 40px/44px table and
+ * header date range and toolbar search, the same inline filter panel, the same 40px/44px table and
  * premium bar, the same pager. `components/app/deal-flow-workspace.tsx` is the reference; change
  * one and look at the other.
  *
@@ -41,16 +42,36 @@ import { cn } from "@/lib/utils";
  *   (`PARTNER_DEAL_FLOW_COLUMNS`). Those columns are replaced by the ones a partner has instead —
  *   carrier, product and, for an admin, which of their people submitted it.
  *
- * The dropdowns are the agent's native `<select>` (owner, 1 Nov). That makes this the one page in
- * the portal with one — the 29 Oct rule that every partner dropdown is a `SelectMenu` was set
- * before this page existed, and "exactly the same design" wins here. Keep the two files the same.
+ * Partner filters use the same searchable SelectMenu as the rest of the portal, inside the shared
+ * inline filter panel.
  */
 
 /** Sample data in place of the API, for `/design/deal-flow` (development only). */
 export type DealFlowPreview = { data: PartnerDealFlowPayload | null; error?: string };
 
-type Filters = { stage_type: string; product: string; submitted_by: string };
-const EMPTY_FILTERS: Filters = { stage_type: "", product: "", submitted_by: "" };
+type Filters = {
+  stage_type: string;
+  product: string;
+  submitted_by: string;
+  customer: string;
+  carrier: string;
+  annualised_premium_min: string;
+  annualised_premium_max: string;
+  draft_date_from: string;
+  draft_date_to: string;
+};
+const EMPTY_FILTERS: Filters = { stage_type: "", product: "", submitted_by: "", customer: "", carrier: "", annualised_premium_min: "", annualised_premium_max: "", draft_date_from: "", draft_date_to: "" };
+
+function currencyFilterLabel(value: string) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? formatCentsAsCurrency(Math.round(numeric * 100)) : "invalid amount";
+}
+
+function currencyFilterCents(value: string) {
+  const numeric = Number(value);
+  const cents = Math.round(numeric * 100);
+  return Number.isFinite(numeric) && Number.isSafeInteger(cents) && cents >= 0 ? cents : null;
+}
 
 const STAGE_TONE: Record<DealFlowStageType, StatusTone> = { open: "action", won: "good", lost: "neutral" };
 
@@ -97,7 +118,11 @@ export function PartnerDealFlow({
   const [firstLoad, setFirstLoad] = useState(!preview);
 
   const query = new URLSearchParams({ from: range.from, to: range.to });
-  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
+  for (const key of ["stage_type", "product", "submitted_by", "customer", "carrier"] as const) if (filters[key]) query.set(key, filters[key]);
+  if (filters.annualised_premium_min && currencyFilterCents(filters.annualised_premium_min) !== null) query.set("annualised_premium_min", String(currencyFilterCents(filters.annualised_premium_min)));
+  if (filters.annualised_premium_max && currencyFilterCents(filters.annualised_premium_max) !== null) query.set("annualised_premium_max", String(currencyFilterCents(filters.annualised_premium_max)));
+  if (filters.draft_date_from) query.set("draft_date_from", filters.draft_date_from);
+  if (filters.draft_date_to) query.set("draft_date_to", filters.draft_date_to);
   if (search.trim()) query.set("search", search.trim());
   const queryString = query.toString();
 
@@ -137,9 +162,17 @@ export function PartnerDealFlow({
   const setDate = (key: "from" | "to", value: string) => { setRange((current) => ({ ...current, [key]: value || ceiling })); setPage(1); };
   const resetToToday = () => { setRange({ from: ceiling, to: ceiling }); setPage(1); };
   const applyFilter = (patch: Partial<Filters>) => { setFilters((current) => ({ ...current, ...patch })); setPage(1); };
-  const clearFilters = () => { setFilters(EMPTY_FILTERS); setSearch(""); setPage(1); };
-  const extraFilters = Object.values(filters).filter(Boolean).length;
-  const hasNarrowing = extraFilters > 0 || Boolean(search.trim());
+  const clearFilters = () => { setFilters(EMPTY_FILTERS); setSearch(""); setRange({ from: ceiling, to: ceiling }); setPage(1); };
+  const premiumNarrowing = Boolean(filters.annualised_premium_min || filters.annualised_premium_max);
+  const draftDateNarrowing = Boolean(filters.draft_date_from || filters.draft_date_to);
+  const premiumRangeInvalid = Boolean(
+    (filters.annualised_premium_min && currencyFilterCents(filters.annualised_premium_min) === null)
+    || (filters.annualised_premium_max && currencyFilterCents(filters.annualised_premium_max) === null)
+    || (filters.annualised_premium_min && filters.annualised_premium_max && Number(filters.annualised_premium_min) > Number(filters.annualised_premium_max)),
+  );
+  const draftDateRangeInvalid = Boolean(filters.draft_date_from && filters.draft_date_to && filters.draft_date_from > filters.draft_date_to);
+  const extraFilters = [filters.stage_type, filters.product, filters.submitted_by, filters.customer, filters.carrier, premiumNarrowing, draftDateNarrowing].filter(Boolean).length;
+  const hasNarrowing = extraFilters > 0 || Boolean(search.trim()) || !isToday;
 
   const periodText = isToday
     ? "today"
@@ -149,6 +182,10 @@ export function PartnerDealFlow({
   const chips: ActiveFilter[] = [
     filters.stage_type && { key: "status", label: "Status", value: STAGE_TYPE_LABEL[filters.stage_type as DealFlowStageType] ?? filters.stage_type, onRemove: () => applyFilter({ stage_type: "" }) },
     filters.product && { key: "product", label: "Product", value: productLineLabel(filters.product), onRemove: () => applyFilter({ product: "" }) },
+    filters.customer && { key: "customer", label: "Customer", value: filters.customer, onRemove: () => applyFilter({ customer: "" }) },
+    filters.carrier && { key: "carrier", label: "Carrier", value: filters.carrier === NO_CARRIER_FILTER ? "No carrier" : filters.carrier, onRemove: () => applyFilter({ carrier: "" }) },
+    premiumNarrowing && { key: "premium", label: "Annualised premium", value: filters.annualised_premium_min && filters.annualised_premium_max ? `${currencyFilterLabel(filters.annualised_premium_min)} – ${currencyFilterLabel(filters.annualised_premium_max)}` : filters.annualised_premium_min ? `At least ${currencyFilterLabel(filters.annualised_premium_min)}` : `Up to ${currencyFilterLabel(filters.annualised_premium_max)}`, onRemove: () => applyFilter({ annualised_premium_min: "", annualised_premium_max: "" }) },
+    draftDateNarrowing && { key: "draft-date", label: "Draft date", value: `${filters.draft_date_from ? dayLabel(filters.draft_date_from) : "any date"} – ${filters.draft_date_to ? dayLabel(filters.draft_date_to) : "any date"}`, onRemove: () => applyFilter({ draft_date_from: "", draft_date_to: "" }) },
     filters.submitted_by && { key: "submitted", label: "Submitted by", value: data?.facets.submitters.find((item) => item.id === filters.submitted_by)?.name ?? "Someone", onRemove: () => applyFilter({ submitted_by: "" }) },
   ].filter(Boolean) as ActiveFilter[];
 
@@ -157,19 +194,20 @@ export function PartnerDealFlow({
   const columns = isAdmin ? 8 : 7;
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+    <div className="m-stagger flex h-[calc(100dvh_-_7rem)] min-h-0 w-full min-w-0 flex-none flex-col gap-6">
       {/* The agent page's header row: the title on the left, the page's actions on the right. */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <PageHeader title="Daily deal flow" description="What the agency did with the leads you sent. The agency's published statement is what is actually paid." />
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline">
-            <a href={`/api/partner/deal-flow?${queryString}&format=csv`} aria-label="Export the deals in this range as CSV">
-              <Download aria-hidden="true" />
-              Export
-            </a>
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Daily Deal Flow"
+        description="What the agency did with the leads you sent. Published statements show what is paid."
+        actions={
+          <div className="flex flex-wrap items-center gap-2" aria-label="Deals worked date range">
+            <input type="date" aria-label="Worked from" className={toolbarControl} value={range.from} max={range.to || ceiling} onChange={(event) => setDate("from", event.target.value)} />
+            <span className="text-xs text-muted-foreground" aria-hidden="true">to</span>
+            <input type="date" aria-label="Worked to" className={toolbarControl} value={range.to} min={range.from || undefined} max={ceiling} onChange={(event) => setDate("to", event.target.value)} />
+            {!isToday && <Button type="button" variant="outline" onClick={resetToToday} aria-label="Show today’s deals">Today</Button>}
+          </div>
+        }
+      />
 
       {data?.capped && <Alert tone="warning">Narrow the range to see every deal — showing the first 5,000.</Alert>}
       {error && data && (
@@ -196,40 +234,107 @@ export function PartnerDealFlow({
       </StatRow>
 
       <TableCard
-        className="relative z-20 flex min-h-[calc(100dvh-var(--top-bar-h)-392px)] min-w-0 flex-1 flex-col [&>.overflow-x-auto]:flex-1"
+        className="relative z-20 flex min-h-[28rem] min-w-0 flex-1 flex-col"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
         toolbar={
-          // §6a: search, the day range (the page's scope), one Filters button; the facets open
-          // inline under the toolbar and show as chips while closed.
-          <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+          // The page's worked-date scope sits in the page header; this toolbar is for row search
+          // and filters on the table's data fields.
+          <DataToolbar actions={
+            <>
+              <FilterButton open={showFilters} onClick={() => setShowFilters((value) => !value)} count={extraFilters} controls="partner-deal-flow-filters" />
+              <RefreshButton onClick={() => void load()} refreshing={loading} />
+            </>
+          }>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Customer, carrier, outcome…" label="Search deals" />
-            <input type="date" aria-label="From" className={toolbarControl} value={range.from} max={range.to || ceiling} onChange={(event) => setDate("from", event.target.value)} />
-            <input type="date" aria-label="To" className={toolbarControl} value={range.to} min={range.from || undefined} max={ceiling} onChange={(event) => setDate("to", event.target.value)} />
-            {!isToday && <Button type="button" variant="outline" onClick={resetToToday} aria-label="Show today’s deals">Today</Button>}
-            <FilterButton open={showFilters} onClick={() => setShowFilters((value) => !value)} count={extraFilters} controls="partner-deal-flow-filters" />
           </DataToolbar>
         }
         filters={<>
-          <FilterPanel id="partner-deal-flow-filters" open={showFilters}>
+          <FilterPanel id="partner-deal-flow-filters" open={showFilters} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <FilterField label="Customer" htmlFor="partner-deal-customer">
+              <input id="partner-deal-customer" type="search" className={cn(toolbarControl, "w-full")} value={filters.customer} onChange={(event) => applyFilter({ customer: event.target.value })} placeholder="Any customer" />
+            </FilterField>
             <FilterField label="Status" htmlFor="partner-deal-status">
-              <select id="partner-deal-status" aria-label="Filter by status" className={cn(toolbarControl, "w-full min-w-0")} value={filters.stage_type} onChange={(event) => applyFilter({ stage_type: event.target.value })}>
-                <option value="">All statuses</option>
-                {DEAL_FLOW_STAGE_TYPES.map((type) => (
-                  <option key={type} value={type}>{counts ? `${STAGE_TYPE_LABEL[type]} · ${counts[type]}` : STAGE_TYPE_LABEL[type]}</option>
-                ))}
-              </select>
+              <SelectMenu
+                id="partner-deal-status"
+                label="Filter by status"
+                value={filters.stage_type}
+                defaultValue=""
+                onChange={(value) => applyFilter({ stage_type: value })}
+                searchPlaceholder="Search statuses"
+                className="w-full"
+                matchTriggerWidth
+                options={[
+                  { value: "", label: "All statuses" },
+                  ...DEAL_FLOW_STAGE_TYPES.map((type) => ({
+                    value: type,
+                    label: STAGE_TYPE_LABEL[type],
+                    count: counts?.[type],
+                  })),
+                ]}
+              />
             </FilterField>
             <FilterField label="Product" htmlFor="partner-deal-product">
-              <select id="partner-deal-product" aria-label="Filter by product" className={cn(toolbarControl, "w-full min-w-0")} value={filters.product} onChange={(event) => applyFilter({ product: event.target.value })}>
-                <option value="">All products</option>
-                {(data?.facets.products ?? []).map((item) => <option key={item} value={item}>{productLineLabel(item)}</option>)}
-              </select>
+              <SelectMenu
+                id="partner-deal-product"
+                label="Filter by product"
+                value={filters.product}
+                defaultValue=""
+                onChange={(value) => applyFilter({ product: value })}
+                searchPlaceholder="Search products"
+                className="w-full"
+                matchTriggerWidth
+                options={[
+                  { value: "", label: "All products" },
+                  ...(data?.facets.products ?? []).map((item) => ({ value: item, label: productLineLabel(item) })),
+                ]}
+              />
+            </FilterField>
+            <FilterField label="Carrier" htmlFor="partner-deal-carrier">
+              <SelectMenu
+                id="partner-deal-carrier"
+                label="Filter by carrier"
+                value={filters.carrier}
+                defaultValue=""
+                onChange={(value) => applyFilter({ carrier: value })}
+                searchPlaceholder="Search carriers"
+                className="w-full"
+                matchTriggerWidth
+                options={[
+                  { value: "", label: "All carriers" },
+                  ...(data?.facets.carriers ?? []).map((carrier) => ({ value: carrier ?? NO_CARRIER_FILTER, label: carrier ?? "No carrier" })),
+                ]}
+              />
+            </FilterField>
+            <FilterField label="Annualised premium" htmlFor="partner-deal-premium-min">
+              <div className="grid grid-cols-2 gap-2">
+                <input id="partner-deal-premium-min" type="number" min="0" step="0.01" inputMode="decimal" aria-label="Minimum annualised premium in dollars" className={cn(toolbarControl, "w-full px-2")} value={filters.annualised_premium_min} onChange={(event) => applyFilter({ annualised_premium_min: event.target.value })} placeholder="Min $" />
+                <input type="number" min="0" step="0.01" inputMode="decimal" aria-label="Maximum annualised premium in dollars" className={cn(toolbarControl, "w-full px-2")} value={filters.annualised_premium_max} onChange={(event) => applyFilter({ annualised_premium_max: event.target.value })} placeholder="Max $" />
+              </div>
+              {premiumRangeInvalid && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">Enter valid amounts, with minimum no higher than maximum.</p>}
+            </FilterField>
+            <FilterField label="Draft date" htmlFor="partner-deal-draft-from">
+              <div className="grid grid-cols-2 gap-2">
+                <input id="partner-deal-draft-from" type="date" aria-label="Draft date from" className={cn(toolbarControl, "w-full px-2")} value={filters.draft_date_from} onChange={(event) => applyFilter({ draft_date_from: event.target.value })} />
+                <input type="date" aria-label="Draft date to" className={cn(toolbarControl, "w-full px-2")} value={filters.draft_date_to} onChange={(event) => applyFilter({ draft_date_to: event.target.value })} />
+              </div>
+              {draftDateRangeInvalid && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">Start date must be on or before end date.</p>}
             </FilterField>
             {isAdmin && (
               <FilterField label="Submitted by" htmlFor="partner-deal-submitter">
-                <select id="partner-deal-submitter" aria-label="Filter by who submitted the lead" className={cn(toolbarControl, "w-full min-w-0")} value={filters.submitted_by} onChange={(event) => applyFilter({ submitted_by: event.target.value })}>
-                  <option value="">Anyone</option>
-                  {(data?.facets.submitters ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
+                <SelectMenu
+                  id="partner-deal-submitter"
+                  label="Filter by who submitted the lead"
+                  value={filters.submitted_by}
+                  defaultValue=""
+                  onChange={(value) => applyFilter({ submitted_by: value })}
+                  searchPlaceholder="Search submitters"
+                  className="w-full"
+                  matchTriggerWidth
+                  options={[
+                    { value: "", label: "Anyone" },
+                    ...(data?.facets.submitters ?? []).map((item) => ({ value: item.id, label: item.name })),
+                  ]}
+                />
               </FilterField>
             )}
           </FilterPanel>
@@ -244,7 +349,7 @@ export function PartnerDealFlow({
           : loading
             ? <SectionLoading rows={6} columns={columns} label="Loading deals" />
             : (
-              <table className={cn(st.table, isAdmin ? "min-w-[1000px]" : "min-w-[880px]")}>
+              <table className={cn(st.table, rows.length === 0 ? "h-full min-h-full" : "flex-none", isAdmin ? "min-w-[1000px]" : "min-w-[880px]")}>
                 <thead>
                   <tr className={st.headRow}>
                     <th scope="col" className={cn(st.th, "w-[210px]")}>Customer</th>
@@ -257,12 +362,11 @@ export function PartnerDealFlow({
                     <th scope="col" className={cn(st.th, "w-[120px] text-right")}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <tbody className={cn("m-seq", rows.length === 0 && "h-full")}>
                   {tablePage.rows.map((row) => (
-                    <tr key={row.leadId} data-lead-id={row.leadId} className="m-row hover:bg-[var(--surface-alt)]">
+                    <tr key={row.leadId} data-lead-id={row.leadId} className="m-row h-11 hover:bg-[var(--surface-alt)]">
                       <td className={cn(st.td, "max-w-[220px]")}>
                         <span className="block max-w-full truncate" title={row.customer}>{row.customer}</span>
-                        <span className={st.sub}>{when(row.updatedAt)}</span>
                       </td>
                       <td className={st.td}>{productLineLabel(row.productLine)}</td>
                       <td className={st.td}><StatusChip tone={STAGE_TONE[row.stageType]} dot>{row.stageName}</StatusChip></td>
@@ -278,13 +382,13 @@ export function PartnerDealFlow({
                     </tr>
                   ))}
                   {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={columns} className={st.td}>
+                    <tr className="h-full">
+                      <td colSpan={columns} className={cn(st.td, "h-full text-center align-middle")}>
                         {hasNarrowing ? (
                           <NoMatches noun="deals" onClear={clearFilters} by={search.trim() ? "search" : "filters"} />
                         ) : (
                           <EmptyState
-                            title={isToday ? "No deals worked yet today" : "No deals worked in this range"}
+                            title="No leads available"
                             hint={isAdmin
                               ? "Leads your team sends appear here once the agency works them."
                               : "Leads you send appear here once the agency works them."}
