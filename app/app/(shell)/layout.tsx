@@ -23,7 +23,7 @@ import { planDisplayName } from "@/lib/plans/display";
 import { AppTopBar } from "@/components/app/app-top-bar";
 import { NotifySoundPrimer } from "@/components/app/notify-sound-primer";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
-import { OverdueComplaintBanner } from "@/components/app/overdue-complaint-banner";
+import { overdueComplaintAlert } from "@/components/app/overdue-complaint-banner";
 import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
 import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
 import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
@@ -160,16 +160,13 @@ export default async function AgentShellLayout({ children }: { children: React.R
     isOwner: context.role === "owner",
   };
 
-  // The always-on alerts, on every page's title line (owner 2026-11-02), not a banner above the page.
-  // Louder than everything below it, and not dismissible (LA-6.4). AG-0.5: complaints are the
-  // agency's, and their screen is refused to a narrowed session inside one.
+  // An overdue regulator complaint (LA-6.4) is an alert in the top bar, not a strip on the page (owner
+  // 2026-11-02): a red warning beside the bell on every page and the Inbox's first row, not dismissible.
+  // AG-0.5: complaints are the agency's, and their screen is refused to a narrowed session inside one.
   const complaintCount = agencyNarrow ? 0 : overdueComplaints;
-  const pageAlerts = complaintCount > 0 || subscriptionNeedsAlert(entitlement.status) ? (
-    <>
-      <OverdueComplaintBanner count={complaintCount} />
-      <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
-    </>
-  ) : null;
+  const urgent = [overdueComplaintAlert(complaintCount)].filter((item) => item !== null);
+  // The subscription's state stays on the page title's line (owner 2026-11-02).
+  const pageAlerts = subscriptionNeedsAlert(entitlement.status) ? <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} /> : null;
 
   return (
     <div className="portal-agent flex min-h-screen flex-col md:flex-row">
@@ -196,7 +193,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* No context strip under the bar (removed 2026-09-28): the workspace, plan and role are in
             the account menu and the plan card, and the read-only and maintenance states it echoed
             are the banners just below, which say what to do about them. */}
-        <AppTopBar user={identity} userId={context.userId} plan={{ name: plan.name, seats: plan.seats, isOwner: plan.isOwner }} menu={menu} />
+        <AppTopBar user={identity} userId={context.userId} plan={{ name: plan.name, seats: plan.seats, isOwner: plan.isOwner }} menu={menu} urgent={urgent} />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />

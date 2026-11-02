@@ -4,15 +4,17 @@ import { notFound } from "next/navigation";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { hasFeature } from "@/lib/entitlements/types";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { FactGrid, FactLine, PolicyLead } from "@/components/app/book/policy/policy-head";
+import { CopyPolicyNumber, PolicyTabs } from "@/components/app/book/policy/policy-islands";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { StatusChip } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState } from "@/components/ui/page-states";
-import { TabbedSections } from "@/components/app/book-views";
+import { TableCard } from "@/components/ui/table-card";
+import { HAND_POLICY_TABS, POLICY_TABS, policyTabOf } from "@/lib/ingestion/policyPage";
 import { getCarrierLibrary } from "@/lib/carriers/service";
 import { DISCREPANCY_KIND_LABELS } from "@/lib/discrepancies/compute";
 import { listDiscrepancies } from "@/lib/discrepancies/service";
@@ -55,11 +57,13 @@ async function readPolicy(tenantId: string, id: string): Promise<(BookPolicyRow 
 
 const STATUS = { active: { label: "Active", tone: "good" }, pending: { label: "Pending", tone: "warning" }, lapsed: { label: "Lapsed", tone: "danger" }, cancelled: { label: "Cancelled", tone: "neutral" } } as const;
 
-export default async function PolicyPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PolicyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("book_of_business");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Book of business" description="Your policies, premiums and carriers in one place." />;
   if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  // Round 2: the same frame and tab layout as a carrier policy; only the tabs a hand-entered record can fill.
+  const tab = policyTabOf(query.tab, HAND_POLICY_TABS);
   if (!isRecordId(id)) notFound();
   const tenantId = guard.context.tenantId;
   const row = await readPolicy(tenantId, id);
@@ -103,10 +107,8 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
   const open = (discrepancies?.items ?? []).filter((item) => item.policyId === row.id && (item.status === "open" || item.status === "disputed"));
   const status = STATUS[row.status as keyof typeof STATUS] ?? { label: row.status, tone: "neutral" as const };
 
-  // Each section fills the viewport under the header, strip and tab row (2026-10-06 redesign).
-  const fill = "flex min-h-[calc(100dvh-var(--top-bar-h)-412px)] flex-col [&>*:first-child]:flex-1";
   const expectedTable = (
-    <PagedTableCard total={expected.length} noun="entries" suffix="each from a commission schedule row" className={fill} footer={<span>{expected.length.toLocaleString("en-US")} {expected.length === 1 ? "entry" : "entries"}, each from a commission schedule row</span>}>
+    <PagedTableCard title="What your contract expects" total={expected.length} noun="entries" suffix="each from a commission schedule row" footer={<span>{expected.length.toLocaleString("en-US")} {expected.length === 1 ? "entry" : "entries"}, each from a commission schedule row</span>}>
       {expected.length === 0 ? (
         <EmptyState title="Nothing expected yet" hint={row.status === "pending" ? "A pending policy has not been issued, so nothing is expected yet." : "Entries appear here as the commission schedule posts them for this policy."} />
       ) : (
@@ -127,7 +129,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
     </PagedTableCard>
   );
   const reportedTable = statements ? (
-    <PagedTableCard total={lines.length} noun="lines" suffix="accepted, on statements that are not voided" className={fill} footer={<span>Accepted lines on statements that are not voided</span>}>
+    <PagedTableCard title="What the carrier reported" total={lines.length} noun="lines" suffix="accepted, on statements that are not voided" footer={<span>Accepted lines on statements that are not voided</span>}>
       {lines.length === 0 ? (
         <EmptyState title="No statement line yet" hint="No accepted statement line pays this policy yet. Lines appear here once a carrier statement that names it is accepted." />
       ) : (
@@ -149,7 +151,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
     </PagedTableCard>
   ) : null;
   const discrepancyTable = (
-    <PagedTableCard total={open.length} noun="discrepancies" suffix={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>} className={fill} footer={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
+    <PagedTableCard title="Open discrepancies" total={open.length} noun="discrepancies" suffix={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>} footer={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
       <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
         <thead><tr><th className="w-[200px]">Kind</th><th>What happened</th><th className="w-[120px] text-right">Owed</th></tr></thead>
         <PagedBody>
@@ -164,46 +166,72 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
       </table>
     </PagedTableCard>
   );
-  // Open discrepancies lead when there are any: they are the one thing on this page to act on.
-  const sections = [
-    ...(open.length > 0 ? [{ key: "discrepancies", label: "Open discrepancies", count: open.length, content: discrepancyTable }] : []),
-    { key: "expected", label: "What your contract expects", count: expected.length, content: expectedTable },
-    ...(reportedTable ? [{ key: "reported", label: "What the carrier reported", count: lines.length, content: reportedTable }] : []),
-  ];
+  const tabs = POLICY_TABS.filter((item) => HAND_POLICY_TABS.includes(item.key)).map((item) => ({
+    key: item.key,
+    label: item.label,
+    count: item.key === "commissions" && open.length > 0 ? open.length : null,
+    tone: item.key === "commissions" ? ("danger" as const) : undefined,
+  }));
+  const hrefs: Record<string, string> = { overview: `/app/policies/${row.id}`, commissions: `/app/policies/${row.id}?tab=commissions` };
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title={`${row.insured_name} · ${row.policy_number}`}
-        breadcrumbs={[{ label: "Book" }, { label: "Policies", href: "/app/policies?source=hand" }, { label: `${row.insured_name} · ${row.policy_number}` }]}
-        description={`${row.carrier} · ${row.product} · ${statementMoney(row.annual_premium_cents)} a year · issued ${statementDay(row.effective_date)} · lead source ${leadSource}`}
-        actions={<><StatusChip tone={status.tone}>{status.label}</StatusChip><RecordLapseSignal policy={{ id: row.id, status: row.status }} /></>}
-      />
+    <DataInPage
+      step="policies"
+      title={row.insured_name}
+      lead={<PolicyLead status={status.label} tone={status.tone} facts={[row.policy_number, row.carrier, row.product, `lead source ${leadSource}`, "entered by hand"]} />}
+      actions={<><RecordLapseSignal policy={{ id: row.id, status: row.status }} /><CopyPolicyNumber policyNumber={row.policy_number} /></>}
+    >
+      <FactLine label="This policy" facts={[
+        { label: "Premium", value: `${statementMoney(row.annual_premium_cents)} a year` },
+        { label: "Issued", value: statementDay(row.effective_date) },
+        ...(exposure ? [{ label: "Chargeback exposure", value: statementMoney(exposure.exposureCents), tone: "warning" as const }] : []),
+      ]} />
+      <PolicyTabs tabs={tabs} value={tab} hrefs={hrefs} />
 
       {discrepanciesFailed && (
         <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">This policy&rsquo;s discrepancies could not be loaded just now, so none are shown. Reload to try again.</p>
       )}
 
-      {ledger.gaps.length > 0 && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
-          {ledger.gaps[0].reason} Until it is fixed on the Rate card, this policy has no expected commission to compare with.
-        </div>
+      {tab === "overview" ? (
+        <TableCard title="Today">
+          <FactGrid items={[
+            ["Status", status.label],
+            ["Carrier", row.carrier],
+            ["Product", row.product],
+            ["Issued", statementDay(row.effective_date)],
+            ["Premium", `${statementMoney(row.annual_premium_cents)} a year`],
+            ["Lead source", leadSource],
+            ["Renewal", row.renewal_date ? statementDay(row.renewal_date) : "—"],
+            ["Chargeback exposure", exposure ? `${statementMoney(exposure.exposureCents)} until ${statementDay(exposure.clawbackEndsOn)}` : row.status === "active" ? "Outside the clawback window" : "Not in force"],
+            ["Open discrepancies", seesDiscrepancies ? String(open.length) : "—"],
+          ]} />
+        </TableCard>
+      ) : (
+        <>
+          {ledger.gaps.length > 0 && (
+            <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
+              {ledger.gaps[0].reason} Until it is fixed on the Rate card, this policy has no expected commission to compare with.
+            </div>
+          )}
+
+          <StatStrip label="This policy's money">
+            <StatTile label="Advance received" value={statementMoney(advanceReceived)} footnote={advanceExpected ? `${statementMoney(advanceExpected)} expected` : "no advance on this contract"} />
+            <StatTile label="Earned to date" value={statementMoney(earned)} footnote={chargedBack ? `${statementMoney(chargedBack)} charged back` : "what your contract expects so far"} />
+            <StatTile label="Carrier paid" value={statementMoney(received)} valueTone={lines.length && received < earned - chargedBack - 100 ? "warning" : undefined} footnote={`${lines.length.toLocaleString("en-US")} accepted statement ${lines.length === 1 ? "line" : "lines"}`} />
+            <StatTile
+              label="Chargeback exposure"
+              value={exposure ? statementMoney(exposure.exposureCents) : "$0.00"}
+              valueTone={exposure ? "warning" : undefined}
+              footnote={exposure ? `until ${statementDay(exposure.clawbackEndsOn)} · ${exposure.clawbackType}` : row.status === "active" ? "outside the clawback window" : "not in force"}
+            />
+          </StatStrip>
+
+          {/* Open discrepancies lead when there are any: they are the one thing on this tab to act on. */}
+          {open.length > 0 && discrepancyTable}
+          {expectedTable}
+          {reportedTable}
+        </>
       )}
-
-      <StatStrip label="This policy's money">
-        <StatTile label="Advance received" value={statementMoney(advanceReceived)} footnote={advanceExpected ? `${statementMoney(advanceExpected)} expected` : "no advance on this contract"} />
-        <StatTile label="Earned to date" value={statementMoney(earned)} footnote={chargedBack ? `${statementMoney(chargedBack)} charged back` : "what your contract expects so far"} />
-        <StatTile label="Carrier paid" value={statementMoney(received)} valueTone={lines.length && received < earned - chargedBack - 100 ? "warning" : undefined} footnote={`${lines.length.toLocaleString("en-US")} accepted statement ${lines.length === 1 ? "line" : "lines"}`} />
-        <StatTile
-          label="Chargeback exposure"
-          value={exposure ? statementMoney(exposure.exposureCents) : "$0.00"}
-          valueTone={exposure ? "warning" : undefined}
-          footnote={exposure ? `until ${statementDay(exposure.clawbackEndsOn)} · ${exposure.clawbackType}` : row.status === "active" ? "outside the clawback window" : "not in force"}
-        />
-      </StatStrip>
-
-      {/* The ledger, the carrier's lines and any open discrepancy: one at a time, as tabs. */}
-      <TabbedSections label="This policy's records" sections={sections} />
-    </div>
+    </DataInPage>
   );
 }

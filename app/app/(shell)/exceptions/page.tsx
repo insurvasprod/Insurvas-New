@@ -26,7 +26,7 @@ export default async function ExceptionsPage() {
   const [view, today] = await Promise.all([loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll }), agencyToday(guard.context.tenantId)]);
 
   return (
-    <DataInPage step="exceptions">
+    <DataInPage step="needs-you" title="Exceptions">
       {!view.available ? (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{QUEUES_PENDING_MESSAGE}</div>
       ) : (

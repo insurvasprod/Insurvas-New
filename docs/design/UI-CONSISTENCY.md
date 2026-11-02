@@ -290,6 +290,53 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
 - `TableCard` does not clip its children (no `overflow-hidden`), so toolbar popovers and menus can
   hang below the toolbar; the table scrolls sideways inside its own wrapper.
 
+### 6c. Dropdowns, calendars and filters (v3)
+**Status:** Live. Set by the owner on 2026-11-02: every dropdown, calendar and filter gets "a different
+design rather than having a default one". Mounted once in `app/layout.tsx`
+(`components/ui/native-controls.tsx`), so every plane and every dialog has it.
+
+- **No browser list.** Clicking a `<select>` opens the app's panel, not the browser's grey list. The
+  panel shows the options with their group headings and a tick on the chosen one. A highlight
+  follows the mouse and the arrow keys. Typing filters, and a long list shows the filter line.
+  Enter picks, Escape closes.
+- **No browser calendar.** A `type="date"` or `"datetime-local"` field opens the app's month
+  calendar, with Today and Clear, and the field's own `min` / `max`. A date-and-time field adds the
+  times of day in 15-minute steps. Typing a date by hand still works.
+- **The same closed look.** Every dropdown shows one chevron and every date field one calendar mark,
+  drawn by `app/globals.css`, with room kept on the right.
+- **Filters use these controls.** A filter is a dropdown, a date or a `ToggleChip` in the toolbar or
+  the `FilterPanel` (§6a), so it looks the same everywhere. A long, searchable choice can use
+  `SelectMenu`.
+- **The control stays real.** Its value, its form and React's `onChange` are untouched; focus never
+  leaves it. Inside a dialog the panel opens inside the dialog, so picking never closes it.
+- **Phones keep their own picker.** A touch screen's native picker is easier there.
+- **Opting out.** `data-native="keep"` opts a control out; say why beside it. A `multiple` or `size`
+  list is never touched.
+
+### 6b. The table foundation (v3)
+**Status:** Live. Set by the owner on 2026-11-02 ("I want this to be as a foundation of the system design").
+`TableCard` applies it to itself (`components/ui/table-card-layout.tsx`); nothing on a page opts in.
+
+- **Full height.** The list that ends the page reaches the bottom of the screen. On a merged page
+  (Data in, Accounting, Commissions) that is the rail's foot. Its rows stay at the top and the
+  footer sits on that line. A card that is not the page's last block keeps its own height.
+- **A page of rows fits.** `PagedTableCard` shows as many rows as fit above that line, and pages
+  the rest with the shared Pager on the bottom line. Inside a dialog, or for a list that is not
+  last, a page is 10 rows. `pageSize` fixes it where a list needs a set number.
+- **Columns spread evenly.** Never one side crammed and the other blank. Each column is measured
+  at its natural width. A column narrower than an equal share of the card is widened to it; a
+  wider one keeps what it needs. No column is ever narrower than its content. A table too wide for
+  the card scrolls sideways as before. A table opts out with `data-even="off"`; say why beside it.
+- **Controls on one line.** A list's own switches (Last month / This month, a view toggle) sit in
+  its toolbar's `actions`, on the Refresh line, Refresh last. They never sit in a row of their own
+  above the card.
+- **Figures above a list are one strip.** `StatStrip` holds its `StatTile`s. A tile is never a box
+  of its own: no `className` with a border, rounding or glass (the `loose-stat-tile` ratchet).
+- **Nothing between the title and the page.** An alert that must be acted on now (an overdue
+  regulator complaint) is not a strip on the page, and not a button of its own. One bell holds
+  notifications and alerts: the urgent item counts on its badge and is the Inbox's pinned first row,
+  on every page, until it is done.
+
 ### 6a. Filters open inline (v3)
 **Status:** Live for new and reworked lists. The 10 lists that already had their own filter panels
 keep them until someone works on them; the `hand-filter-panel` ratchet only goes down.

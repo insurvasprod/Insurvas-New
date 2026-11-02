@@ -3,6 +3,7 @@ import { Geist_Mono, Inter, Inter_Tight, Montserrat } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmHost } from "@/components/ui/confirm-dialog";
+import { NativeControls } from "@/components/ui/native-controls";
 import { ThemeProvider } from "@/components/theme-provider";
 
 // Typefaces (docs/design/BRAND.md, UI-CONSISTENCY.md §0). Self-hosted at build by next/font, so no
@@ -51,6 +52,8 @@ export default function RootLayout({
           {children}
           <Toaster />
           <ConfirmHost />
+          {/* Every native dropdown and date field opens the app's own panel (the control foundation, 2026-11-02). */}
+          <NativeControls />
         </ThemeProvider>
       </body>
     </html>

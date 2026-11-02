@@ -5,18 +5,25 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { QUEUE_TYPES } from "@/lib/ingestion/exceptionQueues";
 import type { DataInStepCounts } from "@/lib/dataIn/steps";
+import { getEntitlement } from "@/lib/entitlements/get";
+import { hasFeature } from "@/lib/entitlements/types";
+import { hiddenOpenFindings, unmappedAgentCodes } from "@/lib/needsYou/store";
+import { countRuleHolds } from "@/lib/pipelineRules/store";
 
 /**
- * The live counts on the one Data in page's rail (owner 2026-11-02): what waits on a person, per step.
- * Head counts only, each under the rule its own step applies, and each on its own: a read that fails (or
- * a table not there yet) leaves its step out, and the rail shows no badge for it.
+ * The live counts on the Book of business rail (owner 2026-11-02, round 2): what waits on a person, per step.
+ * Head counts only, each under the rule its own screen applies, and each on its own: a read that fails (or
+ * a table not there yet) adds nothing, and a step with nothing read shows no badge.
  *
- *   files       carrier files that failed to read and are not just waiting for a layout (owner, bookkeeper)
- *   matching    policies waiting for a person to pick the right client (owner, bookkeeper)
- *   exceptions  open exception items; the owner and bookkeepers see all, a producer their own, a narrow
- *               agency session none (the Exceptions page refuses it)
+ *   files      carrier files that failed to read and are not just waiting for a layout (owner, bookkeeper)
+ *   needs-you  every open decision: policies waiting for a client (owner, bookkeeper), open exception items (the
+ *              owner and bookkeepers all, a producer their own, a narrow agency session none), and for the owner
+ *              and bookkeepers open commission findings and rows to attribute (each only with its own feature on
+ *              the plan), agent codes that map to nobody and two rules that disagree: the Agency view of Needs you (lib/needsYou/store.ts),
+ *              less the status words that wait on Insurvas
  */
 const ROLES = ["owner", "bookkeeper", "producer"] as const;
+const WORKING = ["open", "disputed"] as const;
 
 type Count = PromiseLike<{ count: number | null; error: { message: string } | null }>;
 type Q = Count & { eq(c: string, v: unknown): Q; is(c: string, v: null): Q; in(c: string, v: readonly unknown[]): Q; or(f: string): Q };
@@ -36,14 +43,25 @@ export async function GET() {
   const keeper = role === "owner" || role === "bookkeeper";
   const narrow = (await refuseNarrowInAgency(auth.context, "Exceptions")) !== null;
 
-  const [files, matching, exceptions] = await Promise.all([
+  // Money and credit count only where their own screens open: the feature on the plan, as their APIs require.
+  const entitlement = keeper ? await getEntitlement(tenantId).catch(() => null) : null;
+  const money = Boolean(entitlement && hasFeature(entitlement, "discrepancy_report"));
+  const credit = Boolean(entitlement && hasFeature(entitlement, "producer_payouts"));
+
+  const [files, matching, exceptions, findings, attribution, agentCodes, ruleHolds] = await Promise.all([
     keeper ? head(count("file_registry").eq("status", "failed").is("superseded_by_file_id", null).or("parse_block.is.null,parse_block.neq.no_layout_map")).catch(() => null) : null,
     keeper ? head(count("policy_match_review").eq("status", "open")).catch(() => null) : null,
     narrow ? null : head((keeper ? count("queue_item") : count("queue_item").eq("assigned_to_user_id", userId)).eq("status", "open").in("queue_type", QUEUE_TYPES)).catch(() => null),
+    // Less the findings the list hides because their trace is broken (LA-4.20), so the badge says what the list shows.
+    keeper && money ? head(count("commission_discrepancy").in("status", WORKING)).then(async (n) => (n === null ? null : Math.max(0, n - (await hiddenOpenFindings(tenantId))))).catch(() => null) : null,
+    keeper && credit ? head(count("agency_attribution_item").eq("status", "open")).catch(() => null) : null,
+    keeper ? unmappedAgentCodes(tenantId).then((codes) => codes.length).catch(() => null) : null,
+    // Two rules disagree: null before 20261102100000, which adds nothing.
+    keeper ? countRuleHolds(tenantId).catch(() => null) : null,
   ]);
   const counts: DataInStepCounts = {};
   if (files !== null) counts.files = files;
-  if (matching !== null) counts.matching = matching;
-  if (exceptions !== null) counts.exceptions = exceptions;
+  const decisions = [matching, exceptions, findings, attribution, agentCodes, ruleHolds].filter((n): n is number => n !== null);
+  if (decisions.length) counts["needs-you"] = decisions.reduce((sum, n) => sum + n, 0);
   return NextResponse.json({ counts }, { headers: { "Cache-Control": "no-store" } });
 }

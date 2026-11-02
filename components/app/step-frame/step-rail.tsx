@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, BriefcaseBusiness, Calculator, ChevronsLeft, ChevronsRight, CircleAlert, CreditCard, FileChartColumn, Files, FileText, Import, Landmark, Link2, Receipt, ReceiptText, Scale, Split, UserRoundSearch, Wallet, ChartLine, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, BookUser, BriefcaseBusiness, Calculator, Settings, ChevronsLeft, ChevronsRight, CircleAlert, CreditCard, FileChartColumn, Files, FileText, Import, Landmark, Link2, Receipt, ReceiptText, Scale, Split, UserRoundSearch, Wallet, ChartLine, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -12,7 +12,7 @@ export type RailStep = { key: string; label: string; href: string; icon: string 
 export type RailWaiting = Record<string, [one: string, many: string]>;
 
 const ICONS: Record<string, LucideIcon> = {
-  files: Files, import: Import, link: Link2, "circle-alert": CircleAlert,
+  files: Files, import: Import, link: Link2, "circle-alert": CircleAlert, "book-user": BookUser, settings: Settings,
   "chart-line": ChartLine, landmark: Landmark, "receipt-text": ReceiptText, "credit-card": CreditCard, split: Split, wallet: Wallet, "file-chart-column": FileChartColumn,
   "file-text": FileText, receipt: Receipt, scale: Scale, "user-round-search": UserRoundSearch, "arrow-left-right": ArrowLeftRight, calculator: Calculator, "briefcase-business": BriefcaseBusiness,
 };

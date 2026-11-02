@@ -460,6 +460,38 @@
 }
 
 /*
+ * The control foundation (owner 2026-11-02): every dropdown and date field closed looks the same — one
+ * chevron, one calendar mark, room for it on the right — and opens the app's panel
+ * (components/ui/native-controls.tsx). Unlayered on purpose, so a field's own `px-3` cannot squeeze the
+ * mark: the browser's arrow and calendar button are hidden where the app's panel replaces them (a fine
+ * pointer); a phone keeps its own picker.
+ */
+select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237d8c87' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .7rem center;
+  background-size: 16px 16px;
+  text-overflow: ellipsis;
+}
+select:not([multiple]):not([size]):hover:not(:disabled) { border-color: var(--border-strong); }
+select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
+@media (pointer: fine) {
+  input:is([type="date"], [type="datetime-local"]) {
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237d8c87' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right .7rem center;
+    background-size: 16px 16px;
+    cursor: pointer;
+  }
+  input:is([type="date"], [type="datetime-local"])::-webkit-calendar-picker-indicator { display: none; }
+}
+
+/*
  * Motion is a courtesy, not a requirement. The file guarded two animations by hand; this covers
  * the rest, including the skeletons and the panel transitions added in this redesign.
  */
@@ -704,6 +736,13 @@
   background: var(--error); color: var(--on-error);
   font-size: 10px; font-weight: 600; line-height: 1;
 }
+/* Must be done now (owner 2026-11-02): one bell for notifications and alerts; the urgent item counts on
+   its badge and is the Inbox's pinned first row. */
+.portal-top-urgent-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 4px; }
+.portal-top-urgent-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--error) 45%, transparent); background: var(--error-surface); color: var(--error-ink); font-size: .875rem; line-height: 1.45; text-decoration: none; }
+.portal-top-urgent-row:hover, .portal-top-urgent-row:focus-visible { border-color: var(--error); outline: none; }
+.portal-top-urgent-text { flex: 1; min-width: 0; font-weight: 600; }
+.portal-top-urgent-action { flex: none; font-weight: 700; text-decoration: underline; }
 .portal-top-divider { width: 1px; height: 22px; margin-inline: 2px; background: var(--border); }
 .portal-top-account {
   display: inline-flex; align-items: center; gap: .5rem;

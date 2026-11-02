@@ -23,7 +23,7 @@ export default async function PolicyMatchingPage({ searchParams }: { searchParam
   const pct = (value: number | null) => (value === null ? "—" : `${value}%`);
 
   return (
-    <DataInPage step="matching">
+    <DataInPage step="needs-you" title="Policy matching">
       {!view.available ? (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{MATCHING_PENDING_MESSAGE}</div>
       ) : (

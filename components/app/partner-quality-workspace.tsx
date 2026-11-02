@@ -8,7 +8,7 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarC
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
-import { StatTile } from "@/components/ui/stat";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { PARTNER_TYPES, PARTNER_TYPE_LABELS } from "@/lib/partners/constants";
@@ -142,13 +142,13 @@ export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false, fr
 
     {/* Four figures an operator acts on (2026-10-06 redesign). Partners with leads rides on Leads
         sent and the duplicate rate on Screening pass; both stay columns and drill-downs below. */}
-    {/* Partners A4 (2026-10-25): four glass tiles, each with its change on the prior period. */}
-        <section aria-label="Partner quality totals" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <StatTile className="m-glass rounded-xl border border-border" label="Leads sent" value={count(total.sent)} delta={sentChange == null ? undefined : { value: sentChange }} footnote={`prev ${count(previous.sent)} · ${count(withLeads)} of ${data.rows.length} partners sent (prev ${count(previousWithLeads)})`} />
-      <StatTile className="m-glass rounded-xl border border-border" label="Screening pass" value={total.sent ? percent(pass) : "—"} valueTone={pass != null && pass < 90 ? "warning" : undefined} delta={total.sent ? ptsDelta(pass, previousPass, "up") : undefined} footnote={`${count(screeningFlags(total.screening))} flagged · ${total.sent ? percent(duplicateRate) : "—"} duplicates`} />
-      <StatTile className="m-glass rounded-xl border border-border" label="Conversion" value={total.sent ? percent(conversion) : "—"} delta={total.sent ? ptsDelta(conversion, percentOf(previous.submitted, previous.sent), "up") : undefined} footnote={`${count(total.submitted)} submitted`} />
-      <StatTile className="m-glass rounded-xl border border-border" label="DQ rate" value={total.sent ? percent(dqRate) : "—"} delta={total.sent ? ptsDelta(dqRate, percentOf(previous.disqualified, previous.sent), "down") : undefined} footnote={`${count(total.disqualified)} leads`} />
-    </section>
+    {/* One figure strip (the table foundation, owner 2026-11-02), each figure with its change on the prior period. */}
+        <StatStrip label="Partner quality totals">
+      <StatTile label="Leads sent" value={count(total.sent)} delta={sentChange == null ? undefined : { value: sentChange }} footnote={`prev ${count(previous.sent)} · ${count(withLeads)} of ${data.rows.length} partners sent (prev ${count(previousWithLeads)})`} />
+      <StatTile label="Screening pass" value={total.sent ? percent(pass) : "—"} valueTone={pass != null && pass < 90 ? "warning" : undefined} delta={total.sent ? ptsDelta(pass, previousPass, "up") : undefined} footnote={`${count(screeningFlags(total.screening))} flagged · ${total.sent ? percent(duplicateRate) : "—"} duplicates`} />
+      <StatTile label="Conversion" value={total.sent ? percent(conversion) : "—"} delta={total.sent ? ptsDelta(conversion, percentOf(previous.submitted, previous.sent), "up") : undefined} footnote={`${count(total.submitted)} submitted`} />
+      <StatTile label="DQ rate" value={total.sent ? percent(dqRate) : "—"} delta={total.sent ? ptsDelta(dqRate, percentOf(previous.disqualified, previous.sent), "down") : undefined} footnote={`${count(total.disqualified)} leads`} />
+    </StatStrip>
 
     <TableCard
       className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-292px)]`}
