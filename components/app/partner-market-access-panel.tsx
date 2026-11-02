@@ -154,10 +154,6 @@ export function PartnerMarketAccessPanel({
               <ShieldCheck className="size-4 text-[var(--color-brand)]" />
               Carrier &amp; State access
             </CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Select multiple carriers and states for this configuration. Only
-              active appointment pairs can be selected.
-            </p>
           </div>
           <StatusChip>
             {source === "tenant_appointments"

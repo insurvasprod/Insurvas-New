@@ -2,7 +2,7 @@ import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyMatchingWorkspace } from "@/components/app/policy-matching-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { AI_REVIEW_PENDING, loadMatching, MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
 
@@ -23,8 +23,7 @@ export default async function PolicyMatchingPage({ searchParams }: { searchParam
   const pct = (value: number | null) => (value === null ? "—" : `${value}%`);
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Policy matching" description="Which client and agent each carrier policy belongs to." />
+    <DataInPage step="matching">
       {!view.available ? (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{MATCHING_PENDING_MESSAGE}</div>
       ) : (
@@ -41,6 +40,6 @@ export default async function PolicyMatchingPage({ searchParams }: { searchParam
           <PolicyMatchingWorkspace reviews={view.reviews} links={view.links} unmapped={view.unmapped} mapped={view.mapped} members={view.members} carriers={view.carriers} readOnly={guard.entitlement.access === "read_only"} aiNote={AI_REVIEW_PENDING} initialTab={initialTab} />
         </>
       )}
-    </div>
+    </DataInPage>
   );
 }

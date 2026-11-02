@@ -167,7 +167,7 @@ export function LiveTransferCard() {
           <span className="absolute inline-flex size-full rounded-full bg-[var(--primary)] opacity-60 motion-safe:animate-ping" />
           <span className="relative inline-flex size-2.5 rounded-full bg-[var(--primary)]" />
         </span>
-        <span className="tracking-[0.04em] text-[var(--accent-ink)] uppercase">{handoff ? "Handoff for you" : "Live transfer"}</span>
+        <span className="text-[var(--accent-ink)]">{handoff ? "Handoff for you" : "Live transfer"}</span>
         {!handoff && <span className={cn("ml-auto tabular-nums", waitTone)}>waiting {clock(wait)}</span>}
       </div>
 

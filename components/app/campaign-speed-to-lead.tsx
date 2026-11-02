@@ -54,7 +54,7 @@ export function CampaignSpeedToLead({ vendorId }: { vendorId: string }) {
   const cell = "border-t border-border px-2 py-1.5 text-xs tabular-nums text-[var(--body)]";
   return (
     <div aria-label="Speed to lead by campaign">
-      <p className="m-0 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Speed to lead by campaign<InfoTip label="About speed to lead">From a lead&rsquo;s arrival to its first dial. Within 60s counts every posted lead, so one nobody dialled counts against the campaign.</InfoTip></p>
+      <p className="m-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground">Speed to lead by campaign<InfoTip label="About speed to lead">From a lead&rsquo;s arrival to its first dial. Within 60s counts every posted lead, so one nobody dialled counts against the campaign.</InfoTip></p>
       {state.error ? <p className="m-0 mt-1 text-xs text-[var(--error-ink)]" role="alert">{state.error}</p>
         : !state.loaded ? <SectionLoading rows={2} columns={4} label="Loading speed to lead" />
         : rows.length === 0 ? <p className="m-0 mt-1 text-xs text-muted-foreground">No real-time posted leads yet.</p>

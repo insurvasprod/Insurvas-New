@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 const h3 = "m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
 const help = "mt-1.5 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]";
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const label12 = "text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 
 /** An outcome's real side effects beyond the stage it lands in. */
 function extras(outcome: NonNullable<WalkView["options"]>[number]): string[] {

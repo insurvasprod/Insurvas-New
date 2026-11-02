@@ -149,9 +149,6 @@ export function SubscriptionPanel({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Subscription</h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Every control here moves money, so each one confirms with its effective date.
-              </p>
             </div>
             <StatusChip tone={subscriptionTone(status)}>
               {SUBSCRIPTION_STATUS_LABELS[status]}
@@ -167,17 +164,17 @@ export function SubscriptionPanel({
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Plan</p>
+              <p className="text-xs font-semibold text-muted-foreground">Plan</p>
               <p className="font-medium">
                 {subscription.plan_name} <span className="text-xs">v{subscription.plan_version}</span>
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Billing</p>
+              <p className="text-xs font-semibold text-muted-foreground">Billing</p>
               <p className="font-medium">{BILLING_CYCLE_LABELS[subscription.billing_cycle]}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Period ends</p>
+              <p className="text-xs font-semibold text-muted-foreground">Period ends</p>
               <p className="font-medium">
                 {subscription.current_period_end
                   ? new Date(subscription.current_period_end).toLocaleDateString()
@@ -185,7 +182,7 @@ export function SubscriptionPanel({
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Trial ends</p>
+              <p className="text-xs font-semibold text-muted-foreground">Trial ends</p>
               <p className="font-medium">
                 {subscription.trial_ends_at ? new Date(subscription.trial_ends_at).toLocaleDateString() : "—"}
               </p>

@@ -88,7 +88,7 @@ function RebookDialog({ appointmentId, agentUserId, customerName, onClose, onReb
   }
 
   const field = "mt-1.5 block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground";
-  const labelClass = "block text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+  const labelClass = "block text-xs font-semibold leading-[1.33] text-muted-foreground";
 
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>

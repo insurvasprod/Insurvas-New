@@ -7,7 +7,7 @@ import {
   Edit3,
   Plus,
   Save,
-  Sparkles,
+  LayoutTemplate,
   Trash2,
 } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -658,7 +658,7 @@ export function PartnerFormStudio({
                   disabled={readOnly}
                   onClick={() => applyPreset(preset)}
                 >
-                  <Sparkles className="mr-1 size-3.5" />
+                  <LayoutTemplate className="mr-1 size-3.5" />
                   {preset.name}
                 </Button>
               ))}
@@ -1145,7 +1145,7 @@ function Preview({
         compact && "p-3",
       )}
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <p className="text-xs font-semibold text-muted-foreground">
         Partner preview
       </p>
       <h3 className="mt-1 text-sm font-semibold">Lead form</h3>

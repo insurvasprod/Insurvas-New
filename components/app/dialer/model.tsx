@@ -116,7 +116,7 @@ export const card = "m-glass min-w-0 rounded-[16px] border border-[var(--border)
 
 export const h2 = "m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
 
-export const label = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+export const label = "text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 
 export const value = "mt-1 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums break-words";
 

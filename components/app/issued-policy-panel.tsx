@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 
 const input40 =
   "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const label12 = "text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const small = "text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
 /** Today in the browser's calendar, as YYYY-MM-DD. */

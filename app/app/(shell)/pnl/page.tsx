@@ -5,7 +5,7 @@ import { contractors } from "@/lib/accounting/taxStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PnlBoard } from "@/components/app/accounting/pnl-board";
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -43,9 +43,8 @@ export default async function PnlPage({ searchParams }: { searchParams: Promise<
     : loaded ? <PnlBoard data={loaded.data} query={loaded.query} taxMissing={loaded.taxMissing} />
     : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>;
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Profit & loss" description="Money in, money out, and what is left." />
+    <AccountingPage step="pnl">
       {content}
-    </div>
+    </AccountingPage>
   );
 }

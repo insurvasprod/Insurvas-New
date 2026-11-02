@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronRight, ChevronUp, Plus, Wand2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronUp, ListChecks, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -108,7 +108,7 @@ export function BoardPreview({ pipeline, map, flagged }: { pipeline: PipelineOpt
     <div className={cn("px-4", open ? "pb-3" : "pb-2")}>
       <div className="mb-1.5 flex items-center gap-2">
         <p className="m-0 text-xs font-semibold text-[var(--body)]">On the board · {pipeline.stages.length} stages{!open && placedCount ? ` · states land on ${placedCount}` : ""}</p>
-        <Button type="button" variant="ghost" size="sm" className="ml-auto h-7 px-2 text-xs" aria-expanded={open} aria-controls={`ps-board-${pipeline.id}`} onClick={toggle}>
+        <Button type="button" variant="ghost" size="sm" className="ml-auto" aria-expanded={open} aria-controls={`ps-board-${pipeline.id}`} onClick={toggle}>
           {open ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}{open ? "Collapse" : "Show board"}
         </Button>
       </div>
@@ -225,7 +225,7 @@ export function FillMenu({ matches, canCopy, canClear, canReset, onMatch, onCopy
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline"><Wand2 aria-hidden="true" />Fill in<ChevronDown aria-hidden="true" /></Button>
+        <Button type="button" variant="outline"><ListChecks aria-hidden="true" />Fill in<ChevronDown aria-hidden="true" /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-60">
         <DropdownMenuItem disabled={!matches} onSelect={onMatch} title={matches ? undefined : "No stage here carries a state's name"}>

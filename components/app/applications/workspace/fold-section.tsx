@@ -81,7 +81,7 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
         )}
       >
         {/* Owner 2026-10-28: the section names (Before we start, Health, Medications…) in the bright ink. */}
-        <span className="text-xs font-semibold tracking-[0.04em] text-[var(--ink)] uppercase">{heading}</span>
+        <span className="text-xs font-semibold text-[var(--ink)]">{heading}</span>
         <span className="flex items-center gap-2">
           {complete
             ? <StatusChip tone="good" dot>{completeLabel ?? (total ? `Complete · ${done} of ${total}` : "Complete")}</StatusChip>

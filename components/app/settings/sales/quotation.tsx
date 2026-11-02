@@ -516,7 +516,7 @@ export function SalesQuotationTemplates() {
               </SettingsCard>
 
               {lineage.length > 0 && (
-                <SettingsCard title="Versions" sub="A quote keeps the version it was made with.">
+                <SettingsCard title="Versions" info="A quote keeps the version it was made with.">
                   <ul className="m-0 flex list-none flex-col p-0">
                     {lineage.map((v) => (
                       <li key={v.id} className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] py-2.5 first:border-t-0 first:pt-0">

@@ -138,7 +138,7 @@ export function DispositionPicker({
           <div className="flex flex-col gap-4">
             {groups.filter((group) => group.options.length).map((group) => (
               <div key={group.label}>
-                <p className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{group.label}</p>
+                <p className="text-xs font-semibold leading-[1.33] text-muted-foreground">{group.label}</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {group.options.map((option) => {
                     const blocked = callPathOnly(option);
@@ -541,7 +541,7 @@ export function ListView({
                 </div>
               </div>
               <div className="border-b border-border px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Stage history</p>
+                <p className="text-xs font-semibold text-muted-foreground">Stage history</p>
                 {history?.leadId !== selected.id ? <div className="-mx-4 mt-1"><SectionLoading rows={3} columns={2} label="Loading stage history" /></div> : history.error ? <p className="mt-2 text-sm text-[var(--error-ink)]">{history.error}</p> : history.events && history.events.length ? (
                   <ol className="mt-2 flex flex-col gap-2">
                     {history.events.map((event) => (
@@ -557,7 +557,7 @@ export function ListView({
                 ) : <p className="mt-2 text-sm text-muted-foreground">No stage change recorded yet.</p>}
               </div>
               <div className="px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Record an outcome</p>
+                <p className="text-xs font-semibold text-muted-foreground">Record an outcome</p>
                 {quick.length ? quick.map((group) => (
                   <div key={group.label} className="mt-2.5">
                     <p className="text-xs text-muted-foreground">{group.label}</p>

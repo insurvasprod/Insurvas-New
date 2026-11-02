@@ -367,7 +367,7 @@ export function CalendarAvailabilitySettings() {
 
       {members.length > 1 && (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Whose calendar">
-          <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Whose calendar</span>
+          <span className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">Whose calendar</span>
           {members.map((member) => {
             const current = member.userId === draft.userId;
             const days = new Set((edits[member.userId] ?? member).hours.map((hour) => hour.weekday)).size;

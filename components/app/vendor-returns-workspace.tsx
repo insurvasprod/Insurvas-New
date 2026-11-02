@@ -68,7 +68,7 @@ const field = inputControl;
 // The v3 table (40px sentence-case head at 13/500, 44px rows), as the settings `st` classes draw it.
 const th = "h-[40px] bg-[var(--surface-alt)] px-3 py-2 text-label text-muted-foreground";
 const td = "h-[44px] border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
-const label = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+const label = "text-xs font-semibold leading-[1.33] text-muted-foreground";
 const tfootTd = "border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-sm font-semibold tabular-nums text-foreground";
 
 /** A campaign's cost per issued policy: undefined while not asked, "loading", null when the scorecard cannot answer. */

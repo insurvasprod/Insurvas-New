@@ -291,7 +291,7 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className, 
             {rows.map((item, i) => (
               <li key={item.key}>
                 {item.section && item.section !== rows[i - 1]?.section && (
-                  <p className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">{item.section}</p>
+                  <p className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-1.5 text-xs font-semibold text-[var(--muted)]">{item.section}</p>
                 )}
                 <CopyRow
                   item={item}

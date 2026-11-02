@@ -179,7 +179,7 @@ export function Launchpad({ storageKey, spaces, label = "Your launchpad" }: { st
               <div
                 hidden={shown < 0}
                 data-launch-cell={cell.id}
-                className={cn("relative flex min-w-0 flex-col [&>*]:flex-1", wide && "sm:col-span-2", cell.h === 2 && "xl:row-span-2", editing && "m-launch-wiggle")}
+                className={cn("relative flex min-w-0 flex-col [&>*]:flex-1", wide && "sm:col-span-2", cell.h === 2 && "xl:row-span-2", editing && "m-launch-arranging")}
               >
                 {cell.node}
                 {editing && (

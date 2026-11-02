@@ -104,7 +104,7 @@ function Fact({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
   );
 }
 
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--body)]";
+const label12 = "text-xs leading-[1.33] font-semibold text-[var(--body)]";
 
 /** The phone, large, with Copy (owner 2026-10-28: "their phone number, that's really important"). */
 function PhoneLine({ phone }: { phone: string | null }) {

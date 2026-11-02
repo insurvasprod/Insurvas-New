@@ -53,7 +53,7 @@ const b = {
 };
 const FLAT = "box-border w-full rounded-[8px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] px-2.5 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none transition-colors placeholder:text-[var(--muted)] hover:border-[var(--border-strong)] focus:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 // Owner 2026-10-28: no grey type on this screen — headings and labels read in the body and ink colours.
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--body)]";
+const label12 = "text-xs leading-[1.33] font-semibold text-[var(--body)]";
 
 /** One detail's state, said the way the agent acts on it (owner 2026-10-27: self-explanatory rows). */
 const STATE_LOOK: Record<VerificationState, { label: string; mark: string; row: string }> = {

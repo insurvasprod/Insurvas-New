@@ -182,7 +182,6 @@ function RunPanel({ id, readOnly, docked = false, onClose, onChanged }: { id: st
                 <tr className="border-t-2 border-border font-semibold"><td className="pt-2">Net payable</td><td /><td /><td className="pt-2 text-right tabular-nums">{money(run.netCents)}</td></tr>
               </tbody>
             </table>
-            <p className="text-xs text-muted-foreground">The partner sees transfers rejected at the compliance gate as a count only, and never a commission figure.</p>
           </div>
 
           <div className={section}>

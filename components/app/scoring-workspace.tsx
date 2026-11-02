@@ -49,7 +49,7 @@ function range(since: string | null, until = new Date()) {
 const pct = (value: number | null) => (value === null ? "—" : `${value.toFixed(1)}%`);
 const same = (value: string, target: number | null) => target !== null && Number(value) === target;
 
-const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground first:pl-4 last:pr-4";
+const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold leading-[1.33] whitespace-nowrap text-muted-foreground first:pl-4 last:pr-4";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] first:pl-4 last:pr-4";
 
 const ROLE_LABEL: Record<string, string> = { owner: "Owner", producer: "Producer", setter: "Setter" };

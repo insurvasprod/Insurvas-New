@@ -740,7 +740,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                   const isToday = Boolean(today && sameDay(day, today));
                   const isPast = Boolean(today && !isToday && dateKey(day) < dateKey(today));
                   return (
-                    <span key={dateKey(day)} className={`${WEEK_HEAD} flex items-center gap-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] ${isToday ? "text-[var(--accent-ink)]" : isPast ? "text-muted-foreground opacity-70" : "text-foreground"}`}>
+                    <span key={dateKey(day)} className={`${WEEK_HEAD} flex items-center gap-2 text-xs font-semibold leading-[1.33] ${isToday ? "text-[var(--accent-ink)]" : isPast ? "text-muted-foreground opacity-70" : "text-foreground"}`}>
                       {WEEKDAY[day.weekday]} {day.day}
                       {isToday && <span className="rounded-full bg-[var(--primary-soft)] px-2 py-px text-xs font-semibold normal-case tracking-normal text-[var(--accent-ink)]">Today</span>}
                     </span>
@@ -980,7 +980,7 @@ function BookingDialog({ context, initial, agents, nowAt, callbacks, onClose, on
   }
 
   const field = "mt-1.5 block h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground";
-  const labelClass = "block text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+  const labelClass = "block text-xs font-semibold leading-[1.33] text-muted-foreground";
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>

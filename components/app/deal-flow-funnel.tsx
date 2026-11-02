@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 type Data = DialFunnel & { capped: boolean; timeZone: string };
 
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const label12 = "text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const percent = (value: number | null) => (value == null ? "—" : `${Math.round(value * 100)}%`);
 const ROLE: Record<string, string> = { owner: "owner", producer: "producer", setter: "setter", assistant: "buffer", bookkeeper: "bookkeeper" };
 

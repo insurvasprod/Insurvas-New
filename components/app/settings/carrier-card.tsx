@@ -28,7 +28,7 @@ import type { TenantCarrierRow } from "@/lib/carriers/service";
 import { bpToLevel, levelToBp, todayIso } from "@/lib/appointments/tickModel";
 import type { CarrierProductView, PortalAccountView, ProductLine, SalesCarrierView } from "@/lib/salesSettings/views";
 
-const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
+const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const FIELD = "flex flex-col gap-1.5 text-xs font-semibold text-[var(--muted)]";
 
 async function send(url: string, method: string, body?: unknown): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
@@ -226,7 +226,7 @@ export function CarrierCard({ carrier, dot, contract, switchedOff, states, pendi
         {pendingStates.map((code) => <span key={code} className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-[var(--border-strong)] px-2.5 text-xs font-semibold text-[var(--muted)]">{code}<span className="font-normal">pending</span></span>)}
         {states.length === 0 && pendingStates.length === 0 && !switchedOff
           ? <Button type="button" size="sm" onClick={onSetStates}>Set your states →</Button>
-          : <button type="button" onClick={onSetStates} className="inline-flex h-8 items-center rounded-full border border-[var(--border-strong)] px-3 text-xs font-semibold text-[var(--body)] hover:border-[var(--accent-ink)]">Change states →</button>}
+          : <Button type="button" variant="outline" size="sm" onClick={onSetStates}>Change states</Button>}
       </div>
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">

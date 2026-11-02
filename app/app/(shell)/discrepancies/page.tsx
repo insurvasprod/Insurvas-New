@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -8,8 +6,7 @@ import { CarrierDiscrepancies, DisputeLetters, type HandDiscrepancyRow } from "@
 import { DISCREPANCIES_PENDING_MESSAGE, loadDiscrepancies } from "@/lib/ingestion/discrepancyStore";
 import { payTimingGapText } from "@/lib/ingestion/carrierRules";
 import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import { CommissionsPage } from "@/components/app/commissions/commissions-page";
 import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies } from "@/lib/discrepancies/service";
 
 /**
@@ -54,20 +51,19 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   const pending = "rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]";
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Discrepancies"
-        description={view === "letters" ? "Letters drafted from the findings: you send them, and record how each one ended." : "What you are owed, what will be taken back, and what is held, from your carriers' files and the statements you imported, with the figures behind each."}
-        actions={view === "letters" ? undefined : <Button asChild type="button" variant="outline"><Link href="/app/statements">Statements</Link></Button>}
-      />
-      <ViewTabs
-        label="Discrepancy views"
-        active={view === "letters" ? "letters" : "items"}
-        tabs={[
-          { key: "items", label: "Discrepancies", count: view === "letters" ? undefined : working, href: "/app/discrepancies" },
-          { key: "letters", label: "Letters", href: "/app/discrepancies?view=letters" },
-        ]}
-      />
+    <CommissionsPage
+      step="discrepancies"
+      lead={
+        <ViewTabs
+            label="Discrepancy views"
+            active={view === "letters" ? "letters" : "items"}
+            tabs={[
+              { key: "items", label: "Discrepancies", count: view === "letters" ? undefined : working, href: "/app/discrepancies" },
+              { key: "letters", label: "Letters", href: "/app/discrepancies?view=letters" },
+            ]}
+        />
+      }
+    >
       {!found.available && <div role="status" className={pending}>{DISCREPANCIES_PENDING_MESSAGE}</div>}
       {list && !list.available && <div role="status" className={pending}>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</div>}
       {untimed && untimed.length > 0 && <div role="status" className={pending}>Missing commission is not checked for {untimed.length === 1 ? "1 carrier" : `${untimed.length} carriers`} with no pay trigger or lag set: {payTimingGapText(untimed)}. Insurvas sets these for each carrier.</div>}
@@ -84,6 +80,6 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
           initialSource={view === "statements" ? "hand" : source ?? ""}
         />
       )}
-    </div>
+    </CommissionsPage>
   );
 }

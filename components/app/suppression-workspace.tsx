@@ -58,7 +58,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 // The shared control (foundation v3), without the gap a stacked Field puts above it.
 const field = inputControl;
-const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground";
+const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold leading-[1.33] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 /** The tab's one card fills the rest of the step's column, so a short list never leaves half a page empty. */
 const FILL = "flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:flex-1";

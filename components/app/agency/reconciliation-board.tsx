@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 
-import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/view-tabs";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -56,8 +55,9 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
   }
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Producer reconciliation" description="Expected, reported and received, per producer — never blended." actions={<Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "last", label: "Last month" }, { key: "this", label: "This month" }]} />} />
+    // Commissions › Reconciliation (2026-11-02): the one Commissions page draws the title; the period stays here.
+    <div className="flex flex-col gap-6">
+      <div className="flex justify-end"><Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "last", label: "Last month" }, { key: "this", label: "This month" }]} /></div>
       <TableCard toolbar={
         <DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />}>
           <ToolbarCheckbox checked={overOnly} onChange={(value) => { setOverOnly(value); setPage(1); }} label="Over the threshold only" />

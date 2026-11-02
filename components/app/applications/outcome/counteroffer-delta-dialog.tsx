@@ -84,9 +84,9 @@ export function CounterofferDeltaDialog({ open, onOpenChange, offer, detail, car
           <thead>
             <tr className="bg-[var(--surface-alt)]">
               <th className="w-[150px] px-3 py-2"><span className="sr-only">Term</span></th>
-              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">Applied for</th>
-              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">Offered</th>
-              <th className="w-[168px] px-3 py-2 text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">Difference</th>
+              <th className="px-3 py-2 text-xs font-semibold text-[var(--muted)]">Applied for</th>
+              <th className="px-3 py-2 text-xs font-semibold text-[var(--muted)]">Offered</th>
+              <th className="w-[168px] px-3 py-2 text-xs font-semibold text-[var(--muted)]">Difference</th>
             </tr>
           </thead>
           <tbody className="m-seq">

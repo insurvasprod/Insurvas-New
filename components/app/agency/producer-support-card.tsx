@@ -46,7 +46,7 @@ export function ProducerSupportCard({ producerId, producerName }: { producerId: 
       title="Works for this producer"
       action={available.length ? (
         <div className="flex items-center gap-2">
-          <select aria-label="Add an assistant or setter" className={`${toolbarControl} h-8`} value={choice} onChange={(e) => setChoice(e.target.value)}>
+          <select aria-label="Add an assistant or setter" className={`${toolbarControl}`} value={choice} onChange={(e) => setChoice(e.target.value)}>
             <option value="">Add an assistant or setter</option>
             {available.map((p) => <option key={p.userId} value={p.userId}>{p.name} · {ROLE_LABEL[p.role]}</option>)}
           </select>

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 
-import { PageHeader } from "@/components/ui/page-header";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -63,8 +62,8 @@ export function AttributionBoard({ canResolve }: { canResolve: boolean }) {
   }
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Attribution queue" description="Statement rows we could not safely give to one producer." />
+    // Commissions › Attribution queue (2026-11-02): the one Commissions page draws the title.
+    <div className="flex flex-col gap-6">
       <ViewTabs label="Attribution" value={tab} onChange={(next) => { setTab(next); setPage(1); }} idPrefix="attr-tab" tabs={[
         { key: "disagreement", label: "Disagreements", count: count("disagreement"), tone: count("disagreement") ? "danger" : undefined },
         { key: "unattributed", label: "Unattributed", count: count("unattributed") },

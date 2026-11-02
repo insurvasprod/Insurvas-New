@@ -9,7 +9,7 @@ import { CarrierFilesTable } from "@/components/app/carrier-files-table";
 import { AgentFindings, PipelineRuns } from "@/components/app/pipeline-runs";
 import { PolicyChangesTable } from "@/components/app/policy-changes-table";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { agencyTimezone, BUCKET_PENDING_MESSAGE, loadBucketView } from "@/lib/ingestion/bucketStore";
 import { listFindings, listRuns } from "@/lib/ingestion/dailyRunStore";
@@ -66,12 +66,24 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   const replaced = list.files.length - current.length;
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Carrier files"
-        description="Policy and commission files from your carriers, uploaded, emailed in or dropped by a script."
-        actions={blocked ? <Button type="button" disabled title={blocked}>Upload a file</Button> : <CarrierFileUploadButton carriers={carriers} autoOpen={upload === "1"} />}
-      />
+    <DataInPage
+      step="files"
+      actions={blocked ? <Button type="button" disabled title={blocked}>Upload a file</Button> : <CarrierFileUploadButton carriers={carriers} autoOpen={upload === "1"} />}
+      lead={list.available ? (
+        <ViewTabs
+          label="Carrier file views"
+          active={showDoors ? "doors" : showBucket ? "bucket" : showChanges ? "changes" : showRuns ? "runs" : showFindings ? "findings" : "files"}
+          tabs={[
+            { key: "files", label: "Files", count: list.files.length, href: "/app/carrier-files" },
+            { key: "changes", label: "Policy changes", href: "/app/carrier-files?view=changes" },
+            { key: "runs", label: "Runs", href: "/app/carrier-files?view=runs" },
+            { key: "findings", label: "Agent findings", href: "/app/carrier-files?view=findings" },
+            { key: "bucket", label: "Bucket", href: "/app/carrier-files?view=bucket" },
+            { key: "doors", label: "Email", href: "/app/carrier-files?view=doors" },
+          ]}
+        />
+      ) : undefined}
+    >
 
       {/* LA-4.5: a status word nobody has mapped holds its rows back until Insurvas maps it. */}
       {unmapped.entries.length > 0 && (
@@ -91,21 +103,6 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
           <StatTile label="Failed" value={failed.toLocaleString("en-US")} valueTone={failed ? "warning" : undefined} footnote="cannot be read, see the reason" />
           <StatTile label="Duplicates skipped" value={list.skips.length.toLocaleString("en-US")} footnote="already received" />
         </StatStrip>
-      )}
-
-      {list.available && (
-        <ViewTabs
-          label="Carrier file views"
-          active={showDoors ? "doors" : showBucket ? "bucket" : showChanges ? "changes" : showRuns ? "runs" : showFindings ? "findings" : "files"}
-          tabs={[
-            { key: "files", label: "Files", count: list.files.length, href: "/app/carrier-files" },
-            { key: "changes", label: "Policy changes", href: "/app/carrier-files?view=changes" },
-            { key: "runs", label: "Runs", href: "/app/carrier-files?view=runs" },
-            { key: "findings", label: "Agent findings", href: "/app/carrier-files?view=findings" },
-            { key: "bucket", label: "Bucket", href: "/app/carrier-files?view=bucket" },
-            { key: "doors", label: "Email", href: "/app/carrier-files?view=doors" },
-          ]}
-        />
       )}
 
       {showBucket ? (
@@ -137,6 +134,6 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
           emptyHint={list.available ? "Upload a policy or commission file, email one to the agency's address, or have a script drop it into the bucket." : "Files appear here once the update is applied."}
         />
       )}
-    </div>
+    </DataInPage>
   );
 }

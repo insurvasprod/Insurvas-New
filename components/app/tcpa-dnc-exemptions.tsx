@@ -58,7 +58,7 @@ const STATE_CHIP: Record<DncExemption["state"], { tone: "good" | "neutral" | "wa
   certificate_gone: { tone: "warning", label: "Certificate not held" },
 };
 
-const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground";
+const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold leading-[1.33] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 // The shared control (foundation v3), without the gap a stacked Field puts above it.
 const field = inputControl;

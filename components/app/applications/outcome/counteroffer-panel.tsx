@@ -43,7 +43,7 @@ export function CounterofferPanel({ offer, carrierName, now, readOnly, busy, onA
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
           {cells.map(([label, value]) => (
             <div key={label} className="min-w-0">
-              <dt className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">{label}</dt>
+              <dt className="text-xs font-semibold text-[var(--muted)]">{label}</dt>
               <dd className="mt-0.5 text-sm font-semibold text-[var(--ink)] tabular-nums">{value}</dd>
             </div>
           ))}

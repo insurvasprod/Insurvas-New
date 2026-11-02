@@ -112,7 +112,7 @@ export function GroupMembers({ channelId, channelName, members, directory, viewe
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <h3 className="m-0 flex-1 text-xs font-semibold tracking-[0.02em] text-muted-foreground uppercase">Members · {members.length}</h3>
+        <h3 className="m-0 flex-1 text-xs font-semibold text-muted-foreground">Members · {members.length}</h3>
         {!closed && canAddPeople(me) && <Button type="button" size="sm" variant="outline" onClick={() => setAdding(true)}><UserPlus aria-hidden="true" />Add people</Button>}
       </div>
       {manage && (renaming === null

@@ -101,12 +101,12 @@ export function PayoutsBoard({ canCommit }: { canCommit: boolean }) {
     if (!d) return null;
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label={`Decision for ${p.displayName}`} className={`${toolbarControl} h-8`} value={d.mode} disabled={!d.include} onChange={(e) => set(p.producerUserId, { mode: e.target.value as Decision["mode"] })}>
+        <select aria-label={`Decision for ${p.displayName}`} className={`${toolbarControl}`} value={d.mode} disabled={!d.include} onChange={(e) => set(p.producerUserId, { mode: e.target.value as Decision["mode"] })}>
           <option value="pay_full">Pay this period in full</option>
           <option value="withhold">Withhold against the balance</option>
           <option value="amount">Pay a stated amount</option>
         </select>
-        {d.mode === "amount" && <input aria-label="Amount" inputMode="decimal" placeholder="$" className={`${toolbarControl} h-8 w-24`} value={d.amount} onChange={(e) => set(p.producerUserId, { amount: e.target.value })} />}
+        {d.mode === "amount" && <input aria-label="Amount" inputMode="decimal" placeholder="$" className={`${toolbarControl} w-24`} value={d.amount} onChange={(e) => set(p.producerUserId, { amount: e.target.value })} />}
       </div>
     );
   };

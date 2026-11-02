@@ -30,7 +30,7 @@ export function InboundStepBar({ current, onPick }: { current: 0 | 1 | 2 | 3 | 4
                 aria-hidden="true"
                 className={cn(
                   "grid size-[26px] shrink-0 place-items-center rounded-full text-xs font-bold transition-colors duration-500",
-                  done ? "bg-[var(--primary)] text-[var(--on-primary)]" : on ? "border-2 border-[var(--primary)] text-[var(--accent-ink)] shadow-[0_0_0_4px_var(--primary-soft)]" : "border-[1.5px] border-[var(--border-strong)] text-[var(--body)]",
+                  done ? "bg-[var(--primary)] text-[var(--on-primary)]" : on ? "border-2 border-[var(--primary)] text-[var(--accent-ink)]" : "border-[1.5px] border-[var(--border-strong)] text-[var(--body)]",
                 )}
               >
                 {done ? <Check className="size-3.5" /> : index + 1}

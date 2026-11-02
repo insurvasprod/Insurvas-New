@@ -57,7 +57,7 @@ export function ComingSoon({
 
         {fallbackNearby.length > 0 && (
           <div className="border-t border-border">
-            <h2 className="px-4 pt-3 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">In the meantime</h2>
+            <h2 className="px-4 pt-3 text-xs font-semibold leading-[1.33] text-muted-foreground">In the meantime</h2>
             <ul>
               {fallbackNearby.map((other) => (
                 <li key={other.key} className="flex items-center gap-3 border-t border-border px-4 py-3 first:border-t-0">

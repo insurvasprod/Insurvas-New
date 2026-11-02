@@ -96,6 +96,9 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { leadsInStepOf } from "@/lib/leadSources/steps";
 import { complianceStepOf } from "@/lib/compliance/steps";
 import { reportsViewOf } from "@/lib/reports/views";
+import { dataInStepOf } from "@/lib/dataIn/steps";
+import { accountingStepOf } from "@/lib/accounting/steps";
+import { commissionsStepOf } from "@/lib/commissions/steps";
 
 /** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
 export type AgentModuleAccess = ModuleAccess;
@@ -116,6 +119,12 @@ function isActivePath(pathname: string, href: string) {
   if (href === "/app/compliance" && complianceStepOf(pathname)) return true;
   // Every Reports view is the one Reports entry, whichever view it opens on.
   if (reportsViewOf(href) && reportsViewOf(pathname)) return true;
+  // Every Data in step is the one Data in entry (2026-11-02), whichever page it opens on.
+  if (dataInStepOf(href) && dataInStepOf(pathname)) return true;
+  // Every Accounting step is the one Accounting entry (2026-11-02).
+  if (accountingStepOf(href) && accountingStepOf(pathname)) return true;
+  // Every Commissions step is the one Commissions entry (2026-11-02).
+  if (commissionsStepOf(href) && commissionsStepOf(pathname)) return true;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

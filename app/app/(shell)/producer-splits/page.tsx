@@ -3,7 +3,7 @@ import { ProducerError, producersOverview, syncProducerLedger } from "@/lib/acco
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ProducersBoard } from "@/components/app/accounting/producers-board";
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -30,9 +30,8 @@ export default async function ProducerSplitsPage() {
     problem = error.message;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Producer splits" description="What each producer is owed — and what they owe back." />
+    <AccountingPage step="splits">
       {data ? <ProducersBoard data={data} readOnly={guard.entitlement.access === "read_only"} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}
-    </div>
+    </AccountingPage>
   );
 }

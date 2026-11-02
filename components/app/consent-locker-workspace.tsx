@@ -314,7 +314,7 @@ export function ConsentLockerWorkspace() {
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
       {/* "Not recorded" rather than a blank cell: a missing IP is a fact about the certificate. */}
       <dd className="break-words">{value || <span className="text-muted-foreground">Not recorded</span>}</dd>
     </div>

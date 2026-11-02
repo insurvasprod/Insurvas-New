@@ -55,7 +55,7 @@ export function HouseholdHeader({ caseView, insured }: { caseView: CaseView; ins
         </Link>
       ))}
       <div className="flex min-w-[180px] flex-col justify-center bg-[var(--surface)] px-4 py-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">Combined monthly total</span>
+        <span className="text-xs font-semibold text-[var(--muted)]">Combined monthly total</span>
         <span className="text-lg font-semibold text-[var(--ink)] tabular-nums">{money(total.totalCents || null)}{total.complete ? "" : " so far"}</span>
       </div>
     </section>

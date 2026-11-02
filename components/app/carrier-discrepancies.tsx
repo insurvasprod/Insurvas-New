@@ -479,7 +479,7 @@ export function DisputeLetters({ disputes, readOnly }: { disputes: DisputeRow[];
                       <Button type="button" size="sm" variant="outline" onClick={() => setViewing(d)}>Read</Button>
                       <Button asChild type="button" size="sm" variant="outline"><a href={`/api/app/commission-discrepancies/disputes/${d.id}/pdf`}><Download aria-hidden="true" />PDF</a></Button>
                       {!readOnly && d.status === "draft" && (
-                        <select aria-label="Mark sent" className={`${toolbarControl} h-8`} value="" disabled={busy} onChange={(e) => { if (e.target.value) void run({ action: "mark_sent", dispute_id: d.id, via: e.target.value }, "Marked sent."); }}>
+                        <select aria-label="Mark sent" className={`${toolbarControl}`} value="" disabled={busy} onChange={(e) => { if (e.target.value) void run({ action: "mark_sent", dispute_id: d.id, via: e.target.value }, "Marked sent."); }}>
                           <option value="">I sent it by…</option><option value="email">Email</option><option value="portal">The carrier&apos;s portal</option><option value="post">Post</option>
                         </select>
                       )}

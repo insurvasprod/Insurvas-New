@@ -131,6 +131,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/compliance/complaints/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
   // The Compliance rail's counts (2026-10-30): complaints and deletions waiting on a person, under their steps' gate.
   { sourceFile: "app/api/app/compliance/steps/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/data-in/steps/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/accounting/steps/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/commissions/steps/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/compliance/complaints/[id]/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/compliance/complaints/[id]/deadline/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/compliance/complaints/[id]/attachments/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },

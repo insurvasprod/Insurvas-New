@@ -46,7 +46,7 @@ function stateTone(state: string) { return state === "outstanding" ? "danger" : 
 
 function VerificationTab({ data }: { data: Workspace }) {
   if (!data.verification) return <p className="text-sm text-muted-foreground">Verification has not started for this lead.</p>;
-  return <div className="space-y-5"><div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><div className="flex items-center gap-2"><StatusChip tone={data.verification.session.progress_percentage === 100 ? "good" : "info"}>{data.verification.session.status}</StatusChip>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/call/${data.queue.id}`}>Open live verification</Link></Button>}</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></div><div><h3 className="text-sm font-semibold">Field confirmation</h3><div className="mt-2 divide-y rounded-md border">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><StatusChip tone={stateTone(field.state)}>{field.state}</StatusChip>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</div></div></div>;
+  return <div className="space-y-5"><div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><div className="flex items-center gap-2"><StatusChip tone={data.verification.session.progress_percentage === 100 ? "good" : "info"}>{data.verification.session.status}</StatusChip>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/call/${data.queue.id}`}>Open live verification</Link></Button>}</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></div><div><h3 className="text-sm font-semibold">Field confirmation</h3><div className="mt-2 divide-y rounded-md border">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><StatusChip tone={stateTone(field.state)}>{field.state}</StatusChip>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</div></div></div>;
 }
 
 // "18 Sep 4:19 pm", as the board stamps a note.
@@ -229,7 +229,7 @@ function nextActionLabel(next: LeadNextAction): string {
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</p>
+      <p className="text-xs font-semibold leading-[1.33] text-muted-foreground">{label}</p>
       <div className="mt-1 break-words text-sm font-semibold leading-normal tracking-[-0.02em] tabular-nums text-foreground">{children}</div>
     </div>
   );
@@ -508,7 +508,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               <LeadApplicationEntry leadId={data.lead.id} workItemId={data.queue?.id ?? null} canStart={!readOnly && (data.role === "owner" || data.role === "producer")} className={outline} />
               {data.stage && data.actions.canChangeStage && (
                 <div className="mt-1">
-                  <Label htmlFor="lead-stage" className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Stage</Label>
+                  <Label htmlFor="lead-stage" className="text-xs font-semibold text-muted-foreground">Stage</Label>
                   <select id="lead-stage" disabled={readOnly || saving === "stage"} value={data.stage.id} onChange={moveStage} className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-2 text-sm">
                     {data.stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
                   </select>

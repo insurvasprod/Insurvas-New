@@ -313,7 +313,7 @@ function RuleEditor({ draft, setDraft, readOnly, library, clauseErrors }: {
       {rules.map((rule, r) => (
         <Fragment key={r}>
           {r > 0 && (
-            <div className="flex items-center gap-2 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]" aria-hidden="true">
+            <div className="flex items-center gap-2 text-xs leading-[1.33] font-semibold text-[var(--muted)]" aria-hidden="true">
               <span className="h-px flex-1 bg-[var(--border)]" />or<span className="h-px flex-1 bg-[var(--border)]" />
             </div>
           )}

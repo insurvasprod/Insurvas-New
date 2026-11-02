@@ -3,7 +3,7 @@ import { categoryMap, categoryTotals, contractors, TaxError, taxSettings } from 
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { TaxBoard, TaxNotice, type TaxData } from "@/components/app/accounting/tax-board";
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -33,9 +33,8 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
     problem = error.message;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Tax summaries" description="1099 figures and the year by category, from your records." />
+    <AccountingPage step="tax">
       {data ? <TaxBoard data={data} readOnly={guard.entitlement.access === "read_only"} /> : <><TaxNotice /><TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard></>}
-    </div>
+    </AccountingPage>
   );
 }

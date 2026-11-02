@@ -112,7 +112,7 @@ export function AgentQuestionsDialog({ stageId, stageName, onClose }: { stageId:
               </Field>
             </div>
             <div className="mt-4 flex flex-col gap-3">
-              <span className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">Answers</span>
+              <span className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">Answers</span>
               {node.options.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">No answers yet.</p>}
               {node.options.map((option) => (
                 <div key={option.id} className="grid gap-3 rounded-[8px] bg-[var(--surface-alt)] p-3 sm:grid-cols-4">

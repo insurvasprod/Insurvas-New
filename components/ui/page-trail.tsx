@@ -7,6 +7,9 @@ import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { LEADS_IN_STEPS, leadsInStepLabel, leadsInStepOf } from "@/lib/leadSources/steps";
 import { COMPLIANCE_STEPS, complianceStepLabel, complianceStepOf } from "@/lib/compliance/steps";
 import { REPORTS_VIEWS, reportsViewLabel, reportsViewOf } from "@/lib/reports/views";
+import { DATA_IN_STEPS, dataInStepLabel, dataInStepOf } from "@/lib/dataIn/steps";
+import { accountingStepLabel, accountingStepOf } from "@/lib/accounting/steps";
+import { commissionsStepLabel, commissionsStepOf } from "@/lib/commissions/steps";
 import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
 
 /**
@@ -93,6 +96,18 @@ export function PageTrail({ title }: { title: string }) {
     const below = view && pathname !== view.href && title.trim() && title !== label;
     return <Breadcrumbs crumbs={[{ label: "Reports" }, { label, href: view?.href }, ...(below ? [{ label: title }] : [])]} />;
   }
+  // A Data in step (2026-11-02): Data in › the step, named as the rail names it.
+  const dataInStep = dataInStepOf(pathname);
+  if (dataInStep) {
+    const stepHref = DATA_IN_STEPS.find((step) => step.key === dataInStep)?.href;
+    return <Breadcrumbs crumbs={[{ label: "Data in", href: DATA_IN_STEPS[0]?.href }, { label: dataInStepLabel(dataInStep), href: stepHref }]} />;
+  }
+  // An Accounting step (2026-11-02): Accounting › the step (My balance on its own address).
+  const accountingStep = accountingStepOf(pathname);
+  if (accountingStep) return <Breadcrumbs crumbs={[{ label: "Accounting" }, { label: accountingStepLabel(accountingStep, pathname), href: pathname }]} />;
+  // A Commissions step (2026-11-02): Commissions › the step (My pay on its own address).
+  const commissionsStep = commissionsStepOf(pathname);
+  if (commissionsStep) return <Breadcrumbs crumbs={[{ label: "Commissions" }, { label: commissionsStepLabel(commissionsStep, pathname), href: pathname }]} />;
   if (!item) return null;
   const page = item.navLabel ?? item.label;
   const group = item.section === page ? null : item.section;

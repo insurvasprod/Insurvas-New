@@ -560,7 +560,6 @@ export function ActivityLogWorkspace({ initialView = "agents", role = "", framed
           <StatTile label="Appointments" value={loading || !now_ ? "…" : now_.appointments.toLocaleString()} valueTone={tone(now_?.appointments ?? null, then?.appointments ?? null)} footnote={vs(then?.appointments)} />
           <StatTile label="Applications" value={loading || applications == null ? "…" : applications.toLocaleString()} valueTone={tone(applications, applicationsBefore)} footnote={<>{vs(applicationsBefore)}{!loading && submitted != null && <span className="block">{submitted.toLocaleString()} submitted</span>}</>} />
         </StatStrip>
-        <p className="m-0 text-xs text-muted-foreground">Counts what was dialled and logged — not talk time. Calls go through each agent&rsquo;s own phone, so call length is never seen.</p>
       </div>
 
       {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}

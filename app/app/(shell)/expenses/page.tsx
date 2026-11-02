@@ -3,7 +3,7 @@ import { acquisitionDefaults, ExpenseError, generateRecurring, listExpenses } fr
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ExpensesBoard } from "@/components/app/accounting/expenses-board";
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -33,9 +33,8 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     problem = error.message;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Expenses" description="Everything you spend that is not a lead." />
+    <AccountingPage step="expenses">
       {loaded ? <ExpensesBoard expenses={loaded.expenses} defaults={loaded.defaults} readOnly={guard.entitlement.access === "read_only"} openId={open ?? null} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}
-    </div>
+    </AccountingPage>
   );
 }

@@ -154,10 +154,10 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
     const speaks = next.language && languageKey(next.language) !== "english" ? languageName(next.language) : null;
     const facts = [next.age, next.state, speaks, productLineLabel(next.productLine), next.partnerName ? `from ${next.partnerName}` : null].filter(Boolean).join(" · ");
     return (
-      <section aria-label="Next caller" className="m-glass flex min-w-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] p-5 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_25%,transparent),0_0_30px_color-mix(in_srgb,var(--primary)_12%,transparent)]">
+      <section aria-label="Next caller" className="m-glass flex min-w-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <span className="text-xs font-semibold tracking-[0.04em] text-[var(--accent-ink)] uppercase">Next caller</span>
+            <span className="text-xs font-semibold text-[var(--accent-ink)]">Next caller</span>
             <h2 className="m-0 mt-1 text-title-md font-semibold tracking-[-0.02em] text-[var(--ink)]">{next.customer}</h2>
             {/* Owner 2026-10-28: the phone number, before anything else about them. */}
             <p className="m-0 mt-1 inline-flex items-center gap-2 text-lg font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
@@ -249,7 +249,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
 
         <aside aria-label="You and your team" className="flex min-w-0 flex-col gap-4">
           <section className="m-glass flex flex-col gap-3 rounded-xl border border-border p-4">
-            <h2 className="m-0 text-xs font-semibold tracking-[0.04em] text-[var(--muted)] uppercase">Your open calls</h2>
+            <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your open calls</h2>
             {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">None. Every call you took is finished.</p>}
             {myCalls.map((call) => {
               const age = secondsSince(call.startedAt, now);
@@ -266,7 +266,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
             })}
           </section>
           <section className="m-glass flex flex-col gap-2.5 rounded-xl border border-border p-4">
-            <h2 className="m-0 text-xs font-semibold tracking-[0.04em] text-[var(--muted)] uppercase">Your team now</h2>
+            <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your team now</h2>
             {([["Taking calls", team.taking, "bg-[var(--primary)]"], ["On a call", team.onCall, "bg-[var(--info)]"], ["On break", team.onBreak, "bg-[var(--warning)]"]] as const).map(([label, value, dot]) => (
               <span key={label} className="flex items-center justify-between text-sm text-[var(--body)]"><span className="flex items-center gap-2"><span aria-hidden="true" className={cn("size-2 rounded-full", dot)} />{label}</span><strong className="font-semibold text-[var(--ink)] tabular-nums">{value}</strong></span>
             ))}

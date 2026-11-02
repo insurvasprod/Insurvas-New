@@ -2231,7 +2231,7 @@ function LegacyPartnerPortalWorkspace({
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs font-semibold text-muted-foreground">
                     Your access
                   </p>
                   <p className="mt-2 font-medium">
@@ -2244,7 +2244,7 @@ function LegacyPartnerPortalWorkspace({
                   </p>
                 </div>
                 <div className="rounded-lg border p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs font-semibold text-muted-foreground">
                     Agent-managed settings
                   </p>
                   <p className="mt-2 font-medium">

@@ -118,7 +118,7 @@ export default async function CarrierFilePage({ params, searchParams }: { params
               {file.rows.map((r) => (
                 <tr key={r.rowNumber} className="group">
                   <td className="sticky left-0 z-[1] bg-[var(--surface)] text-right group-hover:bg-[var(--surface-alt)]">
-                    <Link href={rowHref(file.id, r.rowNumber)} className="inline-flex h-7 min-w-9 items-center justify-center rounded-full border border-border px-2 text-xs font-semibold tabular-nums text-[var(--accent-ink)] hover:border-[var(--border-strong)] hover:bg-[var(--primary-soft)]" aria-label={`Open row ${r.rowNumber}`}>{r.rowNumber}</Link>
+                    <Link href={rowHref(file.id, r.rowNumber)} className="inline-flex h-8 min-w-9 items-center justify-center rounded-lg border border-border px-2 text-xs font-semibold tabular-nums text-[var(--accent-ink)] hover:border-[var(--border-strong)] hover:bg-[var(--primary-soft)]" aria-label={`Open row ${r.rowNumber}`}>{r.rowNumber}</Link>
                   </td>
                   {r.preview.map((v, i) => <td key={i} className="max-w-[180px] truncate font-mono text-xs" title={v}>{v === "" ? <span className="font-sans text-muted-foreground">—</span> : v}</td>)}
                   <td className="text-xs">

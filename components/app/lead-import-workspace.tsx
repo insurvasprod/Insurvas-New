@@ -5,7 +5,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Ban, BookUser, Bookmark, Check, ChevronDown, CircleAlert, Flag, Plus, Sparkles, Store, Upload, UserCheck, X, type LucideIcon } from "lucide-react";
+import { ArrowRight, Ban, BookUser, Bookmark, Check, ChevronDown, CircleAlert, Flag, Plus, BadgeCheck, Store, Upload, UserCheck, X, type LucideIcon } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { isOwnBookVendor, OWN_BOOK_CAMPAIGN_NAME, OWN_BOOK_VENDOR_NAME } from "@/lib/campaigns/ownBook";
 
@@ -149,7 +149,7 @@ const STATUS_TONE = { warn: "text-[var(--warning-ink)]", ok: "text-[var(--accent
 /** The two section titles on this step share one, stronger style (owner 2026-10-28). */
 const SECTION_TITLE = "text-card-title font-semibold text-[var(--ink)]";
 /** The small-caps label at the start of each row of the import card (board LirI1: Into, Product, Paid). */
-const ROW_LABEL = "w-20 shrink-0 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--body)]";
+const ROW_LABEL = "w-20 shrink-0 text-xs font-semibold text-[var(--body)]";
 /** One row of the import card: its label, then its controls, wrapping on a narrow screen. */
 const ROW = "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2";
 /** One mapping row: their column and its sample | arrow | your field | status icon. */
@@ -747,7 +747,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
               ? "Create a campaign to continue, or import your own book. Every import goes into a campaign."
               : "Every import goes into a campaign. Ask an owner or producer to create one."}
           </span>}
-          {recognised && vendorName && <span className="inline-flex items-center gap-1.5"><Sparkles className="size-3.5 text-[var(--accent-ink)]" aria-hidden />Recognised as {ownBookLabel ? "your own book" : `${vendorName}'s file`} from its column names</span>}
+          {recognised && vendorName && <span className="inline-flex items-center gap-1.5"><BadgeCheck className="size-3.5 text-[var(--accent-ink)]" aria-hidden />Recognised as {ownBookLabel ? "your own book" : `${vendorName}'s file`} from its column names</span>}
           {campaign && campaign.status !== "active" && <span className="text-[var(--warning-ink)]">Activate it to dial these leads — it is {campaign.status}.</span>}
         </p>}
 

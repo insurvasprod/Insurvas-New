@@ -94,7 +94,7 @@ export function ClientCard({ name }: { name: string }) {
         </div>
       ) : (
       <div className="flex flex-col gap-2 border-t border-[var(--border)] pt-3">
-        <span className="text-xs font-semibold tracking-[0.04em] text-[var(--muted)] uppercase">{LABEL.get(step) ?? step} · still to do</span>
+        <span className="text-xs font-semibold text-[var(--muted)]">{LABEL.get(step) ?? step} · still to do</span>
         {!live || readOnly ? (
           <span className="text-sm text-[var(--muted)]">{readOnly ? "Read-only: nothing on this attempt can change." : "Submitted: nothing left to fill in here."}</span>
         ) : nothingLeft ? (

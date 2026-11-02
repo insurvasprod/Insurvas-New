@@ -313,7 +313,7 @@ export function ArrivalChips({ m }: { m: DraftDateModel }) {
   if (m.rec?.kind !== "recommended" || !m.rec.arrivals.length) return null;
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">The next twelve arrivals</div>
+      <div className="text-xs font-semibold text-[var(--muted)]">The next twelve arrivals</div>
       <ol aria-label="The next twelve deposits" className="flex flex-wrap gap-1.5">
         {m.rec.arrivals.map((a) => (
           <li key={a.month} title={monthName(a.month)} className="inline-flex h-7 w-[52px] items-center justify-center rounded-[6px] border border-[var(--border)] bg-[var(--surface)] text-xs tabular-nums text-[var(--body)]">

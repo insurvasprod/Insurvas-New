@@ -58,7 +58,7 @@ function longRange(from: string, to: string) {
 
 /** A one-line notice the reader must act on (standard §3). */
 const notice = "rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--warning-ink)]";
-const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold leading-[1.33] text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 
 type Scope = { from: string; to: string; vendorId: string; campaignId: string; productCode: string; persist: boolean };
@@ -471,7 +471,7 @@ export function TrueCpaWorkspace({ initialReport = null, framed = false }: { ini
               </li>;
             })}
           </ul>
-          <p className="m-0 text-xs text-muted-foreground">Undialable rate and claim acceptance answer different questions and are never combined into one score. A dash for True CPA means no issued policy yet — not zero cost.</p>
+          <p className="m-0 text-xs text-muted-foreground">A dash for True CPA means no issued policy yet — not zero cost.</p>
         </div>}
     </TableCard>}
 

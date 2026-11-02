@@ -155,7 +155,6 @@ export function InboundSettingsCards({ inbound, disabled }: { inbound: ReturnTyp
           <div className="flex flex-col gap-4">
             <ToggleRow id="inbound-alert-new" title="Agents, when a transfer arrives" help="The “new lead waiting” alert to owners, producers and buffer agents. The claim card shows the wait either way." checked={draft.alertNewTransfer} onChange={(value) => set({ alertNewTransfer: value })} disabled={locked} />
             <ToggleRow id="inbound-email-owners" title="Owners by email, when it escalates" help="Each owner can still turn it off for themselves in Notifications. The in-app alert always fires." checked={draft.emailOwnersOnEscalation} onChange={(value) => set({ emailOwnersOnEscalation: value })} disabled={locked} />
-            <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">The partner is told automatically in their channel: connected, the outcome, and at the partner rung above.</p>
           </div>
         </SettingsCard>
         <SettingsCard title="Buffer agents" info="People with the Assistant role take the call first, then hand it to a licensed agent.">

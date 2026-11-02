@@ -124,7 +124,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
                 // A group heading before the first row of each group (the rows arrive grouped).
                 if (index === 0 || shown.rows[index - 1].group !== row.group) {
                   if (row.group !== "deadline") {
-                    out.push(<tr key={`group-${row.group}`}><td colSpan={7} className="bg-[var(--surface-muted,transparent)] text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[row.group]}{row.group === "no_window" && <> · <span className="normal-case">Insurvas sets the windows per carrier</span></>}</td></tr>);
+                    out.push(<tr key={`group-${row.group}`}><td colSpan={7} className="bg-[var(--surface-muted,transparent)] text-xs font-semibold text-muted-foreground">{GROUP_LABELS[row.group]}{row.group === "no_window" && <> · <span className="normal-case">Insurvas sets the windows per carrier</span></>}</td></tr>);
                   }
                 }
                 const u = urgency(row.daysLeft);
@@ -174,7 +174,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
           <div className="grid gap-6 px-4 py-4 sm:grid-cols-3">
             {([["By reason", rates.byReason, (l: string) => REASON_LABELS[l as keyof typeof REASON_LABELS] ?? l], ["By carrier", rates.byCarrier, (l: string) => l], ["By agent", rates.byAgent, (l: string) => l]] as const).map(([title, list, label]) => (
               <div key={title}>
-                <h3 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+                <h3 className="m-0 mb-2 text-xs font-semibold text-muted-foreground">{title}</h3>
                 <ul className="m-0 grid list-none gap-1 p-0 text-sm">
                   {list.map((r) => (
                     <li key={r.label} className="flex items-baseline justify-between gap-2">

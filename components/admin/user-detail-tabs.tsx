@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 // The boards' table vocabulary (settings primitives' `st`), restated because a server component
 // cannot read values out of a "use client" module.
-const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
+const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold whitespace-nowrap text-[var(--muted)]";
 const TD = "border-t border-[var(--border)] px-3 py-2 align-top text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 const SUB = "block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 const FOOT = "m-0 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";

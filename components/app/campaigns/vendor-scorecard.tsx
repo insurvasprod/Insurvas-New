@@ -2,7 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { BadgeDollarSign, ChevronDown, Clock, HandCoins, KeyRound, Pencil, PhoneOff, Plus, ShieldCheck, Target, Timer, Trash2, Trophy, Wallet, Zap } from "lucide-react";
+import { BadgeDollarSign, ChevronDown, Clock, HandCoins, KeyRound, Pencil, PhoneOff, Plus, ShieldCheck, Target, Timer, Trash2, Trophy, Wallet, Gauge } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { daysLeft, duration, LEAD_TYPE, money, percent, VendorFacts, VendorSignals, type RosterConsent, type RosterRollup, type RosterSpeed, type RosterVendor } from "@/components/app/vendor-roster";
@@ -52,7 +52,7 @@ export function VendorScorecard({ vendor, rollup, fact, facts, speed, consent, u
     { key: "usable", icon: <Target />, label: "Per usable", value: known(rollup?.cost_per_usable_record_cents) ? money(rollup?.cost_per_usable_record_cents) : null, tone: costTone(rollup?.cost_per_usable_record_cents, usableReference), meaning: "Cost per usable lead, after the scrub. Green is at or under your average cost per dialable lead." },
     { key: "policy", icon: isBest ? <Trophy /> : <BadgeDollarSign />, label: fact?.trialling ? "Per policy · trial" : "Per policy", value: known(fact?.cost_per_policy_cents) ? money(fact?.cost_per_policy_cents) : null, tone: policyTone, meaning: fact?.trialling ? "Cost per issued policy. Not ranked while trialling." : isBest ? "Cost per issued policy — the cheapest ranked vendor" : "Cost per issued policy" },
     { key: "median", icon: <Timer />, label: "Median to dial", value: posted && known(speed?.median_seconds) ? duration(speed?.median_seconds) : null, tone: posted ? speedTone(speed?.median_seconds) : null, meaning: "Speed to lead: arrival to first dial, the median. Real-time leads only." },
-    { key: "60s", icon: <Zap />, label: "Under 60s", value: posted && known(speed?.dialled_within_60s_pct) ? percent(speed?.dialled_within_60s_pct) : null, tone: posted ? highIsGood(speed?.dialled_within_60s_pct, 80, 50) : null, meaning: "Share of posted leads dialled within 60 seconds; a lead nobody dialled counts against it" },
+    { key: "60s", icon: <Gauge />, label: "Under 60s", value: posted && known(speed?.dialled_within_60s_pct) ? percent(speed?.dialled_within_60s_pct) : null, tone: posted ? highIsGood(speed?.dialled_within_60s_pct, 80, 50) : null, meaning: "Share of posted leads dialled within 60 seconds; a lead nobody dialled counts against it" },
     { key: "consent", icon: <ShieldCheck />, label: "Consent", value: consentKnown ? percent(consent?.claimed_coverage_pct) : null, tone: consentTone, meaning: vendor.lead_type === "realtime" ? "Leads with a claimed consent certificate — high is good" : "Leads with a claimed consent certificate. Not judged for list or aged leads." },
     { key: "undialable", icon: <PhoneOff />, label: "Undialable", value: known(fact?.undialable_percent) ? percent(fact?.undialable_percent) : null, tone: lowIsGood(fact?.undialable_percent, 5, 15), meaning: "Share of this vendor's rows that could never be dialled — low is good" },
     { key: "claims", icon: <HandCoins />, label: "Claims credited", value: known(fact?.claim_acceptance_percent) ? percent(fact?.claim_acceptance_percent) : null, tone: highIsGood(fact?.claim_acceptance_percent, 80, 50), meaning: "Of what you claimed back from this vendor, the share they credited — high is good" },

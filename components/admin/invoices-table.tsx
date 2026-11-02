@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 type Lens = "all" | "overdue" | "mismatched";
 
-const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 /** Whole days past due, measured against the moment the page was rendered (passed in, so the server and the browser agree). */

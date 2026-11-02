@@ -10,7 +10,7 @@ import { LedgerViews } from "@/components/app/ledger-statement-sections";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementImportButton } from "@/components/app/statement-import";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import { CommissionsPage } from "@/components/app/commissions/commissions-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
@@ -59,8 +59,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   }
   const readOnly = guard.entitlement.access === "read_only";
   const params = await searchParams;
-  // One header for both sources; only its sentence and actions differ.
-  const header = (description?: string, actions?: React.ReactNode) => <PageHeader title="Commission ledger" description={description} actions={actions} />;
   // Carrier accounts are the agency's running balances with each carrier: owners and bookkeepers only.
   const seesAccounts = guard.role === "owner" || guard.role === "bookkeeper";
   const view = params.view === "accounts" && seesAccounts ? "accounts" : params.view === "expected" ? "expected" : "lines";
@@ -80,13 +78,11 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   if (view === "accounts") {
     const accounts = await loadAccounts(guard.context.tenantId);
     return (
-      <div className="m-stagger flex flex-col gap-6">
-        {header("What each carrier says it holds for you: opening and closing balance per statement, whether it adds up, and whether one is missing.")}
-        {sourceTabs()}
+      <CommissionsPage step="ledger" lead={sourceTabs()}>
         {accounts.available
           ? <CarrierAccounts orphanDays={accounts.orphanDays} statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
           : <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{ACCOUNTS_PENDING_MESSAGE}</div>}
-      </div>
+      </CommissionsPage>
     );
   }
 
@@ -149,12 +145,8 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const expectedSummary = `${wholeMoney(totals.grossCents)} gross · ${wholeMoney(totals.advancesCents)} advanced · ${wholeMoney(totals.chargebacksCents)} charged back · ${totals.exposureCents > 0 ? `${wholeMoney(totals.exposureCents)} still exposed` : "nothing exposed"} · derived from ${plural(ledger.policiesRead, "policy", "policies")}`;
 
   const headerActions = (
-    <>
-      {handlesStatements && statementsOnPlan && statements.statementsImported > 0 && (
-        <Button asChild type="button" variant="outline"><Link href="/app/statements">Statement history</Link></Button>
-      )}
-      {importControl}
-    </>
+    // Statements is the step before on the rail (2026-11-02), so only the import stays here.
+    <>{importControl}</>
   );
 
   const notices = (
@@ -177,14 +169,12 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
     // Newest statement first, whichever source a line came from.
     const lines = [...(book?.available ? book.entries : []), ...(handLines ?? [])].sort((a, b) => String(b.statementDate ?? b.transactionDate ?? "").localeCompare(String(a.statementDate ?? a.transactionDate ?? "")));
     return (
-      <div className="m-stagger flex flex-col gap-6">
-        {header("Every commission line: each line of every carrier commission file, and each accepted line of a statement imported by hand, with the source behind it.", headerActions)}
-        {sourceTabs(lines.length, showExpected)}
+      <CommissionsPage step="ledger" lead={sourceTabs(lines.length, showExpected)} actions={headerActions}>
         {notices}
         {book && !book.available && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>{LEDGER_PENDING_MESSAGE}</div>}
         {book?.available && book.truncated && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>Showing the newest {book.cap.toLocaleString("en-US")} lines from carrier files; older lines, and their amounts, are left out of the list and the figures here.</div>}
         <CarrierLedger entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} />
-      </div>
+      </CommissionsPage>
     );
   }
 
@@ -208,9 +198,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   );
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      {header("What your hand-entered policies should earn, from the carrier library's rates and advance rules, and how it compares with what their statements reported.", headerActions)}
-      {sourceTabs(undefined, showExpected)}
+    <CommissionsPage step="ledger" lead={sourceTabs(undefined, showExpected)} actions={headerActions}>
       {!showExpected ? (
         <>
           {notices}
@@ -235,6 +223,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
           {expectedNotices}
         </LedgerViews>
       )}
-    </div>
+    </CommissionsPage>
   );
 }

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Breadcrumbs, type Crumb } from "./breadcrumbs";
 import { PageTrail } from "./page-trail";
 import { InfoTip } from "@/components/ui/info-tip";
+import { PageAlertSlot } from "@/components/ui/page-alerts";
 
 /**
  * The top of every page, in one shape (owner 2026-10-30, the Partner Chat header everywhere):
@@ -51,12 +52,17 @@ export function PageHeader({
     <header data-page-header="visible" className={cn("flex shrink-0 flex-col gap-1.5", className)}>
       {breadcrumbs ? <Breadcrumbs crumbs={breadcrumbs} /> : <PageTrail title={title} />}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 max-w-[44rem]">
-          <div className="flex items-center gap-1.5">
-            <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
-            {/* To the right of the (i), not under it (owner, 2026-10-29): below the title it spills back across
-                the heading and the trail. */}
-            {description && infoDescription && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex items-center gap-1.5">
+              <h1 data-page-title data-size={size} className="m-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
+              {/* To the right of the (i), not under it (owner, 2026-10-29): below the title it spills back across
+                  the heading and the trail. */}
+              {description && infoDescription && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+            </div>
+            {/* The shell's alerts (an overdue complaint, a payment problem) on the title's line, never a
+                banner above the page (owner 2026-11-02: the banner pushed every page into a scroll). */}
+            <PageAlertSlot />
           </div>
           {description && !infoDescription && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
           {meta}

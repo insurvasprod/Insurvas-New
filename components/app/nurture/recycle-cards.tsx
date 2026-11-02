@@ -41,7 +41,7 @@ export function PanelSection({ title, children, aside }: { title: string; childr
   return (
     <section aria-label={title} className="flex min-w-0 flex-col gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
       <div className="flex min-h-6 flex-wrap items-center gap-2">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">{title}</h3>
+        <h3 className="m-0 text-xs font-semibold text-muted-foreground">{title}</h3>
         {aside && <span className="ml-auto flex items-center gap-2">{aside}</span>}
       </div>
       {children}

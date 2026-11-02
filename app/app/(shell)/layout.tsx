@@ -16,7 +16,8 @@ import { PROFILE_SKIPPED_COOKIE } from "@/lib/signup/profileSkip";
 import { outstandingDocuments } from "@/lib/legal/acceptance";
 import { MaintenanceMessage } from "@/components/app/maintenance-message";
 import { AnnouncementStrip } from "@/components/app/announcement-strip";
-import { SubscriptionStateBanner } from "@/components/app/subscription-state-banner";
+import { SubscriptionStateBanner, subscriptionNeedsAlert } from "@/components/app/subscription-state-banner";
+import { PageAlertsProvider } from "@/components/ui/page-alerts";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
 import { planDisplayName } from "@/lib/plans/display";
 import { AppTopBar } from "@/components/app/app-top-bar";
@@ -159,6 +160,17 @@ export default async function AgentShellLayout({ children }: { children: React.R
     isOwner: context.role === "owner",
   };
 
+  // The always-on alerts, on every page's title line (owner 2026-11-02), not a banner above the page.
+  // Louder than everything below it, and not dismissible (LA-6.4). AG-0.5: complaints are the
+  // agency's, and their screen is refused to a narrowed session inside one.
+  const complaintCount = agencyNarrow ? 0 : overdueComplaints;
+  const pageAlerts = complaintCount > 0 || subscriptionNeedsAlert(entitlement.status) ? (
+    <>
+      <OverdueComplaintBanner count={complaintCount} />
+      <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
+    </>
+  ) : null;
+
   return (
     <div className="portal-agent flex min-h-screen flex-col md:flex-row">
       <AgentSidebar
@@ -186,16 +198,12 @@ export default async function AgentShellLayout({ children }: { children: React.R
             are the banners just below, which say what to do about them. */}
         <AppTopBar user={identity} userId={context.userId} plan={{ name: plan.name, seats: plan.seats, isOwner: plan.isOwner }} menu={menu} />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
-        {/* Louder than everything below it, and not dismissible (LA-6.4). */}
-        {/* AG-0.5: complaints are the agency's, and their screen is refused to a narrowed session inside one. */}
-        <OverdueComplaintBanner count={agencyNarrow ? 0 : overdueComplaints} />
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
-        <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
         {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
         <Suspense fallback={null}><SetupGuideBar /></Suspense>
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage className="flex min-w-0 flex-1 flex-col"><SoloProvider solo={solo}><PageTrailProvider menu={menu}><PortalPageTransition>{children}</PortalPageTransition></PageTrailProvider></SoloProvider></DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><SoloProvider solo={solo}><PageTrailProvider menu={menu}><PageAlertsProvider alerts={pageAlerts}><PortalPageTransition>{children}</PortalPageTransition></PageAlertsProvider></PageTrailProvider></SoloProvider></DashboardStage>
       </div>
       </main>
     </div>

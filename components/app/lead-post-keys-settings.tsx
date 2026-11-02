@@ -664,7 +664,6 @@ export function LeadPostKeysSettings() {
 
           {tab === "rejections" && (
             <div className="flex flex-col gap-3">
-              <p className="m-0 text-sm text-[var(--muted)]">A rejected post is a lead you are not billed for. Each reason says what to do about it.</p>
               {activityError ? (
                 <Callout tone="error" title={activityError} />
               ) : !activity ? (
@@ -795,7 +794,7 @@ export function LeadPostKeysSettings() {
             </ul>
           )}
 
-          <SettingsCard title="Live posts" sub="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
+          <SettingsCard title="Live posts" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
             {activityError ? (
               <Callout tone="error" title={activityError} />
             ) : !activity ? (
@@ -809,7 +808,7 @@ export function LeadPostKeysSettings() {
         </div>
 
         {panel || (
-          <SettingsCard title={`Rejections, last ${loaded.windowDays} days`} sub="Across every vendor. Open a vendor for its key, field map and posts." className="lg:sticky lg:top-4">
+          <SettingsCard title={`Rejections, last ${loaded.windowDays} days`} info="Across every vendor. Open a vendor for its key, field map and posts." className="lg:sticky lg:top-4">
             {loaded.rejections.length === 0 ? (
               <p className="m-0 text-sm text-[var(--muted)]">No posts were rejected in the last {loaded.windowDays} days.</p>
             ) : (
@@ -945,7 +944,7 @@ export function LeadPostKeysSettings() {
             const matches = revokeTyped.trim().toLowerCase() === revoking.vendorName.trim().toLowerCase();
             const factLine = (label: string, value: string) => (
               <div>
-                <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--muted)]">{label}</div>
+                <div className="text-xs font-semibold leading-[1.33] text-[var(--muted)]">{label}</div>
                 <div className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</div>
               </div>
             );
