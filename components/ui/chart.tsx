@@ -67,6 +67,8 @@ export function BarSeries({
   format = count,
   unit,
   max,
+  barMaxWidth,
+  labels = "ends",
   className,
   minHeight = 132,
 }: {
@@ -77,11 +79,22 @@ export function BarSeries({
   unit?: string;
   /** Override the scale's top — for two charts that must share an axis. */
   max?: number;
+  /** Keep sparse series readable by capping each bar while its grid cell keeps the time slot. */
+  barMaxWidth?: number;
+  /**
+   * Which bars get an axis label. `"ends"` (the default) draws the first, middle and last, which
+   * is what a run of dates wants — the ends anchor it and the rest would collide. `"all"` is for
+   * a **categorical** series, where every bar is a different thing and an unlabelled bar cannot
+   * be identified at all: one bar per producer, per carrier, per product.
+   */
+  labels?: "ends" | "all";
   className?: string;
   minHeight?: number;
 }) {
   const top = chartTop(max ?? bars.reduce((high, bar) => Math.max(high, bar.value), 0));
-  const labelAt = new Set([0, Math.floor((bars.length - 1) / 2), bars.length - 1]);
+  const labelAt = labels === "all"
+    ? new Set(bars.map((_, index) => index))
+    : new Set([0, Math.floor((bars.length - 1) / 2), bars.length - 1]);
   // The axis gutter is as wide as the widest tick actually reads: a fixed 36px clipped "$4,500"
   // on a phone, and a fixed wide one wastes a third of a narrow chart on whitespace.
   const tickText = ticks(top).map(format);
@@ -107,7 +120,7 @@ export function BarSeries({
             const height = top > 0 ? (bar.value / top) * 100 : 0;
             const accentShare = bar.accent !== undefined && bar.value > 0 ? (bar.accent / bar.value) * 100 : null;
             return (
-              <li key={bar.key} className="flex h-full flex-col justify-end" title={`${bar.label}: ${format(bar.value)}${unit ? ` ${unit}` : ""}${bar.partial ? " (so far)" : ""}`}>
+              <li key={bar.key} className={cn("flex h-full flex-col justify-end", barMaxWidth && "items-center")} title={`${bar.label}: ${format(bar.value)}${unit ? ` ${unit}` : ""}${bar.partial ? " (so far)" : ""}`}>
                 <span
                   className={cn(
                     "m-bar-rise flex flex-col justify-end overflow-hidden rounded-t-[4px] rounded-b-[2px]",
@@ -115,7 +128,7 @@ export function BarSeries({
                     bar.partial && "opacity-60",
                   )}
                   // A bar with something in it is never invisible: 2% is the thinnest mark that still reads.
-                  style={{ height: `${Math.max(bar.value > 0 ? 2 : 0, height)}%` }}
+                  style={{ height: `${Math.max(bar.value > 0 ? 2 : 0, height)}%`, width: barMaxWidth ? "100%" : undefined, maxWidth: barMaxWidth }}
                 >
                   {accentShare !== null && <span className={cn("block", CHART_TONES.strong)} style={{ height: `${accentShare}%` }} />}
                 </span>
@@ -127,7 +140,14 @@ export function BarSeries({
 
       <div aria-hidden="true" className="grid pt-1.5 text-xs leading-none tabular-nums text-muted-foreground" style={{ paddingRight: gutter, gridTemplateColumns: `repeat(${bars.length}, minmax(0, 1fr))` }}>
         {bars.map((bar, index) => (
-          <span key={bar.key} className={cn("whitespace-nowrap", index === 0 ? "text-left" : index === bars.length - 1 ? "text-right" : "text-center")}>
+          <span
+            key={bar.key}
+            title={labels === "all" ? bar.label : undefined}
+            className={cn(
+              labels === "all" ? "min-w-0 truncate px-0.5 text-center" : "whitespace-nowrap",
+              labels === "all" || bars.length === 1 ? "text-center" : index === 0 ? "text-left" : index === bars.length - 1 ? "text-right" : "text-center",
+            )}
+          >
             {labelAt.has(index) ? bar.label : ""}
           </span>
         ))}
@@ -180,7 +200,10 @@ export function ShareBar({
         ))}
       </div>
 
-      <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-4 gap-y-2 p-0">
+      {/* 11rem, not 9: a legend cell holds a dot, a name, a figure and a percentage, and at 9rem
+          two of them fit into a narrow panel and clip every name to "Overr…". Falling to one
+          row per segment sooner costs a little height and keeps the names readable. */}
+      <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-x-4 gap-y-2 p-0">
         {segments.map((segment) => (
           <li key={segment.key} className="flex min-w-0 items-center gap-2 text-sm">
             <span className={cn("size-2.5 shrink-0 rounded-[3px]", CHART_TONES[segment.tone])} aria-hidden="true" />

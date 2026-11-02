@@ -7,6 +7,7 @@ import {
   BarChart3,
   Building2,
   ChevronDown,
+  ClipboardList,
   Home,
   Menu,
   MessageSquare,
@@ -27,7 +28,10 @@ type PartnerNavItem = { label: string; path: string; icon: typeof Home };
 const workspaceItems: PartnerNavItem[] = [
   { label: "Overview", path: "/partner", icon: Home },
   { label: "Submit lead", path: "/partner/submit-lead", icon: Send },
-  { label: "Pipeline", path: "/partner/pipeline", icon: BarChart3 },
+  { label: "Lead pipeline", path: "/partner/pipeline", icon: BarChart3 },
+  // Next to Pipeline, because both answer "where are my leads?" — Pipeline over a range, Deal flow
+  // for one day. The agent menu uses the same icon for its own Daily deal flow (sell.deal-flow).
+  { label: "Deal flow", path: "/partner/deal-flow", icon: ClipboardList },
   { label: "Messages", path: "/partner/messages", icon: MessageSquare },
 ];
 
@@ -59,7 +63,7 @@ function PartnerNavLink({ item, onNavigate }: { item: PartnerNavItem; onNavigate
 /** The organisation's own pages: statements, team review and team access are the partner admin's (LA-7.4). */
 function organizationItems(role: PartnerRole): PartnerNavItem[] {
   return role === "partner_admin"
-    ? [{ label: "Statements", path: "/partner/payouts", icon: WalletCards }, { label: "Team review", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }]
+    ? [{ label: "Commission statements", path: "/partner/payouts", icon: WalletCards }, { label: "Team performance", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }]
     : [];
 }
 

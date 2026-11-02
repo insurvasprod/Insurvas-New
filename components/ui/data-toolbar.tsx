@@ -105,6 +105,23 @@ export function FilterButton({
  * in `<TableCard filters={…}>` and renders only while `open`. Give it the `id` the FilterButton's
  * `controls` names.
  */
+/**
+ * One labelled field inside a `FilterPanel` (§6a).
+ *
+ * Its own label style rather than the kit's `Field`: a filter's label is a quiet 12px caption over
+ * a 36px control, not a form label over an input. It lives here, beside the panel it belongs to,
+ * because the agent app's Daily deal flow and the partner portal's draw the same panel and a
+ * second copy is how the two drift.
+ */
+export function FilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="grid min-w-0 gap-1.5">
+      <label htmlFor={htmlFor} className="text-xs font-medium text-muted-foreground">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 export function FilterPanel({ id, open, children, className }: { id: string; open: boolean; children: ReactNode; className?: string }) {
   if (!open) return null;
   return (
