@@ -162,21 +162,60 @@ export const quotationDefinitionSchema = z.object({
   }
 });
 
+/**
+ * An agency's own question in a field set (owner 2026-10-30): asked in the application step's
+ * "Carrier questions" and checked by QA like any field when required. Never masked — a value that
+ * must be encrypted needs a built-in key with its own path (the SSN, the bank record).
+ */
+export const CUSTOM_FIELD_TYPES = ["text", "long_text", "date", "number", "currency", "choice", "yes_no", "state", "phone", "email"] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
+export const CUSTOM_FIELD_KEY_PATTERN = /^custom\.[a-z0-9_]{2,48}$/;
+/** The sections of a set, in the order the editor shows them; "custom" questions name one of these. */
+export const FIELD_SET_GROUP_KEYS = ["insured", "contact", "addr", "owner", "cov", "pay"] as const;
+
+const customField = z.object({
+  key: z.string().regex(CUSTOM_FIELD_KEY_PATTERN, "A question's key is custom. followed by lowercase letters, digits or _"),
+  label: z.string().trim().min(1, "Every question needs its text").max(160, "Keep a question under 160 characters"),
+  type: z.enum(CUSTOM_FIELD_TYPES),
+  options: z.array(z.string().trim().min(1, "A choice cannot be blank").max(120)).max(50, "Keep a question to 50 choices").optional(),
+  group: z.enum(FIELD_SET_GROUP_KEYS),
+}).strict();
+
 export const fieldSetDefinitionSchema = z.object({
   required: z.array(z.string()).max(200),
   optional: z.array(z.string()).max(200),
   labels: z.record(z.string(), z.string().trim().min(1).max(160)).optional(),
+  /** The asked fields in the order the agent sees them (owner 2026-10-30); absent = canonical order. */
+  order: z.array(z.string()).max(250).optional(),
+  /** A line under a field for the agent, e.g. what the carrier means by it. */
+  help: z.record(z.string(), z.string().trim().min(1).max(300, "Keep help under 300 characters")).optional(),
+  custom: z.array(customField).max(50, "Keep a set to 50 questions of your own").optional(),
 }).strict().superRefine((def, ctx) => {
-  const known = new Set(FIELD_SET_KEYS);
+  const customKeys = new Set<string>();
+  for (const c of def.custom ?? []) {
+    if (customKeys.has(c.key)) ctx.addIssue({ code: "custom", path: ["custom"], message: `${c.label} is listed twice` });
+    customKeys.add(c.key);
+    if (c.type === "choice" && !(c.options ?? []).length) ctx.addIssue({ code: "custom", path: ["custom"], message: `${c.label} needs at least one choice` });
+  }
+  const known = new Set([...FIELD_SET_KEYS, ...customKeys]);
   const seen = new Set<string>();
   for (const k of [...def.required, ...def.optional]) {
     if (!known.has(k)) ctx.addIssue({ code: "custom", path: ["required"], message: `${k} is not an application field` });
     if (seen.has(k)) ctx.addIssue({ code: "custom", path: ["required"], message: `${k} is listed twice` });
     seen.add(k);
   }
+  for (const k of customKeys) {
+    if (!seen.has(k)) ctx.addIssue({ code: "custom", path: ["custom"], message: `${def.custom?.find((c) => c.key === k)?.label ?? k} is not asked — remove it or mark it Optional` });
+  }
   if (def.required.length === 0) ctx.addIssue({ code: "custom", path: ["required"], message: "Mark at least one field required" });
   for (const k of Object.keys(def.labels ?? {})) {
     if (!seen.has(k)) ctx.addIssue({ code: "custom", path: ["labels"], message: `${k} has a label but is not in the set` });
+  }
+  for (const k of Object.keys(def.help ?? {})) {
+    if (!seen.has(k)) ctx.addIssue({ code: "custom", path: ["help"], message: `${k} has help but is not in the set` });
+  }
+  for (const k of def.order ?? []) {
+    if (!seen.has(k)) ctx.addIssue({ code: "custom", path: ["order"], message: `${k} is ordered but is not in the set` });
   }
 });
 

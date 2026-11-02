@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -8,7 +7,7 @@ import { StatementImportButton } from "@/components/app/statement-import";
 import { StatementsTable } from "@/components/app/statements-table";
 import { UnmatchedLinesTable } from "@/components/app/unmatched-lines-table";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import { CommissionsPage } from "@/components/app/commissions/commissions-page";
 import { InfoTip } from "@/components/ui/info-tip";
 import { STATEMENT_EXPLAINER } from "@/lib/dashboard/checklist";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -71,33 +70,25 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   const toType = standing.filter((statement) => statement.status === "awaiting_entry").length;
   const unmatchedCount = standing.reduce((total, statement) => total + statement.counts.unmatched, 0);
   const leftUnmatchedCount = standing.reduce((total, statement) => total + statement.counts.leftUnmatched, 0);
-  const actions = <>
-    <Button asChild type="button" variant="outline"><Link href="/app/ledger">Commission ledger</Link></Button>
-    {importControl}
-  </>;
+  // The Commission ledger is the next step on the rail (2026-11-02), so only the import stays here.
+  const actions = importControl;
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Statements"
-        titleInfo={<InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip>}
-        description="What each carrier paid you, line by line. A line reaches your commission ledger once you accept its match."
-        actions={statements.length > 0 ? undefined : actions}
-      />
-
-      {statements.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <ViewTabs
-            label="Statement lists"
-            active={showUnmatched ? "unmatched" : "statements"}
-            tabs={[
-              { key: "statements", label: "Statements", count: statements.length, href: "/app/statements" },
-              { key: "unmatched", label: "Unmatched lines", count: unmatchedCount, href: "/app/statements?view=unmatched" },
-            ]}
-          />
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
-        </div>
-      )}
+    <CommissionsPage
+      step="statements"
+      titleInfo={<InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip>}
+      actions={actions}
+      lead={statements.length > 0 ? (
+        <ViewTabs
+          label="Statement lists"
+          active={showUnmatched ? "unmatched" : "statements"}
+          tabs={[
+            { key: "statements", label: "Statements", count: statements.length, href: "/app/statements" },
+            { key: "unmatched", label: "Unmatched lines", count: unmatchedCount, href: "/app/statements?view=unmatched" },
+          ]}
+        />
+      ) : undefined}
+    >
 
       {blocked && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
@@ -124,6 +115,6 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
           emptyHint={available ? "Import a carrier's commission statement as CSV, Excel or PDF to review its lines." : STATEMENT_SCHEMA_PENDING_MESSAGE}
         />
       )}
-    </div>
+    </CommissionsPage>
   );
 }

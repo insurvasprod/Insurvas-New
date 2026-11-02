@@ -97,7 +97,7 @@ function hourClock(hour: number) {
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</p>
+      <p className="text-xs font-semibold leading-[1.33] text-muted-foreground">{label}</p>
       <div className="mt-1 break-words text-sm font-semibold leading-normal tracking-[-0.02em] tabular-nums text-foreground">{children}</div>
     </div>
   );

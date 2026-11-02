@@ -146,6 +146,15 @@ export const DIALING_HANDLERS: Record<string, (state: State, body: unknown) => A
   "GET /api/app/queue-sla-settings": (state) => (state === "error" ? failed("the inbound transfer settings") : ok(sla)),
   "GET /api/app/calling-windows": (state) => (state === "error" ? failed("the calling windows") : ok(callingWindows())),
   "GET /api/app/lead-post-keys": (state) => (state === "error" ? failed("your lead posting keys") : ok(leadPosting(state === "empty"))),
+  "GET /api/app/lead-post-keys/activity": (state) => (state === "error" ? failed("recent posts") : ok(state === "empty" ? { recent: [], byVendor: [], capped: false, windowDays: 30 } : {
+    recent: [
+      { receivedAt: ago(0.004), vendorId: "v-northline", keyId: "pk1", campaignId: "cmp-fe", outcome: "accepted", reasonCode: "accepted", processingMs: 820, leadId: null },
+      { receivedAt: ago(0.02), vendorId: "v-northline", keyId: "pk1", campaignId: "cmp-fe", outcome: "rejected", reasonCode: "duplicate", processingMs: 610, leadId: null },
+      { receivedAt: ago(3), vendorId: "v-harbor", keyId: "pk2", campaignId: null, outcome: "rejected", reasonCode: "missing_phone", processingMs: 140, leadId: null },
+    ],
+    byVendor: [{ vendorId: "v-northline", reasonCode: "duplicate", count: 12 }, { vendorId: "v-harbor", reasonCode: "duplicate", count: 5 }, { vendorId: "v-harbor", reasonCode: "missing_phone", count: 8 }, { vendorId: "v-northline", reasonCode: "outside_states", count: 4 }],
+    capped: false, windowDays: 30,
+  })),
   "GET /api/app/api-keys": (state) => (state === "error" ? failed("your API keys") : ok({ keys: state === "empty" ? [] : keys })),
   "GET /api/app/webhooks": () => ok({ webhooks }),
 };

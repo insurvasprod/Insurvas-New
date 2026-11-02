@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpRight, ChevronDown, PanelLeftClose, PanelLeftOpen, Search, Settings2, X,
-  Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, Sparkles, UserRound, Users, Workflow,
+  Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, MessageSquareText, UserRound, Users, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -46,7 +46,7 @@ const SECTION_ICON: Record<string, LucideIcon> = {
   "sales-disclosures": FileText,
   "sales-preferences": ShieldCheck,
   "sales-welcome-pack": Mail,
-  "sales-ai": Sparkles,
+  "sales-ai": MessageSquareText,
   "sales-pipeline-sync": RefreshCw,
   "pipelines": Workflow,
   "form-templates": LayoutTemplate,
@@ -347,6 +347,8 @@ export function AgentSettingsTabs({
       type="button"
       aria-current={isActive ? "page" : undefined}
       aria-controls={`settings-panel-${tab.id}`}
+      // Switching section unmounts the open one: LeaveGuard holds this click while it has a draft.
+      data-navigates=""
       disabled={Boolean(tab.disabled)}
       onClick={() => { selectTab(tab.id); setFlyout(null); }}
       className={cn(
@@ -476,7 +478,7 @@ export function AgentSettingsTabs({
         )}
         {searching && !iconsOnly ? (
           <div id="settings-search-results" ref={resultsRef} onKeyDown={onResultsKey} className="flex max-h-[60dvh] min-h-0 flex-col overflow-y-auto overscroll-contain pb-2.5 lg:max-h-none">
-            <p role="status" className="m-0 px-2.5 pt-2.5 pb-1.5 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
+            <p role="status" className="m-0 px-2.5 pt-2.5 pb-1.5 text-xs leading-[1.33] font-semibold text-[var(--muted)]">
               {hits.length ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}` : "No matches"}
             </p>
             {hits.length ? hits.map((hit) => (
@@ -513,6 +515,10 @@ export function AgentSettingsTabs({
                     aria-label={`${name}${warn ? ", needs attention" : ""}`}
                     onPointerEnter={() => hoverOpen(group)}
                     onPointerLeave={hoverClose}
+                    // A click opens, never toggles (owner 2026-10-30: "I have to double click it"): hovering
+                    // has already opened the list, so the trigger's own toggle shut it on the first click.
+                    // preventDefault skips that toggle; Escape and a click outside still close it.
+                    onClick={(event) => { event.preventDefault(); hoverOpen(group); }}
                     className={cn(RAIL_ICON_BUTTON, "relative mx-auto mb-1", (here || flyout === group) && "bg-[var(--primary-soft)] text-[var(--accent-ink)] hover:bg-[var(--primary-soft)] hover:text-[var(--accent-ink)]")}
                   >
                     <Icon aria-hidden="true" className="size-4" />

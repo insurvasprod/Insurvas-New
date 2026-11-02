@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { RotateCw, Sparkles } from "lucide-react";
+import { RotateCw, Shuffle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -221,7 +221,7 @@ export function LeadListAutoAssign({ lists, members, onDone }: {
   return (
     <>
       <Button type="button" disabled={Boolean(blocked) || running} title={blocked ?? `Assign ${leads(waiting)} by your routing rules`} onClick={() => setConfirming(true)}>
-        <Sparkles aria-hidden="true" />Auto-assign
+        <Shuffle aria-hidden="true" />Auto-assign
       </Button>
 
       <ConfirmDialog

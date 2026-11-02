@@ -121,7 +121,7 @@ export function PrimitivesShowcase() {
     <main className="mx-auto w-full max-w-[1344px] px-4 py-10 sm:px-12">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
+          <div className="text-xs font-semibold leading-[1.33] text-muted-foreground">
             Reference
           </div>
           <h1 className="mt-1.5 text-title-lg font-semibold leading-[1.13] tracking-[-0.025em]">Primitives</h1>

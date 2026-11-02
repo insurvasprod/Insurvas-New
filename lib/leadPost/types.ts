@@ -48,6 +48,29 @@ export type PostKeysLoaded = {
   workspaceId: string;
 };
 
+/** One row of the post log as the screen shows it: never the payload (lib/leadPost/activity.ts). */
+export type RecentPost = {
+  receivedAt: string;
+  vendorId: string | null;
+  keyId: string | null;
+  campaignId: string | null;
+  /** "accepted", "rejected" or "error". */
+  outcome: string;
+  reasonCode: string;
+  processingMs: number | null;
+  leadId: string | null;
+};
+
+export type VendorRejection = { vendorId: string; reasonCode: string; count: number };
+
+export type PostActivity = {
+  recent: RecentPost[];
+  byVendor: VendorRejection[];
+  /** True when the window held more rejected rows than were read; the split is then a lower bound. */
+  capped: boolean;
+  windowDays: number;
+};
+
 /** Every reason a post can be refused, in words a vendor manager would use. */
 export const REJECTION_LABELS: Record<string, string> = {
   duplicate: "Already in your leads",

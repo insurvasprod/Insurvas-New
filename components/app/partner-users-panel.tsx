@@ -531,7 +531,7 @@ export function PartnerUsersPanel({
                       ) : canWrite && canAssignAdmin && activeAdmins.length ? (
                         <select
                           aria-label={`Assign ${member.name} to a partner admin`}
-                          className={cn(toolbarControl, "h-8")}
+                          className={cn(toolbarControl)}
                           value=""
                           disabled={busy !== null}
                           onChange={(event) => {

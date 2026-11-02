@@ -196,9 +196,9 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
               opens over the page, so the card keeps its shape when they are read. */}
           <Popover open={complianceOpen} onOpenChange={setComplianceOpen}>
             <PopoverTrigger asChild>
-              <button type="button" className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--body)] hover:text-[var(--ink)] data-[state=open]:border-[var(--border-strong)] data-[state=open]:text-[var(--ink)]">
+              <Button type="button" variant="outline" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
                 Details<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", complianceOpen && "rotate-180")} />
-              </button>
+              </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="max-h-[min(70dvh,560px)] w-[min(92vw,560px)] overflow-y-auto p-0">
               {complianceDetail}
@@ -210,9 +210,9 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
           {panel.disclosure.configured && (
             <Popover open={disclosureOpen} onOpenChange={setDisclosureOpen}>
               <PopoverTrigger asChild>
-                <button type="button" className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--body)] hover:text-[var(--ink)] data-[state=open]:border-[var(--border-strong)] data-[state=open]:text-[var(--ink)]">
+                <Button type="button" variant="outline" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
                   {`${stateName ?? panel.disclosure.state} disclosure`}<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", disclosureOpen && "rotate-180")} />
-                </button>
+                </Button>
               </PopoverTrigger>
               <PopoverContent align="start" className="max-h-[min(70dvh,480px)] w-[min(92vw,480px)] overflow-y-auto">
                 <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--ink)]">{panel.disclosure.requiredText}</p>

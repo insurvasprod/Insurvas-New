@@ -199,7 +199,7 @@ function RunPanel({ id, readOnly, onClose, onChanged }: { id: string; readOnly: 
             <h3 className="text-base font-semibold">Statement</h3>
             <div className="overflow-x-auto">
             <table className="portal-lead-table w-full min-w-[560px] text-left text-sm">
-              <thead><tr className="text-xs uppercase tracking-wide text-muted-foreground"><th className="py-2">Activity</th><th className="text-right">Count</th><th className="text-right">Rate</th><th className="text-right">Amount</th></tr></thead>
+              <thead><tr className="text-xs text-muted-foreground"><th className="py-2">Activity</th><th className="text-right">Count</th><th className="text-right">Rate</th><th className="text-right">Amount</th></tr></thead>
               <tbody>
                 {run.lines.filter((l) => l.itemType !== "rejected" && l.itemType !== "credit").map((l) => (
                   <tr key={`${l.itemType}-${l.rateCents}`} className="border-t border-border">

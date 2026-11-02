@@ -25,7 +25,7 @@ import { formatCentsAsCurrency } from "@/lib/money";
 import { INVOICE_LINE_KIND_LABELS, INVOICE_STATUS_LABELS } from "@/lib/invoices/constants";
 import { cn } from "@/lib/utils";
 
-const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 const tf = "border-t border-[var(--border-strong)] px-3 py-2.5 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
 const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";

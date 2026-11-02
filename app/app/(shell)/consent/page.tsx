@@ -3,6 +3,7 @@ import { ConsentLockerWorkspace } from "@/components/app/consent-locker-workspac
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
+import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
 
 /**
  * LA-2.6 · `/app/consent`.
@@ -26,7 +27,7 @@ export default async function ConsentPage() {
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Consent locker" detail="In an agency, the owner and admins handle the consent locker." />;
 
-  // The header is drawn by the workspace, so the first load can show the one page skeleton; its
-  // Export follows the list's filters (with none set it is the whole locker).
-  return <ConsentLockerWorkspace />;
+  // The Consent step of the one Compliance page (2026-10-30): the frame draws the title; the workspace puts
+  // its tabs and Export into the frame's top row. Export follows the list's filters (with none set it is the whole locker).
+  return <ComplianceFlowPage step="consent"><ConsentLockerWorkspace /></ComplianceFlowPage>;
 }

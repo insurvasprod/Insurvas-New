@@ -18,7 +18,7 @@ export function PremiumBar({ monthlyCents, max }: { monthlyCents: number | null;
       <span aria-hidden className="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-[var(--surface-alt)]">
         {monthlyCents != null && max > 0 && (
           <span
-            className="block h-full rounded-full bg-[linear-gradient(90deg,var(--success),var(--primary))]"
+            className="block h-full rounded-full bg-[var(--primary)]"
             style={{ width: `${Math.max(4, ((monthlyCents * 12) / max) * 100)}%` }}
           />
         )}

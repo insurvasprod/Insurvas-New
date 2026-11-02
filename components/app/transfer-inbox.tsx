@@ -185,7 +185,7 @@ function screeningNote(item: Item) {
 /* ── local controls ─────────────────────────────────────────────────────── */
 
 const selectFull = cn(toolbarControl, "w-full");
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const label12 = "text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 
 const PILL_TONE: Record<ScreeningSignal["tone"], PillTone> = { error: "error", warning: "warning", success: "success", neutral: "neutral" };
 
@@ -621,7 +621,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
                   <Fragment key={item.id}>
                   {groupStart && (
                     <tr aria-hidden="true">
-                      <td colSpan={9} className="border-t border-[var(--border)] bg-[var(--surface-alt)]/40 px-4 py-1.5 text-xs leading-[1.5] font-semibold tracking-[0.06em] uppercase text-[var(--muted)]">{GROUP_LABEL[group]}</td>
+                      <td colSpan={9} className="border-t border-[var(--border)] bg-[var(--surface-alt)]/40 px-4 py-1.5 text-xs leading-[1.5] font-semibold text-[var(--muted)]">{GROUP_LABEL[group]}</td>
                     </tr>
                   )}
                   <tr onClick={() => setSelectedId(item.id)} className={cn("m-row cursor-pointer", selectedId === item.id ? "bg-[var(--brand-50)]" : selection.isSelected(item.id) ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]")}>

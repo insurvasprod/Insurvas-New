@@ -808,7 +808,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
                                 ["Custom fields", customFieldsText(row.custom_fields, schema)],
                               ].map(([label, value]) => (
                                 <div key={label} className="min-w-0">
-                                  <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</dt>
+                                  <dt className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">{label}</dt>
                                   <dd className="m-0 mt-0.5 break-words text-sm leading-[1.5] text-[var(--ink)]">{value}</dd>
                                 </div>
                               ))}

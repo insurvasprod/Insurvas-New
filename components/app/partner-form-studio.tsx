@@ -1395,7 +1395,7 @@ function Preview({
     >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent-ink)]">
+          <p className="text-xs font-semibold text-[var(--accent-ink)]">
             Interactive partner preview
           </p>
           <h3 className="mt-1 text-base font-semibold text-[var(--ink)]">

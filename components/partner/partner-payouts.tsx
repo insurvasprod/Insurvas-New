@@ -81,7 +81,7 @@ function Statement({ id, onClose }: { id: string; onClose: () => void }) {
             {s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid${s.paidOn ? ` · ${dayMonthYear(s.paidOn)}` : ""}` : "Published"}</StatusChip> : null}
           </div>
           {s ? <div className="mt-4 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-3">
-            <div><p className="m-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">Net payable</p><p className="m-0 mt-1 text-2xl font-semibold tabular-nums text-foreground">{money(s.totals.netCents)}</p></div>
+            <div><p className="m-0 text-xs font-medium text-muted-foreground">Net payable</p><p className="m-0 mt-1 text-2xl font-semibold tabular-nums text-foreground">{money(s.totals.netCents)}</p></div>
             <p className="m-0 text-sm text-muted-foreground">{s.items.length} {s.items.length === 1 ? "transfer" : "transfers"} in this statement</p>
           </div> : null}
         </DialogHeader>

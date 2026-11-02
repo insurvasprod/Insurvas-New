@@ -113,7 +113,7 @@ function StepNav() {
     <nav aria-label="Application steps" className="m-glass rounded-xl border border-border px-4 pt-3 pb-3.5">
       <div className="grid grid-cols-10 gap-0">
         {STAGES.map((stage, i) => (
-          <span key={stage.key} style={{ gridColumn: `span ${stage.steps.length}` }} className={cn("px-2 pb-2 text-xs font-semibold tracking-[0.06em] text-[var(--muted)] uppercase", i > 0 && "border-l border-[var(--border)]")}>
+          <span key={stage.key} style={{ gridColumn: `span ${stage.steps.length}` }} className={cn("px-2 pb-2 text-xs font-semibold text-[var(--muted)]", i > 0 && "border-l border-[var(--border)]")}>
             {stage.label}
           </span>
         ))}
@@ -139,7 +139,7 @@ function StepNav() {
                 >
                   <span aria-hidden="true" className={cn(
                     "inline-grid size-6 place-items-center rounded-full border-2 md:size-[30px] text-xs font-bold transition-colors",
-                    here ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--ink)] shadow-[0_0_0_4px_var(--primary-soft)] motion-safe:animate-[m-pulse_1.2s_ease-out_1]"
+                    here ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--ink)]"
                       : done[i] ? "border-[var(--primary)] bg-[var(--surface)] text-[var(--accent-ink)]"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] group-hover:border-[var(--border-strong)]",
                   )}>
@@ -181,7 +181,7 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
   // line runs unbroken from step 1 to After submit, filling green as each step is finished. Steps not
   // reachable yet are dimmed (their title says why) rather than each wearing a lock.
   const seg = (green: boolean, hidden = false) => (
-    <span aria-hidden="true" className={cn("w-[3px] flex-1 rounded-full transition-colors duration-700", hidden ? "opacity-0" : green ? "bg-[var(--primary)] shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_45%,transparent)]" : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]")} />
+    <span aria-hidden="true" className={cn("w-[3px] flex-1 rounded-full transition-colors duration-700", hidden ? "opacity-0" : green ? "bg-[var(--primary)]" : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]")} />
   );
   return (
     <aside aria-label="The client and the application steps" className="m-glass flex min-h-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_30%,var(--border))] p-4 lg:h-full">
@@ -220,7 +220,7 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
                           {seg(i > 0 && done[i - 1], false)}
                           <span aria-hidden="true" className={cn(
                             "my-0.5 inline-grid size-[30px] shrink-0 place-items-center rounded-full border-2 text-xs font-bold transition-all duration-300",
-                            on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)] shadow-[0_0_14px_color-mix(in_srgb,var(--primary)_55%,transparent)]"
+                            on ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]"
                               : done[i] ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]"
                               : open ? "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] group-hover:border-[var(--primary)]"
                               : "border-[color-mix(in_srgb,var(--ink)_14%,transparent)] bg-[var(--surface)] text-[var(--body)] opacity-70",

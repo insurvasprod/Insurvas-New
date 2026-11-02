@@ -57,7 +57,7 @@ export function LookupCard({ doc, lookup }: { doc: LegalDocType; lookup: Lookup 
 
       {lookup?.found && lookup.records.length > 0 && (
         <div className="mt-4">
-          <div className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
+          <div className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">
             {plural(lookup.records.length, "acceptance", "acceptances")} · {lookup.email}
           </div>
           <ul className="m-0 mt-2 list-none divide-y divide-[var(--border)] overflow-hidden rounded-[8px] border border-[var(--border)] p-0">

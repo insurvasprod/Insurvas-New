@@ -111,14 +111,14 @@ export function DraftDateCalculator({ sheet = false }: { /** Inside the Applicat
 
           {/* Reference, not the answer: folded until it is wanted (2026-10-06 redesign). */}
           <details className="group border-t border-[var(--border)] px-5 py-3">
-            <summary className="flex h-9 cursor-pointer list-none items-center gap-2 text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)] outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <summary className="flex h-9 cursor-pointer list-none items-center gap-2 text-xs font-semibold text-[var(--muted)] outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
               <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden="true" />
               How each income type pays
             </summary>
             <dl className="grid gap-x-6 gap-y-4 pt-2 pb-2 sm:grid-cols-2">
               {HOW_EACH_PAYS.map((row) => (
                 <div key={row.label} className="min-w-0">
-                  <dt className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">{row.label}</dt>
+                  <dt className="text-xs font-semibold text-[var(--muted)]">{row.label}</dt>
                   <dd className="text-sm font-semibold text-[var(--ink)]">{row.value}</dd>
                 </div>
               ))}

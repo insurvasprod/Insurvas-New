@@ -111,7 +111,7 @@ function Face({ channel, scale = "md" }: { channel: Channel; scale?: "sm" | "md"
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">{children}</div>;
+  return <div className="text-xs font-semibold text-muted-foreground">{children}</div>;
 }
 
 function Tile({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "success" | "error" }) {
@@ -129,7 +129,7 @@ function CollapsedRail({ label, badge, onExpand }: { label: string; badge?: numb
     <button type="button" onClick={onExpand} aria-label={`Show ${label.toLowerCase()}`} title={`Show ${label.toLowerCase()}`} className="m-glass hidden min-h-0 flex-col items-center gap-3 rounded-xl border border-border py-3 text-muted-foreground hover:text-foreground md:flex">
       <PanelLeftOpen className="size-4" aria-hidden="true" />
       {badge ? <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--primary)] px-1 text-xs font-semibold text-[var(--primary-foreground)]">{badge}</span> : null}
-      <span className="text-xs font-semibold tracking-[0.04em] uppercase [writing-mode:vertical-rl]">{label}</span>
+      <span className="text-xs font-semibold [writing-mode:vertical-rl]">{label}</span>
     </button>
   );
 }

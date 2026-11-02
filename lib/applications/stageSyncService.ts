@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db, isMissingSchema, rows, type DbError } from "./db";
-import { currentSyncKey, HUMAN_STAGE_SOURCES, shouldMove, SYNC_KEY_LABEL, SYNC_KEYS, targetSyncKey, type SyncAttempt, type SyncKey } from "./stageSync";
+import { attemptForTarget, currentSyncKey, HUMAN_STAGE_SOURCES, shouldMove, SYNC_KEY_LABEL, SYNC_KEYS, targetSyncKey, type SyncAttempt, type SyncKey } from "./stageSync";
 import type { ApplicationOutcome, ApplicationStatus, InsuredRole } from "./constants";
 
 /**
@@ -47,7 +47,7 @@ async function stageMapRows(tenantId: string): Promise<{ data: unknown; error: D
   return { data: legacy.data, error: legacy.error, perPipeline: false };
 }
 
-async function evaluate(tenantId: string, kase: CaseRow): Promise<(LeadStageState & { boardPipelineId: string | null; targetPipelineId: string | null; unmapped?: boolean; schemaPending?: boolean; targetUsable?: boolean }) > {
+async function evaluate(tenantId: string, kase: CaseRow): Promise<(LeadStageState & { boardPipelineId: string | null; targetPipelineId: string | null; targetApplicationId?: string | null; unmapped?: boolean; schemaPending?: boolean; targetUsable?: boolean }) > {
   const client = db();
   const [attemptsQ, quotesQ, mapQ, leadQ, eventsQ] = await Promise.all([
     client.from("tenant_applications").select("id, insured_role, attempt_no, status, outcome, quote_id, created_at").eq("tenant_id", tenantId).eq("case_id", kase.id),
@@ -72,6 +72,8 @@ async function evaluate(tenantId: string, kase: CaseRow): Promise<(LeadStageStat
   }));
   const caseStatus = kase.status === "won" ? "won" : kase.status === "lost" ? "lost" : "open";
   const target = targetSyncKey({ caseStatus, attempts: syncAttempts });
+  // The attempt behind the target, for the history row (20261030200000).
+  const targetIndex = target ? attemptForTarget(target, syncAttempts) : -1;
 
   // Per pipeline (20261029100000): the card moves within the pipeline the lead is on, by that pipeline's
   // own map. Before that migration rows carry no pipeline and the one map applies, as before.
@@ -104,6 +106,7 @@ async function evaluate(tenantId: string, kase: CaseRow): Promise<(LeadStageStat
     needsReconcile: differs && decision?.reason === "manual_override" && Boolean(targetStage && !targetStage.is_archived),
     applicationLabel: targetStage?.name ?? (target ? SYNC_KEY_LABEL[target] : null),
     unmapped: Boolean(target && !targetStageId),
+    targetApplicationId: targetIndex >= 0 ? attempts[targetIndex].id : null,
     targetUsable: Boolean(targetStage && !targetStage.is_archived),
   };
 }
@@ -121,7 +124,7 @@ async function caseById(tenantId: string, caseId: string): Promise<CaseRow | nul
 }
 
 /** Move the lead to a stage: lead, queue row and deal row, then one history row. Only if the lead is still where we read it. */
-async function moveLead(tenantId: string, input: { leadId: string; fromPipelineId: string | null; fromStageId: string | null; toPipelineId: string; toStageId: string; actorUserId: string | null }) {
+async function moveLead(tenantId: string, input: { leadId: string; fromPipelineId: string | null; fromStageId: string | null; toPipelineId: string; toStageId: string; actorUserId: string | null; applicationId?: string | null }) {
   const client = db();
   const now = new Date().toISOString();
   let update = client.from("agent_leads").update({ pipeline_id: input.toPipelineId, stage_id: input.toStageId, updated_at: now }).eq("tenant_id", tenantId).eq("id", input.leadId);
@@ -136,6 +139,8 @@ async function moveLead(tenantId: string, input: { leadId: string; fromPipelineI
   const event = await client.from("tenant_lead_stage_events").insert({
     tenant_id: tenantId, lead_id: input.leadId, from_pipeline_id: input.fromPipelineId, from_stage_id: input.fromStageId,
     to_pipeline_id: input.toPipelineId, to_stage_id: input.toStageId, disposition_key: null, source: "application_sync", actor_user_id: input.actorUserId,
+    // 20261030200000 (live 2026-10-30): the attempt whose change moved the card.
+    application_id: input.applicationId ?? null,
   });
   if (event.error) console.error("[stage-sync] history row not written", input.leadId, event.error.message);
   return { moved: true as const, recorded: !event.error };
@@ -155,7 +160,7 @@ export async function syncLeadStage(tenantId: string, caseId: string): Promise<S
     if (state.unmapped || !state.targetStageId || !state.targetPipelineId) return { moved: false, leadId: kase.lead_id, reason: "unmapped", key: state.target };
     if (!state.targetUsable) return { moved: false, leadId: kase.lead_id, reason: "stage_unavailable", key: state.target };
     if (!state.decision?.move) return { moved: false, leadId: kase.lead_id, reason: state.decision?.reason ?? "already_there", key: state.target };
-    const result = await moveLead(tenantId, { leadId: kase.lead_id, fromPipelineId: state.boardPipelineId, fromStageId: state.boardStageId, toPipelineId: state.targetPipelineId, toStageId: state.targetStageId, actorUserId: null });
+    const result = await moveLead(tenantId, { leadId: kase.lead_id, fromPipelineId: state.boardPipelineId, fromStageId: state.boardStageId, toPipelineId: state.targetPipelineId, toStageId: state.targetStageId, actorUserId: null, applicationId: state.targetApplicationId });
     if (!result.moved) return { moved: false, leadId: kase.lead_id, reason: "raced", key: state.target };
     return { moved: true, leadId: kase.lead_id, fromStageId: state.boardStageId, toStageId: state.targetStageId, key: state.target, recorded: result.recorded };
   } catch (error) {
@@ -183,6 +188,64 @@ export async function leadStageState(tenantId: string, leadId: string): Promise<
   };
 }
 
+export type PipelineSyncCheck = {
+  /** Open cases on this pipeline that were looked at (the newest, up to the cap). */
+  checked: number;
+  capped: boolean;
+  /** A person moved the card since the last sync; the board and the application disagree. */
+  held: { leadId: string; boardStage: string | null; applicationStage: string | null }[];
+  /**
+   * The map says move and nothing stops it, but the card has not moved: its application last changed
+   * before this map was saved (the sync runs on an application's change, never on a map's).
+   */
+  due: { leadId: string; boardStage: string | null; applicationStage: string | null }[];
+  /** The application is at a state this pipeline does not map, so its card cannot follow. */
+  unmapped: Partial<Record<SyncKey, number>>;
+};
+
+const CHECK_CAP = 40;
+
+/** The newest open cases whose lead is on this pipeline (the open-case partial index serves the read). */
+async function openCasesOnPipeline(tenantId: string, pipelineId: string): Promise<{ cases: CaseRow[]; capped: boolean }> {
+  const client = db();
+  const casesQ = await client.from("tenant_application_cases").select("id, lead_id, status, opened_at").eq("tenant_id", tenantId).eq("status", "open").order("opened_at", { ascending: false }).limit(400);
+  if (casesQ.error) throw new Error(casesQ.error.message);
+  const cases = rows<CaseRow>(casesQ.data);
+  const onPipeline = new Set<string>();
+  for (let i = 0; i < cases.length; i += 100) {
+    const ids = cases.slice(i, i + 100).map((c) => c.lead_id);
+    const leads = await client.from("agent_leads").select("id").eq("tenant_id", tenantId).eq("pipeline_id", pipelineId).in("id", ids);
+    if (leads.error) throw new Error(leads.error.message);
+    for (const lead of rows<{ id: string }>(leads.data)) onPipeline.add(lead.id);
+  }
+  const mine = cases.filter((c) => onPipeline.has(c.lead_id));
+  return { cases: mine.slice(0, CHECK_CAP), capped: mine.length > CHECK_CAP };
+}
+
+/** The sync would move this card now: mapped, usable, forward (or the allowed step back), no person holding it. */
+const isDue = (state: Awaited<ReturnType<typeof evaluate>>) =>
+  Boolean(state.target && !state.unmapped && state.targetUsable && state.targetStageId && state.targetPipelineId && state.decision?.move && state.targetStageId !== state.boardStageId);
+
+/**
+ * Settings › Application stages's "Check cards" (read only): for the newest open cases whose lead is on this
+ * pipeline, the same evaluation the sync runs — which cards a person is holding, which are due a move,
+ * and which states have nowhere to go. Moves nothing.
+ */
+export async function pipelineSyncCheck(tenantId: string, pipelineId: string): Promise<PipelineSyncCheck> {
+  const { cases: sample, capped } = await openCasesOnPipeline(tenantId, pipelineId);
+  const out: PipelineSyncCheck = { checked: sample.length, capped, held: [], due: [], unmapped: {} };
+  for (let i = 0; i < sample.length; i += 8) {
+    const states = await Promise.all(sample.slice(i, i + 8).map((kase) => evaluate(tenantId, kase).catch(() => null)));
+    for (const state of states) {
+      if (!state || state.schemaPending) continue;
+      if (state.unmapped && state.target) out.unmapped[state.target] = (out.unmapped[state.target] ?? 0) + 1;
+      if (state.needsReconcile) out.held.push({ leadId: state.leadId, boardStage: state.boardStageName, applicationStage: state.targetStageName });
+      else if (isDue(state)) out.due.push({ leadId: state.leadId, boardStage: state.boardStageName, applicationStage: state.targetStageName });
+    }
+  }
+  return out;
+}
+
 /**
  * Reconcile: put the card where the application says, on a person's say-so. Writes the history row
  * as `application_sync` (so automatic sync resumes after it) with that person as the actor.
@@ -194,6 +257,25 @@ export async function reconcileLeadStage(tenantId: string, leadId: string, actor
   if (!state.targetStageId || !state.targetPipelineId) return { moved: false, toStageId: null, toStageName: null, reason: state.target ? "unmapped" : "no_target" };
   if (!state.targetUsable) return { moved: false, toStageId: null, toStageName: null, reason: "stage_unavailable" };
   if (state.targetStageId === state.boardStageId) return { moved: false, toStageId: state.targetStageId, toStageName: state.targetStageName, reason: "already_there" };
-  const result = await moveLead(tenantId, { leadId, fromPipelineId: state.boardPipelineId, fromStageId: state.boardStageId, toPipelineId: state.targetPipelineId, toStageId: state.targetStageId, actorUserId });
+  const result = await moveLead(tenantId, { leadId, fromPipelineId: state.boardPipelineId, fromStageId: state.boardStageId, toPipelineId: state.targetPipelineId, toStageId: state.targetStageId, actorUserId, applicationId: state.targetApplicationId });
   return { moved: result.moved, toStageId: state.targetStageId, toStageName: state.targetStageName, reason: result.moved ? undefined : "raced" };
+}
+
+/**
+ * Settings › Application stages › "Move cards now", on the owner's say-so: the cards the check calls due —
+ * the map says move, nothing holds them — go where their application says, by the same rules as the
+ * automatic sync (forward only, a person's move wins). A map change never moves cards by itself; this
+ * is the one way to catch up cards whose applications last changed before it. History rows carry the
+ * owner as the actor. The newest open cases only, as the check.
+ */
+export async function bringPipelineUpToDate(tenantId: string, pipelineId: string, actorUserId: string): Promise<{ checked: number; moved: number; capped: boolean }> {
+  const { cases, capped } = await openCasesOnPipeline(tenantId, pipelineId);
+  let moved = 0;
+  for (const kase of cases) {
+    const state = await evaluate(tenantId, kase).catch(() => null);
+    if (!state || state.schemaPending || state.needsReconcile || !isDue(state)) continue;
+    const result = await moveLead(tenantId, { leadId: kase.lead_id, fromPipelineId: state.boardPipelineId, fromStageId: state.boardStageId, toPipelineId: state.targetPipelineId!, toStageId: state.targetStageId!, actorUserId, applicationId: state.targetApplicationId });
+    if (result.moved) moved += 1;
+  }
+  return { checked: cases.length, moved, capped };
 }

@@ -3,7 +3,7 @@ import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { ExceptionQueues } from "@/components/app/exception-queues";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { agencyToday } from "@/lib/ingestion/agencyDay";
 import { ageDays } from "@/lib/ingestion/exceptionQueues";
@@ -26,8 +26,7 @@ export default async function ExceptionsPage() {
   const [view, today] = await Promise.all([loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll }), agencyToday(guard.context.tenantId)]);
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Exceptions" description={seesAll ? "What the carrier files and the sales don't agree on, and who is clearing it." : "What the carrier files and your sales don't agree on."} />
+    <DataInPage step="exceptions">
       {!view.available ? (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{QUEUES_PENDING_MESSAGE}</div>
       ) : (
@@ -41,6 +40,6 @@ export default async function ExceptionsPage() {
           <ExceptionQueues open={view.open} closed={view.closed} rules={view.rules} isOwner={guard.role === "owner"} today={today} readOnly={guard.entitlement.access === "read_only"} carriers={view.carriers} />
         </>
       )}
-    </div>
+    </DataInPage>
   );
 }

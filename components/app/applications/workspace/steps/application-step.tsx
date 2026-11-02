@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { CANONICAL_GROUPS, TIER_LABEL, type CanonicalField } from "@/lib/applications/constants";
 import { isPlausibleSsn } from "@/lib/applications/formats";
+import { orderedKeys } from "@/lib/applications/fieldSetLayout";
 import type { FieldValue } from "@/lib/applications/types";
 import { US_STATES } from "@/lib/appointments/constants";
 import { cn } from "@/lib/utils";
@@ -80,9 +81,47 @@ function Input({ fieldKey, label, required, type }: { fieldKey: string; label?: 
     );
   }
   return (
-    <Field label={label ?? field?.label ?? fieldKey} htmlFor={fieldKey} required={required}>
+    <Field label={label ?? field?.label ?? fieldKey} htmlFor={fieldKey} required={required} hint={setHint(attempt, fieldKey)}>
       {input}
       <PrefillHint fv={fv} fieldKey={fieldKey} readOnly={readOnly} />
+    </Field>
+  );
+}
+
+/** The field set's line under a field (owner 2026-10-30): what the carrier's form calls it, and its help. */
+function setHint(attempt: ReturnType<typeof useWorkspace>["attempt"], fieldKey: string) {
+  const wording = attempt.fieldSet?.wording[fieldKey];
+  const help = attempt.fieldSet?.help[fieldKey];
+  const parts = [wording ? `On the ${attempt.carrierName ?? "carrier's"} form: \u201c${wording}\u201d` : null, help ?? null].filter(Boolean);
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
+/** One of the agency's own questions (custom.*), drawn by its type; saved like any field. */
+function QuestionInput({ q }: { q: NonNullable<ReturnType<typeof useWorkspace>["attempt"]["fieldSet"]>["custom"][number] }) {
+  const { attempt, readOnly, setValue } = useWorkspace();
+  const fv = attempt.values[q.key];
+  const value = asText(fv?.value);
+  const set = (v: string) => setValue(q.key, v === "" ? null : q.type === "number" || q.type === "currency" ? Number(v) : v);
+  let input: ReactNode;
+  if (q.type === "choice" || q.type === "yes_no" || q.type === "state") {
+    const options = q.type === "yes_no" ? [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]
+      : q.type === "state" ? US_STATES.map(([code, name]) => ({ value: code, label: name }))
+        : q.options.map((o) => ({ value: o, label: o }));
+    input = (
+      <select id={q.key} className={control} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)}>
+        <option value="">Choose…</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    );
+  } else if (q.type === "long_text") {
+    input = <textarea id={q.key} className={cn(control, "min-h-20 py-2")} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)} />;
+  } else {
+    const kind = q.type === "phone" ? "tel" : q.type === "currency" ? "number" : q.type === "date" || q.type === "number" || q.type === "email" ? q.type : "text";
+    input = <input id={q.key} type={kind} inputMode={kind === "number" ? "decimal" : undefined} autoComplete="off" className={control} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)} />;
+  }
+  return (
+    <Field label={q.label} htmlFor={q.key} required={q.required} hint={q.help || undefined}>
+      {input}
     </Field>
   );
 }
@@ -239,6 +278,41 @@ export function ApplicationStep() {
   const pAddress = progress(groupKeys.address);
   const pOwner = progress(groupKeys.owner);
   const toCheck = [...groupKeys.insured, ...groupKeys.address, ...groupKeys.owner].filter(unchecked);
+  // The field set's order for the Insured and Address sections (owner 2026-10-30); a field it does not
+  // ask is left out. Height and weight share one cell, placed where the first of them comes.
+  const layout = attempt.fieldSet;
+  const insuredNode: Record<string, ReactNode> = {
+    "insured.first_name": <Input key="insured.first_name" fieldKey="insured.first_name" label="Legal first name" required={req("insured.first_name")} />,
+    "insured.last_name": <Input key="insured.last_name" fieldKey="insured.last_name" label="Legal last name" required={req("insured.last_name")} />,
+    "insured.middle_initial": <Input key="insured.middle_initial" fieldKey="insured.middle_initial" required={req("insured.middle_initial")} />,
+    "insured.dob": <Input key="insured.dob" fieldKey="insured.dob" required={req("insured.dob")} />,
+    "insured.gender": <Input key="insured.gender" fieldKey="insured.gender" required={req("insured.gender")} />,
+    "insured.birth_state": <Input key="insured.birth_state" fieldKey="insured.birth_state" required={req("insured.birth_state")} />,
+    "insured.ssn": <SsnField key="insured.ssn" required={req("insured.ssn")} />,
+    "insured.tobacco": <Input key="insured.tobacco" fieldKey="insured.tobacco" required={req("insured.tobacco")} />,
+    "insured.height_in": <BuildField key="build" required={req("insured.height_in") || req("insured.weight_lb")} />,
+  };
+  // The agency's own questions sit in their section (Insured, Address and contact) at their place in the
+  // set's order; those for owner, coverage or payment come together under "<carrier> questions".
+  const custom = layout?.custom ?? [];
+  const customIn = (groups: string[]) => custom.filter((q) => groups.includes(q.group));
+  for (const q of custom) insuredNode[q.key] = <QuestionInput key={q.key} q={q} />;
+  const insuredOrder = [...new Set(orderedKeys(layout, [...groupKeys.insured, ...customIn(["insured"]).map((q) => q.key)]).map((k) => (k === "insured.weight_lb" ? "insured.height_in" : k)))];
+  const addressNode: Record<string, ReactNode> = {
+    "addr.line1": <Input key="addr.line1" fieldKey="addr.line1" label="Street" required={req("addr.line1")} />,
+    "addr.line2": <Input key="addr.line2" fieldKey="addr.line2" required={req("addr.line2")} />,
+    "addr.city": <Input key="addr.city" fieldKey="addr.city" required={req("addr.city")} />,
+    "addr.state": <Input key="addr.state" fieldKey="addr.state" required={req("addr.state")} />,
+    "addr.zip": <Input key="addr.zip" fieldKey="addr.zip" required={req("addr.zip")} />,
+    "addr.years_at": <Input key="addr.years_at" fieldKey="addr.years_at" required={req("addr.years_at")} />,
+    "contact.phone": <Input key="contact.phone" fieldKey="contact.phone" required={req("contact.phone")} />,
+    "contact.email": <Input key="contact.email" fieldKey="contact.email" required={req("contact.email")} />,
+  };
+  for (const q of custom) addressNode[q.key] = <QuestionInput key={q.key} q={q} />;
+  const addressOrder = orderedKeys(layout, [...groupKeys.address, ...customIn(["addr", "contact"]).map((q) => q.key)]);
+  const questions = customIn(["owner", "cov", "pay"]);
+  const questionsDone = questions.filter((q) => q.required && hasContent(values[q.key])).length;
+  const questionsRequired = questions.filter((q) => q.required).length;
 
   return (
     <section aria-label="Application record" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
@@ -258,15 +332,7 @@ export function ApplicationStep() {
       </div>
 
       <FoldSection heading="Insured" done={pInsured.done} total={pInsured.total} complete={pInsured.complete} unit="required filled">
-        <Input fieldKey="insured.first_name" label="Legal first name" required={req("insured.first_name")} />
-        <Input fieldKey="insured.last_name" label="Legal last name" required={req("insured.last_name")} />
-        <Input fieldKey="insured.middle_initial" required={req("insured.middle_initial")} />
-        <Input fieldKey="insured.dob" required={req("insured.dob")} />
-        <Input fieldKey="insured.gender" required={req("insured.gender")} />
-        <Input fieldKey="insured.birth_state" required={req("insured.birth_state")} />
-        <SsnField required={req("insured.ssn")} />
-        <Input fieldKey="insured.tobacco" required={req("insured.tobacco")} />
-        <BuildField required={req("insured.height_in") || req("insured.weight_lb")} />
+        {insuredOrder.map((k) => insuredNode[k])}
       </FoldSection>
 
       <FoldSection heading="Address and contact" done={pAddress.done} total={pAddress.total} complete={pAddress.complete} unit="required filled">
@@ -276,14 +342,7 @@ export function ApplicationStep() {
             {sharedContact.length > 0 && <span className="flex items-center gap-2 text-xs text-[var(--muted)]">Contact <SharedWithPrimary keys={sharedContact} what="contact details" /></span>}
           </span>
         )}
-        <Input fieldKey="addr.line1" label="Street" required={req("addr.line1")} />
-        <Input fieldKey="addr.line2" required={req("addr.line2")} />
-        <Input fieldKey="addr.city" required={req("addr.city")} />
-        <Input fieldKey="addr.state" required={req("addr.state")} />
-        <Input fieldKey="addr.zip" required={req("addr.zip")} />
-        <Input fieldKey="addr.years_at" required={req("addr.years_at")} />
-        <Input fieldKey="contact.phone" required={req("contact.phone")} />
-        <Input fieldKey="contact.email" required={req("contact.email")} />
+        {addressOrder.map((k) => addressNode[k])}
       </FoldSection>
 
       <FoldSection heading="Owner and coverage" done={pOwner.done} total={pOwner.total} complete={pOwner.complete} unit="required filled">
@@ -307,6 +366,12 @@ export function ApplicationStep() {
         {!sameAsInsured && <Input fieldKey="owner.dob" />}
         {!sameAsInsured && <Input fieldKey="owner.relationship" required />}
       </FoldSection>
+
+      {questions.length > 0 && (
+        <FoldSection heading={`${attempt.carrierName ?? "Carrier"} questions`} done={questionsDone} total={questionsRequired} complete={questionsDone === questionsRequired && questions.some((q) => hasContent(values[q.key]))} unit="required filled">
+          {questions.map((q) => <QuestionInput key={q.key} q={q} />)}
+        </FoldSection>
+      )}
 
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border)] pt-3">
         <Button type="button" variant="outline" onClick={() => goTo("quote")}><ArrowLeft aria-hidden="true" />Back to Quote</Button>

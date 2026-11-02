@@ -1,12 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { ChevronDown, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown, ChevronLeft, Plus, RotateCcw, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { InfoTip } from "@/components/ui/info-tip";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Switch, control } from "@/components/app/settings/primitives";
 import { TEMPLATE_FIELD_TYPES, type TemplateField, type TemplateFieldType, type TemplateFormDefinition, type TemplateFormField, type TemplateValidation } from "@/lib/templates/constants";
 import { BANK_ACCOUNT_MAX_DIGITS, BANK_ACCOUNT_MIN_DIGITS } from "@/lib/templates/formats";
@@ -47,8 +49,8 @@ function Fold({ label, value, open, children }: { label: string; value: string; 
     <details open={open} className="group border-t border-[var(--border)]">
       <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-3 px-4 hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--ring-color)] [&::-webkit-details-marker]:hidden">
         <span className="shrink-0 text-sm font-semibold text-[var(--ink)]">{label}</span>
-        <span className="ml-auto min-w-0 truncate text-sm text-[var(--muted)]">{value}</span>
-        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-[var(--muted)] transition-transform duration-150 group-open:rotate-180" />
+        <span className="ml-auto min-w-0 truncate text-sm text-[var(--body)]">{value}</span>
+        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-[var(--body)] transition-transform duration-150 group-open:rotate-180" />
       </summary>
       <div className="flex flex-col gap-2 px-4 pb-3.5">{children}</div>
     </details>
@@ -72,27 +74,11 @@ function limitSummary(field: TemplateField): string {
   return [length === "None" ? null : `${length} characters`, v.pattern ? chars : null].filter(Boolean).join(", ") || "None";
 }
 
-/** Pressed-button chips for a single choice, 36px like every control. */
-function Chips<K extends string>({ label, options, value, onChange }: { label: string; options: ReadonlyArray<{ key: K; label: string }>; value: K | null; onChange: (key: K) => void }) {
+/** One choice from a few, as the kit's 36px chips in a named radio group. */
+function Choices<K extends string>({ label, options, value, onChange }: { label: string; options: ReadonlyArray<{ key: K; label: string }>; value: K | null; onChange: (key: K) => void }) {
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
-      {options.map((option) => {
-        const on = option.key === value;
-        return (
-          <button
-            key={option.key}
-            onClick={() => onChange(option.key)}
-            type="button"
-            aria-pressed={on}
-            className={cn(
-              "inline-flex h-9 items-center rounded-full border px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-              on ? "border-2 border-[var(--ink)] bg-[var(--primary-soft)] px-[11px] font-semibold text-[var(--ink)]" : "border-[var(--border-strong)] bg-transparent text-[var(--body)] hover:bg-[var(--surface-alt)]",
-            )}
-          >
-            {option.label}
-          </button>
-        );
-      })}
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+      {options.map((option) => <ToggleChip key={option.key} role="radio" selected={option.key === value} onClick={() => onChange(option.key)}>{option.label}</ToggleChip>)}
     </div>
   );
 }
@@ -116,7 +102,7 @@ function NumberPair({ id, lead, between = "to", low, high, onLow, onHigh, prefix
  * they have to, a hint, the limits that answer type has, its choices, and when it is asked. Every
  * edit goes into the page's one draft. "Put back how it was" undoes this question's own changes.
  */
-export function QuestionPanel({ field, fields, form, sectionKey, placement, changed, setField, setValidation, setPlacement, onRequired, onMoveTo, onReset, onDelete, onClose }: {
+export function QuestionPanel({ field, fields, form, sectionKey, placement, changed, setField, setValidation, setPlacement, onRequired, onMoveTo, onReset, onDelete, onBack, onClose }: {
   field: TemplateField;
   fields: TemplateField[];
   form: TemplateFormDefinition;
@@ -133,6 +119,8 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
   onMoveTo: (target: string | null) => void;
   onReset: (() => void) | null;
   onDelete: () => void;
+  /** Back to the form's own settings, in the same panel. */
+  onBack: () => void;
   onClose: () => void;
 }) {
   const key = field.field_key;
@@ -143,6 +131,9 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
   const rare = TEMPLATE_FIELD_TYPES.filter((type) => !COMMON_FIELD_TYPES.includes(type));
   const others = fields.filter((item) => item.field_key !== key);
   const full = placementWidth(field, placement) === "full";
+  const where = sectionKey ? form.sections.find((section) => section.section_key === sectionKey)?.label ?? "" : "Agents only";
+  // The five rarer answer kinds stay folded behind one chip until wanted (board FtE03).
+  const [moreKinds, setMoreKinds] = useState(false);
   const answers = (item: TemplateField | null): string[] | null => (!item ? null : item.type === "boolean" ? ["Yes", "No"] : CHOICE_TYPES.includes(item.type) && item.options.length ? item.options : null);
 
   function setType(type: TemplateFieldType) {
@@ -155,10 +146,13 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
     <DetailPanel
       mode="split"
       splitFrom="xl"
-      title="Change this question"
+      title={field.label || "Untitled question"}
+      status={<StatusChip>{where}</StatusChip>}
+      actions={<Button onClick={onBack} type="button" variant="ghost"><ChevronLeft aria-hidden="true" />This form</Button>}
       onClose={onClose}
       closeLabel="Close the question"
-      className="xl:sticky xl:top-[calc(var(--top-bar-h)+1rem)] xl:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] xl:self-start"
+      // Beside the form the panel is always there (board FtA): "This form" goes back, so no ×.
+      className="xl:sticky xl:top-[calc(var(--top-bar-h)+1rem)] xl:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] xl:self-start xl:[&>div:first-child>button:last-child]:hidden"
       footer={
         <>
           {onReset && <Button onClick={onReset} type="button" variant="ghost"><RotateCcw aria-hidden="true" />Put back how it was</Button>}
@@ -178,24 +172,25 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
 
       <div className="flex flex-col gap-1.5">
         <Label tip="Decides the box they get: a date picker, a list to pick from, a money amount.">They answer with…</Label>
-        <Chips label="They answer with" options={COMMON_FIELD_TYPES.map((type) => ({ key: type, label: TEMPLATE_FIELD_PLAIN[type].label }))} value={COMMON_FIELD_TYPES.includes(field.type) ? field.type : null} onChange={setType} />
-        <select aria-label="Other kinds of answer" className={cn(control, rare.includes(field.type) && "border-2 border-[var(--ink)] font-semibold")} value={rare.includes(field.type) ? field.type : ""} onChange={(event) => { if (event.target.value) setType(event.target.value as TemplateFieldType); }}>
-          <option value="">Other kinds…</option>
-          {rare.map((type) => <option key={type} value={type}>{TEMPLATE_FIELD_PLAIN[type].label} ({TEMPLATE_FIELD_PLAIN[type].hint})</option>)}
-        </select>
+        <Choices label="They answer with" options={COMMON_FIELD_TYPES.map((type) => ({ key: type, label: TEMPLATE_FIELD_PLAIN[type].label }))} value={COMMON_FIELD_TYPES.includes(field.type) ? field.type : null} onChange={setType} />
+        {moreKinds || rare.includes(field.type) ? (
+          <Choices label="Other kinds of answer" options={rare.map((type) => ({ key: type, label: TEMPLATE_FIELD_PLAIN[type].label }))} value={rare.includes(field.type) ? field.type : null} onChange={setType} />
+        ) : (
+          <Button onClick={() => setMoreKinds(true)} type="button" variant="outline" className="self-start">More kinds ({rare.length})</Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
         <Label tip="“Yes, always” also stops agents from saving a lead without it. “Only on this form” means only partners must answer.">Do they have to answer?</Label>
-        <Chips label="Do they have to answer?" options={requiredChoices(placement).map((choice) => ({ key: choice, label: REQUIRED_CHOICE_LABELS[choice] }))} value={requiredChoice(field, placement)} onChange={onRequired} />
+        <Choices label="Do they have to answer?" options={requiredChoices(placement).map((choice) => ({ key: choice, label: REQUIRED_CHOICE_LABELS[choice] }))} value={requiredChoice(field, placement)} onChange={onRequired} />
       </div>
 
       {/* The rest, folded: each row says its current value, so nothing hides behind a click. */}
       <div key={key} className="-mx-4 border-b border-[var(--border)]">
         {sectionKey && placement && (
           <Fold label="Size" value={`${full ? "Full row" : "Half row"}${placement.width ? "" : " (usual)"}`}>
-            <Chips label="Size" options={[{ key: "half", label: "Half row" }, { key: "full", label: "Full row" }]} value={full ? "full" : "half"} onChange={(width) => setPlacement(sectionKey, key, { width })} />
-            <p className="m-0 text-xs text-[var(--muted)]">Two half-row questions sit side by side. On a phone every question takes the whole row.</p>
+            <Choices label="Size" options={[{ key: "half", label: "Half row" }, { key: "full", label: "Full row" }]} value={full ? "full" : "half"} onChange={(width) => setPlacement(sectionKey, key, { width })} />
+            <p className="m-0 text-xs text-[var(--body)]">Two half-row questions sit side by side. On a phone every question takes the whole row.</p>
           </Fold>
         )}
 
@@ -205,7 +200,7 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
 
         {limitsFor(field.type) && (
           <Fold label="Limits" value={limitSummary(field)}>
-            <p className="m-0 text-xs text-[var(--muted)]">Partners can’t send the form until the answer fits. Leave a box empty for no limit.</p>
+            <p className="m-0 text-xs text-[var(--body)]">Partners can’t send the form until the answer fits. Leave a box empty for no limit.</p>
             {field.type === "currency" && <NumberPair id="question-money" lead="Between" between="and" prefix="$" low={v.min} high={v.max} onLow={(min) => setValidation(key, { min })} onHigh={(max) => setValidation(key, { max })} />}
             {field.type === "number" && <NumberPair id="question-number" lead="Between" between="and" low={v.min} high={v.max} onLow={(min) => setValidation(key, { min })} onHigh={(max) => setValidation(key, { max })} />}
             {field.type === "date" && <NumberPair id="question-age" lead="Age from" low={v.age_min} high={v.age_max} onLow={(age_min) => setValidation(key, { age_min })} onHigh={(age_max) => setValidation(key, { age_max })} />}
@@ -228,7 +223,7 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
 
         {CHOICE_TYPES.includes(field.type) && (
           <Fold label="Choices" value={`${field.options.length} ${field.options.length === 1 ? "choice" : "choices"}`} open>
-            <p className="m-0 text-xs text-[var(--muted)]">Partners pick from these, in this order.</p>
+            <p className="m-0 text-xs text-[var(--body)]">Partners pick from these, in this order.</p>
             {field.options.map((option, index) => (
               <div key={index} className="flex items-center gap-1.5">
                 <input aria-label={`Choice ${index + 1}`} className={cn(control, "mt-0")} maxLength={120} value={option} onChange={(event) => setOption(index, event.target.value)} />
@@ -265,12 +260,14 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
           </Fold>
         )}
 
-        <Fold label="Where it sits" value={sectionKey ? form.sections.find((section) => section.section_key === sectionKey)?.label ?? "" : "Agents only"}>
-          <select aria-label="Where it sits" className={cn(control, "mt-0")} value={sectionKey ?? AGENTS_ONLY} onChange={(event) => onMoveTo(event.target.value === AGENTS_ONLY ? null : event.target.value)}>
-            {form.sections.map((section, index) => <option key={section.section_key} value={section.section_key}>Part {index + 1}: {section.label}</option>)}
-            <option value={AGENTS_ONLY}>For your agents only (partners never see it)</option>
-          </select>
-          <p className="m-0 text-xs text-[var(--muted)]">Saved on each lead under the name {key}. That name never changes.</p>
+        <Fold label="Where it sits" value={where}>
+          <Choices
+            label="Where it sits"
+            options={[...form.sections.map((section, index) => ({ key: section.section_key, label: `Part ${index + 1}: ${section.label}` })), { key: AGENTS_ONLY, label: "For your agents only" }]}
+            value={sectionKey ?? AGENTS_ONLY}
+            onChange={(next) => onMoveTo(next === AGENTS_ONLY ? null : next)}
+          />
+          <p className="m-0 text-xs text-[var(--body)]">Saved on each lead under the name {key}. That name never changes.</p>
         </Fold>
       </div>
     </DetailPanel>

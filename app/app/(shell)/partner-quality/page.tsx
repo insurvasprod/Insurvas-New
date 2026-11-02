@@ -4,6 +4,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { PartnerQualityWorkspace } from "@/components/app/partner-quality-workspace";
 import { validPartnerQualityPeriod } from "@/lib/partnerQuality/metrics";
+import { ReportsPage } from "@/components/app/reports/reports-page";
 
 function single(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
 
@@ -17,5 +18,5 @@ export default async function PartnerQualityPage({ searchParams }: { searchParam
   // A row opens the partner record's Quality tab for someone who may open partner records.
   const recordLinks = records.entitled && actAsPage(records, ["owner", "bookkeeper"]);
   // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
-  return <><PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} /></>;
+  return <ReportsPage view="partner" bar={false}><PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} framed /></ReportsPage>;
 }

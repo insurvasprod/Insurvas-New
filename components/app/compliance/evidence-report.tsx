@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
@@ -12,11 +13,17 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { bookLine, formatPhone, gapDay, type GapItem, type GapSeverity } from "@/lib/compliance/evidenceGaps";
 import type { BookScan, EvidenceReport } from "@/lib/compliance/evidenceReport";
+import { NextUp } from "@/components/app/lead-sources/next-up";
+import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 
 /**
  * LA-6.3 · the evidence report on screen: the gaps first and expanded, consent broken out, the
  * timeline collapsed; or, with no number, the book-wide gap scan. PDF and CSV come from the same
  * route the screen reads (/api/app/compliance/evidence).
+ *
+ * Compliance in one page (2026-10-30): this is the Evidence step. Its downloads sit in the frame's corner,
+ * its run button at the toolbar's right end, and `?focus=<finding>` (Overview's "See the numbers") opens
+ * the scan with that finding's numbers showing.
  */
 type Query = { phone: string; from: string; to: string; lead: string; contact: string };
 
@@ -43,16 +50,18 @@ function Toolbar({ query, report }: { query: Query; report?: EvidenceReport }) {
   const api = `/api/app/compliance/evidence?${qs(query)}`;
   return (
     <form onSubmit={submit} className="w-full">
+      {/* A report's downloads in the corner, the PDF as the page's one primary (secondary, then primary). */}
+      {report ? (
+        <ComplianceSlot slot="corner">
+          <Button asChild variant="outline"><Link href="/app/evidence-report">Whole book</Link></Button>
+          <Button asChild variant="outline"><a href={`${api}&format=csv`}>Timeline CSV</a></Button>
+          <Button asChild><a href={`${api}&format=pdf`}><Download aria-hidden="true" />Download PDF</a></Button>
+        </ComplianceSlot>
+      ) : null}
       <DataToolbar
         actions={
           <>
-            {report ? (
-              <>
-                <Button asChild variant="outline"><a href={`${api}&format=pdf`}>Download PDF</a></Button>
-                <Button asChild variant="outline"><a href={`${api}&format=csv`}>Timeline CSV</a></Button>
-                <Button asChild variant="outline"><Link href="/app/evidence-report">Whole book</Link></Button>
-              </>
-            ) : null}
+            <Button type="submit" variant="outline">{phone.trim() ? "Run report" : "Scan the book"}</Button>
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>
         }
@@ -61,9 +70,8 @@ function Toolbar({ query, report }: { query: Query; report?: EvidenceReport }) {
           <span className="sr-only">Phone number</span>
           <input className={`${toolbarControl} w-full`} inputMode="tel" placeholder="Phone number, e.g. (817) 555-0142" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </label>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">From<input type="date" className={toolbarControl} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">To<input type="date" className={toolbarControl} value={to} onChange={(e) => setTo(e.target.value)} /></label>
-        <Button type="submit">{phone.trim() ? "Run report" : "Scan the book"}</Button>
+        <label className="flex items-center gap-2 text-sm text-[var(--ink)]">From<input type="date" className={toolbarControl} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="flex items-center gap-2 text-sm text-[var(--ink)]">To<input type="date" className={toolbarControl} value={to} onChange={(e) => setTo(e.target.value)} /></label>
       </DataToolbar>
     </form>
   );
@@ -92,6 +100,9 @@ function ReportView({ report }: { report: EvidenceReport }) {
   const validConsent = report.consent.filter((c) => c.valid).length;
   return (
     <>
+      {report.gaps.length
+        ? <NextUp tone={report.gaps.some((g) => g.severity === "critical") ? "danger" : "warning"}><strong>{report.gaps.length}</strong> gap{report.gaps.length === 1 ? "" : "s"} found for {report.phones.map(formatPhone).join(", ") || "this record"}. Fix {report.gaps.length === 1 ? "it" : "them"} while {report.gaps.length === 1 ? "it is" : "they are"} still fixable.</NextUp>
+        : <NextUp tone="done">No gaps found for {report.phones.map(formatPhone).join(", ") || "this record"}{report.undetermined.length ? ` · ${report.undetermined.length} check${report.undetermined.length === 1 ? "" : "s"} could not run` : ""}.</NextUp>}
       <StatStrip label="Report totals">
         <StatTile label="Gaps found" value={String(report.gaps.length)} valueTone={report.gaps.length ? "warning" : undefined} footnote={`${report.gapsChecked} checks · ${report.undetermined.length} undetermined`} />
         <StatTile label="Records held" value={String(report.timeline.length)} footnote={report.phones.map(formatPhone).join(", ")} />
@@ -173,8 +184,14 @@ function ReportView({ report }: { report: EvidenceReport }) {
   );
 }
 
-function ScanView({ scan, query }: { scan: BookScan; query: Query }) {
-  const [openCat, setOpenCat] = useState<string | null>(null);
+function ScanView({ scan, query, focus }: { scan: BookScan; query: Query; focus: string | null }) {
+  const [openCat, setOpenCat] = useState<string | null>(focus && (scan.numbersByCategory[focus]?.length ?? 0) > 0 ? focus : null);
+  const focused = useRef<HTMLTableRowElement | null>(null);
+  // Arriving from Overview with ?focus=: the finding's numbers are open, and scrolled to.
+  useEffect(() => { if (focus) focused.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [focus]);
+  const RANK = { critical: 0, high: 1, medium: 2 } as const;
+  const worst = scan.lines.filter((l) => l.numbers > 0).sort((a, b) => RANK[a.severity] - RANK[b.severity])[0];
+  const show = (category: string) => { setOpenCat(category); requestAnimationFrame(() => document.getElementById(`gap-${category}`)?.scrollIntoView({ block: "center", behavior: "smooth" })); };
   const line = (k: string) => scan.lines.find((l) => l.category === k);
   const dnc = line("called_after_dnc");
   const hours = line("outside_legal_hours");
@@ -182,6 +199,11 @@ function ScanView({ scan, query }: { scan: BookScan; query: Query }) {
   const undetermined = scan.lines.filter((l) => l.undeterminedReason && !l.numbers).length;
   return (
     <>
+      {worst ? (
+        <NextUp tone={worst.severity === "critical" ? "danger" : "warning"} action={(scan.numbersByCategory[worst.category]?.length ?? 0) > 0 ? <Button variant="outline" onClick={() => show(worst.category)}>Show the {worst.numbers.toLocaleString("en-US")}</Button> : null}>
+          {worst.label}: <strong>{worst.numbers.toLocaleString("en-US")}</strong> number{worst.numbers === 1 ? "" : "s"}{worst.severity === "critical" ? ". Fix today." : "."}
+        </NextUp>
+      ) : <NextUp tone={undetermined ? "warning" : "done"}>{undetermined ? <><strong>{undetermined}</strong> check{undetermined === 1 ? "" : "s"} could not run; every other check is clear.</> : "No gaps found across the book."}</NextUp>}
       <StatStrip label="Book-wide gaps">
         <StatTile label="Called after DNC" value={String(dnc?.numbers ?? 0)} valueTone={dnc?.numbers ? "danger" : undefined} footnote="numbers · fix today" />
         <StatTile label="Outside legal hours" value={String(hours?.count ?? 0)} valueTone={hours?.count ? "danger" : undefined} footnote={`calls${hours?.undeterminedCount ? ` · ${hours.undeterminedCount} undetermined` : ""}`} />
@@ -196,7 +218,7 @@ function ScanView({ scan, query }: { scan: BookScan; query: Query }) {
               const numbers = scan.numbersByCategory[l.category] ?? [];
               const expanded = openCat === l.category;
               return [
-                <tr key={l.category}>
+                <tr key={l.category} id={`gap-${l.category}`} ref={l.category === focus ? focused : undefined}>
                   <td>{l.numbers ? <StatusChip tone={SEVERITY_TONE[l.severity]}>{SEVERITY_LABEL[l.severity]}</StatusChip> : l.undeterminedReason ? <StatusChip tone="info">Undetermined</StatusChip> : <StatusChip tone="good">Clear</StatusChip>}</td>
                   <td><div className="font-medium">{l.label}</div><div className="text-xs text-muted-foreground">{l.numbers || l.undeterminedReason ? bookLine(l) : "None found."}</div></td>
                   <td className="text-right tabular-nums">{l.numbers}</td>
@@ -228,13 +250,13 @@ function ScanView({ scan, query }: { scan: BookScan; query: Query }) {
   );
 }
 
-export function EvidenceReportView({ query, report, scan, problem }: { query: Query; report?: EvidenceReport; scan?: BookScan; problem?: string }) {
+export function EvidenceReportView({ query, report, scan, problem, focus = null }: { query: Query; report?: EvidenceReport; scan?: BookScan; problem?: string; focus?: string | null }) {
   return (
     <>
       <TableCard toolbar={<Toolbar query={query} report={report} />}>
         {problem ? <ErrorState detail={problem} /> : null}
       </TableCard>
-      {report ? <ReportView report={report} /> : scan ? <ScanView scan={scan} query={query} /> : null}
+      {report ? <ReportView report={report} /> : scan ? <ScanView scan={scan} query={query} focus={focus} /> : null}
     </>
   );
 }

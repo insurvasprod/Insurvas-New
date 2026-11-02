@@ -59,7 +59,7 @@ const STRATEGY_CHIP: Record<RuleStrategy, string> = { round_robin: "Round robin"
 /** readUnassignedPool reads at most this many leads. */
 const POOL_READ_CAP = 500;
 /** The board's small-caps section label: the kit's label style (StatTile's), 12px/600 uppercase. */
-const sectionLabel = "m-0 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+const sectionLabel = "m-0 text-xs font-semibold leading-[1.33] text-muted-foreground";
 /** Where a personal licence is added (Team & access) and where an agency appointment is (Carriers › States). */
 const LICENCES_HREF = "/app/settings#team-access";
 const APPOINTMENTS_HREF = "/app/settings#carriers/carriers-states";
@@ -522,7 +522,6 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
           </button>
         </li>
       </ol>
-      <p className="m-0 text-xs leading-[1.5] text-[var(--body)]">Licensing sits above every rule: nobody gets a state they can’t write.</p>
     </section>
   );
 

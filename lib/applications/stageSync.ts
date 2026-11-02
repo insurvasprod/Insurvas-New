@@ -34,6 +34,18 @@ function keyFor(a: SyncAttempt): SyncKey | null {
   return a.hasQuote ? "quoted" : null;
 }
 
+/**
+ * The attempt behind a target (20261030200000: the history row names it). The most advanced attempt at
+ * the target's own state; for back-to-quoting the newest live attempt; for lost the last attempt.
+ * Returns an index into `attempts`, or -1 when none stands for it.
+ */
+export function attemptForTarget(target: SyncKey, attempts: SyncAttempt[]): number {
+  const newest = (pick: (a: SyncAttempt) => boolean) => attempts.reduce((best, a, i) => (pick(a) && (best < 0 || a.attemptNo > attempts[best].attemptNo) ? i : best), -1);
+  if (target === "requoting") return newest((a) => a.status !== "closed");
+  if (target === "lost") return newest(() => true);
+  return newest((a) => keyFor(a) === target);
+}
+
 /** Where the case's attempts say the lead belongs, or null when they say nothing. */
 export function targetSyncKey(input: { caseStatus: "open" | "won" | "lost"; attempts: SyncAttempt[] }): SyncKey | null {
   if (input.caseStatus === "lost") return "lost";

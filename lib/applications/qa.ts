@@ -125,7 +125,9 @@ export function runQa(input: {
   if (!attempt.carrierId || !attempt.selectedQuoteId) add(blocking, "QA_NO_QUOTE", "Select a quote before submitting.", null, "quote");
   for (const key of attempt.requiredKeys) {
     if (key.startsWith("pay.")) continue; // payment is checked by method below
-    if (!has(key)) add(blocking, "QA_REQUIRED_FIELD", `${LABEL.get(key) ?? key} is required by ${attempt.carrierName ?? "this carrier"}.`, key);
+    // An agency's own question (custom.*) is named by its text from the field set.
+    const label = LABEL.get(key) ?? attempt.fieldSet?.custom.find((c) => c.key === key)?.label ?? key;
+    if (!has(key)) add(blocking, "QA_REQUIRED_FIELD", `${label} is required by ${attempt.carrierName ?? "this carrier"}.`, key);
   }
 
   // SSA validity (LA-3.7): a plaintext value is checked whole; a masked one by its serial (the last

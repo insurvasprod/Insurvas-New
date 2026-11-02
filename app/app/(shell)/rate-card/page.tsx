@@ -2,7 +2,7 @@ import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RateCardWorkspace } from "@/components/app/rate-card";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { CommissionsPage } from "@/components/app/commissions/commissions-page";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { EXPECTED_PENDING_MESSAGE, loadRateCard } from "@/lib/ingestion/expectedCommissionStore";
 
@@ -21,8 +21,7 @@ export default async function RateCardPage() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Rate card" description="Your commission rates for the carriers you write, so every payment can be checked against what it should have been." />
+    <CommissionsPage step="rates">
       {!view.available ? (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{EXPECTED_PENDING_MESSAGE}</div>
       ) : (
@@ -38,6 +37,6 @@ export default async function RateCardPage() {
           <RateCardWorkspace carriers={view.carriers} products={view.products} readOnly={guard.entitlement.access === "read_only"} today={today} />
         </>
       )}
-    </div>
+    </CommissionsPage>
   );
 }

@@ -70,7 +70,7 @@ export function StepSection({ title, action, children, id }: { title: ReactNode;
   return (
     <div id={id} className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">{title}</h3>
+        <h3 className="text-xs font-semibold text-[var(--muted)]">{title}</h3>
         {action}
       </div>
       {children}

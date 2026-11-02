@@ -8,8 +8,8 @@
  */
 
 import { StatusChip } from "@/components/ui/status-chip";
-import type { ReactNode } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 
 import { Field, SettingsCard, ToggleRow, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,11 @@ import { feedOfQuestionKey, INTERVIEW_FEEDS, type InterviewFeed } from "@/lib/ap
 import type { UwFieldType } from "@/lib/salesSettings/templateSchemas";
 import { cn } from "@/lib/utils";
 
+import { notify } from "@/lib/notify";
+
 import { QuestionBank } from "./question-bank";
+import { Segmented } from "@/components/ui/view-tabs";
+
 import { WithReason } from "./shared";
 
 const PERSISTENCY_LABEL = "Keeps the policy on the books";
@@ -43,6 +47,14 @@ const TYPE_SHORT: Record<UwFieldType, string> = {
   text: "Free text", long_text: "Long free text", medication_list: "Medication list",
 };
 
+/** A question's follow-ups, and theirs, by key. */
+export function descendantKeys(key: string, qs: readonly UwQuestion[]): Set<string> {
+  const out = new Set<string>();
+  const walk = (k: string) => { for (const x of qs) if (x.showWhen?.key === k && !out.has(x.key)) { out.add(x.key); walk(x.key); } };
+  walk(key);
+  return out;
+}
+
 const isYnu = (q: UwQuestion) => q.type === "single_select" && q.options.length === 3 && q.options.every((o, i) => o === YNU[i]);
 const typeChoiceOf = (q: UwQuestion): TypeChoice => (isYnu(q) ? "yes_no_unsure" : q.type);
 const answerText = (parent: UwQuestion | undefined, equals: string) => (parent?.type === "boolean" ? (equals === "true" ? "Yes" : "No") : equals);
@@ -57,8 +69,11 @@ type Props = {
   title: ReactNode;
   sub?: ReactNode;
   children?: ReactNode;
-  /** Owner pick C (2026-10-28): lay the builder out beside the question bank. */
-  bank?: { templateName: string };
+  /**
+   * Owner pick C (2026-10-28): lay the builder out beside the question bank. `carrierName` is the
+   * one carrier the template is for, or null for a template every carrier uses (the knockout wording).
+   */
+  bank?: { templateName: string; carrierName?: string | null };
 };
 
 /**
@@ -104,6 +119,64 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
   };
   const renameSection = (key: string, label: string) => set(qs, draft.sections.map((s) => (s.key === key ? { ...s, label } : s)));
   const removeSection = (key: string) => set(qs, draft.sections.filter((s) => s.key !== key));
+  const moveSection = (key: string, by: -1 | 1) => {
+    const list = [...draft.sections];
+    const i = list.findIndex((s) => s.key === key);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    set(qs, list);
+  };
+
+  // S6 (owner 2026-10-30): drag a question — its follow-ups travel with it — before another, or onto
+  // a section to put it last there. A drop that would ask a follow-up before its question is refused.
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [phonePane, setPhonePane] = useState<"list" | "side" | null>(null);
+  // The bank (or the question open) stays in view while the list scrolls (owner 2026-10-30): it
+  // sticks to the top of the box that scrolls — the settings content, else the window — and is never
+  // taller than that box, scrolling inside itself instead.
+  const sideRef = useRef<HTMLDivElement>(null);
+  const [sideBox, setSideBox] = useState<{ top: number; maxHeight: number } | null>(null);
+  useEffect(() => {
+    const el = sideRef.current;
+    if (!el) return;
+    const scroller = el.closest<HTMLElement>("[data-settings-scroll]");
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const update = () => {
+      if (!wide.matches) return setSideBox(null);
+      const scrolls = scroller && getComputedStyle(scroller).overflowY !== "visible";
+      const bar = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--top-bar-h")) || 0;
+      setSideBox(scrolls ? { top: 16, maxHeight: scroller.clientHeight - 32 } : { top: bar + 16, maxHeight: window.innerHeight - bar - 32 });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    if (scroller) observer.observe(scroller);
+    window.addEventListener("resize", update);
+    wide.addEventListener("change", update);
+    return () => { observer.disconnect(); window.removeEventListener("resize", update); wide.removeEventListener("change", update); };
+  }, [bank]);
+  const [overKey, setOverKey] = useState<string | null>(null);
+  const endDrag = () => { setDragKey(null); setOverKey(null); };
+  const moveBlock = (from: string, before: string | null, section: string) => {
+    const block = new Set([from, ...descendantKeys(from, qs)]);
+    if (before && block.has(before)) return;
+    const moving = qs.filter((q) => block.has(q.key)).map((q) => ({ ...q, section }));
+    const rest = qs.filter((q) => !block.has(q.key));
+    let at = before ? rest.findIndex((q) => q.key === before) : rest.map((q) => q.section).lastIndexOf(section) + 1;
+    if (at <= 0 && !before) at = draft.sections.slice(0, draft.sections.findIndex((s) => s.key === section)).reduce((n, s) => n + rest.filter((q) => q.section === s.key).length, 0);
+    rest.splice(at < 0 ? rest.length : at, 0, ...moving);
+    const next = orderBySection({ sections: draft.sections, questions: rest }).questions;
+    const index = new Map(next.map((q, i) => [q.key, i]));
+    if (next.some((q) => q.showWhen && (index.get(q.showWhen.key) ?? -1) > (index.get(q.key) ?? 0))) {
+      notify.warn("A follow-up has to come after its question", { detail: "Move the question it follows, and it comes with it." });
+      return;
+    }
+    set(next);
+  };
+  const dropProps = (before: string | null, section: string, marker: string) => readOnly ? {} : {
+    onDragOver: (e: DragEvent) => { if (dragKey && dragKey !== before) { e.preventDefault(); e.stopPropagation(); setOverKey(marker); } },
+    onDrop: (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); if (dragKey) moveBlock(dragKey, before, section); endDrag(); },
+  };
 
   const numberOf = new Map(qs.map((q, i) => [q.key, i + 1]));
   const listCard = (
@@ -118,7 +191,7 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
         {ordered.sections.map((s, si) => {
           const inSection = qs.filter((q) => q.section === s.key);
           return (
-            <div key={s.key} className={cn("py-3", si === 0 ? "pt-0" : "border-t border-[var(--border)]")}>
+            <div key={s.key} className={cn("rounded-[10px] py-3", si === 0 ? "pt-0" : "border-t border-[var(--border)]", overKey === `section:${s.key}` && "bg-[var(--primary-soft)]")} {...dropProps(null, s.key, `section:${s.key}`)}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {readOnly ? (
                   <h4 className="m-0 text-sm leading-[1.5] font-semibold text-[var(--ink)]">{s.label}</h4>
@@ -132,6 +205,12 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
                 )}
                 {!readOnly && (
                   <span className="flex items-center gap-1">
+                    <WithReason reason={si === 0 ? "Already the first section." : null}>
+                      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move the section ${s.label} up`} disabled={si === 0} onClick={() => moveSection(s.key, -1)}><ArrowUp aria-hidden="true" /></Button>
+                    </WithReason>
+                    <WithReason reason={si === ordered.sections.length - 1 ? "Already the last section." : null}>
+                      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move the section ${s.label} down`} disabled={si === ordered.sections.length - 1} onClick={() => moveSection(s.key, 1)}><ArrowDown aria-hidden="true" /></Button>
+                    </WithReason>
                     <Button type="button" variant="ghost" size="sm" onClick={() => addQuestion(s.key)}><Plus aria-hidden="true" />Add a question</Button>
                     {inSection.length === 0 && (
                       <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove the empty section ${s.label}`} onClick={() => removeSection(s.key)}><Trash2 aria-hidden="true" /></Button>
@@ -149,10 +228,23 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
                     const hasChildren = qs.some((x) => x.showWhen?.key === q.key);
                     const on = q.key === selectedKey;
                     return (
-                      <li key={q.key} className={cn("flex items-start gap-2 rounded-[8px] px-2 py-1.5", on && "bg-[var(--brand-50)]", q.showWhen && "ml-4")}>
+                      <li
+                        key={q.key}
+                        draggable={!readOnly}
+                        onDragStart={(e) => { setDragKey(q.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", q.key); }}
+                        onDragEnd={endDrag}
+                        {...dropProps(q.key, s.key, q.key)}
+                        className={cn(
+                          "flex items-start gap-2 rounded-[8px] px-2 py-1.5 transition-[box-shadow,opacity] duration-150",
+                          on && "bg-[var(--brand-50)]", q.showWhen && "ml-4",
+                          overKey === q.key && dragKey !== q.key && "shadow-[inset_0_2px_0_var(--primary)]",
+                          dragKey === q.key && "opacity-50",
+                        )}
+                      >
+                        {!readOnly && <GripVertical aria-hidden="true" className="mt-1 size-4 shrink-0 cursor-grab text-[var(--body)]" />}
                         <button
                           type="button"
-                          onClick={() => onSelect(on ? null : q.key)}
+                          onClick={() => { setPhonePane(null); onSelect(on ? null : q.key); }}
                           aria-pressed={on}
                           className="min-w-0 flex-1 rounded-[6px] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                         >
@@ -211,17 +303,29 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
       onPatch={(p) => patch(selected.key, p)}
       onQuestions={(list) => set(list)}
       onRekey={(to) => rekey(selected.key, to)}
+      knockoutFor={bank?.carrierName ?? null}
     />
   );
 
   // Owner 2026-10-28 (after pick C): the template's own questions are the page — wide, on the left;
   // the question bank is the side tool on the right. A question clicked in the list opens its editor
   // in the bank's place, with the way back to the bank.
+  // S15 (owner 2026-10-30): on a phone the two columns are one switch — the list, or the bank (or
+  // the question picked) — instead of the bank stacked under the whole list.
   if (bank) {
+    const side = phonePane === "side" || Boolean(selected && phonePane !== "list");
     return (
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
-        <div className="min-w-0">{listCard}</div>
-        <div className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)]">
+        <div className="lg:hidden">
+          <Segmented
+            label="Show"
+            value={side ? "side" : "list"}
+            onChange={(k) => setPhonePane(k)}
+            options={[{ key: "list", label: `Questions ${qs.length}` }, { key: "side", label: selected ? "This question" : "Question bank" }]}
+          />
+        </div>
+        <div className={cn("min-w-0", side && "hidden lg:block")}>{listCard}</div>
+        <div ref={sideRef} style={sideBox ?? undefined} className={cn("flex min-w-0 flex-col gap-3 lg:sticky lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-width:thin]", !side && "hidden lg:flex")}>
           {selected ? (
             <>
               <span><Button type="button" variant="outline" size="sm" onClick={() => onSelect(null)}><ArrowLeft aria-hidden="true" />Question bank</Button></span>
@@ -242,9 +346,11 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
   );
 }
 
-function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQuestions, onRekey }: {
+function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQuestions, onRekey, knockoutFor = null }: {
   q: UwQuestion; index: number; total: number; all: UwQuestion[]; sections: UwDraft["sections"]; readOnly: boolean;
   onPatch: (p: Partial<UwQuestion>) => void; onQuestions: (list: UwQuestion[]) => void; onRekey: (to: string) => void;
+  /** The one carrier the template is for; null when every carrier uses it. */
+  knockoutFor?: string | null;
 }) {
   const id = (part: string) => `uw-${q.key}-${part}`;
   const locked = isLockedPersistency(q);
@@ -252,8 +358,6 @@ function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQue
   const earlier = all.slice(0, at).filter((x) => x.type === "boolean" || x.type === "single_select");
   const parent = q.showWhen ? all.find((x) => x.key === q.showWhen?.key) : undefined;
   const valuesFor = (x: UwQuestion | undefined) => (x?.type === "boolean" ? [{ v: "true", l: "Yes" }, { v: "false", l: "No" }] : (x?.options ?? []).map((o) => ({ v: o, l: o })));
-  const followUps = all.filter((x) => x.showWhen?.key === q.key && x.showWhen.equals === "true");
-  const firstFollowUp = followUps.find((x) => x.type === "text" || x.type === "long_text") ?? null;
 
   const setType = (choice: TypeChoice) => {
     if (choice === "yes_no_unsure") return onPatch({ type: "single_select", options: [...YNU], knockout: null });
@@ -263,15 +367,13 @@ function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQue
     onPatch(next);
   };
 
-  const setFollowUp = (label: string) => {
-    if (firstFollowUp) {
-      if (!label.trim() && !all.some((x) => x.showWhen?.key === firstFollowUp.key)) return onQuestions(all.filter((x) => x.key !== firstFollowUp.key));
-      return onQuestions(all.map((x) => (x.key === firstFollowUp.key ? { ...x, label } : x)));
-    }
-    if (!label.trim()) return;
+  /** A new free-text follow-up for this answer, after the question and the follow-ups it already has. */
+  const addFollowUp = (equals: "true" | "false") => {
     const key = freshKey(`${q.key}_details`, all.map((x) => x.key));
     const list = [...all];
-    list.splice(at + 1, 0, { key, label, type: "text", options: [], help: null, required: false, persistency: false, section: q.section, knockout: null, showWhen: { key: q.key, equals: "true" }, appliesTo: "all" });
+    const tree = descendantKeys(q.key, all);
+    const last = Math.max(at, ...list.map((x, i) => (tree.has(x.key) ? i : -1)));
+    list.splice(last + 1, 0, { key, label: equals === "true" ? "Tell me more about that." : "Why not?", type: "text", options: [], help: null, required: false, persistency: false, section: q.section, knockout: null, showWhen: { key: q.key, equals }, appliesTo: "all" });
     onQuestions(list);
   };
 
@@ -375,27 +477,59 @@ function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQue
           onChange={(on) => onPatch({ persistency: on })}
         />
 
+        {/* S4 (owner 2026-10-30): one picture of the branch — for Yes and for No, whether it rules
+            the carrier out, what the agent sees, and the questions it opens. */}
         {q.type === "boolean" && (
-          <>
-            <ToggleRow
-              id={id("knockout")}
-              title="A Yes is a knockout for this carrier"
-              help="A knockout does not stop the interview. It marks the carrier as one that will decline and sends the agent to the Quote step to pick another."
-              checked={Boolean(q.knockout)}
-              disabled={readOnly}
-              onChange={(on) => onPatch({ knockout: on ? { when: "true", note: q.knockout?.note ?? "" } : null })}
-            />
-            {q.knockout && (
-              <Field label="What the agent sees" htmlFor={id("ko-note")} required hint="Shown as “Knockout — …” the moment Yes is given.">
-                <input id={id("ko-note")} className={control} value={q.knockout.note} disabled={readOnly} placeholder="Most carriers decline this; guaranteed issue only." onChange={(e) => onPatch({ knockout: { when: "true", note: e.target.value } })} />
-              </Field>
-            )}
-            <div className="border-l-2 border-[var(--border)] pl-4">
-              <Field label="Follow-up question" htmlFor={id("follow")} hint="Asked only when the answer is Yes. The answer goes on the application as written.">
-                <input id={id("follow")} className={control} value={firstFollowUp?.label ?? ""} disabled={readOnly} placeholder="When were you last treated, and who treated you?" onChange={(e) => setFollowUp(e.target.value)} />
-              </Field>
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-[var(--ink)]">When the answer is…</span>
+            <div className="grid gap-3">
+              {(["true", "false"] as const).map((v) => {
+                const word = v === "true" ? "Yes" : "No";
+                const ko = q.knockout?.when === v ? q.knockout : null;
+                const kids = all.filter((x) => x.showWhen?.key === q.key && x.showWhen.equals === v);
+                return (
+                  <div key={v} className={cn("flex flex-col gap-3 rounded-[12px] border p-3", ko ? "border-[color-mix(in_srgb,var(--error)_50%,var(--border))]" : "border-[var(--border)]")}>
+                    <span className="flex flex-wrap items-center gap-2">
+                      <StatusChip dot={false} tone={ko ? "danger" : "neutral"}>{word}</StatusChip>
+                      {ko && <span className="text-xs font-semibold text-[var(--error-ink)]">Rules out {knockoutFor ?? "the carrier being quoted"}</span>}
+                    </span>
+                    <ToggleRow
+                      id={id(`knockout-${v}`)}
+                      title={knockoutFor ? `A ${word} is a knockout for ${knockoutFor}` : `A ${word} is a knockout for the carrier being quoted`}
+                      help="It doesn't stop the interview: the agent sees it at once and picks another carrier on Quote."
+                      checked={Boolean(ko)}
+                      disabled={readOnly || (Boolean(q.knockout) && !ko)}
+                      onChange={(on) => onPatch({ knockout: on ? { when: v, note: q.knockout?.note ?? "" } : null })}
+                    />
+                    {ko && (
+                      <Field label="What the agent sees" htmlFor={id(`ko-note-${v}`)} required hint={`Shown as “Knockout — …” the moment ${word} is given.`}>
+                        <input id={id(`ko-note-${v}`)} className={control} value={ko.note} disabled={readOnly} placeholder="Most carriers decline this; guaranteed issue only." onChange={(e) => onPatch({ knockout: { when: v, note: e.target.value } })} />
+                      </Field>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <span className="text-xs font-semibold text-[var(--ink)]">{kids.length ? `Then ask (${kids.length})` : `Nothing else is asked when ${word}.`}</span>
+                      {kids.map((k) => {
+                        const hasOwn = all.some((x) => x.showWhen?.key === k.key);
+                        return (
+                          <span key={k.key} className="flex items-center gap-2">
+                            <input aria-label={`Follow-up when ${word}`} className={cn(control, "mt-0 min-w-0 flex-1")} value={k.label} disabled={readOnly} onChange={(e) => onQuestions(all.map((x) => (x.key === k.key ? { ...x, label: e.target.value } : x)))} />
+                            {!readOnly && (
+                              <WithReason reason={hasOwn ? "Remove its own follow-ups first." : null}>
+                                <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove the follow-up “${k.label}”`} disabled={hasOwn} onClick={() => onQuestions(all.filter((x) => x.key !== k.key))}><Trash2 aria-hidden="true" /></Button>
+                              </WithReason>
+                            )}
+                          </span>
+                        );
+                      })}
+                      {!readOnly && (
+                        <span><Button type="button" variant="outline" size="sm" onClick={() => addFollowUp(v)}><Plus aria-hidden="true" />Ask another when {word}</Button></span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </>
+          </div>
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">

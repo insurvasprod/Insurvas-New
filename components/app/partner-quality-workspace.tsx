@@ -42,8 +42,8 @@ function ConversionBars({ now, prior, max }: { now: number | null; prior: number
   const width = (value: number | null) => `${value == null || max <= 0 ? 0 : Math.max(3, (value / max) * 100)}%`;
   return (
     <span aria-hidden className="flex w-20 flex-col gap-1">
-      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: width(now) }} /></span>
-      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--border-strong)]" style={{ width: width(prior) }} /></span>
+      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="m-bar-x block h-full rounded-full bg-[var(--primary)]" style={{ width: width(now) }} /></span>
+      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="m-bar-x block h-full rounded-full bg-[var(--border-strong)]" style={{ width: width(prior) }} /></span>
     </span>
   );
 }
@@ -53,7 +53,8 @@ function ConversionBars({ now, prior, max }: { now: number | null; prior: number
  * so a row opens the partner's own record on its Quality tab (2026-10-25). Anyone else — a producer —
  * keeps the stand-alone quality page.
  */
-export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false }: { initialPeriod?: Period | null; recordLinks?: boolean }) {
+/** `framed`: inside the Reports page (components/app/reports/reports-page.tsx), which draws the title and trail. */
+export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false, framed = false }: { initialPeriod?: Period | null; recordLinks?: boolean; framed?: boolean }) {
   const [period, setPeriod] = useState<Period>(() => initialPeriod ?? defaultPartnerQualityPeriod());
   const [data, setData] = useState<PartnerQualityReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,7 +105,7 @@ export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false }: 
   }
 
   if (loading && !data) return <PageLoading />;
-  if (!data) return <div className="space-y-6"><PageHeader title="Partner Quality" /><ErrorState detail={error || "Could not load partner quality"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
+  if (!data) return <div className="space-y-6">{!framed && <PageHeader title="Partner quality" />}<ErrorState detail={error || "Could not load partner quality"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
 
   const active: Period = { from: data.from, to: data.to };
   const total = data.summary;
@@ -137,7 +138,7 @@ export function PartnerQualityWorkspace({ initialPeriod, recordLinks = false }: 
   const th = (key: SortKey, label: string, hint?: string) => <th className="text-right" title={hint}><SortButton label={label} active={sort.key === key} onClick={() => toggleSort(key)} /></th>;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader visible title="Partner Quality" description="How good each lead source's leads are, against the period before." breadcrumbs={[{ label: "Reports" }, { label: "Partner Quality" }]} />
+    {!framed && <PageHeader title="Partner quality" description="How good each lead source's leads are, against the period before." breadcrumbs={[{ label: "Reports" }, { label: "Partner quality" }]} />}
 
     {/* Four figures an operator acts on (2026-10-06 redesign). Partners with leads rides on Leads
         sent and the duplicate rate on Screening pass; both stay columns and drill-downs below. */}

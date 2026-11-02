@@ -108,7 +108,7 @@ export function PublishDialog({
             ]}
           />
           <div>
-            <div className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">What changed</div>
+            <div className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">What changed</div>
             <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
               {editor.changeSummary.trim() || "No summary. Users are not told what changed."}
             </p>

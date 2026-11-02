@@ -138,7 +138,7 @@ function SpouseForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open
       <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="flex flex-wrap items-center gap-5">
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">Combined monthly total</div>
+            <div className="text-xs font-semibold text-[var(--muted)]">Combined monthly total</div>
             <div className="mt-1 flex flex-wrap items-baseline gap-2">
               <span className="text-sm text-[var(--body)] tabular-nums">{money(mine)}</span>
               <span className="text-sm text-[var(--muted)]">+</span>

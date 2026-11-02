@@ -182,7 +182,7 @@ function BeneficiaryRow({ r, n, colour, flash, issues, readOnly, shareText, onSh
       <div className="flex items-center gap-3">
         <span aria-hidden="true" className="inline-grid size-[30px] shrink-0 place-items-center rounded-full text-xs font-bold text-[var(--ink)]" style={{ background: colour }}>{n}</span>
         <strong className="min-w-0 flex-1 truncate text-card-title text-[var(--ink)]">{displayName(r) === "this beneficiary" ? "New beneficiary" : displayName(r)}</strong>
-        <span className={cn("rounded-full px-2.5 py-0.5 text-sm font-semibold tabular-nums transition-[box-shadow,background-color] duration-500", flash ? "bg-[var(--primary)] text-[var(--ink)] shadow-[0_0_0_4px_var(--primary-soft)]" : "bg-[var(--surface)] text-[var(--ink)]")}>{r.share_bp > 0 ? `${pct(r.share_bp)}` : "—"}</span>
+        <span className={cn("rounded-full px-2.5 py-0.5 text-sm font-semibold tabular-nums transition-colors duration-500", flash ? "bg-[var(--primary)] text-[var(--ink)]" : "bg-[var(--surface)] text-[var(--ink)]")}>{r.share_bp > 0 ? `${pct(r.share_bp)}` : "—"}</span>
         {!readOnly && (
           <Button type="button" variant="ghost" size="icon" onClick={onRemove} aria-label={`Remove ${displayName(r)}`} className="text-[var(--muted)]">
             <X aria-hidden="true" />
@@ -215,7 +215,7 @@ function BeneficiaryRow({ r, n, colour, flash, issues, readOnly, shareText, onSh
             autoComplete="off"
             placeholder="0.00"
             title="Up to two decimals, from 0.01 to 100"
-            className={cn(control, "tabular-nums transition-[box-shadow] duration-500", flash && "shadow-[0_0_0_3px_var(--primary)]")}
+            className={cn(control, "tabular-nums transition-colors duration-500", flash && "border-[var(--primary)]")}
             value={shareText}
             disabled={readOnly}
             aria-invalid={shareInvalid}

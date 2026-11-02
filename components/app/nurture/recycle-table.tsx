@@ -177,7 +177,7 @@ export function ComesBackWhen({ campaigns }: { campaigns: NurtureCampaignReport[
           className="-mx-2 flex min-h-9 items-center gap-2 rounded-md px-2 text-left outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_4%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
         >
           <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Comes back when</span>
+            <span className="text-xs font-semibold text-muted-foreground">Comes back when</span>
             {differ > 0 && <span className="text-xs text-[var(--body)]">{reference.campaign_name}&apos;s rule ({ruleSummary(rule)}) · {plural(differ, "campaign has", "campaigns have")} their own</span>}
           </span>
           <span className="shrink-0 text-xs text-[var(--body)]">{open ? "Hide" : "Show rules"}</span>

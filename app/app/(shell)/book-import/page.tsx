@@ -5,7 +5,7 @@ import { BookImport } from "@/components/app/book-import";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { buttonVariants } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { BOOK_IMPORT_PENDING_MESSAGE, loadBookImport } from "@/lib/ingestion/bookImport";
 import { bookAdvanceAtRisk } from "@/lib/ingestion/commissionLedgerStore";
@@ -23,12 +23,7 @@ export default async function BookImportPage() {
   const [view, advance] = await Promise.all([loadBookImport(guard.context.tenantId), bookAdvanceAtRisk(guard.context.tenantId).catch(() => ({ cents: null, policies: 0, unknown: 0 }))]);
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Import your book"
-        description="Upload each carrier's latest policy file, or drop it on the carrier's row. Each one is read as soon as it arrives."
-        actions={view.available && view.totals.policies > 0 ? <Link href="/app/exceptions" className={buttonVariants({ variant: "outline" })}>Look over imported clients</Link> : undefined}
-      />
+    <DataInPage step="import" actions={view.available && view.totals.policies > 0 ? <Link href="/app/exceptions" className={buttonVariants({ variant: "outline" })}>Look over imported clients</Link> : undefined}>
       {!view.available ? (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{BOOK_IMPORT_PENDING_MESSAGE}</div>
       ) : (
@@ -43,6 +38,6 @@ export default async function BookImportPage() {
           <BookImport carriers={view.carriers} others={view.others} processing={view.processing} readOnly={guard.entitlement.access === "read_only"} />
         </>
       )}
-    </div>
+    </DataInPage>
   );
 }

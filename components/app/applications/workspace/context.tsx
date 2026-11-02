@@ -101,6 +101,11 @@ export function useWorkspace() {
   return value;
 }
 
+/** The workspace when there is one: the Quote step's inputs also draw outside a case (Settings › Quotation templates' preview). */
+export function useOptionalWorkspace() {
+  return useContext(Ctx);
+}
+
 function pickAttempt(c: CaseView, insured: InsuredRole, attemptNo: number | null) {
   const mine = c.attempts.filter((a) => a.insuredRole === insured).sort((a, b) => a.attemptNo - b.attemptNo);
   return (attemptNo ? mine.find((a) => a.attemptNo === attemptNo) : undefined) ?? mine.find((a) => a.status !== "closed") ?? mine[mine.length - 1] ?? c.attempts[0];

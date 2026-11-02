@@ -507,6 +507,11 @@ rule only with the owner's yes, in this section and the test together.
 - **Title on every page.** `PageHeader` always shows the trail ("Partners › Partner Chat", from the
   menu by `components/ui/page-trail.tsx`) and the title, with the actions on the title's line. The
   top bar names no page. See §2.
+- **Alerts on the title's line (2026-11-02).** The shell's always-on alerts (an overdue regulator
+  complaint, a payment problem) are one 36px line beside the title that fills the rest of that line,
+  the whole sentence on the left and the action on the right (`PageAlert`, placed by `PageAlertSlot`
+  in `PageHeader`). Never a banner above the trail: it pushed every page into a scroll. A page with
+  no header shows them above it.
 - **One card.** The mockups' card (canvas board LirS1's `.g`): 16px corners; in dark, a white wash
   from 6% to 1.5% at 160° and a 9% white hairline, blurred 14px. It is `.m-glass`, so `Card`,
   `TableCard`, `StatStrip`, the home panels and every `cardSurface` draw it. No glossy card.
@@ -520,6 +525,27 @@ rule only with the owner's yes, in this section and the test together.
   stroke) that turns green when its group is open; pages 14px text only under the group's name, the
   current one a soft green row in bold; no tree lines. The block "The sidebar, owner 2026-10-30" is
   the last sidebar rule in `app/globals.css`.
+
+## 17. Nothing that looks AI-made (2026-11-02)
+**Status:** Live. Set by the owner: "remove any AI looking button or anything that we didn't like".
+The ratchets `caps-label`, `glow`, `magic-icon` and `pill-control` in
+`lib/design/uiConsistency.test.mjs` start at zero and keep it there.
+
+- **No glow.** No blurred coloured shadow (`shadow-[0_0_14px_…]`), no brand orbs behind the page,
+  no glow on hover. A selected or current thing is a flat fill or a border. A 0-blur ring is a border
+  and is fine.
+- **No gradient fills.** A bar or progress line is one token colour. (The dark card's faint wash in
+  §16 and the loading skeleton are the only gradients in the app.)
+- **No endless motion.** A live marker is a still dot; nothing pulses, pings, breathes or wiggles to
+  get attention. Arranging tiles shows a dashed outline. One-off entrances and a single confirm
+  pulse stay.
+- **No magic icons.** No `Sparkles`, `Wand`, `Zap`, `Bot` or `BrainCircuit`, and no emoji: an icon
+  says what the button does (`Shuffle` for auto-assign, `SkipForward` for auto-next, the lock for a
+  locked setting).
+- **Sentence-case labels.** No uppercase letter-spaced eyebrows. The one kept is the figure strip's
+  label (§16, the owner's pick), recorded as an exception in the test.
+- **No pills.** A button, or a link drawn as one, has 8px corners whatever element draws it (§5a).
+  Pills stay for toggle tracks, dots, avatars, the Filters count and the marketing CTAs.
 
 ## Ownership notes
 - `components/ui/*` and `app/globals.css` are shared: change them only deliberately, once, for all.

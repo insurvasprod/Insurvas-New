@@ -530,7 +530,9 @@
 /* 1 · Entrance. Eight steps of 32ms, then everything else lands together — a
    page that keeps arriving for two seconds feels slow, not premium. */
 .m-in,
-.m-stagger > * { animation: m-rise var(--t-enter) var(--e-out) both; }
+/* backwards, not both: a held end transform makes the element a containing block, and every
+   position:fixed sheet inside it (DetailPanel on a phone) is then pinned to it, not the screen. */
+.m-stagger > * { animation: m-rise var(--t-enter) var(--e-out) backwards; }
 .m-stagger > *:nth-child(1) { animation-delay: 0ms; }
 .m-stagger > *:nth-child(2) { animation-delay: 32ms; }
 .m-stagger > *:nth-child(3) { animation-delay: 64ms; }
@@ -561,7 +563,7 @@
 
 /* 5 · View swap. The outgoing view is cut, not faded, so the two are never on
    screen together. */
-.m-swap { animation: m-rise 260ms var(--e-out) both; }
+.m-swap { animation: m-rise 260ms var(--e-out) backwards; }
 /* A side panel (a record's details, a create form) slides in from the edge it is attached to, and a
    tab's view fades in when the tab changes (2026-10-09). Transform and opacity only, like the rest. */
 @keyframes m-panel-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
@@ -575,7 +577,8 @@
 .m-deny { animation: m-deny 200ms var(--e) 1 both; animation-delay: 760ms; }
 
 /* 7 · Live. Only a genuinely live signal pulses; a timestamp does not. */
-.m-live { animation: m-pulse 2.4s var(--e-out) infinite; }
+/* A live marker is a still dot (design-system pass 2026-11-02: nothing breathes or glows). */
+.m-live { animation: none; }
 
 /* 8 · Skeleton. Matches the shape of the text it replaces, so nothing shifts
    when the data lands. */
@@ -2339,7 +2342,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .lead-form-control { width: 100%; min-height: 2.25rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 0 .65rem; color: var(--accent-ink); font-size: .82rem; }
 
 /* Settings is a focused workspace: one configuration surface is visible at a time. */
-.portal-settings-panel { min-width: 0; animation: portal-settings-panel-in 180ms ease both; }
+.portal-settings-panel { min-width: 0; animation: portal-settings-panel-in 180ms ease backwards; }
 .portal-settings-empty { border: 1px dashed var(--portal-line); border-radius: 12px; padding: 2rem; color: var(--portal-muted); font-size: .82rem; text-align: center; }
 @keyframes portal-settings-panel-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .portal-settings-panel { animation: none; } }
@@ -3151,23 +3154,10 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 /* No lit edge and no halo behind the figures (owner 2026-10-30): the mockups' strip is the plain card. */
 .m-stat-strip { position: relative; }
 
-/* The still brand glows behind a role home. */
-.m-ambient-orb {
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(64px);
-  opacity: var(--ambient-opacity);
-}
-.m-ambient-orb--a { left: 4%; top: -40px; width: 46%; height: 320px; background: radial-gradient(closest-side, var(--primary), transparent); }
-.m-ambient-orb--b { right: 2%; top: 80px; width: 38%; height: 280px; background: radial-gradient(closest-side, color-mix(in srgb, var(--primary) 55%, var(--info)), transparent); }
-
-/* LiveStamp's dot (components/ui/live-stamp.tsx): a ring that breathes out while the data is fresh. */
-.m-live-dot { width: 7px; height: 7px; border-radius: 9999px; background: var(--primary); animation: m-live-pulse 1.8s ease-out infinite; }
-.m-live-dot.is-stale { background: var(--warning); animation: none; }
-@keyframes m-live-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 60%, transparent); }
-  100% { box-shadow: 0 0 0 7px transparent; }
-}
+/* LiveStamp's dot (components/ui/live-stamp.tsx): green while the data is fresh, amber once stale.
+   Still (design-system pass 2026-11-02): no breathing ring, no brand glows behind the page. */
+.m-live-dot { width: 7px; height: 7px; border-radius: 9999px; background: var(--primary); }
+.m-live-dot.is-stale { background: var(--warning); }
 
 /* Ring (components/ui/ring.tsx) draws its arc once, from empty to its value. */
 .m-ring { animation: m-ring-draw 900ms var(--e-out) both; animation-delay: 200ms; }
@@ -3439,15 +3429,15 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   font: inherit; font-size: .75rem; font-weight: 700; line-height: 1;
 }
 .m-tile-grid--keys > .m-tile:nth-child(-n + 9) .m-tile-key::before { content: counter(launch-tile); }
-/* Dashboard C's launchpad (components/ui/launchpad.tsx, redesign 2026-10-25): tiles lift on hover,
-   wiggle while being arranged, and their week bars rise into place. Reduced motion stills all three. */
-.m-dash-tile { transition: border-color var(--t-micro) var(--e), box-shadow var(--t-micro) var(--e), transform var(--t-micro) var(--e); }
-.m-dash-tile:hover { border-color: color-mix(in srgb, var(--primary) 45%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 15%, transparent), 0 20px 50px rgba(0, 0, 0, .28); transform: translateY(-1px); }
-@keyframes m-launch-wiggle { 0%, 100% { transform: rotate(-.35deg); } 50% { transform: rotate(.35deg); } }
-.m-launch-wiggle { animation: m-launch-wiggle .5s ease-in-out infinite; }
+/* Dashboard C's launchpad (components/ui/launchpad.tsx, redesign 2026-10-25). A tile's border darkens
+   on hover; while tiles are being arranged each one carries a dashed outline. No glow, no lift, no
+   wiggle (design-system pass 2026-11-02). Week bars still rise into place once. */
+.m-dash-tile { transition: border-color var(--t-micro) var(--e); }
+.m-dash-tile:hover { border-color: color-mix(in srgb, var(--ink) 22%, transparent); }
+.m-launch-arranging > * { outline: 1px dashed color-mix(in srgb, var(--ink) 30%, transparent); outline-offset: 3px; border-radius: 16px; }
 @keyframes m-bar-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .m-bar-rise { transform-origin: bottom; animation: m-bar-rise .9s cubic-bezier(.2, .8, .2, 1) both; }
-@media (prefers-reduced-motion: reduce) { .m-dash-tile, .m-dash-tile:hover { transition: none; transform: none; } .m-launch-wiggle, .m-bar-rise { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .m-dash-tile { transition: none; } .m-bar-rise { animation: none; } }
 
 /* One scrollbar across the app (owner 2026-10-27): thin, a brand-green thumb on a clear track, as
    Pipelines & outcomes drew it. Every scrolling area gets it; only the agent rail hides its bar. */

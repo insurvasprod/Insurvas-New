@@ -7,6 +7,7 @@ import type {
   OutcomeReasonCode, PaymentMethod, RequirementKind, ValueSource, WaitingOn,
 } from "./constants";
 import type { BeneficiaryTier } from "./beneficiaries";
+import type { FieldSetLayout } from "./fieldSetLayout";
 import type { QaVerdict } from "./qa";
 
 export type FieldValue = {
@@ -202,6 +203,8 @@ export type AttemptView = {
   selectedQuoteId: string | null;
   values: Record<string, FieldValue>;
   requiredKeys: string[];
+  /** The field set's order, wording, help and the agency's own questions (null: none applies). */
+  fieldSet?: FieldSetLayout | null;
   payment: PaymentView | null;
   beneficiaries: BeneficiaryView[];
   disclosures: DisclosureView[];

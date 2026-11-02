@@ -3,6 +3,7 @@ import { SuppressionWorkspace } from "@/components/app/suppression-workspace";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
+import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
 
 /**
  * LA-2.3 · `/app/tcpa`.
@@ -29,6 +30,7 @@ export default async function TcpaPage() {
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="TCPA / DNC" detail="In an agency, the owner and admins keep the suppression list. The dialer still checks every number before it rings." />;
 
-  // The header is drawn by the workspace: its Suppress a number action opens the workspace's form.
-  return <SuppressionWorkspace />;
+  // The TCPA / DNC step of the one Compliance page (2026-10-30): the frame draws the title; the workspace puts
+  // its tabs and its Suppress a number action into the frame's top row.
+  return <ComplianceFlowPage step="dnc"><SuppressionWorkspace /></ComplianceFlowPage>;
 }

@@ -13,7 +13,7 @@ import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { DraftActions } from "@/components/app/settings/primitives";
+import { DraftActions, LockIcon } from "@/components/app/settings/primitives";
 import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
 import { fieldLabel } from "@/components/ui/field";
 
@@ -173,7 +173,7 @@ export function AccountingSettingsBoard({ initial, locked, accounts, canEdit }: 
       ), <>The threshold moves — check the year&apos;s IRS instructions. Categories are set on <Link className="underline" href="/app/tax">Tax summaries</Link>.</>)}
 
       {section("Locked", (
-        <ul className="flex flex-col gap-2 text-sm">{locked.map((l) => <li key={l.key}><span aria-hidden>🔒 </span><strong>{l.label}.</strong> <span className="text-muted-foreground">{l.reason}</span></li>)}</ul>
+        <ul className="flex flex-col gap-2 text-sm">{locked.map((l) => <li key={l.key} className="flex items-baseline gap-1.5"><span className="translate-y-0.5 text-[var(--muted)]"><LockIcon /></span><span><strong>{l.label}.</strong> <span className="text-muted-foreground">{l.reason}</span></span></li>)}</ul>
       ), <>Set elsewhere and linked, never edited here: commission schedules and contract levels (<Link className="underline" href="/app/rate-card">Rate card</Link>), partner terms, carrier lags, vendors and campaigns (<Link className="underline" href="/app/campaigns">Campaigns</Link>).</>)}
 
 

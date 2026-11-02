@@ -36,7 +36,7 @@ export function PayoutStrip({ quotes }: { quotes: QuoteView[] }) {
     <section aria-label="Estimated first-year commission" className="flex flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-[18px]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">Estimated first-year commission</span>
+          <span className="text-xs font-semibold text-[var(--muted)]">Estimated first-year commission</span>
           {top ? (
             <div className="flex flex-wrap items-baseline gap-x-[18px] gap-y-1">
               <span className="flex items-baseline gap-2">

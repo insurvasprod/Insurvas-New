@@ -274,7 +274,6 @@ export function StatementImportButton({
                   <option value="">Choose the carrier…</option>
                   {carriers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                 </select>
-                <p className="text-xs text-muted-foreground">Lines are matched to policies recorded with this carrier.</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">

@@ -43,7 +43,8 @@ export function LeaveGuard({
     const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); };
     const onClick = (event: MouseEvent) => {
       if (replaying.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const target = (event.target as Element | null)?.closest?.("a[href], [role='tab']");
+      // [data-navigates]: a button that changes what the page shows, like the Settings menu's items.
+      const target = (event.target as Element | null)?.closest?.("a[href], [role='tab'], [data-navigates]");
       if (!(target instanceof HTMLElement) || scope?.current?.contains(target)) return;
       if (target.closest("[role='dialog']")) return;
       if (target instanceof HTMLAnchorElement && (target.target === "_blank" || target.hasAttribute("download") || target.getAttribute("href")?.startsWith("#"))) return;

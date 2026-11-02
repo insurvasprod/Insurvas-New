@@ -22,6 +22,14 @@ up/down/delete toolbar on the picked question; the "add a question" picker opens
 panel that says what partners will experience, generated from the settings. Section names such as
 "How to reach them" are suggested defaults; each agency's own labels stay theirs.
 
+**Revision 4: layout A, built 2026-10-30** (owner pick; canvas page "Settings · Form templates",
+boards FtA and every edit FtE01–FtE18, FtP01–FtP03). The form plus one side panel: "This form" rows
+(Who can apply, Topics, Lead steps, Version with who published it and when, For your agents only) until
+a question is picked, then that question. Live / N changes, Review (changes + blockers), Undo all and
+Publish version N sit on the title's line; products are chips; each part's move and remove are in a ⋯
+menu; the phone preview is always one column; below 1280px the panel is a sheet drawn on `<body>`.
+No API change except `published` on GET /api/app/templates.
+
 The light-theme layout below was round 1. It still describes the features, the storage and the tests; the
 look follows revision 2.
 

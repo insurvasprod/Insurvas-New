@@ -231,7 +231,7 @@ export function VendorSettings({ row, locked, onSaved, onDelete, deleting = fals
     }
   }
 
-  const label = (text: string) => <span className="text-xs font-semibold tracking-[0.06em] text-[var(--ink)] uppercase">{text}</span>;
+  const label = (text: string) => <span className="text-xs font-semibold text-[var(--ink)]">{text}</span>;
   const card = (children: ReactNode) => <div className={cn(cardSurface, "flex min-w-0 flex-col gap-6 p-5")}>{children}</div>;
   return <div ref={scope} className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
     <LeadsInSlot slot="continue">

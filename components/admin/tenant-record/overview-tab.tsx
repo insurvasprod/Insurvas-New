@@ -60,7 +60,7 @@ function Facts({ items }: { items: { label: string; value: string }[] }) {
     <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
       {items.map((item) => (
         <div key={item.label} className="min-w-0">
-          <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{item.label}</dt>
+          <dt className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">{item.label}</dt>
           <dd className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] break-words text-[var(--ink)] tabular-nums">
             {item.value}
           </dd>

@@ -151,7 +151,7 @@ export function TaxBoard({ data, readOnly }: { data: TaxData; readOnly: boolean 
             <thead><tr><th>Category</th><th className="w-[160px] text-right">{data.year}</th></tr></thead>
             <tbody>{TAX_CATEGORIES.filter((k) => byCategory.has(k)).map((k) => <tr key={k}><td>{TAX_CATEGORY_LABELS[k]}</td><td className="text-right tabular-nums">{money(byCategory.get(k) ?? 0)}</td></tr>)}</tbody>
             <tbody>
-              <tr><td colSpan={2} className="pt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Which bucket each kind of money goes into — a suggestion you can change</td></tr>
+              <tr><td colSpan={2} className="pt-6 text-xs font-semibold text-muted-foreground">Which bucket each kind of money goes into — a suggestion you can change</td></tr>
               {data.map.map((m) => (
                 <tr key={`${m.sourceType}-${m.sourceValue}`}>
                   <td>{SOURCE_LABEL[m.sourceType]}: {m.sourceValue.replace(/_/g, " ")}{m.overridden ? <span className="text-xs text-muted-foreground"> · yours (default: {TAX_CATEGORY_LABELS[m.defaultCategory]})</span> : null}</td>

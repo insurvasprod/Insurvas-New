@@ -2,7 +2,7 @@
 
 import { createElement, Fragment } from "react";
 import { Check, CircleAlert, Inbox, Sparkles, TriangleAlert, X } from "lucide-react";
-import { sileo, type SileoOptions, type SileoState } from "sileo";
+import { sileo, type SileoOptions, type SileoPosition, type SileoState } from "sileo";
 
 import { playFor, setCallInProgress } from "./sound";
 import { detailFor } from "./suggest.ts";
@@ -35,6 +35,11 @@ export type NotifyOptions = {
   action?: { label: string; onClick: () => void };
   /** Overrides the treatment's duration. Rarely the right call — the durations are the design. */
   durationMs?: number;
+  /**
+   * Where this one toast appears; the Toaster's top-right otherwise. For an Undo beside the work it
+   * undoes, on a page whose own actions sit top-right (Settings › Form templates: bottom-center).
+   */
+  position?: SileoPosition;
 };
 
 // How long each stays. Longer for anything the reader has to act on, because dismissing a blocker
@@ -88,6 +93,7 @@ function show(treatment: Treatment, title: string, options: NotifyOptions = {}, 
     title: long ? look.label : title,
     description: body,
     duration,
+    ...(options.position ? { position: options.position } : {}),
     // Opens at once and closes a second before it leaves, so a 3 s `done` shows its detail for 2 s.
     autopilot: { expand: 150, collapse: Math.max(0, duration - 1000) },
     // The label is for a screen reader: the badge's colour and glyph say it to everyone else.

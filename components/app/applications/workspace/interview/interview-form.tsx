@@ -209,7 +209,7 @@ export function InterviewQuestionList({ questions, answers, readOnly, onAnswers,
       {shown.map((q, i) => (
         <Fragment key={q.key}>
           {sections > 1 && (i === 0 || sectionKey(shown[i - 1]) !== sectionKey(q)) && (
-            <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">
+            <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-5 py-2 text-xs font-semibold text-[var(--muted)]">
               {sectionHeading(q)}
             </div>
           )}

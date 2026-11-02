@@ -34,6 +34,7 @@ export const AUDITED_SECTIONS: ReadonlyArray<{ key: string; label: string; modul
   { key: "calling-windows", label: "Calling windows", module: "LA-2.4" },
   { key: "pipelines", label: "Pipelines", module: "LA-1.20" },
   { key: "dispositions", label: "Dispositions", module: "LA-2.9" },
+  { key: "sales-pipeline-sync", label: "Application stages", module: "LA-3.23" },
 ];
 
 export type SettingsAuditEntry = {

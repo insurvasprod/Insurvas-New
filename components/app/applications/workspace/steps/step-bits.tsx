@@ -14,7 +14,7 @@ import type { ValueSource } from "@/lib/applications/constants";
 import type { FieldValue } from "@/lib/applications/types";
 import { cn } from "@/lib/utils";
 
-import { useWorkspace } from "@/components/app/applications/workspace/context";
+import { useOptionalWorkspace, useWorkspace } from "@/components/app/applications/workspace/context";
 
 /** How a carried-in value says where it came from. A typed value says nothing. */
 export const PREFILL_FROM: Record<ValueSource, string> = {
@@ -46,7 +46,8 @@ export function PrefillHint({ fv, fieldKey, readOnly, extra, confirmable = true 
   /** False for a value read straight from an interview answer: there is no stored field to mark checked. */
   confirmable?: boolean;
 }) {
-  const { markReviewed } = useWorkspace();
+  // No workspace outside a case (the settings preview): nothing there is prefilled, so nothing is marked.
+  const markReviewed = useOptionalWorkspace()?.markReviewed ?? (() => {});
   if (!isPrefilled(fv)) return extra ? <span className="mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]">{extra}</span> : null;
   return (
     <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-xs leading-[1.5] text-[var(--accent-ink)]">

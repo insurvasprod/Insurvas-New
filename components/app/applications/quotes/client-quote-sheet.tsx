@@ -26,7 +26,7 @@ export type ClientSheetProps = {
   notice?: ReactNode;
 };
 
-const label = "text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)] print:text-neutral-600";
+const label = "text-xs font-semibold text-[var(--muted)] print:text-neutral-600";
 
 export function ClientQuoteSheet({ agencyName, productLine, clientName, callName, dateLabel, quotes, draftDay, agent, notice }: ClientSheetProps) {
   const cols = quotes.length >= 3 ? "sm:grid-cols-3" : quotes.length === 2 ? "sm:grid-cols-2" : "";

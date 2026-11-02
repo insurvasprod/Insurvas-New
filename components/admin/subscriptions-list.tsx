@@ -303,7 +303,7 @@ function SubscriptionDetail({ row }: { row: SubscriptionListRow }) {
       <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
         {facts.map((fact) => (
           <div key={fact.label} className="min-w-0">
-            <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{fact.label}</dt>
+            <dt className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">{fact.label}</dt>
             <dd className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] tabular-nums">{fact.value}</dd>
           </div>
         ))}

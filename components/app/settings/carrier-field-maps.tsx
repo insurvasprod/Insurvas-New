@@ -44,7 +44,7 @@ const LOOK: Record<Autofill, { label: string; fg: string; tint: string; line: st
   insurvas: { label: "Insurvas map", fg: "text-[var(--accent-ink)]", tint: "bg-[var(--surface-alt)]", line: "border-[var(--border)]" },
   none: { label: "No map", fg: "text-[var(--error-ink)]", tint: "bg-[color-mix(in_srgb,var(--error)_14%,transparent)]", line: "border-[var(--border)]" },
 };
-const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
+const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const tile = `${cardInset} px-3 py-2.5`;
 const CHIP = "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--border-strong)] px-3 text-xs font-semibold text-[var(--body)] hover:border-[var(--accent-ink)] disabled:cursor-not-allowed disabled:opacity-50";
 const DAY = 24 * 60 * 60 * 1000;
@@ -221,7 +221,7 @@ function Autofill({ carrier, map, option, canEdit, now, onChanged }: {
   const start = () => run("Starting a map", () => mapRequest("/api/app/field-maps", { method: "POST", body: JSON.stringify({ carrier_id: carrier.id, carrier_product_id: null, origin: origin.trim() }) }), (m) => `Draft v${m.version} started for ${carrier.name}`);
 
   const openSite = site ? (label: string) => (
-    <a href={site} target="_blank" rel="noopener noreferrer" title="Opens the carrier's site. The Insurvas extension's side panel highlights each field the map finds." className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--primary)] px-4 text-sm font-semibold text-[var(--on-primary)] hover:bg-[var(--accent-hover)]">
+    <a href={site} target="_blank" rel="noopener noreferrer" title="Opens the carrier's site. The Insurvas extension's side panel highlights each field the map finds." className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-sm font-semibold text-[var(--on-primary)] hover:bg-[var(--accent-hover)]">
       {label}<ExternalLink className="size-3.5" aria-hidden="true" />
     </a>
   ) : () => null;
@@ -237,7 +237,7 @@ function Autofill({ carrier, map, option, canEdit, now, onChanged }: {
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="flex flex-wrap items-center gap-2.5">
-          <span className="flex items-center gap-1 text-sm font-semibold tracking-[0.04em] uppercase text-[var(--ink)]">Autofill<Hint id="hint-fm-autofill" label="About autofill" text="The field map: where each answer goes on this carrier's application, so the browser extension can type it in for the agent." /></span>
+          <span className="flex items-center gap-1 text-sm font-semibold text-[var(--ink)]">Autofill<Hint id="hint-fm-autofill" label="About autofill" text="The field map: where each answer goes on this carrier's application, so the browser extension can type it in for the agent." /></span>
           <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", look.fg, look.tint)}>{look.label}</span>
           {site && <code className="font-mono text-xs text-[var(--muted)]">{site.replace(/^https:\/\//, "")}</code>}
         </span>

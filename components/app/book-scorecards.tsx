@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 
 import { ViewTabs } from "@/components/app/book-of-business-views";
+import { InReportsSlot } from "@/components/app/reports/reports-slot";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
@@ -92,7 +93,8 @@ function historyNote(history: ScorecardsView["history"]): string {
   return `${issued}${issued ? " " : ""}${names}: counted on policies issued since ${late.length === 1 ? "its" : "their"} first file, because ${late.length === 1 ? "its file lists" : "their files list"} only live policies, or lapses without the date they ended, so older policies can't be judged fairly.`;
 }
 
-export function BookScorecards({ model }: { model: ScorecardsView }) {
+/** `framed`: inside the Reports page (components/app/reports/reports-page.tsx): the views and the period go to its top row. */
+export function BookScorecards({ model, framed = false }: { model: ScorecardsView; framed?: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const base = `/app/book-scorecards?view=${model.view}&months=${model.months}`;
@@ -101,6 +103,7 @@ export function BookScorecards({ model }: { model: ScorecardsView }) {
   const refresh = <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />;
 
   const tabs = (
+    <InReportsSlot framed={framed} slot="lead">
     <div className="flex flex-wrap items-center gap-3">
       <ViewTabs label="Scorecard views" active={model.view} tabs={[
         { key: "overview", label: "Overview", href: `/app/book-scorecards?view=overview&months=${model.months}` },
@@ -111,6 +114,7 @@ export function BookScorecards({ model }: { model: ScorecardsView }) {
         {model.periods.map((m) => <option key={m} value={m}>Last {m} months</option>)}
       </select>
     </div>
+    </InReportsSlot>
   );
 
   if (model.policies === 0) {
@@ -159,7 +163,7 @@ function Overview({ model, Fig, refresh }: Parts) {
         )}
       </PagedTableCard>
 
-      <PagedTableCard key={bookDim} total={book.length} noun="rows" title="Book of business" toolbar={<DataToolbar actions={<><CsvButton name={`book-by-${bookDim}`} header={[DIMENSION_LABELS[bookDim], "Policies", "In force", "In-force premium", "Premium, all policies", "No premium on file"]} rows={book.map((s) => [bookDim === "status" ? statusLabel(s.key) : s.name, s.policies, s.inForce, dollars(s.inForceCents), dollars(s.annualCents), s.annualUnknown])} />{refresh}</>}><SliceTabs label="Book by" value={bookDim} options={["carrier", "product", "status", "agent", "agency"] as const} onChange={setBookDim} /></DataToolbar>}>
+      <PagedTableCard key={`book-${bookDim}`} total={book.length} noun="rows" title="Book of business" toolbar={<DataToolbar actions={<><CsvButton name={`book-by-${bookDim}`} header={[DIMENSION_LABELS[bookDim], "Policies", "In force", "In-force premium", "Premium, all policies", "No premium on file"]} rows={book.map((s) => [bookDim === "status" ? statusLabel(s.key) : s.name, s.policies, s.inForce, dollars(s.inForceCents), dollars(s.annualCents), s.annualUnknown])} />{refresh}</>}><SliceTabs label="Book by" value={bookDim} options={["carrier", "product", "status", "agent", "agency"] as const} onChange={setBookDim} /></DataToolbar>}>
         <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
           <thead><tr><th>{DIMENSION_LABELS[bookDim]}</th><th className="w-[110px] text-right">Policies</th><th className="w-[110px] text-right">In force</th><th className="w-[170px] text-right">In-force premium</th><th className="w-[170px] text-right">Premium, all policies</th></tr></thead>
           <PagedBody>
@@ -198,7 +202,7 @@ function Overview({ model, Fig, refresh }: Parts) {
         </table>
       </TableCard>
 
-      <PagedTableCard key={cbDim} total={cbRows.length} noun="rows" title="Chargeback ratio" toolbar={<DataToolbar actions={<CsvButton name={`chargebacks-by-${cbDim}`} header={[DIMENSION_LABELS[cbDim], "Advanced", "Charged back", "Policies advanced", "Ratio", "Charged back on earlier advances"]} rows={cbRows.map((r) => [r.name, dollars(r.advancedCents), dollars(r.chargedBackCents), r.advancedPolicies, chargebackText(r, model.minSample), dollars(r.earlierCents)])} />}><SliceTabs label="Chargebacks by" value={cbDim} options={["carrier", "product", "agent", "source"] as const} onChange={setCbDim} /></DataToolbar>}>
+      <PagedTableCard key={`chargebacks-${cbDim}`} total={cbRows.length} noun="rows" title="Chargeback ratio" toolbar={<DataToolbar actions={<CsvButton name={`chargebacks-by-${cbDim}`} header={[DIMENSION_LABELS[cbDim], "Advanced", "Charged back", "Policies advanced", "Ratio", "Charged back on earlier advances"]} rows={cbRows.map((r) => [r.name, dollars(r.advancedCents), dollars(r.chargedBackCents), r.advancedPolicies, chargebackText(r, model.minSample), dollars(r.earlierCents)])} />}><SliceTabs label="Chargebacks by" value={cbDim} options={["carrier", "product", "agent", "source"] as const} onChange={setCbDim} /></DataToolbar>}>
         {cbRows.length === 0 ? <EmptyState title="No advances on file yet" hint="The ratio appears once a commission file with advances has been read." /> : (
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
             <thead><tr><th>{DIMENSION_LABELS[cbDim]}</th><th className="w-[150px] text-right">Advanced</th><th className="w-[150px] text-right">Charged back</th><th className="w-[120px] text-right">Ratio</th></tr></thead>

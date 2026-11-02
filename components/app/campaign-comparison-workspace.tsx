@@ -34,7 +34,7 @@ const TONE_TEXT: Record<"info" | "warning" | "success", string> = {
   warning: "text-[var(--warning-ink)]",
   success: "text-[var(--success-ink)]",
 };
-const fact = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+const fact = "text-xs font-semibold leading-[1.33] text-muted-foreground";
 
 const label: Record<ComparisonMetricKey, string> = { contact_rate: "Contact rate", conversion_rate: "Issued conversion", cost_per_issued: "Cost per issued policy" };
 function dollars(cents: number | null) { return cents == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }

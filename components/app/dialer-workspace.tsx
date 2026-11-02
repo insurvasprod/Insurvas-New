@@ -20,7 +20,7 @@ import { useNow } from "@/components/app/applications/outcome/use-now";
 import { BookAppointmentDialog } from "@/components/app/dialer/book-appointment-dialog";
 import { ScheduleDialog } from "@/components/app/dialer/schedule-dialog";
 import { CallbackPicker } from "@/components/app/callbacks/callback-picker";
-import { CalendarPlus, Check, Phone, PhoneCall, ShieldCheck, Zap, type LucideIcon } from "lucide-react";
+import { CalendarPlus, Check, Phone, PhoneCall, ShieldCheck, SkipForward, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 export function DialerWorkspace({ readOnly = false, role = "producer", canCheckNumber = false, requestedLeadId = null }: { readOnly?: boolean; role?: string; canCheckNumber?: boolean; requestedLeadId?: string | null }) {
@@ -211,7 +211,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
           {/* Auto-next: serve the next lead as soon as an outcome is recorded (on by default). */}
           {!searchMode && !readOnly && (
             <Button type="button" variant="outline" onClick={() => setAutoNext(!autoNext)} aria-pressed={autoNext} title={autoNext ? "The next lead is served as soon as you record an outcome." : "After an outcome the screen clears; serve the next lead when you are ready."} className={autoNext ? "border-[var(--primary)] text-[var(--accent-ink)]" : undefined}>
-              <Zap aria-hidden="true" />Auto-next {autoNext ? "on" : "off"}
+              <SkipForward aria-hidden="true" />Auto-next {autoNext ? "on" : "off"}
             </Button>
           )}
           {!readOnly && <Button data-guide="dialer-next" type="button" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>

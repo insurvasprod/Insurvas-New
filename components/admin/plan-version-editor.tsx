@@ -368,7 +368,7 @@ export function PlanVersionEditor({
               {previewMenu.length === 0 && <p className="text-sm text-[var(--nav-muted)]">Nothing — no feature granted.</p>}
               {previewMenu.map((section) => (
                 <div key={section.id} className="mb-3 last:mb-0">
-                  <p className="mb-1 text-xs font-semibold tracking-[0.02em] uppercase text-[var(--nav-muted)]">{section.label}</p>
+                  <p className="mb-1 text-xs font-semibold text-[var(--nav-muted)]">{section.label}</p>
                   {section.items.map((item) => <p key={item.key} className="py-0.5 pl-2 text-sm text-[var(--nav-ink)]">{item.label}</p>)}
                 </div>
               ))}

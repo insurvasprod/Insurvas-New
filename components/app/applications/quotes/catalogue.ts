@@ -39,7 +39,7 @@ export type CarrierProduct = {
 };
 
 /** One field of the quotation template (LA-3.4), in the template's order. */
-export type QuotationField = { key: string; label: string; type: string; required: boolean; options: string[] };
+export type QuotationField = { key: string; label: string; type: string; required: boolean; options: string[]; /** The note the agent reads under the input. */ help?: string };
 
 /** `validDays`: how long a quote typed on it stands before the carrier must be asked again (default 30). */
 export type QuotationTemplate = { id: string; version: number; ageBasis: AgeBasis; validDays?: number; fields?: QuotationField[] };

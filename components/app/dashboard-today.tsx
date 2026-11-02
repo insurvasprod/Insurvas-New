@@ -110,7 +110,7 @@ export function NextCallback({ callback, serverNow, href }: { callback: NonNulla
       href={href}
       aria-label={`Next callback: ${callback.name}, ${left.text}, ${theirs} their time`}
       title={`${callback.name} · ${theirs} their time`}
-      className="group inline-flex h-9 min-w-0 max-w-full items-center gap-2 rounded-full border border-border bg-[var(--surface-alt)] px-3 text-sm text-inherit no-underline transition-colors hover:border-[var(--border-strong)]"
+      className="group inline-flex h-9 min-w-0 max-w-full items-center gap-2 rounded-lg border border-border bg-[var(--surface-alt)] px-3 text-sm text-inherit no-underline transition-colors hover:border-[var(--border-strong)]"
     >
       <span className={`size-2 shrink-0 rounded-full ${left.late ? "bg-[var(--error)]" : "bg-[var(--primary)]"} ${reduced ? "" : "m-live"}`} aria-hidden="true" />
       <span className="truncate text-muted-foreground">Next · <span className="font-semibold text-foreground">{callback.name}</span></span>

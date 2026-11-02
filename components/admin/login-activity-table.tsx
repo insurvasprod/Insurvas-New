@@ -130,7 +130,7 @@ function PagedFooter({ total }: { total: number }) {
   );
 }
 
-const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
+const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold whitespace-nowrap text-[var(--muted)]";
 const TD = "border-t border-[var(--border)] px-3 py-2 text-left align-middle text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 function BoardLoginTable({

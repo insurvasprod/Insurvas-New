@@ -138,7 +138,7 @@ function DetailView({
 
 function SectionTitle({ title, count }: { title: string; count: number }) {
   return (
-    <h3 className="m-0 flex items-center gap-2 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
+    <h3 className="m-0 flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">
       {title}<span className="tabular-nums">{count}</span>
     </h3>
   );

@@ -19,7 +19,7 @@ import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS, type ProductCategory, type
 import { cn } from "@/lib/utils";
 import { ProductDialog } from "./product-dialog";
 
-const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 export type ProductUsage = { templates: number; partners: number };

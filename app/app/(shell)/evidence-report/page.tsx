@@ -5,14 +5,15 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { EvidenceReportView } from "@/components/app/compliance/evidence-report";
-import { PageHeader } from "@/components/ui/page-header";
+import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
 
 /**
  * Setup › Evidence report (LA-6.3, Notion sprint). With no number: the book-wide gap scan — where
  * the gaps are while they can still be fixed. With a number (or a lead, or a client): every
  * compliance record we hold about it, gaps first. Owner and producer only. Every generation is logged.
+ * The Evidence step of the one Compliance page (2026-10-30); `?focus=<finding>` opens that finding's numbers.
  */
-export default async function EvidenceReportPage({ searchParams }: { searchParams: Promise<{ phone?: string; lead?: string; contact?: string; from?: string; to?: string }> }) {
+export default async function EvidenceReportPage({ searchParams }: { searchParams: Promise<{ phone?: string; lead?: string; contact?: string; from?: string; to?: string; focus?: string }> }) {
   const guard = await guardPage("litigation_packet");
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Evidence report" description="Every compliance record held about a number, and every gap." />;
@@ -45,11 +46,9 @@ export default async function EvidenceReportPage({ searchParams }: { searchParam
   }
   // A bad range keeps the form on screen with the reason, as a bad number does: it used to replace the
   // whole page, leaving nothing to correct the dates with (QA pass 2026-10-22).
-  const content = <EvidenceReportView query={query} report={report} scan={scan} problem={"error" in range ? range.error : problem} />;
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Evidence report" description="What we hold about a number — and what is missing." />
-      {content}
-    </div>
+    <ComplianceFlowPage step="evidence">
+      <EvidenceReportView query={query} report={report} scan={scan} problem={"error" in range ? range.error : problem} focus={q.focus ?? null} />
+    </ComplianceFlowPage>
   );
 }

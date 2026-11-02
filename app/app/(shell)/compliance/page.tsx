@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowRight, CircleAlert, TriangleAlert } from "lucide-react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { loadComplianceDashboard } from "@/lib/compliance/dashboard";
@@ -7,22 +8,23 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { EmptyState } from "@/components/ui/page-states";
+import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
+import { cn } from "@/lib/utils";
 
 /**
- * Setup › Compliance (LA-6.7, Notion sprint). Am I exposed right now — in about five seconds.
- * Deadlines and active problems on top, in severity order; standing coverage below. Every figure
- * opens the rows behind it. Owner and producer only.
+ * Compliance › Overview (LA-6.7, Notion sprint), the first step of the one Compliance page. Am I exposed
+ * right now — in about five seconds. Standing coverage on top (owner 2026-10-30), then deadlines and active
+ * problems in severity order, each with the button that opens its fix (LA-6.7: "everything clicks through"). Every
+ * figure opens the rows behind it. Owner and producer only. Compliance settings open from the rail's foot.
  */
-const ALERT_STYLE: Record<AlertSeverity, string> = {
-  incident: "border-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)] font-semibold",
-  critical: "border-[color-mix(in_srgb,var(--error)_40%,transparent)] bg-[var(--error-surface)] text-[var(--error-ink)]",
-  warning: "border-[color-mix(in_srgb,var(--warning)_40%,transparent)] bg-[var(--warning-surface)] text-[var(--warning-ink)]",
+const MARK: Record<AlertSeverity, { icon: typeof CircleAlert; tint: string; label: string }> = {
+  incident: { icon: CircleAlert, tint: "bg-[var(--error-surface)] text-[var(--error-ink)]", label: "Incident" },
+  critical: { icon: CircleAlert, tint: "bg-[var(--error-surface)] text-[var(--error-ink)]", label: "Fix today" },
+  warning: { icon: TriangleAlert, tint: "bg-[var(--warning-surface)] text-[var(--warning-ink)]", label: "Soon" },
 };
-const MARK: Record<AlertSeverity, string> = { incident: "Incident", critical: "●", warning: "⚠" };
 
 export default async function CompliancePage() {
   const guard = await guardPage("tcpa_checker");
@@ -36,18 +38,7 @@ export default async function CompliancePage() {
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Compliance" detail="In an agency, the owner and admins handle compliance." />;
   const { alerts, tiles } = await loadComplianceDashboard({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Compliance" description="Am I exposed right now?" actions={guard.role === "owner" ? <Button asChild variant="outline"><Link href="/app/compliance/settings">Settings</Link></Button> : undefined} />
-      {alerts.length ? (
-        <ul className="flex flex-col gap-2" aria-label="Deadlines and active problems">
-          {alerts.map((a) => (
-            <li key={a.key} role={a.severity === "warning" ? undefined : "alert"} className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${ALERT_STYLE[a.severity]}`}>
-              <span><span className="mr-2" aria-hidden={a.severity !== "incident"}>{MARK[a.severity]}</span>{a.text}</span>
-              <Link href={a.href} className="font-semibold underline">{a.action}</Link>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+    <ComplianceFlowPage step="overview">
       <StatStrip label="Standing coverage">
         {tiles.map((t) => (
           <StatTile
@@ -58,13 +49,30 @@ export default async function CompliancePage() {
             valueSize={t.value && /\d/.test(t.value) ? "figure" : "text"}
             valueTone={t.tone}
             footnote={t.footnote}
-            action={<Link href={t.href} className="underline">{t.action}</Link>}
+            action={<Link href={t.href} className="font-semibold text-[var(--accent-ink)] hover:underline">{t.action}</Link>}
           />
         ))}
       </StatStrip>
-      {!alerts.length ? (
-        <TableCard><EmptyState title="Nothing needs you today" hint="No deadline is close, no number was called after it should have stopped, and no licence is about to lapse." /></TableCard>
-      ) : null}
-    </div>
+      {/* Needs you, under the figures (owner 2026-10-30): the next step is its first row, so there is no separate "next up" line. */}
+      <TableCard title={alerts.length ? `Needs you · ${alerts.length}` : "Needs you"}>
+        {alerts.length ? (
+          <ul className="m-0 list-none divide-y divide-border p-0" aria-label="Deadlines and active problems">
+            {alerts.map((a) => {
+              const mark = MARK[a.severity];
+              const Icon = mark.icon;
+              return (
+                <li key={a.key} role={a.severity === "warning" ? undefined : "alert"} className="m-row flex min-h-[2.75rem] flex-wrap items-center gap-3 px-4 py-2">
+                  <span title={mark.label} aria-label={mark.label} className={cn("grid size-7 shrink-0 place-items-center rounded-full", mark.tint)}><Icon className="size-4" aria-hidden="true" /></span>
+                  <span className={cn("min-w-0 flex-1 text-sm text-[var(--ink)]", a.severity === "incident" && "font-semibold")}>{a.text}</span>
+                  <Button asChild variant="outline" size="sm"><Link href={a.href}>{a.action}<ArrowRight aria-hidden="true" /></Link></Button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <EmptyState title="Nothing needs you today" hint="No deadline is close, no number was called after it should have stopped, and no licence is about to lapse." />
+        )}
+      </TableCard>
+    </ComplianceFlowPage>
   );
 }

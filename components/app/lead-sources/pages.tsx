@@ -14,7 +14,7 @@ import { NeedsYou } from "@/components/app/lead-sources/needs-you";
 import { SourceTabs, type SourceTab } from "@/components/app/lead-sources/source-tabs";
 import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
 import { Callout } from "@/components/app/settings/primitives";
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -122,13 +122,11 @@ export async function VendorBillsPage({ tab, open, vendor, guards }: { tab: Vend
   const readOnly = (canInvoices ? money : returns).entitlement.access === "read_only";
 
   return (
-    <>
-      <div className="m-stagger flex flex-col gap-6">
-        <PageHeader title="Vendor bills" description="What you paid for leads, and what vendors owe you back." />
-        {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}
-        {canInvoices && <NeedsYou access={{ lists: false, claims: false, invoices: true, invoicesHref: "/app/vendor-bills?tab=invoices", campaignsHref: null }} only={["invoices"]} />}
-        <SourceTabs label="Vendor bills" tabs={tabs} initialTab={tab} />
-      </div>
-    </>
+    // Accounting › Vendor bills (owner 2026-11-02): a step of the one Accounting page; Returns stays its tab.
+    <AccountingPage step="bills">
+      {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}
+      {canInvoices && <NeedsYou access={{ lists: false, claims: false, invoices: true, invoicesHref: "/app/vendor-bills?tab=invoices", campaignsHref: null }} only={["invoices"]} />}
+      <SourceTabs label="Vendor bills" tabs={tabs} initialTab={tab} />
+    </AccountingPage>
   );
 }

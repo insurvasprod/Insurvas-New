@@ -17,7 +17,7 @@ export function WaitBar({ seconds, warnSeconds, escalateSeconds, className }: { 
   const tone = seconds >= escalateSeconds ? "var(--error)" : seconds >= warnSeconds ? "var(--warning)" : "var(--success)";
   return (
     <span aria-hidden className={cn("relative block h-2 min-w-16 flex-1 rounded-full bg-[var(--surface-alt)]", className)}>
-      <span className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out" style={{ width: `${width}%`, background: `linear-gradient(90deg, var(--success), ${tone})`, boxShadow: `0 0 10px ${tone}` }} />
+      <span className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out" style={{ width: `${width}%`, background: tone }} />
       <span className="absolute -inset-y-1 w-px bg-[var(--warning)] opacity-70" style={{ left: `${(warnSeconds / full) * 100}%` }} />
       <span className="absolute -inset-y-1 w-px bg-[var(--error)] opacity-70" style={{ left: `${(escalateSeconds / full) * 100}%` }} />
     </span>

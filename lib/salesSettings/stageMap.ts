@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import type { Actor } from "@/lib/applications/http";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError, type DbError } from "@/lib/applications/db";
+import { SYNC_KEY_LABEL } from "@/lib/applications/stageSync";
+import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { auditSales } from "./settings";
 
 /**
@@ -31,7 +33,7 @@ type KeyMap = Record<StageSyncKey, string | null>;
 export type StageMapView = { pipelines: PipelineOption[]; map: KeyMap; maps: Record<string, KeyMap>; perPipeline: boolean; stored: number; canEdit: boolean };
 
 function fail(error: DbError, what: string): never {
-  if (isMissingSchema(error)) throw new SchemaPendingError("Pipeline sync");
+  if (isMissingSchema(error)) throw new SchemaPendingError("Application stages");
   if (error?.message?.includes("STAGE_MAP_FOREIGN_STAGE") || error?.message?.includes("STAGE_MAP_OTHER_PIPELINE")) throw new ApplicationError("STAGE_NOT_FOUND", "That stage isn't in this pipeline.", 400);
   throw new ApplicationError("STAGE_MAP_UNAVAILABLE", `${what}: ${error?.message ?? "unknown error"}`, 500);
 }
@@ -58,9 +60,9 @@ type StoredRow = { sync_key: StageSyncKey; stage_id: string; pipeline_id: string
 async function storedMap(tenantId: string): Promise<{ rows: StoredRow[]; perPipeline: boolean }> {
   const full = await db().from("tenant_application_stage_map").select("sync_key, stage_id, pipeline_id").eq("tenant_id", tenantId);
   if (!full.error) return { rows: rows<StoredRow>(full.data), perPipeline: true };
-  if (!isMissingSchema(full.error) && !/pipeline_id/.test(full.error.message ?? "")) fail(full.error, "Could not load the pipeline sync");
+  if (!isMissingSchema(full.error) && !/pipeline_id/.test(full.error.message ?? "")) fail(full.error, "Could not load the application stages");
   const legacy = await db().from("tenant_application_stage_map").select("sync_key, stage_id").eq("tenant_id", tenantId);
-  if (legacy.error) fail(legacy.error, "Could not load the pipeline sync");
+  if (legacy.error) fail(legacy.error, "Could not load the application stages");
   return { rows: rows<{ sync_key: StageSyncKey; stage_id: string }>(legacy.data).map((r) => ({ ...r, pipeline_id: null })), perPipeline: false };
 }
 
@@ -93,14 +95,14 @@ export async function saveStageMap(actor: Actor, next: Partial<Record<StageSyncK
   const upserts = changed.filter((key) => after[key]).map((key) => ({ tenant_id: actor.tenantId, sync_key: key, stage_id: after[key], updated_by: actor.userId, ...(perPipeline ? { pipeline_id: pipeline!.id } : {}) }));
   if (upserts.length) {
     const up = await client.from("tenant_application_stage_map").upsert(upserts, { onConflict: perPipeline ? "tenant_id,pipeline_id,sync_key" : "tenant_id,sync_key" });
-    if (up.error) fail(up.error, "Could not save the pipeline sync");
+    if (up.error) fail(up.error, "Could not save the application stages");
   }
   const cleared = changed.filter((key) => !after[key]);
   if (cleared.length) {
     let del = client.from("tenant_application_stage_map").delete().eq("tenant_id", actor.tenantId).in("sync_key", cleared);
     if (perPipeline) del = del.eq("pipeline_id", pipeline!.id);
     const done = await del;
-    if (done.error) fail(done.error, "Could not save the pipeline sync");
+    if (done.error) fail(done.error, "Could not save the application stages");
   }
   const name = (id: string | null) => (id ? pipelines.flatMap((p) => p.stages.map((s) => ({ ...s, pipeline: p.name }))).find((s) => s.id === id) : null);
   await auditSales(actor, "tenant.application_stage_map_updated", "tenant_application_stage_map", actor.tenantId, {
@@ -109,5 +111,21 @@ export async function saveStageMap(actor: Actor, next: Partial<Record<StageSyncK
     before: Object.fromEntries(changed.map((key) => [key, before[key] ? { stageId: before[key], stage: name(before[key])?.name ?? null } : null])),
     after: Object.fromEntries(changed.map((key) => [key, after[key] ? { stageId: after[key], stage: name(after[key])?.name ?? null, pipeline: name(after[key])?.pipeline ?? null } : null])),
   });
+  // LA-8.8 · the section's "Last changed by" line and the settings history. A stage that has since been
+  // archived has no name to read; the row says so rather than storing an id.
+  const stageLabel = (id: string | null) => (id ? name(id)?.name ?? "A stage that was archived" : UNMAPPED_LABEL);
+  await recordSettingsChanges({
+    tenantId: actor.tenantId,
+    actorId: actor.userId,
+    section: "sales-pipeline-sync",
+    changes: changed.map((key) => ({
+      key: `${pipeline?.id ?? "agency"}.${key}`,
+      label: `${pipeline ? `${pipeline.name} — ` : ""}${SYNC_KEY_LABEL[key]}`,
+      from: stageLabel(before[key]),
+      to: stageLabel(after[key]),
+    })),
+  });
   return getStageMap(actor);
 }
+
+const UNMAPPED_LABEL = "Doesn't move the card";

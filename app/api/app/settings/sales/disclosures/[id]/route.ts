@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
-import { discardDraft, disclosureInputSchema, retireDisclosure, saveDisclosure } from "@/lib/salesSettings/disclosures";
+import { deleteDocument, discardDraft, disclosureInputSchema, retireDisclosure, saveDisclosure } from "@/lib/salesSettings/disclosures";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 const notFound = () => NextResponse.json({ error: "That disclosure could not be found." }, { status: 404 });
 
 /**
  * LA-3.10 · save a disclosure (owners). A draft is saved in place; a published version is never
- * changed — the edit becomes version N + 1 as a draft. DELETE discards a draft (only a draft).
+ * changed — the edit becomes version N + 1 as a draft. DELETE discards a draft (only a draft);
+ * DELETE ?document=1 deletes the whole document this version belongs to, if no application carries it.
  * PATCH `{ status: "retired" }` retires a published version (it stays on the applications that
  * acknowledged it).
  */
@@ -33,7 +34,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
   if (!isUuid(id)) return notFound();
   try {
-    return NextResponse.json(await discardDraft(actorOf(auth, request), id));
+    const whole = new URL(request.url).searchParams.get("document") === "1";
+    return NextResponse.json(whole ? await deleteDocument(actorOf(auth, request), id) : await discardDraft(actorOf(auth, request), id));
   } catch (error) {
     return failure(error);
   }

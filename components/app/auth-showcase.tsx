@@ -95,7 +95,7 @@ export function AuthShowcase({ step = 0, footnote }: { step?: number; footnote?:
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusInside(false); }}
     >
       <div key={`copy-${scene.key}`} className={styles.copy}>
-        <p className="m-0 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-muted)]">{scene.eyebrow}</p>
+        <p className="m-0 text-xs font-semibold text-[var(--nav-muted)]">{scene.eyebrow}</p>
         <h2 className="mb-0 mt-3 max-w-[20ch] text-title-lg font-semibold leading-[1.08] tracking-[-0.035em] text-[var(--on-dark)] sm:text-headline-lg">
           {scene.title}
         </h2>
@@ -217,7 +217,7 @@ function DialerScreen() {
         <span className={`${styles.popIn} ${styles.glow} mt-3 flex items-center justify-center gap-1.5 rounded-md bg-[var(--primary)] py-2 text-xs font-semibold text-[var(--on-primary)]`} style={delay(5)}><Phone className="size-3.5" />Dial now</span>
       </div>
       <div>
-        <p className="m-0 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted)]">Before this call</p>
+        <p className="m-0 text-xs font-semibold text-[var(--muted)]">Before this call</p>
         <ul className="m-0 mt-2 list-none space-y-2 p-0">
           {checks.map((check, checkIndex) => (
             <li key={check} className={`${styles.rowIn} flex items-start gap-2 text-xs`} style={delay(checkIndex + 1)}>
@@ -250,7 +250,7 @@ function AttributionScreen() {
         ))}
       </div>
       <div className="mt-3 rounded-lg border border-[var(--border)] p-3">
-        <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-[0.06em] text-[var(--muted)]"><span>Source</span><span>Policies issued</span></div>
+        <div className="mb-2 flex justify-between text-xs font-semibold text-[var(--muted)]"><span>Source</span><span>Policies issued</span></div>
         <div className="space-y-2.5">
           {sources.map((source, sourceIndex) => (
             <div key={source.name}>

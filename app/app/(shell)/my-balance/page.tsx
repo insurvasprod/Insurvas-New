@@ -3,7 +3,7 @@ import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { myBalance, ProducerError } from "@/lib/accounting/producerStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -34,8 +34,7 @@ export default async function MyBalancePage() {
   }
   const money = (c: number) => formatCentsAsCurrency(c);
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="My balance" description="Your share of the commission, and what has come back." />
+    <AccountingPage step="splits" pathname="/app/my-balance">
       {!data ? <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>
         : !data.visible ? <TableCard><EmptyState title="Not shared" hint="Your agency has not turned on producer balances. Ask the owner." /></TableCard>
         : (
@@ -70,6 +69,6 @@ export default async function MyBalancePage() {
             ) : null}
           </>
         )}
-    </div>
+    </AccountingPage>
   );
 }

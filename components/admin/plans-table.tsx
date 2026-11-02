@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { PlanDialog } from "./plan-dialog";
 
 const CYCLE_SHORT = { monthly: "mo", quarterly: "qtr", yearly: "yr" } as const;
-const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 /** The cheapest offered cycle, with the others on hover. A plan with no price on any cycle cannot be sold. */

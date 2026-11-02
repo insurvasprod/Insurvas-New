@@ -64,7 +64,7 @@ const DEAL_RECORD_LABEL: Record<DealFlowStatus, string> = { partial: "Partial", 
 const STAGE_TONE: Record<DealFlowStageType, StatusTone> = { open: "info", won: "good", lost: "danger" };
 const MONEY_HINT = "Enter money as dollars and cents, like 71.40";
 
-const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const label12 = "text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 type View = "deals" | "funnel" | "partners";
 
 function todayFor(timeZone: string | null) {
@@ -618,7 +618,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                 ]}
               />
               <details className="group border-t border-border pt-3" open>
-                <summary className="cursor-pointer list-none text-xs font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Policy details</summary>
+                <summary className="cursor-pointer list-none text-xs font-semibold text-[var(--muted)]">Policy details</summary>
                 <div className="mt-3">
                   <KeyValues
                     items={[
@@ -638,7 +638,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
               </div>
               <IssuedPolicyPanel dealId={selectedRow.id} defaultCarrier={selectedRow.carrier} readOnly={data.readOnly} onChanged={() => void load(query)} />
               <details className="group border-t border-border pt-3">
-                <summary className="cursor-pointer list-none text-xs font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Submission timeline</summary>
+                <summary className="cursor-pointer list-none text-xs font-semibold text-[var(--muted)]">Submission timeline</summary>
                 <div className="mt-3"><Timeline items={timelineFor(selectedRow, timeZone)} /></div>
               </details>
             </DetailPanel>

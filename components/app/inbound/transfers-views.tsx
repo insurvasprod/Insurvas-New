@@ -17,14 +17,14 @@ export function TeamViews({ current }: { current: "now" | "all" }) {
     { key: "all", label: "All callers", href: "/app/inbound/team?tab=all" },
   ] as const;
   return (
-    <nav aria-label="Team views" className="inline-flex h-9 w-fit items-center gap-0.5 rounded-full border border-border p-0.5">
+    <nav aria-label="Team views" className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg border border-border p-0.5">
       {views.map((view) => (
         <Link
           key={view.key}
           href={view.href}
           aria-current={view.key === current ? "page" : undefined}
           className={cn(
-            "inline-flex h-8 items-center rounded-full px-3.5 text-sm font-semibold tracking-[-0.01em] no-underline transition-colors",
+            "inline-flex h-8 items-center rounded-md px-3.5 text-sm font-semibold no-underline transition-colors",
             view.key === current ? "bg-[var(--primary)] text-[var(--on-primary)]" : "text-muted-foreground hover:text-foreground",
           )}
         >

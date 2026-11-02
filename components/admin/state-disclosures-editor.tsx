@@ -334,7 +334,7 @@ export function StateDisclosureEditor({
                   <Button type="button" variant="outline" size="sm" onClick={() => setStates([...STATE_CODES])}>
                     Select all
                   </Button>
-                  <Button type="button" variant="ghost" className="h-8" onClick={() => setStates(row ? [row.state] : [])}>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setStates(row ? [row.state] : [])}>
                     {row ? "Only this state" : "Clear"}
                   </Button>
                 </>

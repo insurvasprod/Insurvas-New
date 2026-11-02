@@ -229,7 +229,7 @@ export function CallingWindowSettingsPanel() {
       {readOnly && <Callout tone="info" title="Only an owner can change calling windows. You are seeing what is in force." />}
 
       <SettingsGrid>
-        <SettingsCard title="Your agency’s hours" sub={`In the customer’s timezone. Narrowing only: federal law allows ${compact(FEDERAL_MINUTES.start)}–${compact(FEDERAL_MINUTES.end)}.`}>
+        <SettingsCard title="Your agency’s hours" info={`In the customer’s timezone. Narrowing only: federal law allows ${compact(FEDERAL_MINUTES.start)}–${compact(FEDERAL_MINUTES.end)}.`}>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Earliest" htmlFor="window-start">
               <input

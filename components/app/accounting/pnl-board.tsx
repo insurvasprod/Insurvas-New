@@ -139,7 +139,7 @@ export function PnlBoard({ data, query, taxMissing = 0 }: { data: PnlView; query
       <td />
     </tr>
   );
-  const heading = (label: string) => <tr><td colSpan={5} className="pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</td></tr>;
+  const heading = (label: string) => <tr><td colSpan={5} className="pt-4 text-xs font-semibold text-muted-foreground">{label}</td></tr>;
 
   return (
     <>

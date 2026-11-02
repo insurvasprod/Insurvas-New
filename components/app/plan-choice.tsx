@@ -448,7 +448,7 @@ export function PlanChoiceSummary() {
 
   return (
     <section aria-label="Your plan summary" className="mx-auto w-full max-w-[500px] rounded-xl border border-[var(--nav-line)] bg-black/20 p-6 text-[var(--nav-ink)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--nav-muted)]">Your plan</p>
+      <p className="text-xs font-semibold text-[var(--nav-muted)]">Your plan</p>
       <h2 className="mt-1.5 text-2xl font-semibold leading-tight tracking-[-0.02em] text-[var(--on-dark)]">{plan.name}</h2>
       <p className="text-sm text-[var(--nav-muted)]">{included} of {allFeatures} features</p>
 

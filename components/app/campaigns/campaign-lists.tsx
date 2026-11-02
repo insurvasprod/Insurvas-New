@@ -57,7 +57,7 @@ export function CampaignLists({ campaignId }: { campaignId: string }) {
   const noState = (lists ?? []).reduce((sum, list) => ({ leads: sum.leads + list.noState, lists: sum.lists + (list.noState > 0 ? 1 : 0) }), { leads: 0, lists: 0 });
   return (
     <Card id="lists" aria-label="Lists" className="min-w-0 gap-2 p-3">
-      <span className="px-1 pt-1 text-xs font-semibold tracking-[0.06em] text-[var(--ink)] uppercase">{lists ? `${n(lists.length)} list${lists.length === 1 ? "" : "s"}` : "Lists"}</span>
+      <span className="px-1 pt-1 text-xs font-semibold text-[var(--ink)]">{lists ? `${n(lists.length)} list${lists.length === 1 ? "" : "s"}` : "Lists"}</span>
       {/* A problem many lists share is said once, with its fix (critique 2026-10-30), not on every row. */}
       {noState.leads > 0 && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-[var(--warning-surface)] px-3.5 py-2.5 text-sm text-[var(--ink)]">
         <span className="min-w-0 flex-1"><strong className="font-semibold">{n(noState.leads)}</strong> {noState.leads === 1 ? "lead has" : "leads have"} no state{noState.lists > 1 ? ` across ${n(noState.lists)} lists` : ""}, so {noState.leads === 1 ? "it can't" : "they can't"} be called yet.</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, CheckCircle2, ChevronRight, PhoneCall, PhoneForwarded, PhoneOff, UserPlus, Zap } from "lucide-react";
+import { Check, CheckCircle2, ChevronRight, PhoneCall, PhoneForwarded, PhoneOff, UserPlus, Activity } from "lucide-react";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { cardTitle, type PartnerMessage } from "@/lib/partnerChat/cards";
 import { LEAD_STATE_LABEL, LEAD_STEPS, leadLanes, type LeadState, type LeadStep } from "@/lib/partnerChat/leadLanes";
@@ -24,7 +24,7 @@ function look(message: PartnerMessage) {
   if (message.cardType === "new_lead") return { Icon: UserPlus, tile: "bg-[var(--info-surface)] text-[var(--info-ink)]" };
   if (message.cardType === "connected") return { Icon: PhoneCall, tile: "bg-[var(--primary-soft)] text-[var(--accent-ink)]" };
   if (message.cardType === "transferred") return { Icon: PhoneForwarded, tile: "bg-[var(--primary-soft)] text-[var(--accent-ink)]" };
-  return { Icon: Zap, tile: "bg-[var(--surface-alt)] text-[var(--body)]" };
+  return { Icon: Activity, tile: "bg-[var(--surface-alt)] text-[var(--body)]" };
 }
 
 const STATE_TONE: Record<LeadState, StatusTone> = { waiting: "info", live: "action", won: "good", dropped: "danger", closed: "neutral" };

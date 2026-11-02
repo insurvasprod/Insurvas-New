@@ -306,16 +306,6 @@ export function AffiliateIntakeForm({ slug }: { slug: string }) {
             ))}
           </div>
         </div>
-
-        <div className="rounded-xl border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5">
-          <div className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--info-ink)]">
-            Why this page asks so little
-          </div>
-          <p className="mt-1.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
-            Every extra field on a consumer form costs abandonment and widens the breach surface. Consent is a
-            deliberate, unticked act because that record is the TCPA defence.
-          </p>
-        </div>
       </div>
     </div>,
   );

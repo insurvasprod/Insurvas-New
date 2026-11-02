@@ -45,7 +45,7 @@ export function FirstValueSample() {
       {open && (
         <section id="first-value-sample" aria-label="Sample result" className="mt-3 overflow-hidden rounded-xl border border-border bg-card">
           <div className="bg-[var(--brand-700)] px-4 py-4 text-[var(--on-dark)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--nav-muted)]">Sample · not your data</p>
+            <p className="text-xs font-semibold text-[var(--nav-muted)]">Sample · not your data</p>
             <p className="mt-1 text-sm text-[var(--nav-muted)]">You appear to be owed</p>
             <p className="text-3xl font-semibold tracking-[-0.03em] tabular-nums">$3,412.60</p>
             <p className="mt-1 text-xs text-[var(--nav-muted)]">7 policies on one sample statement</p>

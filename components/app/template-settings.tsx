@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * Settings › Form templates, layout C (docs/design/specs/form-templates.md, revision 3): the form
- * partners fill in is the page. Click a question to change it in the panel beside it; one line at the
- * top says whether partners see what is drawn, and Publish changes is the only green button.
+ * Settings › Form templates, layout A (owner pick 2026-10-30; canvas page settings-form-templates):
+ * the form partners fill in, with one side panel beside it that shows the form's settings until a
+ * question is picked, then that question. The title's line says Live, or N changes with Review,
+ * Undo all and Publish version N — the page's only green button.
  *
  * The whole form is one draft. Every edit — a question, a part, an age limit, the name — is held in
  * this browser until it is published as one new immutable form version. Partner drafts already in
@@ -22,44 +23,27 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
-import { StatusTabs, type StatusTab } from "@/components/app/form-templates/status-tabs";
+import { ProductChips } from "@/components/app/form-templates/product-chips";
 import { PartnerLeadForm, type PartnerFormPreviewSource } from "@/components/partner/partner-portal-workspace";
 import type { TemplateField, TemplateFieldType, TemplateFormDefinition, TemplateFormField, TemplateRow, TemplateValidation } from "@/lib/templates/constants";
 import { moveFieldWithinSection, moveSection } from "@/lib/templates/formMoves";
 import { applyRequiredChoice, type RequiredChoice } from "@/lib/templates/plainLabels";
-import { sectionAvailability, sectionsByGroup } from "@/lib/templates/sectionAvailability";
+import { sectionAvailability, sectionAvailabilityError, sectionsByGroup } from "@/lib/templates/sectionAvailability";
 import { diffTemplateDraft, eligibilityFieldKey, type TemplateDraft } from "@/lib/agentTemplates/draftChanges";
 import { parseSettingsHash } from "@/lib/settings/registry";
-import { draftFrom, uniqueKey, type Available, type Current, type DraftState, type Preview, type Product } from "@/components/app/form-templates/draft";
+import { draftFrom, uniqueKey, type Available, type Current, type DraftState, type Preview, type Product, type Published } from "@/components/app/form-templates/draft";
 import { FormCanvas, type Picked } from "@/components/app/form-templates/form-canvas";
 import { QuestionPanel } from "@/components/app/form-templates/question-panel";
 import { FormSettingsPanel } from "@/components/app/form-templates/form-settings";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { PublishBar, SETTINGS_TABS, StatusLine, type SettingsTab } from "@/components/app/form-templates/status-line";
+import { PublishBar, PublishControls, SETTINGS_TABS, type SettingsTab } from "@/components/app/form-templates/status-line";
+import { publishBlockers } from "@/lib/templates/publishBlockers";
+import { SIDE_BY_SIDE, SidePanelHost } from "@/components/app/form-templates/side-panel-host";
 
 const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
+/** Undo toasts sit at the foot, clear of the Publish controls at the end of the title's line (board FtE07). */
+const UNDO_AT = "bottom-center" as const;
 
-/** "Got it" on the three-step guide, kept in this browser only; storage can be missing or blocked. */
-const GUIDE_KEY = "insurvas.formTemplates.guideDismissed";
-function guideDismissed() { try { return typeof window !== "undefined" && window.localStorage.getItem(GUIDE_KEY) === "1"; } catch { return false; } }
-
-/** How the page works, in three steps, for someone who has never seen it. */
-function Guide({ onDismiss }: { onDismiss: () => void }) {
-  const steps = ["Click a question on the form", "Change it in the panel that opens", "Press Publish changes when you’re ready"];
-  return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-1">
-      <ol className="m-0 flex list-none flex-wrap items-center gap-x-5 gap-y-1.5 p-0">
-        {steps.map((step, index) => (
-          <li key={step} className="flex items-center gap-2 text-sm text-[var(--body)]">
-            <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--ink)]">{index + 1}</span>
-            {step}
-          </li>
-        ))}
-      </ol>
-      <Button onClick={onDismiss} type="button" variant="ghost" className="ml-auto">Got it</Button>
-    </div>
-  );
-}
 
 /** Every place a question sits, so "changed" can tell a moved or re-required question from an untouched one. */
 function placementsOf(form: TemplateFormDefinition, fieldKey: string) {
@@ -84,13 +68,29 @@ export function TemplateSettings() {
   const [error, setError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [picked, setPicked] = useState<Picked>(null);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  /** The live version's publisher and time; null when unknown. */
+  const [published, setPublished] = useState<Published | null>(null);
+  /** Each product's live form version, for its chip. */
+  const [liveVersions, setLiveVersions] = useState<Record<string, number>>({});
+  /** The "This form" panel: open beside the form on wide screens, a sheet opened on demand below. */
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Which of its rows is open. */
+  const [settingsRow, setSettingsRow] = useState<SettingsTab | null>(null);
   const [trying, setTrying] = useState(false);
   /** A product switch waiting on Publish / Discard / Stay. */
   const [switchTo, setSwitchTo] = useState<string | null>(null);
   /** A part with questions in it, waiting on its remove confirmation. */
   const [removing, setRemoving] = useState<string | null>(null);
-  const [guide, setGuide] = useState(() => !guideDismissed());
+
+  // The side panel starts open where it sits beside the form; on smaller screens it waits for the button.
+  // It follows the width: narrowing to a sheet closes it, so it never covers the form unasked.
+  useEffect(() => {
+    const query = window.matchMedia(SIDE_BY_SIDE);
+    const sync = () => setSettingsOpen(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
 
   async function load(product?: string) {
     setLoading(true);
@@ -104,6 +104,8 @@ export function TemplateSettings() {
     setAvailable(body.templates ?? []);
     setProducts(body.products ?? []);
     setAgencyName(typeof body.agencyName === "string" ? body.agencyName : null);
+    setPublished(body.published && typeof body.published.at === "string" ? body.published : null);
+    setLiveVersions(body.liveVersions && typeof body.liveVersions === "object" ? body.liveVersions : {});
     setState(body.current ? { draft: draftFrom(body.current), seen: {} } : null);
     setSaveError("");
     setSelected("");
@@ -114,12 +116,12 @@ export function TemplateSettings() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, []);
 
-  // "#form-templates/form-lead-steps" (the settings search) opens Form settings on that tab.
+  // "#form-templates/form-lead-steps" (the settings search) opens the side panel on that row.
   useEffect(() => {
     const fromHash = () => {
       const { tab, anchor } = parseSettingsHash(window.location.hash);
       const hit = tab === "form-templates" ? SETTINGS_TABS.find((item) => item.anchor === anchor) : null;
-      if (hit) setSettingsTab(hit.key);
+      if (hit) { setPicked(null); setSettingsOpen(true); setSettingsRow(hit.key); }
     };
     fromHash();
     window.addEventListener("hashchange", fromHash);
@@ -240,13 +242,7 @@ export function TemplateSettings() {
   const eligibility = eligibilityKey ? fieldMap.get(eligibilityKey) ?? null : null;
   const productOptions = products.some((product) => product.code === productCode) ? products : [{ code: productCode, name: current.template.product_name }, ...products];
   const word = changes.length === 1 ? "change" : "changes";
-  const productTabs: StatusTab<string>[] = productOptions.map((product) => ({
-    key: product.code,
-    label: product.name,
-    status: product.code !== productCode ? { text: "Open its form", tone: "calm" }
-      : dirty ? { text: `${changes.length} ${word} not published`, tone: "warn" }
-      : { text: `Live · version ${current.assignment.definition_version}`, tone: "good" },
-  }));
+  const blockers = publishBlockers(draft.form, draft.fields);
 
   /* draft mutators */
   const setField = (fieldKey: string, patch: Partial<TemplateField>) => update((d) => ({ ...d, fields: d.fields.map((field) => (field.field_key === fieldKey ? { ...field, ...patch } : field)) }));
@@ -320,7 +316,7 @@ export function TemplateSettings() {
     const label = fieldMap.get(fieldKey)?.label || "the question";
     update((d) => withSections({ ...d, fields: d.fields.filter((field) => field.field_key !== fieldKey) }, (sections) => sections.map((section) => ({ ...section, fields: section.fields.filter((field) => field.field_key !== fieldKey) }))));
     setPicked(null);
-    notify.done(`Deleted “${label}”`, { action: { label: "Undo", onClick: () => update(() => before) }, durationMs: 6000 });
+    notify.done(`Deleted “${label}”`, { action: { label: "Undo", onClick: () => update(() => before) }, durationMs: 6000, position: UNDO_AT });
   }
   function addSection() {
     const key = uniqueKey("section", new Set(draft!.form.sections.map((section) => section.section_key)));
@@ -334,7 +330,7 @@ export function TemplateSettings() {
     update((d) => withSections(d, (sections) => sections.filter((section) => section.section_key !== sectionKey)));
     if (picked?.sectionKey === sectionKey) setPicked(null);
     setRemoving(null);
-    notify.done(`Removed “${label}”`, { action: { label: "Undo", onClick: () => update(() => before) }, durationMs: 6000 });
+    notify.done(`Removed “${label}”`, { action: { label: "Undo", onClick: () => update(() => before) }, durationMs: 6000, position: UNDO_AT });
   }
   function askRemoveSection(sectionKey: string) {
     const section = draft!.form.sections.find((item) => item.section_key === sectionKey);
@@ -354,119 +350,142 @@ export function TemplateSettings() {
   const topics = (Object.keys(governed) as Array<keyof typeof governed>).filter((group) => governed[group].length > 0);
   const topicsOn = topics.filter((group) => groups[group]).length;
   const ages = eligibility ? [eligibility.validation?.age_min, eligibility.validation?.age_max] : null;
-  const settingValues: Record<SettingsTab, string> = {
-    who: !ages ? "Anyone" : ages[0] != null && ages[1] != null ? `Ages ${ages[0]}–${ages[1]}` : ages[0] != null ? `Ages ${ages[0]}+` : ages[1] != null ? `Up to age ${ages[1]}` : "Any age",
-    parts: topics.length ? `${topicsOn} of ${topics.length} on` : "None on this form",
-    steps: "Set in Pipelines",
-    versions: current.latest ? `Update: version ${current.latest.version}` : `Live: version ${current.assignment.definition_version}`,
+  const placed = new Set(draft.form.sections.flatMap((section) => section.fields.map((field) => field.field_key)));
+  const agentsOnly = draft.fields.filter((field) => !placed.has(field.field_key));
+  const settingValues: Record<SettingsTab, { text: string; tone?: "warn" | "info" }> = {
+    who: { text: !ages ? "Anyone" : ages[0] != null && ages[1] != null ? `Ages ${ages[0]}–${ages[1]}` : ages[0] != null ? `Ages ${ages[0]}+` : ages[1] != null ? `Up to age ${ages[1]}` : "Any age" },
+    parts: { text: topics.length ? `${topicsOn} of ${topics.length} on` : "None on this form", tone: sectionAvailabilityError(draft.form, draft.fields) ? "warn" : undefined },
+    steps: { text: "Set in Pipelines & outcomes" },
+    versions: current.latest ? { text: `Insurvas version ${current.latest.version} is out`, tone: "info" } : { text: `Version ${current.assignment.definition_version} live` },
+    agents: { text: `${agentsOnly.length} ${agentsOnly.length === 1 ? "question" : "questions"}` },
   };
   const removingSection = removing ? draft.form.sections.find((section) => section.section_key === removing) ?? null : null;
   const switchName = switchTo ? productOptions.find((product) => product.code === switchTo)?.name ?? "the other product" : "";
+  const publishAndReload = () => void publish().then((ok) => { if (ok) void load(productCode); });
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader />
-      <LeaveGuard dirty={dirty} onDiscard={discard} what="the form draft" />
+      <SettingsSectionHeader
+        actions={
+          <PublishControls
+            changes={changes}
+            seen={state?.seen ?? {}}
+            liveVersion={current.assignment.definition_version}
+            blockers={blockers}
+            saving={saving}
+            onUndoAll={discard}
+            onPublish={publishAndReload}
+          />
+        }
+      />
+      <LeaveGuard dirty={dirty} onDiscard={discard} onSave={publish} what="the form draft" />
 
-      {productTabs.length > 1 && <StatusTabs label="Products" tabs={productTabs} value={productCode} onChange={switchProduct} idPrefix="form-product" panelIdPrefix="form-product-panel" />}
+      {saveError && (
+        <Callout tone="error" title={`Nothing was published: ${saveError}`}>
+          <Button onClick={publishAndReload} type="button" variant="outline" className="mt-2" disabled={saving}>Try again</Button>
+        </Callout>
+      )}
 
-      <div id={`form-product-panel-${productCode}`} role={productTabs.length > 1 ? "tabpanel" : undefined} aria-labelledby={productTabs.length > 1 ? `form-product-${productCode}` : undefined} className="flex min-w-0 flex-col gap-5">
-        {guide && <Guide onDismiss={() => { setGuide(false); try { window.localStorage.setItem(GUIDE_KEY, "1"); } catch { /* the guide just comes back next time */ } }} />}
-        <StatusLine
-          changes={changes}
-          seen={state?.seen ?? {}}
-          liveVersion={current.assignment.definition_version}
-          saveError={saveError}
-          chips={[
-            { key: "who", label: "Who can apply", value: settingValues.who },
-            { key: "parts", label: "Topics", value: settingValues.parts },
-            { key: "steps", label: "Lead steps", value: settingValues.steps },
-            current.latest
-              ? { key: "versions", label: "New Insurvas version", value: `version ${current.latest.version}`, tone: "info" }
-              : { key: "versions", label: "Versions", value: settingValues.versions },
-          ]}
-          onSettings={setSettingsTab}
-        />
-
-        <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
-          <div className="min-w-0 flex-1">
-            <FormCanvas
-              form={draft.form}
-              fields={draft.fields}
-              productName={current.template.product_name}
-              picked={picked}
-              changed={changed}
-              onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
-              onMoveField={(sectionKey, fieldKey, by) => update((d) => ({ ...d, form: moveFieldWithinSection(d.form, sectionKey, fieldKey, by) }))}
-              onWidth={(sectionKey, fieldKey, width) => setPlacement(sectionKey, fieldKey, { width })}
-              onDeleteField={deleteField}
-              onRenameSection={(sectionKey, label) => update((d) => withSections(d, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, label } : section))))}
-              onMoveSection={(sectionKey, by) => update((d) => ({ ...d, form: moveSection(d.form, sectionKey, by) }))}
-              onRemoveSection={askRemoveSection}
-              onAddQuestion={addQuestion}
-              onReuse={reuse}
-              onAddSection={addSection}
-              onAddAgentField={addAgentField}
-              onTry={() => setTrying(true)}
-            />
-          </div>
-          {picked && pickedField && (
-            <QuestionPanel
-              field={pickedField}
-              fields={draft.fields}
-              form={draft.form}
-              sectionKey={picked.sectionKey}
-              placement={pickedPlacement}
-              changed={changed.has(pickedField.field_key)}
-              setField={setField}
-              setValidation={setValidation}
-              setPlacement={setPlacement}
-              onRequired={(choice) => setRequired(pickedField.field_key, picked.sectionKey, choice)}
-              onMoveTo={(to) => moveTo(pickedField.field_key, picked.sectionKey, to)}
-              onReset={saved.fields.some((field) => field.field_key === pickedField.field_key) && changed.has(pickedField.field_key) ? () => resetQuestion(pickedField.field_key, picked.sectionKey) : null}
-              onDelete={() => deleteField(pickedField.field_key)}
-              onClose={() => setPicked(null)}
-            />
-          )}
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <ProductChips products={productOptions} value={productCode} changes={changes.length} liveVersions={liveVersions} onChange={switchProduct} />
+        {!settingsOpen && !picked && <Button onClick={() => setSettingsOpen(true)} type="button" variant="outline" className="ml-auto">Form settings</Button>}
       </div>
 
-      <PublishBar count={changes.length} saving={saving} onUndoAll={discard} onPublish={() => void publish().then((ok) => { if (ok) void load(productCode); })} />
+      <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
+        <div className="min-w-0 flex-1">
+          <FormCanvas
+            form={draft.form}
+            fields={draft.fields}
+            productName={current.template.product_name}
+            picked={picked}
+            changed={changed}
+            onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
+            onMoveField={(sectionKey, fieldKey, by) => update((d) => ({ ...d, form: moveFieldWithinSection(d.form, sectionKey, fieldKey, by) }))}
+            onWidth={(sectionKey, fieldKey, width) => setPlacement(sectionKey, fieldKey, { width })}
+            onDeleteField={deleteField}
+            onRenameSection={(sectionKey, label) => update((d) => withSections(d, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, label } : section))))}
+            onMoveSection={(sectionKey, by) => update((d) => ({ ...d, form: moveSection(d.form, sectionKey, by) }))}
+            onRemoveSection={askRemoveSection}
+            onAddQuestion={addQuestion}
+            onReuse={reuse}
+            onAddSection={addSection}
+            onTry={() => setTrying(true)}
+          />
+        </div>
+        {/* One side panel: the picked question, else the form's own settings. */}
+        <SidePanelHost>
+        {picked && pickedField ? (
+          <QuestionPanel
+            field={pickedField}
+            fields={draft.fields}
+            form={draft.form}
+            sectionKey={picked.sectionKey}
+            placement={pickedPlacement}
+            changed={changed.has(pickedField.field_key)}
+            setField={setField}
+            setValidation={setValidation}
+            setPlacement={setPlacement}
+            onRequired={(choice) => setRequired(pickedField.field_key, picked.sectionKey, choice)}
+            onMoveTo={(to) => moveTo(pickedField.field_key, picked.sectionKey, to)}
+            onReset={saved.fields.some((field) => field.field_key === pickedField.field_key) && changed.has(pickedField.field_key) ? () => resetQuestion(pickedField.field_key, picked.sectionKey) : null}
+            onDelete={() => deleteField(pickedField.field_key)}
+            onBack={() => { setPicked(null); setSettingsOpen(true); }}
+            onClose={() => setPicked(null)}
+          />
+        ) : settingsOpen && (
+          <FormSettingsPanel
+            open={settingsRow}
+            onOpen={setSettingsRow}
+            onClose={() => setSettingsOpen(false)}
+            values={settingValues}
+            eligibility={eligibility}
+            onAges={(patch) => { if (eligibility) setValidation(eligibility.field_key, patch); }}
+            form={draft.form}
+            fields={draft.fields}
+            onGroup={(group, on) => update((d) => ({ ...d, form: { ...d.form, section_availability: { ...(d.form.section_availability ?? {}), [group]: on } } }))}
+            versions={{
+              current,
+              published,
+              name: draft.name,
+              onName: (name) => update((d) => ({ ...d, name })),
+              templates: available.filter((template) => template.product_code === productCode),
+              selected,
+              chosen,
+              preview,
+              applying,
+              dirty,
+              onSelect: (value) => { setSelected(value); setPreview(null); },
+              onPreview: () => void showPreview(),
+              onApply: () => void apply(),
+            }}
+            agents={{
+              fields: agentsOnly,
+              picked: picked?.sectionKey === null ? picked.fieldKey : null,
+              changed,
+              onPick: (fieldKey) => setPicked({ fieldKey, sectionKey: null }),
+              onAdd: addAgentField,
+            }}
+          />
+        )}
+        </SidePanelHost>
+      </div>
 
-      {settingsTab && (
-        <FormSettingsPanel
-          tab={settingsTab}
-          values={settingValues}
-          onTab={setSettingsTab}
-          onClose={() => setSettingsTab(null)}
-          eligibility={eligibility}
-          onAges={(patch) => { if (eligibility) setValidation(eligibility.field_key, patch); }}
-          form={draft.form}
-          fields={draft.fields}
-          onGroup={(group, on) => update((d) => ({ ...d, form: { ...d.form, section_availability: { ...(d.form.section_availability ?? {}), [group]: on } } }))}
-          versions={{
-            current,
-            name: draft.name,
-            onName: (name) => update((d) => ({ ...d, name })),
-            templates: available.filter((template) => template.product_code === productCode),
-            selected,
-            chosen,
-            preview,
-            applying,
-            dirty,
-            onSelect: (value) => { setSelected(value); setPreview(null); },
-            onPreview: () => void showPreview(),
-            onApply: () => void apply(),
-          }}
-        />
-      )}
+      <PublishBar
+        changes={changes}
+        seen={state?.seen ?? {}}
+        liveVersion={current.assignment.definition_version}
+        blockers={blockers}
+        saving={saving}
+        onUndoAll={discard}
+        onPublish={publishAndReload}
+      />
 
       {/* "Try the form": the partner's own form component, fed this draft, so show-when runs for real (LA-1.4-5). */}
       <Dialog open={trying} onOpenChange={setTrying}>
         <DialogContent className="max-h-[88vh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="text-title-sm text-[var(--ink)]">Try the form</DialogTitle>
-            <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">Fill it in as a partner would. Nothing is saved or sent.</DialogDescription>
+            <DialogDescription className="text-sm leading-[1.5] text-[var(--body)]">Fill it in as a partner would. Nothing is saved or sent.</DialogDescription>
           </DialogHeader>
           {previewSource && (
             <div className="portal-partner-submit-page">
@@ -480,7 +499,7 @@ export function TemplateSettings() {
         <DialogContent className="border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-title-sm text-[var(--ink)]">Publish your {changes.length} {word} first?</DialogTitle>
-            <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">They are on the {current.template.product_name} form and not live yet. Opening {switchName} drops them unless you publish.</DialogDescription>
+            <DialogDescription className="text-sm leading-[1.5] text-[var(--body)]">They are on the {current.template.product_name} form and not live yet. Opening {switchName} drops them unless you publish.</DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button onClick={() => setSwitchTo(null)} type="button" variant="ghost">Stay here</Button>
@@ -494,7 +513,7 @@ export function TemplateSettings() {
         <DialogContent className="border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-title-sm text-[var(--ink)]">Remove “{removingSection?.label}”?</DialogTitle>
-            <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">
+            <DialogDescription className="text-sm leading-[1.5] text-[var(--body)]">
               Partners stop seeing its {removingSection?.fields.length} {removingSection?.fields.length === 1 ? "question" : "questions"}. They stay saved on leads, under For your agents only.
             </DialogDescription>
           </DialogHeader>

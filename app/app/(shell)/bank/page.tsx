@@ -3,7 +3,7 @@ import { BankError, findings, listAccounts, matchQueue, openStatements } from "@
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { BankBoard, type BankData } from "@/components/app/accounting/bank-board";
-import { PageHeader } from "@/components/ui/page-header";
+import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -30,9 +30,8 @@ export default async function BankPage() {
     problem = error.message;
   }
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Bank deposits" description="What actually arrived — matched to what the carriers say they paid." />
+    <AccountingPage step="bank">
       {data ? <BankBoard data={data} readOnly={guard.entitlement.access === "read_only"} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}
-    </div>
+    </AccountingPage>
   );
 }

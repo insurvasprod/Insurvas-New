@@ -29,7 +29,7 @@ export function AuthCard({ title, description, children, className }: {
 export function AuthFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</div>
+      <div className="text-xs font-semibold leading-[1.33] text-muted-foreground">{label}</div>
       <div className="mt-1 break-words text-sm font-semibold tabular-nums text-foreground">{value}</div>
     </div>
   );

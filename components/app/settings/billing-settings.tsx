@@ -80,7 +80,7 @@ const TIER_LOOK: Record<UsageTier, { bar: string; text: string; row: string }> =
 const ANCHOR_TAB: Record<string, Tab> = { "billing-limits": "overview", "billing-plan": "plan", "billing-invoices": "invoices", "billing-card": "invoices", "billing-cancel": "overview" };
 /** A plan can include forty features; the card shows the first few and opens the rest on request. */
 const FEATURES_SHOWN = 10;
-const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold tracking-[0.04em] uppercase text-[var(--muted)]";
+const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 
 function tierCaption(l: Limit, warnPercent: number): string {
   const reset = l.metered && l.resetsAt ? ` Resets ${day(l.resetsAt)}.` : "";

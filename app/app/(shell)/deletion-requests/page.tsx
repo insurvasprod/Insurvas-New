@@ -4,7 +4,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DeletionRequestsBoard } from "@/components/app/compliance/deletion-requests-board";
-import { PageHeader } from "@/components/ui/page-header";
+import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -36,10 +36,6 @@ export default async function DeletionRequestsPage() {
   const content = loaded
     ? <DeletionRequestsBoard requests={loaded.requests} methods={loaded.settings.methods} holdDays={loaded.settings.holdDays} isOwner={guard.role === "owner"} readOnly={guard.entitlement.access === "read_only"} />
     : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>;
-  return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Deletion requests" description="Someone asked to be deleted: verify, hold, delete, certify." />
-      {content}
-    </div>
-  );
+  // The Deletions step of the one Compliance page (2026-10-30).
+  return <ComplianceFlowPage step="deletions">{content}</ComplianceFlowPage>;
 }

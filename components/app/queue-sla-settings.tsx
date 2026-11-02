@@ -209,7 +209,7 @@ export function QueueSlaSettings() {
       {jobNotice && <Callout tone={jobNotice.tone} title={jobNotice.text} />}
       {error && <Callout tone="error" title={error} />}
 
-      <SettingsCard title="The ladder" sub="Counted from the moment a lead becomes claimable. Each rung must be later than the one before.">
+      <SettingsCard title="The ladder" info="Counted from the moment a lead becomes claimable. Each rung must be later than the one before.">
         <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
           {FIELDS.map((field) => {
             const invalid = parsed?.[field.key] === null;

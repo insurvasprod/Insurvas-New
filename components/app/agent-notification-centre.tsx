@@ -211,7 +211,7 @@ export function NotificationCentrePanel({
         {kinds.length > 0 && (
           <select
             aria-label="Type of notification"
-            className={cn(toolbarControl, "h-8 max-w-[11rem] text-xs")}
+            className={cn(toolbarControl, "max-w-[11rem]")}
             value={filter === "all" || filter === "unread" ? "" : filter}
             onChange={(event) => choose((event.target.value || "all") as BellFilter)}
           >
