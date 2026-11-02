@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { PanelLeftClose, PanelLeftOpen, Search, X } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 export type SettingsSection = { key: string; label: string; icon?: ReactNode };
+export type SettingsNavigationGroup = { key: string; label: string; sections: string[] };
 
 /**
  * A settings surface: sections on the left, the open one in the middle, health on the right.
@@ -17,6 +18,7 @@ export type SettingsSection = { key: string; label: string; icon?: ReactNode };
  */
 export function SettingsLayout({
   sections,
+  groups,
   active,
   onSelect,
   rail,
@@ -26,6 +28,7 @@ export function SettingsLayout({
   children,
 }: {
   sections: SettingsSection[];
+  groups?: SettingsNavigationGroup[];
   active: string;
   onSelect: (key: string) => void;
   rail?: ReactNode;
@@ -36,6 +39,7 @@ export function SettingsLayout({
 }) {
   const [query, setQuery] = useState("");
   const [folded, setFolded] = useState(false);
+  const [closedGroups, setClosedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [desktop, setDesktop] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -53,9 +57,41 @@ export function SettingsLayout({
   const visibleSections = searchable && query.trim()
     ? sections.filter((section) => section.label.toLowerCase().includes(query.trim().toLowerCase()))
     : sections;
+  const visibleGroups = groups?.flatMap((group) => {
+    const groupMatches = searchable && query.trim() && group.label.toLowerCase().includes(query.trim().toLowerCase());
+    const items = sections.filter((section) => group.sections.includes(section.key)
+      && (!searchable || !query.trim() || groupMatches || section.label.toLowerCase().includes(query.trim().toLowerCase())));
+    return items.length ? [{ ...group, items }] : [];
+  });
   const toggleFold = (next: boolean) => {
     setFolded(next);
     try { window.localStorage.setItem("insurvas.settings.menuFolded", next ? "1" : "0"); } catch { /* storage blocked: the menu still works */ }
+  };
+  const renderSection = (section: SettingsSection) => {
+    const isActive = section.key === active;
+    return (
+      <button
+        key={section.key}
+        type="button"
+        aria-current={isActive ? "page" : undefined}
+        aria-label={foldedRail ? section.label : undefined}
+        title={foldedRail ? section.label : undefined}
+        onClick={() => onSelect(section.key)}
+        className={cn(
+          groups
+            ? "portal-settings-subsection flex min-h-[30px] w-full shrink-0 items-center gap-2 rounded-[8px] border-0 px-2.5 py-1 text-left text-label font-normal transition-colors"
+            : "flex min-h-10 min-w-0 shrink-0 items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-sm font-medium transition-colors",
+          "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          isActive
+            ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]"
+            : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground",
+          foldedRail && "w-10 justify-center px-0"
+        )}
+      >
+        {section.icon && <span className="grid size-5 shrink-0 place-items-center">{section.icon}</span>}
+        {!foldedRail && <span className="min-w-0 truncate">{section.label}</span>}
+      </button>
+    );
   };
 
   return (
@@ -67,19 +103,18 @@ export function SettingsLayout({
           ? "xl:grid-cols-[240px_minmax(0,1fr)_300px]"
           : foldedRail
             ? "lg:grid-cols-[52px_minmax(0,1fr)]"
-            : "lg:grid-cols-[240px_minmax(0,1fr)]"
+            : groups
+              ? "lg:grid-cols-[256px_minmax(0,1fr)]"
+              : "lg:grid-cols-[240px_minmax(0,1fr)]"
       )}
     >
-      <nav
-        aria-label="Settings sections"
-        className={cn(
-          "flex min-w-0 flex-col gap-1",
-          fitHeight && "lg:h-full lg:min-h-0",
-          foldedRail && "items-center"
-        )}
+      <aside
+        data-settings-rail={groups ? "" : undefined}
+        data-folded={foldedRail ? "" : undefined}
+        className={cn("flex min-w-0 flex-col", fitHeight && "lg:h-full lg:min-h-0", foldedRail && "items-center")}
       >
         {(searchable || collapsible) && (
-          <div className={cn("mb-1 flex min-w-0 items-center gap-1.5", foldedRail && "flex-col")}>
+          <div className={cn("mb-1 flex min-w-0 items-center gap-1.5", groups && "shrink-0", foldedRail && "flex-col")}>
             {foldedRail ? (
               <>
                 <button type="button" onClick={() => toggleFold(false)} aria-label="Show the settings menu" title="Show menu" className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
@@ -100,36 +135,73 @@ export function SettingsLayout({
             {collapsible && !foldedRail && <button type="button" onClick={() => toggleFold(true)} aria-label="Hide the settings menu" title="Hide menu" className="hidden size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] lg:inline-flex"><PanelLeftClose className="size-4" aria-hidden="true" /></button>}
           </div>
         )}
-        {!visibleSections.length ? (
+        <nav
+          aria-label="Settings sections"
+          className={cn(
+            groups
+              ? "portal-settings-nav relative box-border flex min-h-0 w-full flex-col gap-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-1"
+              : "flex min-w-0 flex-col gap-1",
+            fitHeight && !groups && "lg:h-full lg:min-h-0",
+            groups && fitHeight && "lg:flex-1",
+            foldedRail && "items-center"
+          )}
+        >
+        {groups ? !visibleGroups?.length ? (
           <p role="status" className="m-0 px-2.5 py-3 text-sm text-muted-foreground">Nothing in Settings matches “{query.trim()}”.</p>
-        ) : visibleSections.map((section) => {
+        ) : foldedRail ? visibleGroups.flatMap((group) => group.items).map((section) => {
           const isActive = section.key === active;
           return (
             <button
               key={section.key}
               type="button"
               aria-current={isActive ? "page" : undefined}
-              aria-label={foldedRail ? section.label : undefined}
-              title={foldedRail ? section.label : undefined}
+              aria-label={section.label}
+              title={section.label}
               onClick={() => onSelect(section.key)}
               className={cn(
-                "flex min-h-10 min-w-0 shrink-0 items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-sm font-medium transition-colors",
+                "flex min-h-10 w-10 shrink-0 items-center justify-center rounded-[8px] px-0 py-2 text-left text-sm font-medium transition-colors",
                 "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                isActive
-                  ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]"
-                  : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground",
-                foldedRail && "w-10 justify-center px-0"
+                isActive ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]" : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground"
               )}
             >
               {section.icon && <span className="grid size-5 shrink-0 place-items-center">{section.icon}</span>}
-              {!foldedRail && <span className="min-w-0 truncate">{section.label}</span>}
             </button>
           );
-        })}
-      </nav>
+        }) : visibleGroups.map((group) => {
+          const groupId = `settings-nav-group-${group.key}`;
+          const open = Boolean(searchable && query.trim()) || !closedGroups.has(group.key);
+          return (
+            <section key={group.key} className="portal-settings-nav-group" aria-labelledby={`${groupId}-label`}>
+              <h2 className="m-0">
+                <button
+                  type="button"
+                  id={`${groupId}-label`}
+                  aria-expanded={open}
+                  aria-controls={groupId}
+                  onClick={() => setClosedGroups((current) => {
+                    const next = new Set(current);
+                    if (next.has(group.key)) next.delete(group.key); else next.add(group.key);
+                    return next;
+                  })}
+                  className="portal-settings-group-label flex w-full items-center gap-2 rounded-[8px] border-0 bg-transparent text-left transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                >
+                  <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                  {!open && <span className="shrink-0 text-xs font-medium tabular-nums text-[var(--muted)]">{group.items.length}</span>}
+                  <ChevronDown aria-hidden="true" className={cn("portal-settings-group-chevron size-4 shrink-0 text-[var(--muted)]", open && "is-open")} />
+                </button>
+              </h2>
+              <div id={groupId} className="portal-settings-nav-subsections" hidden={!open}>
+                {group.items.map(renderSection)}
+              </div>
+            </section>
+          );
+        }) : !visibleSections.length ? (
+          <p role="status" className="m-0 px-2.5 py-3 text-sm text-muted-foreground">Nothing in Settings matches “{query.trim()}”.</p>
+        ) : visibleSections.map(renderSection)}
+        </nav>
+      </aside>
 
       <div className={cn("min-w-0 space-y-4", fitHeight && "lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1.5")}>{children}</div>
-
       {rail && <aside className="space-y-4 xl:sticky xl:top-[calc(var(--top-bar-h)+1.5rem)]">{rail}</aside>}
     </div>
   );

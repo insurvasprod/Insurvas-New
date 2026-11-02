@@ -124,6 +124,10 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
       searchable
       collapsible
       fitHeight
+      groups={[
+        { key: "your-account", label: "Your Account", sections: ["account", "notifications"] },
+        { key: "agency", label: "Agency", sections: ["products"] },
+      ]}
       sections={[
         { key: "account", label: "Account", icon: <Building2 className="size-4" aria-hidden="true" /> },
         { key: "notifications", label: "Notifications", icon: <Bell className="size-4" aria-hidden="true" /> },
