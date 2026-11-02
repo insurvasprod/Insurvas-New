@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { effectiveCloser, type PartnerLeadAccess } from "@/lib/partnerLeads/scope";
+import { narrowTo } from "@/lib/partnerAuth/team";
 import { partnerOutcomeLabel } from "@/lib/partnerLeads/service";
 import { intakeLocalDate } from "@/lib/dealFlow/localDate";
 import { dealFlowFigures, type FigureRow } from "./figures";
@@ -10,6 +10,7 @@ import {
   PARTNER_DEAL_FLOW_COLUMNS,
   PARTNER_DEAL_FLOW_LEAD_COLUMNS,
   type DealFlowStageType,
+  type PartnerDealFlowAccess,
   type PartnerDealFlowFilters,
   type PartnerDealFlowPayload,
   type PartnerDealFlowRow,
@@ -19,13 +20,22 @@ import {
  * Daily deal flow, the partner's side: one day of what the agency did with the leads this partner
  * sent (plan `tasks/partner-daily-deal-flow`). Read-only.
  *
- * ## It does not decide access
+ * ## It does not decide access, and this page's scope is not the portal's
  *
- * The rule is `lib/partnerLeads/scope.ts`', unchanged and uncopied: a `partner_user` sees only the
- * leads they submitted, a `partner_admin` sees the organisation's. This file calls `effectiveCloser`
- * rather than restating it, because a second copy of "who may see what" is faithful on the day it is
- * written and drifts afterwards — and the drift is invisible until a partner sees somebody else's
- * customer.
+ * The caller hands down `visibleIds`: the `created_by` ids this viewer may read, worked out from
+ * the signed session by `lib/partnerAuth/team.ts`. This file never sees the role and never decides
+ * anything, because a second copy of "who may see what" is faithful on the day it is written and
+ * drifts afterwards — and the drift is invisible until a partner sees somebody else's customer.
+ *
+ * **This page is narrower than the rest of the portal, on purpose** (owner, 2 Nov). Here a
+ * `partner_admin` sees their own team — the members whose `partner_admin_user_id` points at them —
+ * and themselves. Everywhere else an admin still sees the whole partner organisation, which is
+ * `lib/partnerLeads/scope.ts`' decision and is deliberately untouched: Pipeline, the lead record,
+ * the CSV export, Overview and Team review are all unchanged.
+ *
+ * So an admin can open a lead on Pipeline that is absent from this page. That is the decision, not
+ * a bug. Widening Pipeline to match would need a migration — `partner_lead_pipeline_page` takes one
+ * `p_closer_id`, not a list — which is why the two are out of step rather than both moved at once.
  *
  * ## It reads its own columns rather than the agency's report
  *
@@ -82,7 +92,7 @@ export async function listPartnerDealFlow(
   tenantId: string,
   partnerId: string,
   options: { from: string; to: string; timezone: string; filters?: PartnerDealFlowFilters },
-  access: PartnerLeadAccess,
+  access: PartnerDealFlowAccess,
 ): Promise<PartnerDealFlowPayload> {
   const { from, to, timezone } = options;
   if (!isValidDay(from) || !isValidDay(to)) throw new Error("Choose a valid date range");
@@ -90,20 +100,27 @@ export async function listPartnerDealFlow(
   const filters = options.filters ?? {};
   const db = getSupabaseServiceClient();
 
-  // The one access decision, taken the way the Pipeline takes it: null narrows nothing beyond the
-  // partner (an admin), an id pins the read to one person — and for a partner user that id is
-  // their own whatever the request asked for.
-  const closerId = effectiveCloser(access, { closerId: filters.submittedBy });
-  let query = db
+  // An empty list is a bug upstream, not a scope. It would read as "nobody", and worse, it invites
+  // the next person at this line to treat it as "no filter" and open the organisation. The list
+  // always holds the viewer, so there is no legitimate way to arrive here with none.
+  const visibleIds = [...access.visibleIds];
+  if (!visibleIds.length) throw new Error("Could not load the daily deal flow: no submitter is in scope");
+  // `?submitted_by=` is one of the page's own filters, not part of the boundary: it narrows within
+  // the list and can never add to it, and an id outside the list narrows nothing rather than
+  // erroring — an error would confirm that the id exists.
+  const allowedIds = narrowTo(visibleIds, filters.submittedBy);
+
+  // The boundary, in SQL and unconditional. `const`, so a later edit cannot make it an `if`.
+  const query = db
     .from("deal_flow")
     .select(SELECT)
     .eq("tenant_id", tenantId)
     .eq("partner_id", partnerId)
+    .in("agent_leads.created_by", visibleIds)
     .gte("local_date", from)
     .lte("local_date", to)
     .order("updated_at", { ascending: false })
     .limit(MAX_ROWS);
-  if (closerId) query = query.eq("agent_leads.created_by", closerId);
 
   const { data, error } = await query;
   if (error) throw new Error(`Could not load the daily deal flow: ${error.message}`);
@@ -157,7 +174,10 @@ export async function listPartnerDealFlow(
   });
 
   // The facets describe what this viewer could filter down to, so they come from the scoped set
-  // before the page's own filters narrow it — otherwise choosing a product empties the product menu.
+  // before the page's own filters narrow it — otherwise choosing a product empties the product menu,
+  // and choosing a person leaves the submitter menu holding only that person. Because `scoped` is
+  // already inside the boundary, the submitter menu can never name somebody whose rows the page
+  // would then refuse to show.
   const facets = {
     products: [...new Set(scoped.map((row) => row.productLine))].sort(),
     submitters: [...new Map(scoped.filter((row) => row.submittedBy.id).map((row) => [row.submittedBy.id as string, { id: row.submittedBy.id as string, name: row.submittedBy.name }])).values()]
@@ -169,6 +189,10 @@ export async function listPartnerDealFlow(
   // true once one of them is picked — a chip reading "Won 4" that becomes "Won 0" the moment you
   // press it is worse than no count at all.
   const beforeStage = scoped.filter((row) => {
+    // Fails closed: a row whose submitter is not in the allowed list is dropped whatever the query
+    // returned. The `.in()` above already guarantees it — this costs nothing and means the table
+    // cannot show a row the boundary would refuse, even if that line is ever weakened.
+    if (!row.submittedBy.id || !allowedIds.includes(row.submittedBy.id)) return false;
     if (filters.product && row.productLine !== filters.product) return false;
     if (search && !searchable(row).includes(search)) return false;
     return true;

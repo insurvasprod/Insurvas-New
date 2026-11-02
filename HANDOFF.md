@@ -93,26 +93,39 @@ Suggested — the owner has not directed these:
    alone; nothing else imports a chart primitive.
 4. Round 2's `tasks/partner-pipeline/todo.md` task 21 is closed; nothing is left open there.
 
-## Daily deal flow (1 Nov, in progress)
+## Daily deal flow (1–2 Nov, in progress)
 
 A fifth workspace page, `/partner/deal-flow`: one day of what the agency did with this partner's
 leads — stage, carrier, monthly premium, draft date — read-only, defaulting to today in the partner
 organisation's timezone. Plan and tasks in `tasks/partner-daily-deal-flow/{plan,todo}.md`.
 
-**Access is unchanged.** A partner admin sees the whole organisation and a partner user sees their
-own submissions, exactly as on Pipeline: the service calls `effectiveCloser` / `canSeeLead` from
-`lib/partnerLeads/scope.ts` rather than restating the rule, and
-`lib/partnerDealFlow/isolation.test.mjs` fails the build if it starts deciding for itself.
+**Access, revised 2 Nov: on this page an admin sees their team.** A `partner_user` sees the deals
+on leads they submitted; a `partner_admin` sees their own team's and their own, where a team is the
+members whose `partner_users.partner_admin_user_id` points at that admin — the reporting line the
+agency already manages, which until now governed nothing anyone could see. The rule is
+`lib/partnerAuth/team.ts`, pure and tested; the route resolves the id list from the session and the
+service is handed ids, so nothing below the route sees a role at all.
 
-> An earlier draft of the plan read the owner's answer as "narrow every page to the admin's own
-> team" and built it — a team rule from `partner_users.partner_admin_user_id` across Pipeline, the
-> lead record, the export, Overview and Team review, with a migration to carry a list of ids into
-> the pipeline read model. That was the wrong reading and was **reverted in full** on the same day.
-> Nothing of it remains; the team-scoping question is closed.
+**Everywhere else an admin still sees the whole organisation.** `lib/partnerLeads/scope.ts` is
+byte-identical to what it was, and Pipeline, the lead record, the CSV export, Overview and Team
+review are unchanged. The portal is therefore inconsistent on purpose: an admin can open a lead on
+Pipeline that is absent from Daily deal flow. Matching Pipeline to it needs a **migration** —
+`partner_lead_pipeline_page` takes one `p_closer_id`, not a list — so the two moved separately, and
+that is written down in `components/partner/README.md`, in the service's own docblock and here, so
+nobody "fixes" it by accident.
+
+> On 1 Nov an earlier draft read the owner's answer as "narrow every page" and built exactly that,
+> rescoping Pipeline, the lead record, the export, Overview and Team review in one stroke by
+> editing `scope.ts`. It was **reverted in full** the same day. The 2 Nov work is the narrow
+> version of the same idea: one page, no migration, `scope.ts` untouched. If the rule ever should
+> spread, it spreads from `team.ts` — editing `scope.ts` is what made the first attempt invisible.
 
 Built so far: the read (`lib/partnerDealFlow/`, with pure `localDay.ts` and `figures.ts`), the API
-route, the page, the sidebar entry and the `/design/deal-flow` preview. **Not yet verified:** the
-day stepper's fetch and the CSV download, both of which need a signed-in session.
+route, the page, the sidebar entry, the team rule and its loader, and the `/design/deal-flow`
+preview — whose sample organisation now has two teams and an unassigned member, because the scoping
+rule is invisible on a flat list of submitters. **Not yet verified:** the day stepper's fetch and
+the CSV download, and the scoping itself has only ever run against fixtures — nobody has opened
+this page signed in.
 
 ## Agency dashboard redesign (2 Nov, in progress)
 
@@ -152,6 +165,8 @@ session; `scripts/seed-qa-agency.mjs` seeds exactly that on the LA-1.25 Alert De
 | `app/design/agency/page.tsx` | Dev-only preview; the live agency is empty, so this is the only place the page can be seen with data |
 | `tasks/partner-daily-deal-flow/plan.md` | Daily deal flow: the decisions, what was cut from the agency's version, and why |
 | `lib/partnerDealFlow/types.ts` | `PARTNER_DEAL_FLOW_COLUMNS` — the literal allow-list that keeps the agency's notes, closers and vendors off the partner's page |
+| `lib/partnerAuth/team.ts` | Who a partner admin's team is — **Daily deal flow only**; `scope.ts` still opens the organisation everywhere else |
+| `lib/partnerDealFlow/fixtures.ts` | The preview's sample organisation: two teams and one unassigned member, so the scoping can be seen working or failing |
 | `lib/partnerDealFlow/localDay.ts` | The local-date boundary; `deal_flow.local_date` is local, and a UTC read is off by one for part of every day |
 | `lib/partnerDealFlow/figures.ts` | The four cards' arithmetic — change it here, not in the component |
 | `tasks/partner-portal-round-3/plan.md` | Round 3's reasoning, risks and the three-library decision |

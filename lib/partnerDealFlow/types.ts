@@ -42,6 +42,25 @@ export const PARTNER_DEAL_FLOW_COLUMNS = [
  */
 export const PARTNER_DEAL_FLOW_LEAD_COLUMNS = ["created_by", "created_at", "stage_id"] as const;
 
+/**
+ * Who this request may see, resolved from the signed session before the service is called.
+ *
+ * Ids rather than a role, deliberately. The portal's own rule is `lib/partnerLeads/scope.ts`', and
+ * under it a `partner_admin` sees the whole organisation — on Pipeline, the lead record, the CSV
+ * export, Overview and Team review, where it is unchanged. This page alone narrows an admin to
+ * their team (owner, 2 Nov), and it does so by being handed a list rather than by re-deciding from
+ * the role: a second opinion about who an admin is would drift from `scope.ts` the day after it
+ * was written. `lib/partnerAuth/team.ts` works out the list; this is the shape it travels in.
+ */
+export type PartnerDealFlowAccess = {
+  /**
+   * The `agent_leads.created_by` ids this viewer may read. **Never empty** — it always holds the
+   * viewer themselves. An empty list would filter to nothing, or tempt the next reader of the
+   * query into treating it as "no filter"; the service throws rather than accept one.
+   */
+  visibleIds: readonly string[];
+};
+
 export type PartnerDealFlowRow = {
   leadId: string;
   /** The deal's own local day. One range can hold several, so the row carries it, not the page. */

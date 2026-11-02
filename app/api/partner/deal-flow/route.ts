@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { partnerTeamMembers, requirePartner } from "@/lib/partnerAuth/requirePartner";
+import { visibleSubmitters } from "@/lib/partnerAuth/team";
 import { listPartnerDealFlow } from "@/lib/partnerDealFlow/service";
 import { partnerDealFlowCsv } from "@/lib/partnerDealFlow/csv";
 import { resolveDay } from "@/lib/partnerDealFlow/localDay";
@@ -10,10 +11,16 @@ import { DEAL_FLOW_STAGE_TYPES, type DealFlowStageType, type PartnerDealFlowFilt
  * Daily deal flow for the signed-in partner (plan `tasks/partner-daily-deal-flow`).
  *
  * Open to both roles and read-only: there is no POST, PATCH or DELETE here, because the agency
- * records what it did with a lead and the partner reads it. Who sees which rows is decided by
- * `effectiveCloser` inside the service, exactly as on the pipeline route — a partner user is
- * pinned to their own submissions whatever `?submitted_by=` says, and an admin may use it to
- * narrow to one person in their organisation.
+ * records what it did with a lead and the partner reads it.
+ *
+ * Who sees which rows is decided here, from the session, and handed to the service as a list of
+ * ids — the service is given the answer rather than the question. A `partner_user` gets their own
+ * id; a `partner_admin` gets their team's and their own (`lib/partnerAuth/team.ts`). This is the
+ * one partner page that narrows an admin below the whole organisation; everywhere else
+ * `lib/partnerLeads/scope.ts` still opens the organisation to them, unchanged.
+ *
+ * `?submitted_by=` only ever narrows inside that list. A partner user naming a colleague, or an
+ * admin naming another team's member, gets their own view back rather than an error.
  *
  * `tenant_id` and `partner_id` come from the signed session. A `?partner_id=` that is not the
  * caller's is refused rather than ignored, so a wrong link fails loudly instead of quietly showing
@@ -52,11 +59,16 @@ export async function GET(request: NextRequest) {
   const from = resolveDay(params.get("from"), context.partnerTimezone);
   const to = resolveDay(params.get("to"), context.partnerTimezone);
   try {
+    // Inside the try with the service's own reads: a `partner_users` read that fails throws rather
+    // than returning an empty list, so the request ends in an error instead of a page that looks
+    // right and is scoped wrong.
+    const members = await partnerTeamMembers(context.tenantId, context.partnerId);
+    const visibleIds = visibleSubmitters({ userId: context.userId, role: context.role }, members);
     const payload = await listPartnerDealFlow(
       context.tenantId,
       context.partnerId,
       { from, to, timezone: context.partnerTimezone, filters: filtersFrom(request) },
-      { userId: context.userId, role: context.role },
+      { visibleIds },
     );
     if (params.get("format") === "csv") {
       const name = payload.from === payload.to ? payload.from : `${payload.from}_${payload.to}`;

@@ -225,3 +225,153 @@ See [todo.md](todo.md) for acceptance criteria, verification and file lists.
 2. **Statement reconciliation.** Partner admins also see Statements. If the day's won premium should
    tie back to a statement line, that link belongs in Task 5 — it is the one cross-page connection
    a partner would actually want.
+
+---
+
+# Round 3: team scoping, on Daily deal flow only (2 Nov)
+
+**Status:** planned, not started. **Awaiting approval.**
+
+## What was asked
+
+> "the publisher admin account can see the leads for their team, while the user can only see their
+> leads, so nobody else's."
+
+A `partner_admin` sees their own team's deals; a `partner_user` sees only their own. On **Daily
+deal flow**.
+
+## This was built once and reverted — read this before starting
+
+On 1 Nov I built exactly this rule and applied it across the whole portal, then reverted it in
+full when the owner said to leave organisation-wide access as it was. Nothing of it survives in
+the tree. What survives is the knowledge, and it changes the shape of the work:
+
+**The expensive part was never Daily deal flow.** It was Pipeline. `partner_lead_pipeline_page` is
+an RPC that takes `p_closer_id uuid` — one id, where `null` means "everyone in this partner" — so
+narrowing it to a list needed a migration across several SQL functions, modelled on
+`20261019400000_ag_scoped_deal_flow_in_sql.sql`. **Daily deal flow uses no RPC at all.** Its
+service filters in TypeScript:
+
+```ts
+if (closerId) query = query.eq("agent_leads.created_by", closerId);
+```
+
+Turning that into `.in("agent_leads.created_by", ids)` is a one-line change. **Round 3 needs no
+migration and no SQL.**
+
+**Teams already exist in the data.** `partner_users.partner_admin_user_id`, from migration
+`20260915190000`, with a trigger that forbids self-assignment and requires the target to be a
+`partner_admin` in the same organisation. The agency's Partners panel already shows "Reports to …"
+and groups members into Partner admins / Partner users / Unassigned. The reporting line is a live,
+managed concept that has never governed what anyone can see.
+
+## Architecture decisions
+
+**D1 — The rule is one pure function, in one file.** `lib/partnerAuth/team.ts`:
+`visibleSubmitters(viewer, members)` returns the `created_by` ids this viewer may see. No database,
+no server imports, so it is unit-testable — the same reason `partnerLeads/scope.ts` exists.
+
+**D2 — Daily deal flow only. `lib/partnerLeads/scope.ts` is not touched.** This is the decision
+that went wrong last time: I changed the shared `scope.ts`, which silently changed Pipeline, the
+lead record, the export, Overview and Team review too. Round 3's rule is additive and confined —
+the deal-flow service takes its own access object carrying the id list, and `effectiveCloser` keeps
+its current meaning for every other page.
+
+**The consequence, stated once:** a partner admin will see a lead on Pipeline that is absent from
+Daily deal flow. That is what "Daily deal flow only" means. It is the owner's call and the plan
+proceeds on it; if the portal should be consistent later, Pipeline is a separate job with a
+migration attached.
+
+**D3 — Deactivated members stay visible to their admin.** The membership read must **not** filter
+`status = 'active'`. Deactivating someone must not hide the deals they already submitted: the leads
+exist, the agency worked them, the partner is paid for them. Whether somebody may sign in is a
+different question, already answered for the viewer's own row in `readPartnerContext`.
+
+**D4 — The list always holds the viewer, so it is never empty.** A caller turns it into
+`.in("agent_leads.created_by", ids)`, and `[]` there matches nothing — or worse, invites a future
+caller to treat "empty" as "no filter" and open the whole organisation. Asserted in the tests.
+
+**D5 — Admins are peers.** The trigger keeps `partner_admin_user_id` null on admin rows, so there
+is no chain to walk: an admin sees their team and themselves, never another admin's submissions or
+another admin's team.
+
+**D6 — The "Submitted by" filter offers only the team.** Otherwise the control names people whose
+rows the page would then refuse to show.
+
+## The rule
+
+```
+partner_user   -> [their own id]
+partner_admin  -> [their own id] + [members whose partner_admin_user_id is this admin]
+```
+
+## Dependency graph
+
+```
+team.ts + tests          (T1)   pure, no dependencies
+      │
+      └── membership loader     (T2)   cached per request
+                │
+                ├── deal-flow service takes the list   (T3)
+                │        └── route builds it from the session   (T4)
+                │                 └── isolation tests            (T5)
+                ├── the Submitted-by facet narrows     (T3)
+                └── fixtures + preview show a team     (T6) → docs (T7)
+```
+
+Build order: **T1 → T2 → T3 → T4 → T5 → T6 → T7.** T6 can start any time after T1.
+
+## Task list
+
+See [todo.md](todo.md), Round 3 section.
+
+### Phase 1: The rule
+- [ ] Task R1: `lib/partnerAuth/team.ts` — the pure predicate, with tests
+- [ ] Task R2: the per-request membership loader
+
+### Checkpoint R-A: the rule stands alone, nothing consumes it yet
+
+### Phase 2: Daily deal flow reads it
+- [ ] Task R3: the service and its facets take the id list
+- [ ] Task R4: the route builds the access from the session
+- [ ] Task R5: isolation tests
+
+### Checkpoint R-B: an admin sees their team and nobody else's
+
+### Phase 3: Reviewable and written down
+- [ ] Task R6: fixtures and the preview show two teams
+- [ ] Task R7: docs
+
+### Checkpoint R-C: ready for review
+
+## Risks and mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Touching `lib/partnerLeads/scope.ts` silently rescopes Pipeline, the lead record, the export, Overview and Team review | **High — this is how it went wrong on 1 Nov** | D2: the deal-flow service carries its own access type. A test asserts `scope.ts` is unchanged and that `effectiveCloser` still returns null for an admin. |
+| An empty id list read as "no filter" opens the organisation | **Critical** | D4: the viewer is always in their own list, so `[]` is unreachable. Asserted. |
+| Deactivating a member hides their past deals from their admin | High | D3: the membership read does not filter on status. |
+| The portal contradicts itself — org-wide on Pipeline, team-only here | Medium, and intended | The owner's decision. Recorded in the component's docblock and the README so the next person does not "fix" it. |
+| A partner user's `?submitted_by=` widens their view | **Critical** | The list is built from the session; a requested id can only narrow within it, never add to it. Asserted. |
+| Line endings flip on edited files | Low | `git diff --stat` after each edit. One file in this area, `app/partner/(portal)/payouts/page.tsx`, is CRLF in HEAD — leave it CRLF. |
+
+## Open questions
+
+1. **Members with no admin assigned.** The agency's Partners panel has an "Unassigned users"
+   bucket, so this is a live state. On 1 Nov the owner chose **"nobody but themselves"** — their
+   deals reach no admin at all. That still stands unless you say otherwise, but it is worth
+   re-confirming, because it is a silent hole: a lead submitted by an unassigned member would be
+   invisible to every admin on this page.
+2. **Should the agency be told?** If 1 stands, the agency's Partners panel could raise its
+   "Unassigned users" count from a filter option to a visible warning, so somebody can close the
+   hole. One extra task; say if you want it.
+3. **Pipeline later?** Not in this round. Say if you want it queued as its own job — it carries the
+   migration this one does not.
+
+## Open questions — answered 2 Nov ("your recommendations")
+
+| # | Decision |
+|---|---|
+| 1 | **Unassigned members: nobody but themselves.** Carried forward from 1 Nov. A member with no `partner_admin_user_id` appears in no admin's team on this page. |
+| 2 | **No warning in the agency's Partners panel. My recommendation changed — here is why.** When this rule was planned portal-wide, an unassigned member's leads would have been invisible to every admin everywhere, which is a genuine hole worth flagging to the agency. Scoped to Daily deal flow alone, the leads are **not** invisible: an admin still sees them on Pipeline, the lead record, the export and Overview. The gap is one page, not the portal, and changing an agent-app screen to warn about it would be out of proportion to a gap that size. Revisit only if Pipeline ever follows. |
+| 3 | **Pipeline stays organisation-wide.** Not queued as a task, recorded as a known follow-up in Task R7's note so the inconsistency reads as a decision rather than an oversight. It carries a migration across several SQL functions; Round 3 does not. |

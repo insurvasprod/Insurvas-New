@@ -74,7 +74,7 @@ Check a change on `/design/overview` (busy, quiet, empty, error; both roles; thr
 and `/design/organization` (Team review and Statements). Team access and Settings have no preview:
 their figures are the shared cards and their data is a single list.
 
-## Daily deal flow (2026-11-01)
+## Daily deal flow (2026-11-01, scope revised 2026-11-02)
 
 `partner-deal-flow.tsx` — what the agency did with this partner's leads, over a range that defaults
 to today.
@@ -98,10 +98,30 @@ Two differences, both the owner's own earlier decisions rather than design choic
 The dropdowns are the agent's **native `<select>`** (owner, 1 Nov), which makes this the one page
 in the portal with one — see Controls below.
 
-- **No access decision in the component or the service.** `effectiveCloser` and `canSeeLead` from
-  [`lib/partnerLeads/scope.ts`](../../lib/partnerLeads/scope.ts) decide it, so this page and
-  Pipeline cannot drift apart. `lib/partnerDealFlow/isolation.test.mjs` fails the build if the
-  service starts branching on the role itself.
+- **This page is deliberately narrower than the rest of the portal.** A `partner_user` sees the
+  deals on leads they submitted; a `partner_admin` sees **their own team's and their own** — the
+  members whose `partner_admin_user_id` points at them (owner, 2 Nov). The rule is
+  [`lib/partnerAuth/team.ts`](../../lib/partnerAuth/team.ts): the route works the id list out from
+  the session and hands the service ids, so neither the component nor the service ever sees a role.
+
+  Everywhere else an admin still sees the **whole partner organisation** —
+  [`lib/partnerLeads/scope.ts`](../../lib/partnerLeads/scope.ts) is untouched, and Pipeline, the
+  lead record, the CSV export, Overview and Team review are unchanged. So an admin can open a lead
+  on Pipeline that is absent from here. **That is the decision, not a bug to fix.** Bringing
+  Pipeline into line would take a migration — `partner_lead_pipeline_page` takes one `p_closer_id`,
+  not a list — which is why the two are out of step rather than both moved at once. If the rule
+  ever does spread, it spreads from `team.ts`; editing `scope.ts` silently rescopes five surfaces,
+  which is what had to be reverted on 1 Nov.
+
+  `lib/partnerAuth/team.test.mjs` holds the rule and `lib/partnerDealFlow/isolation.test.mjs` holds
+  the wiring — including that `scope.ts` still opens the organisation to an admin, so a future edit
+  cannot quietly take Pipeline with it.
+- **A member nobody has assigned reaches no admin here.** With a null `partner_admin_user_id` they
+  are on no team, so on this page their deals go to no admin at all. They stay visible to an admin
+  on every other partner surface, which is why the agency is not warned about it.
+- **The page says "your team", not "your organisation".** Two strings depend on the scope: the
+  Deals worked card's footer and the empty state's hint. No test asserts copy against the scope, so
+  if the boundary moves again, read them.
 - **The arithmetic is pure and lives apart.** The local-date boundary is
   [`localDay.ts`](../../lib/partnerDealFlow/localDay.ts) — `deal_flow.local_date` is a local date,
   and a UTC read is off by one for part of every day — and the four figures are
@@ -111,9 +131,19 @@ in the portal with one — see Controls below.
   portal, already scoped and already masked.
 
 Check a change on `/design/deal-flow` (busy, quiet, empty, error; both roles) at 1536×826,
-1366×657 and 375 wide. Note that the entrance animation (`m-stagger`) stalls while the browser pane
-is backgrounded, so a screenshot taken then catches it mid-fade and the page looks blank — read the
-accessibility tree or computed styles instead, or disable animations before the shot.
+1366×657 and 375 wide.
+
+The sample organisation has **two admins with their own reports and one unassigned member**, and
+the day holds deals from all six. That is not decoration: on a flat list of submitters the scoping
+rule is invisible, because a build that had lost it entirely would look exactly like one that kept
+it. The caption above the table says who is viewing and how much is being withheld — "Rion Test
+sees 9 of 12 — team: Dana Whitfield, Sam Okafor · not theirs: Noor Haddad, Theo Lindqvist, Orla
+Byrne" — and it is computed from the same membership rows the rule reads, so it cannot drift from
+the table beneath it.
+
+Note that the entrance animation (`m-stagger`) stalls while the browser pane is backgrounded, so a
+screenshot taken then catches it mid-fade and the page looks blank — read the accessibility tree or
+computed styles instead, or disable animations before the shot.
 
 ## Controls (2026-10-30)
 

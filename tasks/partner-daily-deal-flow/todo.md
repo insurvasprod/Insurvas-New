@@ -399,3 +399,339 @@ The owner looked at the finished page and asked for "exactly the same design as 
 | No Campaign, Vendor, Owner or Notes columns | Agency-internal (`PARTNER_DEAL_FLOW_COLUMNS`). Replaced by Carrier, Product and Submitted by. |
 | No "By partner" or "Dial funnel" tabs | A partner is one partner; Team review already owns performance over time. |
 | ~~`SelectMenu` instead of native `<select>`~~ | **Resolved 1 Nov: made native.** The dropdowns are now the agent's native `<select>` in a shared `FilterField`. This is the only native `<select>` in the partner portal, and `components/partner/README.md` records it as the one exception to the 29 Oct rule. |
+
+---
+
+# Round 3 tasks: team scoping on Daily deal flow (2 Nov)
+
+Plan, decisions and risks: [plan.md](plan.md), Round 3. **All seven tasks done; Checkpoint R-C
+reached except the owner's review. Not committed.**
+
+**The rule:** a `partner_user` sees only deals on leads they submitted; a `partner_admin` sees
+their own team's and their own, where a team is the members whose `partner_admin_user_id` points
+at that admin. **On Daily deal flow only.**
+
+**Standing bar for every Round 3 task:**
+
+- `npm test` at its baseline — **20 failures**, those 20 pre-existing SQL-text assertions against
+  CRLF-checked-out migrations. No task may add a 21st. (3542/3522/20 before Round 3;
+  3558/3538/20 after R1's sixteen.)
+- `npx tsc --noEmit` and `npm run build` clean, and **the files you touched produce no lint
+  output**. Repo-wide `npm run lint` is useless as a gate and was before Round 3: it exits 0 while
+  reporting ~138,000 problems, nearly all of them from `.claude/worktrees/foundation-v3/.next/` —
+  a stale worktree's build output being linted as source. Run
+  `npx eslint <the files you changed>` instead, which is fast and exits non-zero on a real
+  problem. (Worth fixing separately by ignoring `.claude/worktrees` in the eslint config; it is
+  not Round 3's job.)
+- `git diff --stat` after each edit; no whole-file rewrites. `app/partner/(portal)/payouts/page.tsx`
+  is CRLF in HEAD — if you touch it, leave it CRLF.
+- **`lib/partnerLeads/scope.ts` is not modified.** Every other partner page keeps organisation-wide
+  access for an admin.
+
+---
+
+### Task R1: The pure team predicate
+
+**Description:** One file answering "which submitter ids may this viewer see?", with no database
+and no server imports, so it can be tested against what it promises.
+
+**Acceptance criteria:**
+- [x] `visibleSubmitters(viewer, members)` returns `[viewer.userId]` for a `partner_user`.
+- [x] For a `partner_admin`, the admin plus every member whose `partner_admin_user_id` equals the
+      admin's id — and nobody else: not other admins, not another admin's reports, not unassigned
+      members.
+- [x] The result always contains the viewer and is never empty.
+- [x] No duplicates, and the caller's input array is not reordered.
+- [x] `narrowTo(ids, requestedId)` returns `ids` when nothing was asked for, `[requestedId]` when
+      the id is already in `ids`, and `ids` **unchanged** when it is not — narrow, never widen, and
+      never error (an error would confirm that the id exists).
+
+**Verification:**
+- [x] `node --experimental-strip-types --test lib/partnerAuth/team.test.mjs` — 16 pass, 0 fail.
+- [x] A case per rule above, each named for the wrong answer it prevents.
+
+**Added beyond the criteria:** a self-pointing admin row (what happens if the no-self-assignment
+trigger is ever dropped) and `narrowTo` returning a copy, so a caller cannot alias the team list.
+
+**Dependencies:** None
+
+**Files likely touched:**
+- `lib/partnerAuth/team.ts`
+- `lib/partnerAuth/team.test.mjs`
+
+**Estimated scope:** Small
+
+---
+
+### Task R2: The per-request membership loader
+
+**Description:** Read the organisation's membership once per request and hand it to the predicate.
+Memoised with `react.cache`, as `readPartnerContext` already is.
+
+**Acceptance criteria:**
+- [x] `partnerTeamMembers(tenantId, partnerId)` returns `{ user_id, role, partner_admin_user_id }`.
+- [x] It reads **every** membership row, **not** only active ones (plan D3) — deactivating a member
+      must not hide the deals they already submitted from their admin. A comment says so.
+- [x] A failed read throws rather than returning an empty or a wide list; the caller fails closed
+      and loudly.
+- [x] One `partner_users` read per request, not one per call site — `cache()` from react, like
+      `readPartnerContext` directly above it.
+- [x] A row whose `role` is neither partner role is dropped rather than cast, so a future enum
+      value cannot arrive in the team list untyped.
+
+**Verification:**
+- [x] `npm run build` — exit 0.
+- [ ] Manual: open the page and confirm a single `partner_users` read per request. **Still open,
+      and it needs a signed-in session, which is blocked here.** Structurally it cannot multiply:
+      there is one call site (the route) and it goes through `cache()`. But that is an argument,
+      not a measurement.
+
+**Dependencies:** R1
+
+**Files likely touched:**
+- `lib/partnerAuth/requirePartner.ts`
+
+**Estimated scope:** Small
+
+---
+
+### Checkpoint R-A: the rule stands alone — **reached 2 Nov**
+
+- [x] `team.test.mjs` covers user, admin-with-team, admin-without-team, unassigned member, a second
+      admin, and narrow-not-widen. 16 cases, all passing.
+- [x] **Nothing consumes the rule yet — the portal behaves exactly as it does today.** Verified by
+      grep: no import of `partnerAuth/team`, `visibleSubmitters` or `partnerTeamMembers` outside
+      the two files that define them.
+- [x] `npm test` still at 20 failures — 3558 tests, 3538 pass, 20 fail, the same CRLF SQL-text
+      assertions as before.
+- [x] `npx tsc --noEmit` and `npm run build` exit 0; neither new file produces lint output.
+- [x] `git diff --stat lib/partnerLeads/scope.ts` empty — Pipeline, the lead record, the export,
+      Overview and Team review are untouched.
+- [x] The whole diff is insertions. No file flipped its line endings.
+
+---
+
+### Task R3: The deal-flow service takes the list
+
+**Description:** The one change that does the work. Today the service calls `effectiveCloser` and
+applies `.eq("agent_leads.created_by", closerId)`; it takes the team's ids and applies `.in(...)`.
+No RPC, no migration.
+
+**Acceptance criteria:**
+- [x] `listPartnerDealFlow` takes an access object carrying `visibleIds` — `PartnerDealFlowAccess`
+      in `lib/partnerDealFlow/types.ts`. `PartnerLeadAccess` is untouched.
+- [x] The query filters `.in("agent_leads.created_by", visibleIds)`, always applied. The builder is
+      now `const`, so the `if (…) query = query…` shape that made it conditional cannot come back,
+      and a test asserts both.
+- [x] `?submitted_by=` narrows within the list and can never add to it (`narrowTo`).
+- [x] The **Submitted by facet** offers only the ids in the list: the facets are built from the
+      rows the boundary already returned, so naming somebody outside it is not possible.
+- [x] The figures, the stage chips and the CSV all describe the same narrowed set — all four are
+      derived from `beforeStage`, and the route hands `payload.rows` to the CSV. Confirmed by
+      reading the flow, and the CSV's single source is asserted in `isolation.test.mjs`.
+- [x] `lib/partnerLeads/scope.ts` is byte-identical to HEAD.
+
+**Changed beyond the criteria, on purpose.** `?submitted_by=` used to be applied in SQL, which
+collapsed the Submitted-by menu to the one person picked — you could not switch to another without
+clearing the filter first. That is a pre-existing bug, but this task rewrites the exact lines it
+lives on, so leaving it would have made it look new. The SQL filter is now purely the boundary
+(the team), and the submitter choice is one of the page's own in-memory filters next to product and
+search — which is what the facet comment already said should happen.
+
+**And the page had to stop saying "organisation".** Two strings in
+`components/partner/partner-deal-flow.tsx` told an admin the figures covered the organisation:
+the Deals worked card's footer, and the empty state's hint. Both now say "your team". Found by
+opening the preview rather than by a test — no test asserts page copy against the scope, and after
+this one neither does any other, so the next person to change the scope will have to look too.
+
+**Verification:**
+- [x] `node --experimental-strip-types --test "lib/partnerDealFlow/*.test.mjs"` — all pass.
+- [x] `git diff --stat lib/partnerLeads/scope.ts` is empty.
+- [x] `/design/deal-flow?role=partner_admin` reads "Across your team"; `?role=partner_user` still
+      reads "Submitted by you".
+
+**Dependencies:** R2
+
+**Files likely touched:**
+- `lib/partnerDealFlow/service.ts`
+- `lib/partnerDealFlow/types.ts`
+
+**Estimated scope:** Medium
+
+---
+
+### Task R4: The route builds the access from the session
+
+**Acceptance criteria:**
+- [x] The route resolves the id list from the signed session and passes it; nothing about who the
+      caller is comes from the request. `partnerTeamMembers(context.tenantId, context.partnerId)`
+      then `visibleSubmitters({ userId: context.userId, role: context.role }, members)`.
+- [x] `?partner_id=` that is not the caller's still returns 403 — `checkPartnerParam` is unchanged.
+- [x] The CSV export is narrowed identically to the table — one payload feeds both, and the table
+      is `payload.rows`.
+- [x] Still no POST, PATCH, PUT or DELETE.
+- [x] The membership read sits inside the same `try` as the service's own reads, so a read that
+      fails ends the request rather than producing a page that looks right and is scoped wrong.
+
+**Verification:**
+- [x] `curl` the route unauthenticated gives 401; POST, PATCH, PUT and DELETE give 405. A
+      `?partner_id=` that is not the caller's gives 401 before 403, because authentication runs
+      first — you cannot probe partner ids without a session.
+- [x] `npm run build` — exit 0.
+
+**Dependencies:** R3
+
+**Files likely touched:**
+- `app/api/partner/deal-flow/route.ts`
+
+**Estimated scope:** Small
+
+---
+
+### Task R5: Isolation tests
+
+**Description:** The protection `lib/partnerLeads/isolation.test.mjs` gives Pipeline, for this
+page's new rule — so a change that weakens it fails the build instead of being noticed by a partner.
+
+**Acceptance criteria:**
+- [x] A partner user asking for a colleague's id gets their own rows only.
+- [x] An admin asking for another team's member gets their own team's rows only — no widening, no
+      error.
+- [x] An admin never sees another admin's own submissions.
+- [x] An unassigned member's deals reach no admin.
+- [x] A test asserts the service does **not** import or branch on the role itself (no
+      `access.role`, no `effectiveCloser`), and that `effectiveCloser` still returns null for an
+      admin and `scope.ts` has never heard of teams — so a future edit cannot quietly rescope
+      Pipeline.
+
+**What these tests are, and are not.** They do not run a query: the service reads Supabase, so the
+rows themselves are only ever seen by a person. What is proved is the id list the query is built
+from, plus — by source text, the way the rest of this file already works — that the query is built
+from it and from nothing else. `isolation.test.mjs` says so at the top, so nobody reads more
+assurance into it than it gives.
+
+**Verification:**
+- [x] `node --experimental-strip-types --test lib/partnerDealFlow/isolation.test.mjs` — 19 pass.
+- [x] `npm test` still at 20 failures — 3567 tests, 3547 pass, 20 fail.
+
+**Dependencies:** R4
+
+**Files likely touched:**
+- `lib/partnerDealFlow/isolation.test.mjs`
+
+**Estimated scope:** Small
+
+---
+
+### Checkpoint R-B: an admin sees their team and nobody else's — **reached 2 Nov**
+
+- [x] Proved by test, not by eye — 19 cases in `lib/partnerDealFlow/isolation.test.mjs`, on top of
+      the 16 in `lib/partnerAuth/team.test.mjs`. With the caveat recorded under R5: these prove the
+      id list and the wiring, not a query's output.
+- [x] Pipeline, the lead record, the export, Overview and Team review are **unchanged** — an admin
+      still sees the whole organisation there. `/design/pipeline?role=partner_admin` still reads
+      "Your organisation's leads", and no file under `lib/partnerLeads/` or any pipeline route is
+      in the diff at all.
+- [x] `npm test` at 3567 tests, 3547 pass, 20 fail — the same 20 pre-existing CRLF SQL-text
+      assertions. `tsc --noEmit` and `npm run build` exit 0; no changed file produces lint output.
+- [x] Every changed file kept its line endings; `git diff --stat` shows only real edits.
+- [x] The preview's sample data was one flat list of three submitters, so the rule could not be
+      *seen* working or failing. Fixed in R6: two teams, an unassigned member, and a caption that
+      states what is being withheld.
+- [ ] **Still only fixtures.** Nobody has opened this page signed in — see Checkpoint R-C.
+
+---
+
+### Task R6: Fixtures and the preview show two teams
+
+**Description:** The rule is invisible on today's sample data, which has one flat list of people.
+Without two teams on the preview there is no way to see the rule working, or failing.
+
+**Acceptance criteria:**
+- [x] `lib/partnerDealFlow/fixtures.ts` models **two admins with their own reports, plus one
+      unassigned member** — Rion (admin) with Dana and Sam, Noor (admin) with Theo, and the
+      unassigned Orla. The busy day holds twelve deals across all six.
+- [x] `/design/deal-flow?role=partner_admin` shows one admin's team; a second admin's reports are
+      absent and visibly so.
+- [x] `?role=partner_user` is their own rows only — the viewer there is Dana, one of Rion's
+      people, so the user's three rows are a visible subset of the admin's nine.
+- [x] The Submitted-by filter on the preview lists only the team.
+- [x] **The fixture narrows by calling `visibleSubmitters`**, the same function the route calls,
+      rather than imitating the rule with its own `role ===` check as it used to. The preview now
+      shows what the page will show, and changes when the rule does.
+- [x] **A caption says what is being withheld.** "Rion Test sees 9 of 12 — team: Dana Whitfield,
+      Sam Okafor · not theirs: Noor Haddad, Theo Lindqvist, Orla Byrne", computed from the same
+      membership rows. Nine rows on screen look identical whether three are correctly withheld or
+      the rule has stopped running; the caption is what makes the difference legible.
+
+**Verification:**
+- [x] Both roles at 1536×826, no horizontal scroll, caption on one line. Admin: 9 rows, submitters
+      exactly Rion/Dana/Sam, and Gloria Mendes, Walter Reyes and Ada Nwosu absent from the page.
+      User: 3 rows, no Submitted-by column, no submitter filter. Quiet: 2 of 3 and 1 of 3.
+- [x] `npm test` — 3572 tests, 3552 pass, the same 20 pre-existing failures.
+- [x] Five new cases in `isolation.test.mjs` cover the preview, and a **mutation check** confirmed
+      they bite: removing the narrowing from `fixtures.ts` fails three of them.
+
+**Dependencies:** R1 (the shape), R3 (the behaviour)
+
+**Files likely touched:**
+- `lib/partnerDealFlow/fixtures.ts`
+- `app/design/deal-flow/page.tsx`
+
+**Estimated scope:** Small
+
+---
+
+### Task R7: Write down why the portal is inconsistent
+
+**Description:** An admin seeing more on Pipeline than on Daily deal flow looks like a bug. If it
+is not written down where the next person reads, somebody will "fix" it.
+
+**Acceptance criteria:**
+- [x] `components/partner/README.md` states the rule, that it applies to this page only, and why.
+      Its old bullet said the opposite — "`effectiveCloser` and `canSeeLead` decide it, so this
+      page and Pipeline cannot drift apart" — which this round made false.
+- [x] The service's docblock says the same, next to the code, under a heading that names the
+      inconsistency rather than burying it.
+- [x] `HANDOFF.md` records the change and its date. Its Daily deal flow section said "**Access is
+      unchanged**" and "the team-scoping question is closed"; both are now corrected, and the 1 Nov
+      revert is kept as the reason the rule lives in `team.ts` rather than `scope.ts`.
+- [x] All three say Pipeline would need a **migration** (`partner_lead_pipeline_page` takes one
+      `p_closer_id`, not a list), so nobody assumes it is a quick follow-up.
+- [x] `lib/partnerAuth/team.ts`'s own docblock carries the rule, since that is where somebody
+      changing it will actually be.
+- [x] Added to `HANDOFF.md`'s Relevant Files: `lib/partnerAuth/team.ts` and
+      `lib/partnerDealFlow/fixtures.ts`.
+
+**Verification:**
+- [x] `node --experimental-strip-types --test lib/design/designDocs.test.mjs` — 4 pass.
+
+**Dependencies:** R5
+
+**Files likely touched:**
+- `components/partner/README.md`
+- `lib/partnerDealFlow/service.ts`
+- `HANDOFF.md`
+
+**Estimated scope:** Small
+
+---
+
+### Checkpoint R-C: ready for review — **2 Nov**
+
+- [x] All seven tasks' acceptance criteria met.
+- [x] `npm test` at 3572 / 3552 / 20 — the same 20 pre-existing CRLF SQL-text failures and no
+      more. `tsc --noEmit` and `npm run build` exit 0; `npx eslint` on all ten changed files gives
+      no output. (Repo-wide `npm run lint` is not a gate — see the standing bar above.)
+- [x] The three open questions in plan.md answered.
+- [x] `lib/partnerLeads/scope.ts` byte-identical to HEAD, and no file under `lib/partnerLeads/` or
+      any pipeline route is in the diff. `/design/pipeline?role=partner_admin` still reads "Your
+      organisation's leads".
+- [x] Every changed file kept its line endings.
+- [ ] Reviewed with the owner.
+- [ ] Still true, and still worth saying: **nobody has opened the partner portal signed in.** This
+      rule decides who sees whose leads, and it has only ever been exercised against fixtures. The
+      preview is a good fixture — two teams, an unassigned member, a caption that states what is
+      withheld — but it is still the rule checking its own work. The first real test is one admin,
+      signed in, not seeing another team's deals.
+- [ ] Not committed. Three commits remain local and unpushed on `redesign/partner-pipeline`.

@@ -183,7 +183,7 @@ export function PartnerDealFlow({
           to its deals; In progress turns amber when a deal is days old. */}
       <StatRow label="Deal flow summary">
         <StatCard icon={Handshake} label="Deals worked" period={periodText} value={figures ? figures.worked : "—"}
-          fact={{ label: isAdmin ? "Across your organisation" : "Submitted by you" }} />
+          fact={{ label: isAdmin ? "Across your team" : "Submitted by you" }} />
         <StatCard icon={BadgeCheck} label="Won" period={periodText} value={figures ? figures.won : "—"}
           fact={{ label: "Annualised", value: figures ? `${formatCentsAsCurrency(figures.wonAnnualisedCents)}${figures.wonUnpriced > 0 ? ` · ${figures.wonUnpriced} unpriced` : ""}` : "—" }}
           action={figures && figures.won > 0 && filters.stage_type !== "won" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "won" })}>Show</button> : undefined} />
@@ -286,7 +286,7 @@ export function PartnerDealFlow({
                           <EmptyState
                             title={isToday ? "No deals worked yet today" : "No deals worked in this range"}
                             hint={isAdmin
-                              ? "Leads your organisation sends appear here once the agency works them."
+                              ? "Leads your team sends appear here once the agency works them."
                               : "Leads you send appear here once the agency works them."}
                             action={<Button asChild variant="outline"><Link href="/partner/submit-lead">Submit a lead</Link></Button>}
                           />

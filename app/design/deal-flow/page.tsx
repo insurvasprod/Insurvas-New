@@ -9,6 +9,7 @@ import {
   SAMPLE_DEAL_FLOW_ROLES,
   SAMPLE_DEAL_FLOW_STATES,
   sampleDealFlow,
+  sampleDealFlowAudience,
   type SampleDealFlowRole,
   type SampleDealFlowState,
 } from "@/lib/partnerDealFlow/fixtures";
@@ -34,6 +35,9 @@ export default async function DealFlowDesignPage({ searchParams }: { searchParam
   const filtersOpen = one("filters") === "open";
 
   const data = state === "error" ? null : sampleDealFlow({ state, role, day });
+  // Who is viewing, and what the rule is keeping from them. Without this the page is just a
+  // shorter table — you cannot tell a correct narrowing from a rule that has stopped running.
+  const audience = sampleDealFlowAudience({ state, role });
 
   const href = (next: Partial<{ state: string; role: string }>) =>
     `/design/deal-flow?state=${next.state ?? state}&role=${next.role ?? role}&day=${day}`;
@@ -52,6 +56,12 @@ export default async function DealFlowDesignPage({ searchParams }: { searchParam
           <span aria-hidden="true">·</span>
           <span className="flex flex-wrap items-center gap-1">
             {SAMPLE_DEAL_FLOW_ROLES.map((item) => <a key={item} href={href({ role: item })} className={pill(item === role)}>{item === "partner_admin" ? "admin" : "user"}</a>)}
+          </span>
+          <span className="w-full text-xs">
+            <span className="font-semibold text-foreground">{audience.viewer.name}</span> sees{" "}
+            <span className="font-semibold text-foreground">{audience.visibleDeals} of {audience.totalDeals}</span>
+            {audience.team.length ? ` — team: ${audience.team.join(", ")}` : " — their own submissions only"}
+            {audience.hidden.length ? ` · not theirs: ${audience.hidden.join(", ")}` : ""}
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
