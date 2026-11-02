@@ -39,10 +39,10 @@ export default async function PublisherDetailPage({
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const tab = typeof query.tab === "string" ? query.tab : null;
 
-  // Module 1 simplified (2026-10-25): quality and payouts for this one partner are sections of its
-  // Overview. Each keeps the gate of the page it replaces — its feature on the plan, the roles that
-  // page admits, and (quality) no narrowed agency session — so a section is shown only to someone who
-  // could have opened that page. Chat stays in Partner chat; Message opens this partner's conversation.
+  // Quality analytics stay in Overview; payout runs are rendered under Commercial terms. Each
+  // keeps the gate of the page it replaces — its feature on the plan, the roles that page admits,
+  // and (quality) no narrowed agency session — so only eligible viewers see the section. Chat stays
+  // in Partner chat; Message opens this partner's conversation.
   const extraTabs: Partial<Record<PartnerExtraTab, ReactNode>> = {};
   let messageHref: string | null = null;
   if (UUID.test(id)) {

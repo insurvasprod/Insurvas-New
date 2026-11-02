@@ -7,6 +7,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsAgencyMembership } from "@/lib/auth/planeSeparation";
 import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken, type PartnerSessionPayload } from "./session";
 import { isPartnerRole, type PartnerRole } from "./roles";
+import type { PartnerMember } from "./team";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
@@ -92,3 +93,33 @@ export async function requirePartner(allowedRoles?: readonly PartnerRole[]): Pro
   if (allowedRoles && !allowedRoles.includes(context.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   return { context };
 }
+
+/**
+ * Every membership row in one partner organisation, for the team rule in `./team.ts`.
+ *
+ * Memoised per request like `readPartnerContext` above, so the one page that scopes by team costs
+ * a single extra `partner_users` read however many times it asks.
+ *
+ * **Every row, not only the active ones.** Deactivating a member must not hide the deals they
+ * already submitted from their admin: the leads stay in the organisation's book, and a day's
+ * figures that shrink when somebody is offboarded would be worse than no figures. Whether a seat
+ * may sign in is `readPartnerContext`'s question, and it asks it of the person reading, not of the
+ * people read about.
+ *
+ * Fails loudly. A read that errors throws rather than returning `[]`, which the team rule would
+ * take for "an admin with no reports" and quietly narrow the page to the admin's own deals — the
+ * page would look fine and be wrong.
+ */
+export const partnerTeamMembers = cache(async (tenantId: string, partnerId: string): Promise<PartnerMember[]> => {
+  const supabase = getSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("partner_users")
+    .select("user_id, role, partner_admin_user_id")
+    .eq("tenant_id", tenantId)
+    .eq("partner_id", partnerId);
+  if (error) throw new Error(`partner_users read failed: ${error.message}`);
+  const rows = (data ?? []) as { user_id: string; role: string; partner_admin_user_id: string | null }[];
+  return rows
+    .filter((row) => isPartnerRole(row.role))
+    .map((row) => ({ user_id: row.user_id, role: row.role as PartnerRole, partner_admin_user_id: row.partner_admin_user_id }));
+});

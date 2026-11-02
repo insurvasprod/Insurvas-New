@@ -173,17 +173,19 @@ export function Segmented<K extends string>({
   options,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   options: ReadonlyArray<{ key: K; label: string; count?: number | null; tone?: "danger" }>;
   value: K;
   onChange: (key: K) => void;
+  disabled?: boolean;
 }) {
   // The one filter chip (owner 2026-10-30): a pick-one row of ToggleChips, as on the Source page.
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-2">
       {options.map((option) => (
-        <ToggleChip key={option.key} role="radio" selected={value === option.key} onClick={() => onChange(option.key)} count={option.count ?? undefined} countTone={option.tone}>
+        <ToggleChip key={option.key} role="radio" selected={value === option.key} disabled={disabled} onClick={() => onChange(option.key)} count={option.count ?? undefined} countTone={option.tone}>
           {option.label}
         </ToggleChip>
       ))}

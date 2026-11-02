@@ -69,7 +69,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
 import { PARTNER_LIMIT_KEYS } from "@/lib/partners/limits";
@@ -137,39 +137,40 @@ type PartnerDraft = {
   notes: string;
 };
 type DetailTab =
-  "overview" | "terms" | "products" | "markets" | "forms" | "team" | PartnerExtraTab;
+  "overview" | "terms" | "products" | "markets" | "people" | PartnerExtraTab;
 
 /**
- * Module 1 simplified (2026-10-25): one partner's quality and payout runs used to be pages of their
- * own; they are sections of the record's Overview now, with its users (Partner record B, chosen
- * 2026-10-25). Each keeps its own feature and role gate: the record page passes in only the
- * sections this person may see. Chat is not here: it stays in Partner chat, and the record's
- * Message button opens this partner's conversation there.
+ * A partner record has separate workspaces for performance, setup, commercial terms, markets, and
+ * people. Quality analytics stay in Overview; payout runs live with Commercial terms; team access,
+ * contact details, and notes live together in People. The record page passes only the sections this
+ * person may see, preserving each section's feature and role gate. Chat stays in Partner chat.
  */
 export type PartnerExtraTab = "quality" | "payouts";
 
-// Overview is one scroll (figures, quality, money, people, products, contact); the set-up sections
-// keep their tabs. Old links to ?tab=quality / payouts / team land on Overview at that section.
-// Five, named for the job (UI-CONSISTENCY §15). "Activity" went on 2026-10-29: its whole panel was a
+// Overview is focused on performance. Commercial terms owns rate history and payout runs; People
+// owns the team roster, contact, and notes. Old ?tab=quality links still scroll to analytics, while
+// legacy payouts/team links are mapped to their new workspaces below.
+// The setup sections are named for the job (UI-CONSISTENCY §15); product access and form design
+// now share one workspace. "Activity" went on 2026-10-29: its whole panel was a
 // paragraph saying the audit trail is not viewable here plus a link to the lead workspace, so it was
 // a tab that apologised rather than did anything ("whatever is not functional, we need to remove" —
 // owner, 29 Oct). An old ?tab=activity link falls through to Overview, as any unknown tab does.
 const detailTabs: DetailTab[] = [
   "overview",
   "products",
-  "forms",
   "terms",
   "markets",
+  "people",
 ];
-const OVERVIEW_SECTIONS = ["quality", "payouts", "team"] as const;
+const OVERVIEW_SECTIONS = ["quality"] as const;
 
 const detailTabLabel = (tab: DetailTab) =>
-  tab === "team"
-    ? "Users"
-    : tab === "markets"
+  tab === "markets"
     ? "Carrier & states"
     : tab === "terms"
       ? "Commercial terms"
+      : tab === "products"
+        ? "Products & forms"
       : tab.charAt(0).toUpperCase() + tab.slice(1);
 
 /** On / off for a product, as the kit's status chip (Foundation v3: dot plus text). */
@@ -398,7 +399,15 @@ export function PartnersWorkspace({
       return typeof value === "string" && current === value ? null : next;
     });
   const shownTabs = detailTabs;
-  const [detailTab, setDetailTab] = useState<DetailTab>(() => (shownTabs.find((tab) => tab === initialTab) ?? "overview"));
+  // Keep old deep links working as sections move to their own tab.
+  const initialDetailTab = initialTab === "forms"
+    ? "products"
+    : initialTab === "payouts"
+      ? "terms"
+      : initialTab === "team"
+        ? "people"
+        : initialTab;
+  const [detailTab, setDetailTab] = useState<DetailTab>(() => (shownTabs.find((tab) => tab === initialDetailTab) ?? "overview"));
   // A link to one of Overview's sections (?tab=quality, the cross-partner lists) scrolls to it once,
   // as soon as the section has rendered (it waits on the partner's data), giving up after ~6 s.
   const overviewSection = OVERVIEW_SECTIONS.find((section) => section === initialTab) ?? null;
@@ -741,6 +750,13 @@ export function PartnersWorkspace({
   const selectedProducts = selectedPartner
     ? (partnerProducts[selectedPartner.id] ?? [])
     : [];
+  const approvedFormProducts = useMemo(() => {
+    if (!selectedPartner) return undefined;
+    const products = partnerProducts[selectedPartner.id];
+    return products
+      ?.filter((product) => product.approved && product.is_enabled)
+      .map((product) => ({ code: product.code, name: product.name }));
+  }, [partnerProducts, selectedPartner]);
   const selectedLimitKey = PARTNER_LIMIT_KEYS[draft.partner_type];
   const selectedUsage =
     usage[
@@ -1084,10 +1100,7 @@ export function PartnersWorkspace({
                     termText={termText(selectedPartner.active_term)}
                     approved={partnerProducts[selectedPartner.id] ? { count: selectedProducts.filter((product) => product.approved).length, total: selectedProducts.length } : null}
                     lastSubmission={selectedPartner.last_submission}
-                    onGo={readOnly || selectedPartner.status === "offboarded" ? undefined : (to) => {
-                      if (to === "people") document.getElementById("partner-section-team")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                      else setDetailTab(to);
-                    }}
+                    onGo={readOnly || selectedPartner.status === "offboarded" ? undefined : (to) => setDetailTab(to)}
                   />
                   {extraTabs.quality && (
                     <section id="partner-section-quality" className="scroll-mt-24 space-y-3">
@@ -1095,59 +1108,6 @@ export function PartnersWorkspace({
                       {extraTabs.quality}
                     </section>
                   )}
-                  {extraTabs.payouts && (
-                    <section id="partner-section-payouts" className="scroll-mt-24 space-y-3">
-                      <h3 className="text-base font-semibold">Money</h3>
-                      {extraTabs.payouts}
-                    </section>
-                  )}
-                  <section id="partner-section-team" className="scroll-mt-24 space-y-3">
-                    <h3 className="text-base font-semibold">People</h3>
-                    <PartnerUsersPanel
-                      key={selectedPartner.id}
-                      partnerId={selectedPartner.id}
-                      readOnly={readOnly}
-                      offboarded={selectedPartner.status === "offboarded"}
-                      // The admin-assignment route is owner-only; this page's owner flag is the same check.
-                      canAssignAdmin={canManageProductConfig}
-                      seatUsage={usage.partnerUsers}
-                      seatLimit={limits.max_partner_users}
-                      onSeatsChanged={() => void refreshCapacity()}
-                    />
-                  </section>
-                  {/* The products table lived here as well as in its own tab, with a button whose only
-                      job was to open that tab — the same list twice, one linking to the other. The
-                      strip above already carries the figure ("Approved Products 2 of 8"); the detail
-                      is one tab away (owner, 2026-10-29: simplify). */}
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <section className="rounded-lg border border-border p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-sm font-semibold">Contact</h3>
-                        {!readOnly && selectedPartner.status !== "offboarded" && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>Edit</Button>
-                        )}
-                      </div>
-                      <div className="mt-2 space-y-1.5 text-sm">
-                        {selectedPartner.contact_name && <p className="font-medium">{selectedPartner.contact_name}</p>}
-                        {selectedPartner.contact_email && <p className="break-all text-muted-foreground">{selectedPartner.contact_email}</p>}
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                          <MapPin className="size-3.5" aria-hidden="true" />
-                          {countryName(selectedPartner.country)} · {zonesFor(selectedPartner.country).find(([value]) => value === selectedPartner.timezone)?.[1] ?? selectedPartner.timezone} time
-                        </p>
-                      </div>
-                    </section>
-                    <section className="rounded-lg border border-border p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-sm font-semibold">Notes</h3>
-                        {!readOnly && selectedPartner.status !== "offboarded" && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>{selectedPartner.notes ? "Edit" : "Add"}</Button>
-                        )}
-                      </div>
-                      <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground" title={selectedPartner.notes ?? undefined}>
-                        {selectedPartner.notes || "No notes added yet."}
-                      </p>
-                    </section>
-                  </div>
                   {selectedPartner.partner_type === "affiliate" && (
                     <AffiliateLinksPanel
                       partnerId={selectedPartner.id}
@@ -1157,6 +1117,7 @@ export function PartnersWorkspace({
                 </div>
               )}
               {detailTab === "terms" && (
+                <div className="space-y-8">
                 <section className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-muted-foreground">
@@ -1203,74 +1164,166 @@ export function PartnersWorkspace({
                     />
                   )}
                 </section>
+                {extraTabs.payouts && (
+                  <section aria-labelledby="partner-payouts-title" className="space-y-3 border-t border-border pt-6">
+                    <div>
+                      <h3 id="partner-payouts-title" className="text-base font-semibold">Payouts</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">Review draft, published, and paid runs for this partner.</p>
+                    </div>
+                    {extraTabs.payouts}
+                  </section>
+                )}
+                </div>
+              )}
+              {detailTab === "people" && (
+                <div id="partner-section-team" className="space-y-6">
+                  <section aria-labelledby="partner-users-title" className="space-y-3">
+                    <div>
+                      <h3 id="partner-users-title" className="text-base font-semibold">Portal users</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">Manage who can access this partner’s portal.</p>
+                    </div>
+                    <PartnerUsersPanel
+                      key={selectedPartner.id}
+                      partnerId={selectedPartner.id}
+                      readOnly={readOnly}
+                      offboarded={selectedPartner.status === "offboarded"}
+                      // The admin-assignment route is owner-only; this page's owner flag is the same check.
+                      canAssignAdmin={canManageProductConfig}
+                      seatUsage={usage.partnerUsers}
+                      seatLimit={limits.max_partner_users}
+                      onSeatsChanged={() => void refreshCapacity()}
+                    />
+                  </section>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <section aria-labelledby="partner-contact-title" className="rounded-lg border border-border p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 id="partner-contact-title" className="text-sm font-semibold">Primary contact</h3>
+                        {!readOnly && selectedPartner.status !== "offboarded" && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>Edit</Button>
+                        )}
+                      </div>
+                      <div className="mt-2 space-y-1.5 text-sm">
+                        {selectedPartner.contact_name ? <p className="font-medium">{selectedPartner.contact_name}</p> : <p className="text-muted-foreground">No contact name added.</p>}
+                        {selectedPartner.contact_email ? <p className="break-all text-muted-foreground">{selectedPartner.contact_email}</p> : <p className="text-muted-foreground">No email added.</p>}
+                        <p className="flex items-center gap-2 text-muted-foreground">
+                          <MapPin className="size-3.5" aria-hidden="true" />
+                          {countryName(selectedPartner.country)} · {zonesFor(selectedPartner.country).find(([value]) => value === selectedPartner.timezone)?.[1] ?? selectedPartner.timezone} time
+                        </p>
+                      </div>
+                    </section>
+                    <section aria-labelledby="partner-notes-title" className="rounded-lg border border-border p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 id="partner-notes-title" className="text-sm font-semibold">Internal notes</h3>
+                        {!readOnly && selectedPartner.status !== "offboarded" && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>{selectedPartner.notes ? "Edit" : "Add note"}</Button>
+                        )}
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground" title={selectedPartner.notes ?? undefined}>
+                        {selectedPartner.notes || "No internal notes yet."}
+                      </p>
+                    </section>
+                  </div>
+                </div>
               )}
               {detailTab === "products" && (
-                // One list: what this partner may send (2026-10-29). Which products the agency sells
-                // is set once, in Settings › Products, not repeated on every partner.
-                <section className="space-y-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <h3 className="text-sm font-semibold">What {selectedPartner.name} may send</h3>
-                    <Link href="/app/settings#products" className="text-xs font-medium text-[var(--accent-ink)] hover:underline">
-                      Products your agency sells: Settings › Products
-                    </Link>
-                  </div>
-                  {canManageProductConfig && selectedProducts.length > 0 && !selectedProducts.some((product) => product.is_enabled) ? (
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-3 text-sm">
-                      <span className="text-[var(--body)]">Your agency sells no products yet, so there is nothing to approve for {selectedPartner.name}.</span>
-                      <Button asChild size="sm"><Link href="/app/settings#products">Choose products</Link></Button>
+                <div className="space-y-6">
+                  <section aria-labelledby="partner-product-access-title" className="space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 id="partner-product-access-title" className="text-card-title">Product access</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Choose which products {selectedPartner.name} can submit. Only products your agency sells can be approved.
+                        </p>
+                      </div>
+                      {canManageProductConfig && partnerProducts[selectedPartner.id] && (
+                        <StatusChip tone="info">
+                          {selectedProducts.filter((product) => product.approved).length} of {selectedProducts.length} approved
+                        </StatusChip>
+                      )}
                     </div>
-                  ) : canManageProductConfig ? (
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      {selectedProducts.map((product) => (
-                        <label
-                          key={product.code}
-                          className={cn("flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm transition-colors", product.approved && "border-[var(--primary)] bg-[var(--primary-soft)]", !product.is_enabled && "opacity-50")}
-                        >
-                          <input
-                            type="checkbox"
-                            className="size-4"
-                            checked={product.approved}
-                            disabled={
-                              readOnly ||
-                              !product.is_enabled ||
-                              busy !== null ||
-                              selectedPartner.status === "offboarded"
-                            }
-                            onChange={() =>
-                              void togglePartnerProduct(
-                                selectedPartner.id,
-                                product,
-                              )
-                            }
-                          />
-                          <span className="min-w-0 flex-1 font-medium">{product.name}</span>
-                          {!product.is_enabled && (
-                            <span className="text-xs text-muted-foreground">Your agency does not sell it</span>
-                          )}
-                        </label>
-                      ))}
+                    {canManageProductConfig && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/40 px-3 py-2.5 text-sm">
+                        <span className="text-muted-foreground">Manage the products available across your agency.</span>
+                        <Button asChild variant="outline" size="sm"><Link href="/app/settings#products">Agency products</Link></Button>
+                      </div>
+                    )}
+                    {canManageProductConfig && partnerProducts[selectedPartner.id] ? (
+                      selectedProducts.some((product) => product.is_enabled) ? (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {selectedProducts.map((product) => (
+                            <label
+                              key={product.code}
+                              className={cn(
+                                "flex min-h-16 items-center gap-3 rounded-lg border border-border px-3 py-2.5 transition-colors",
+                                product.approved && "border-[var(--primary)] bg-[var(--primary-soft)]",
+                                !product.is_enabled && "opacity-60",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="size-4 shrink-0 accent-[var(--primary)]"
+                                checked={product.approved}
+                                disabled={
+                                  readOnly ||
+                                  !product.is_enabled ||
+                                  busy !== null ||
+                                  selectedPartner.status === "offboarded"
+                                }
+                                onChange={() => void togglePartnerProduct(selectedPartner.id, product)}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium">{product.name}</span>
+                                <span className="mt-0.5 block text-xs text-muted-foreground">
+                                  {!product.is_enabled
+                                    ? "Not sold by your agency"
+                                    : product.approved
+                                      ? "Available to this partner"
+                                      : "Not available to this partner"}
+                                </span>
+                              </span>
+                              <StatusChip tone={product.approved ? "good" : "neutral"}>
+                                {product.approved ? "Approved" : product.is_enabled ? "Not approved" : "Agency disabled"}
+                              </StatusChip>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState
+                          title="No active agency products"
+                          hint="Enable the products your agency sells in Settings before you can approve them for this partner."
+                          action={<Button asChild variant="outline"><Link href="/app/settings#products">Choose agency products</Link></Button>}
+                        />
+                      )
+                    ) : canManageProductConfig ? (
+                      <SectionLoading rows={3} columns={2} label="Loading product access" />
+                    ) : (
+                      <p className="rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground">
+                        Product approvals are managed by the account owner.
+                      </p>
+                    )}
+                  </section>
+
+                  <div className="border-t border-border" />
+
+                  <section aria-labelledby="partner-form-setup-title" className="space-y-3">
+                    <div>
+                      <h3 id="partner-form-setup-title" className="text-card-title">Form setup</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Choose an approved product to configure the fields partners complete when they send a lead.
+                      </p>
                     </div>
-                  ) : (
-                    <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                      Product availability is managed by the account owner.
-                    </p>
-                  )}
-                </section>
+                    <PartnerFormStudio
+                      embedded
+                      partnerId={selectedPartner.id}
+                      availableProducts={approvedFormProducts}
+                      readOnly={readOnly || selectedPartner.status === "offboarded"}
+                    />
+                  </section>
+                </div>
               )}
               {detailTab === "markets" && (
                 <PartnerMarketAccessPanel
                   compact
-                  partnerId={selectedPartner.id}
-                  readOnly={readOnly || selectedPartner.status === "offboarded"}
-                />
-              )}
-              {detailTab === "forms" && (
-                // `embedded`: the studio draws its own card and title, which inside this tab's card
-                // read as a page nested in a page (owner, 2026-10-29). The banner that used to sit
-                // above it said the phone field cannot be removed — the field list already locks
-                // that row (`locked` on the phone field), so the banner only repeated the control.
-                <PartnerFormStudio
-                  embedded
                   partnerId={selectedPartner.id}
                   readOnly={readOnly || selectedPartner.status === "offboarded"}
                 />

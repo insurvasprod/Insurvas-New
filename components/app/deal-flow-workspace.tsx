@@ -22,7 +22,7 @@ import Link from "next/link";
 import { BadgeCheck, Copy, Download, Handshake, Hourglass, Plus, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
+import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
@@ -50,6 +50,8 @@ import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Pager } from "@/components/ui/pager";
+// Shared with the partner portal's Daily deal flow, so the two draw the same column.
+import { PremiumBar } from "@/components/ui/premium-bar";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { productName, useSoldProducts } from "@/components/app/products/use-sold-products";
 
@@ -189,16 +191,6 @@ function Alert({ tone, children }: { tone: "info" | "warning" | "error"; childre
   return <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-lg border border-border border-l-[3px] px-4 py-3 text-sm", look)}>{children}</div>;
 }
 
-/** One labelled field in the inline Filters panel (foundation v3 §6a). */
-function FilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
-  return (
-    <div className="grid min-w-0 gap-1.5">
-      <label htmlFor={htmlFor} className="text-xs font-medium text-muted-foreground">{label}</label>
-      {children}
-    </div>
-  );
-}
-
 /** The deal's money at a glance at the top of its panel: annualised, monthly and face, tabular. */
 function MoneyTrio({ row }: { row: DealFlowRow }) {
   const cells: Array<[string, string]> = [["Annualised", annualised(row.monthly_premium_cents)], ["Monthly", money(row.monthly_premium_cents)], ["Face amount", money(row.face_amount_cents)]];
@@ -230,18 +222,6 @@ function CopyId({ leadId }: { leadId: string }) {
       {id}
       <Copy aria-hidden className="size-3.5" />
     </button>
-  );
-}
-
-/** Leads A2: one premium bar per row, against the largest premium on the page. */
-function PremiumBar({ monthlyCents, max }: { monthlyCents: number | null; max: number }) {
-  return (
-    <span className="flex items-center gap-2.5">
-      <span aria-hidden className="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-[var(--surface-alt)]">
-        {monthlyCents != null && max > 0 && <span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.max(4, ((monthlyCents * 12) / max) * 100)}%` }} />}
-      </span>
-      <span className="w-[72px] text-right font-semibold tabular-nums">{annualised(monthlyCents)}</span>
-    </span>
   );
 }
 

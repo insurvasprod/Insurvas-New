@@ -193,7 +193,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
 
   return <div className="m-stagger space-y-6">
     <PageHeader
-      title="Team review"
+      title="Team performance"
       description="Review submitted leads and member performance."
       visible
       infoDescription
@@ -206,7 +206,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
       </form>}
     />
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
-    {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team review could not be loaded: {error}<Button type="button" variant="outline" onClick={reload}>Try again</Button></p>}
+    {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" onClick={reload}>Try again</Button></p>}
     {/* Six figures read as two rows of three, not five and a stray. */}
     <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
       <StatCard

@@ -205,6 +205,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
     label: shortPeriod(run.periodStart, run.periodEnd),
     value: run.netCents / 100,
   }));
+  const statementScaleMax = statementBars.length ? Math.max(...statementBars.map((bar) => bar.value)) * 1.4 : undefined;
   const statementDetail = statements === undefined ? "Statements"
     : statements === null ? "Statements unavailable"
     : latestStatement === null ? "No statements yet"
@@ -260,7 +261,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
           <HomePanel
             title="Submissions"
             period={`${WINDOW_DAYS} days`}
-            link={{ label: "Team review", href: reviewHref }}
+            link={{ label: "Team performance", href: reviewHref }}
             className="min-h-[296px] @4xl:col-span-8"
             bodyClassName="pt-1"
             footer={<>
@@ -334,7 +335,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
             <HomePanel
               title="Your agency"
               period="how fast they move"
-              link={{ label: "Team review", href: reviewHref }}
+              link={{ label: "Team performance", href: reviewHref }}
               className="min-h-[220px] @4xl:col-span-4"
               bodyClassName="pt-1"
             >
@@ -363,7 +364,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
             <HomePanel
               title="Earnings"
               period={termLabel(terms) ?? "your statements"}
-              link={{ label: "Statements", href: "/partner/payouts" }}
+              link={{ label: "Commission statements", href: "/partner/payouts" }}
               className="min-h-[220px] @4xl:col-span-8"
               bodyClassName="pt-1"
               footer={latestStatement ? <>
@@ -382,8 +383,10 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
               ) : (
                 <BarSeries
                   bars={statementBars}
-                  summary={`Net paid per statement period: ${statementBars.map((bar) => `${bar.label} ${dollars(bar.value)}`).join(", ")}`}
+                  summary={`Net payable by statement period: ${statementBars.map((bar) => `${bar.label} ${dollars(bar.value)}`).join(", ")}`}
                   format={dollars}
+                  max={statementScaleMax}
+                  barMaxWidth={48}
                   className="flex-1"
                   minHeight={112}
                 />
@@ -394,10 +397,10 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
       </div>
 
       <HomeShortcuts>
-        <ShortcutLink icon={LineChart} label="Pipeline" href={PIPELINE} figure={ready ? String(counters?.stillOpen ?? 0) : undefined} caption="still open" />
+        <ShortcutLink icon={LineChart} label="Lead pipeline" href={PIPELINE} figure={ready ? String(counters?.stillOpen ?? 0) : undefined} caption="still open" />
         <ShortcutLink icon={MessageSquare} label="Messages" href="/partner/messages" figure={pulse ? String(pulse.pendingFollowUps) : undefined} caption="waiting on your team" />
         {isAdmin && <ShortcutLink icon={Users} label="Team" href="/partner/team" figure={team ? String(team.active) : undefined} caption="active members" />}
-        {isAdmin && <ShortcutLink icon={WalletCards} label="Statements" href="/partner/payouts" figure={latestStatement ? formatCentsAsCurrency(latestStatement.netCents) : undefined} caption={statementDetail} />}
+        {isAdmin && <ShortcutLink icon={WalletCards} label="Commission statements" href="/partner/payouts" figure={latestStatement ? formatCentsAsCurrency(latestStatement.netCents) : undefined} caption={statementDetail} />}
       </HomeShortcuts>
     </div>
   );

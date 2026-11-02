@@ -119,7 +119,7 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
         description={`${productLineLabel(detail.product)} — submitted by ${detail.submittedBy.name}`}
         visible
         infoDescription
-        breadcrumbs={[{ label: "Pipeline", href: backHref }, { label: detail.customer }]}
+        breadcrumbs={[{ label: "Lead pipeline", href: backHref }, { label: detail.customer }]}
         meta={<div className="mt-1.5 flex flex-wrap items-center gap-2">
           <StatusChip tone={stageTone(detail)}>{stageLabel(detail)}</StatusChip>
           <span className="text-sm text-muted-foreground">{productLineLabel(detail.product)}</span>
