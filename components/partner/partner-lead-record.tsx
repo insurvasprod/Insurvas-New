@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { ChevronDown, FileText, Languages, MessageSquare, Phone, UserRound } from "lucide-react";
 
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
-import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -129,7 +127,6 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
             idPrefix="partner-lead-tab"
             controls={activePanel}
           />
-          <Button asChild variant="outline" size="icon" title="Message your agent"><Link href="/partner/messages" aria-label="Message your agent"><MessageSquare aria-hidden="true" /></Link></Button>
         </div>}
       />
       {tab === "overview" ? <Submission detail={detail} /> : tab === "call-updates" ? <CallUpdates detail={detail} /> : <SharedNotes detail={detail} />}
