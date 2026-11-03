@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Send, ShieldCheck, UserCheck, UserMinus, UserPlus, X } from "lucide-react";
+import { Send, ShieldCheck, UserCheck, UserMinus, UserPlus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { PartnerInviteResultPanel, type PartnerInviteResult } from "@/components/app/partner-invite-result";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
@@ -223,7 +224,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
         description="See who has access to your partner workspace. Partner users can submit leads, track your organization's pipeline, and message the agent."
         hideTitle
         breadcrumbs={CRUMBS}
-        actions={<Button type="button" variant="secondary" size="sm" onClick={() => setInviteOpen((open) => !open)} aria-expanded={inviteOpen}><UserPlus aria-hidden="true" />Invite teammate</Button>}
+        actions={<Button type="button" variant="secondary" size="sm" onClick={() => setInviteOpen(true)} aria-haspopup="dialog"><UserPlus aria-hidden="true" />Invite teammate</Button>}
       />
       {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team access could not be refreshed: {error}<Button type="button" variant="outline" size="sm" onClick={() => void load()}>Try again</Button></p>}
       {invite && <PartnerInviteResultPanel result={invite} />}
@@ -255,36 +256,6 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search members" label="Search members by name or email" />
           </DataToolbar>
         }
-        filters={inviteOpen ? (
-          <form className="grid gap-3 rounded-lg border border-border bg-[var(--surface-alt)] p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_11rem_auto] sm:items-start" onSubmit={(event) => void submit(event)} noValidate>
-            <Field label="Full name" htmlFor="partner-team-name" error={fieldError?.field === "name" ? fieldError.message : undefined}>
-              <Input id="partner-team-name" className="mt-1.5" autoComplete="name" maxLength={120} autoFocus value={name} aria-invalid={fieldError?.field === "name"} onChange={(event) => { setName(event.target.value); if (fieldError?.field === "name") setFieldError(null); }} />
-            </Field>
-            <Field label="Work email" htmlFor="partner-team-email" error={fieldError?.field === "email" ? fieldError.message : undefined}>
-              <Input id="partner-team-email" className="mt-1.5" type="email" autoComplete="email" maxLength={254} value={email} aria-invalid={fieldError?.field === "email"} onChange={(event) => { setEmail(event.target.value); if (fieldError?.field === "email") setFieldError(null); }} />
-            </Field>
-            <Field label="Role" info="Partner users can submit leads, track your organization's pipeline, and message the agent. A partner admin is added by your agent.">
-              {/* The one option a partner admin cannot pick is shown disabled with the reason rather than hidden. */}
-              <SelectMenu
-                label="Role"
-                value="partner_user"
-                onChange={() => undefined}
-                className="mt-1.5 w-full"
-                panelClassName="w-72 max-w-[calc(100vw-2rem)]"
-                panelAlign="start"
-                searchPlaceholder="Search roles"
-                options={[
-                  { value: "partner_user", label: "Partner user" },
-                  { value: "partner_admin", label: "Partner admin", description: "Added by your agent", disabled: true },
-                ]}
-              />
-            </Field>
-            <div className="flex items-center gap-1.5 sm:mt-[1.625rem]">
-              <Button type="submit" disabled={busy !== null}>{busy === "invite" ? "Sending…" : "Send invitation"}</Button>
-              <Button type="button" variant="ghost" size="icon" title="Cancel" aria-label="Cancel the invitation" onClick={() => { setInviteOpen(false); setFieldError(null); }}><X aria-hidden="true" /></Button>
-            </div>
-          </form>
-        ) : undefined}
         footer={shown.length > pageSize ? <Pager page={visible.current} total={shown.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         <Table>
@@ -318,6 +289,40 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
             </TableBody>
         </Table>
       </TableCard>
+
+      <Dialog open={inviteOpen} onOpenChange={(open) => { setInviteOpen(open); if (!open) setFieldError(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Invite a teammate</DialogTitle></DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => void submit(event)} noValidate>
+            <Field label="Full name" htmlFor="partner-team-name" error={fieldError?.field === "name" ? fieldError.message : undefined}>
+              <Input id="partner-team-name" className="mt-1.5" autoComplete="name" maxLength={120} value={name} aria-invalid={fieldError?.field === "name"} onChange={(event) => { setName(event.target.value); if (fieldError?.field === "name") setFieldError(null); }} />
+            </Field>
+            <Field label="Work email" htmlFor="partner-team-email" error={fieldError?.field === "email" ? fieldError.message : undefined}>
+              <Input id="partner-team-email" className="mt-1.5" type="email" autoComplete="email" maxLength={254} value={email} aria-invalid={fieldError?.field === "email"} onChange={(event) => { setEmail(event.target.value); if (fieldError?.field === "email") setFieldError(null); }} />
+            </Field>
+            <Field label="Role" info="Partner users can submit leads, track your organization's pipeline, and message the agent. A partner admin is added by your agent.">
+              {/* The one option a partner admin cannot pick is shown disabled with the reason rather than hidden. */}
+              <SelectMenu
+                label="Role"
+                value="partner_user"
+                onChange={() => undefined}
+                className="mt-1.5 w-full"
+                panelClassName="w-72 max-w-[calc(100vw-2rem)]"
+                panelAlign="start"
+                searchPlaceholder="Search roles"
+                options={[
+                  { value: "partner_user", label: "Partner user" },
+                  { value: "partner_admin", label: "Partner admin", description: "Added by your agent", disabled: true },
+                ]}
+              />
+            </Field>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy !== null}>{busy === "invite" ? "Sending…" : "Send invitation"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
