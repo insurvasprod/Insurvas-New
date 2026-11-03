@@ -31,7 +31,7 @@ export function AppAuthFrame({ children, width = "default" }: { children: ReactN
     <AuthLayout
       plane="agent"
       width={width}
-      heading={heading ? <div data-auth-line="" className="mb-3 flex justify-center text-center">{heading}</div> : undefined}
+      heading={heading ? <div data-auth-line="" className="mb-6 flex justify-center text-center">{heading}</div> : undefined}
     >
       {rest}
     </AuthLayout>
