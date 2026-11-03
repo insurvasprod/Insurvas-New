@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { ArrowLeft, CircleDot, FileText, Info, Loader2, MessageCircle, Mic, MicOff, MoreHorizontal, Plus, Search, Users, X } from "lucide-react";
+import { ArrowLeft, FileText, Info, ListFilter, Loader2, MessageCircle, Mic, MicOff, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Users, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { ComposerFiles } from "@/components/app/partner-chat/attachments";
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ChatComposer } from "@/components/ui/chat-composer";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { control, Field } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
@@ -99,6 +99,16 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Phones show one pane at a time. Above md both are on screen and this is ignored.
   const [threadOnPhone, setThreadOnPhone] = useState(false);
+  // The conversation list folds to a rail of faces so the thread gets the room; remembered per browser.
+  const [listFolded, setListFolded] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
+    try { setListFolded(window.localStorage.getItem("insurvas.partner.chatListFolded") === "1"); } catch { /* storage blocked: start open */ }
+  }, []);
+  function foldList(next: boolean) {
+    setListFolded(next);
+    try { window.localStorage.setItem("insurvas.partner.chatListFolded", next ? "1" : "0"); } catch { /* storage blocked: it still folds */ }
+  }
   const [channelType, setChannelType] = useState<"direct" | "group">("direct");
   const [recipientIds, setRecipientIds] = useState<string[]>([]);
   const [channelName, setChannelName] = useState("");
@@ -247,18 +257,46 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
         // navigation rail than the agent shell, so use the same 320px details column while giving
         // the conversation list a little less room; the message header then keeps its title and
         // controls on one line, as it does in Partner Chat.
-        style={{ "--partner-chat-cols-xl": detailsOpen && selected ? "minmax(15rem, 16rem) minmax(0, 1fr) 20rem" : "minmax(15rem, 20rem) minmax(0, 1fr)" } as React.CSSProperties}
-        className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3.5 md:[grid-template-columns:minmax(15rem,20rem)_minmax(0,1fr)] xl:[grid-template-columns:var(--partner-chat-cols-xl)]"
+        style={{
+          "--partner-chat-cols-md": listFolded ? "3.5rem minmax(0, 1fr)" : "minmax(15rem, 20rem) minmax(0, 1fr)",
+          "--partner-chat-cols-xl": listFolded
+            ? (detailsOpen && selected ? "3.5rem minmax(0, 1fr) 20rem" : "3.5rem minmax(0, 1fr)")
+            : (detailsOpen && selected ? "minmax(15rem, 16rem) minmax(0, 1fr) 20rem" : "minmax(15rem, 20rem) minmax(0, 1fr)"),
+        } as React.CSSProperties}
+        className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3.5 md:[grid-template-columns:var(--partner-chat-cols-md)] xl:[grid-template-columns:var(--partner-chat-cols-xl)]"
       >
         {/* Conversations. On a phone this is the page until one is opened. */}
         <aside
           className={cn("m-glass relative flex max-h-96 min-h-0 min-w-0 flex-col rounded-xl border border-border md:max-h-none", threadOnPhone && "hidden md:flex")}
           aria-label="Conversations"
         >
-          <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-3 pt-3 pb-2.5">
+          {listFolded && (
+            <div className="hidden min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto py-2 md:flex" role="list" aria-label="Conversations, folded">
+              <Button type="button" variant="ghost" size="icon" aria-label="Show conversations" title="Show conversations" onClick={() => foldList(false)}><PanelLeftOpen aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon" aria-label="New conversation" title="New conversation" onClick={() => setNewOpen(true)}><Plus aria-hidden="true" /></Button>
+              <span className="h-px w-6 bg-border" aria-hidden="true" />
+              {data.channels.map((channel) => (
+                <button
+                  type="button"
+                  role="listitem"
+                  key={channel.id}
+                  onClick={() => openConversation(channel.id)}
+                  aria-current={channel.id === selectedId ? "true" : undefined}
+                  aria-label={`${channel.name}${channel.unreadCount > 0 ? `, ${channel.unreadCount} unread` : ""}`}
+                  title={channel.name}
+                  className={cn("relative grid size-10 shrink-0 place-items-center rounded-lg transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]", channel.id === selectedId && "bg-[var(--primary-soft)]")}
+                >
+                  <ChannelIcon channel={channel} />
+                  {channel.unreadCount > 0 && <span className="absolute right-1 top-1 size-2.5 rounded-full bg-[var(--primary)] ring-2 ring-[var(--surface)]" aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className={cn("flex shrink-0 flex-col gap-2.5 border-b border-border px-3 pt-3 pb-2.5", listFolded && "md:hidden")}>
             <div className="flex items-center gap-1.5">
               <h2 className="m-0 flex-1 text-card-title text-foreground">Conversations</h2>
-              <Button type="button" size="sm" onClick={() => setNewOpen(true)} aria-label="New conversation" title="New conversation"><Plus aria-hidden="true" />New</Button>
+              <Button type="button" variant="ghost" size="icon" className="hidden md:inline-flex" aria-label="Fold the conversation list" title="Fold the list" onClick={() => foldList(true)}><PanelLeftClose aria-hidden="true" /></Button>
+              <Button type="button" variant="secondary" size="icon" aria-label="New conversation" title="New conversation" onClick={() => setNewOpen(true)}><Plus aria-hidden="true" /></Button>
             </div>
 
             <label className="relative block">
@@ -276,7 +314,7 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-1.5" role="list">
+          <div className={cn("min-h-0 flex-1 overflow-y-auto p-1.5", listFolded && "md:hidden")} role="list">
             {loading && <SectionLoading rows={6} columns={2} label="Loading conversations" />}
             {!loading && filteredChannels.length === 0 && <p className="m-0 px-3 py-8 text-center text-sm text-muted-foreground">{data.channels.length ? "No conversations match these filters." : "No conversations yet. Start a conversation with your agent or team."}</p>}
             {filteredChannels.map((channel) => {
@@ -318,23 +356,29 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
                 <Button type="button" variant="ghost" size="icon-sm" className="md:hidden" aria-label="Back to conversations" onClick={() => setThreadOnPhone(false)}>
                   <ArrowLeft aria-hidden="true" />
                 </Button>
-                <ChannelIcon channel={selected} large />
+                <ChannelIcon channel={selected} />
                 <div className="min-w-0 flex-1">
                   <h2 className="m-0 truncate text-card-title font-semibold text-foreground">{selected.name}</h2>
                   <p className="m-0 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="truncate">{channelTypeLabel(selected)}</span>
-                    <span aria-hidden="true">·</span>
-                    <span className="inline-flex shrink-0 items-center gap-1">
-                      <CircleDot className={cn("size-3", selected.status === "active" ? "text-[var(--success-ink)]" : "text-muted-foreground")} aria-hidden="true" />
-                      {selected.status === "active" ? "Connected" : "Archived"}
-                    </span>
+                    <span className={cn("size-2 shrink-0 rounded-full", selected.status === "active" ? "bg-[var(--success-ink)]" : "bg-muted-foreground")} aria-hidden="true" />
+                    <span className="truncate">{selected.status === "active" ? "Connected" : "Archived"} · {channelTypeLabel(selected)}</span>
                   </p>
                 </div>
-                <div className="hidden shrink-0 items-center gap-1 sm:flex" role="radiogroup" aria-label="Show in this conversation">
-                  {([ ["all", "All", selected.messages.length], ["messages", "Messages", messageCount], ["updates", "Updates", updateCount] ] as const).map(([value, label, count]) => (
-                    <ToggleChip key={value} role="radio" selected={threadView === value} count={count} onClick={() => setThreadView(value)} className="h-8 px-2.5 text-xs">{label}</ToggleChip>
-                  ))}
-                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant={threadView === "all" ? "ghost" : "secondary"} size="icon" aria-label={`Show in this conversation: ${threadView === "all" ? "everything" : threadView}`} title="Show messages, updates or both" className="relative">
+                      <ListFilter aria-hidden="true" />
+                      {threadView !== "all" && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--primary)]" aria-hidden="true" />}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuRadioGroup value={threadView} onValueChange={(value) => setThreadView(value as typeof threadView)}>
+                      <DropdownMenuRadioItem value="all">Everything <span className="ml-auto pl-3 tabular-nums text-muted-foreground">{selected.messages.length}</span></DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="messages">Messages <span className="ml-auto pl-3 tabular-nums text-muted-foreground">{messageCount}</span></DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="updates">Updates <span className="ml-auto pl-3 tabular-nums text-muted-foreground">{updateCount}</span></DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button type="button" variant={threadSearchOpen ? "secondary" : "ghost"} size="icon" aria-pressed={threadSearchOpen} aria-label={threadSearchOpen ? "Close message search" : "Search this conversation"} title="Search this conversation" onClick={() => { setThreadSearchOpen((open) => !open); setThreadSearch(""); }}>
                   {threadSearchOpen ? <X aria-hidden="true" /> : <Search aria-hidden="true" />}
                 </Button>
