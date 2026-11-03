@@ -21,6 +21,7 @@ import {
   CardTitle,
   cardSurface,
 } from "@/components/ui/card";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Check, CheckCircle2, ChevronDown, FileText, PanelLeftClose, PanelLeftOpen, Send, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
@@ -53,7 +54,6 @@ import {
   dobFieldKey,
 } from "@/lib/templates/formats";
 import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
-import { StatusChip } from "@/components/ui/status-chip";
 import { placementWidth } from "@/lib/templates/placementWidth";
 import { US_STATES } from "@/lib/signup/constants";
 
@@ -1221,6 +1221,10 @@ export function PartnerLeadForm({
   const duplicateLine = duplicateMatches.length ? "Review match" : duplicateState === "match" ? "Possible match" : duplicateState === "clear" ? "No match" : "Not yet";
   // Screened and let through: a result that is not blocked and has no warning still waiting on an acknowledgement.
   const screened = Boolean(screening) && !screening?.blocked && !dncPending;
+  // How much of what is required is filled in, over every section. Nothing is counted before the form opens.
+  const requiredTotal = sections.reduce((sum, item) => sum + visibleRequired(item).length, 0);
+  const requiredOpen = sections.reduce((sum, item) => sum + requiredLeft(item), 0);
+  const progressPercent = !formOpened ? 0 : requiredTotal === 0 ? 100 : Math.round(((requiredTotal - requiredOpen) / requiredTotal) * 100);
   const warningBlock = screening?.warning && (
     <div className="portal-partner-submit-callout is-warning">
       <p className="font-medium">Compliance warning</p>
@@ -1330,18 +1334,25 @@ export function PartnerLeadForm({
     <>
       <LeaveGuard dirty={!preview && formOpened && Boolean(screening) && hasDraftAnswers} mode="autosaved-draft" onPause={saveAndPause} onDiscard={() => undefined} what="this lead" />
       {/* The process, along the top: where this lead is and what is next. */}
-      <ol className="portal-partner-submit-topsteps" aria-label="Lead submission steps">
-        {([
-          ["Screen phone", screened ? "done" : "current"],
-          ["Application", !screened ? "next" : canSubmit ? "done" : "current"],
-          ["Review and submit", canSubmit ? "current" : "next"],
-        ] as const).map(([label, state], index) => (
-          <li key={label} data-state={state} aria-current={state === "current" ? "step" : undefined}>
-            <span className="portal-partner-submit-topstep-dot" aria-hidden="true">{state === "done" ? <Check /> : index + 1}</span>
-            <span>{label}</span>
-          </li>
-        ))}
-      </ol>
+      <div className="portal-partner-submit-topbar">
+        <span aria-hidden="true" />
+        <ol className="portal-partner-submit-topsteps" aria-label="Lead submission steps">
+          {([
+            ["Screen phone", screened ? "done" : "current"],
+            ["Application", !screened ? "next" : canSubmit ? "done" : "current"],
+            ["Review and submit", canSubmit ? "current" : "next"],
+          ] as const).map(([label, state], index) => (
+            <li key={label} data-state={state} aria-current={state === "current" ? "step" : undefined}>
+              <span className="portal-partner-submit-topstep-dot" aria-hidden="true">{state === "done" ? <Check /> : index + 1}</span>
+              <span>{label}</span>
+            </li>
+          ))}
+        </ol>
+        <div className="portal-partner-submit-progress-inline" role="progressbar" aria-label="Required fields completed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
+          <span className="portal-partner-submit-progress-inline-track"><span style={{ width: `${progressPercent}%` }} /></span>
+          <strong>{progressPercent}%</strong>
+        </div>
+      </div>
       <div className="portal-partner-submit-body" data-folded={railFolded ? "" : undefined}>
         <nav className="portal-partner-submit-rail" aria-label="Application sections and checks">
           <div className="portal-partner-submit-rail-head">
@@ -1479,15 +1490,13 @@ export function PartnerLeadForm({
             </div>
           )}
           {formOpened && (
-            <section className={`${cardSurface} portal-partner-submit-consent`} aria-labelledby={`partner-consent-heading-${productCode}`}>
-              <div className="portal-partner-submit-review-consent-head">
-                <div><h3 id={`partner-consent-heading-${productCode}`}>Customer consent</h3></div>
-                <StatusChip tone={consentGiven ? "good" : "warning"}>{consentGiven ? "Confirmed" : "Required"}</StatusChip>
-              </div>
-              <label><input ref={consentRef} id={`partner-consent-${productCode}`} type="checkbox" checked={consentGiven} onChange={(event) => setConsentGiven(event.target.checked)} />
-                <span>The customer gave express written consent to be contacted by a licensed agent at the number above, by phone and by SMS, about insurance products. I hold documentation of that consent and understand every submission is audit logged.</span>
+            <div className="portal-partner-submit-consent-line">
+              <label htmlFor={`partner-consent-${productCode}`}>
+                <input ref={consentRef} id={`partner-consent-${productCode}`} type="checkbox" checked={consentGiven} onChange={(event) => setConsentGiven(event.target.checked)} />
+                <span>Customer gave express written consent to be contacted by phone and SMS<span className="portal-partner-submit-required"> *</span></span>
               </label>
-            </section>
+              <InfoTip label="About the customer consent">The customer gave express written consent to be contacted by a licensed agent at the number above, by phone and by SMS, about insurance products. I hold documentation of that consent and understand every submission is audit logged.</InfoTip>
+            </div>
           )}
           {submitError && (
             <p className="portal-partner-submit-error" role="alert">
@@ -1498,6 +1507,9 @@ export function PartnerLeadForm({
             <span className="portal-partner-submit-save-status" role="status">
               {saving ? "Saving…" : draftSavedAt ? `Saved ${agoLabel(draftSavedAt, now)}` : ""}
             </span>
+            {formOpened && !canSubmit && outstanding.length > 0 && (
+              <span id={`partner-outstanding-${productCode}`} className="portal-partner-submit-outstanding" title={`Still needed: ${outstanding.join(", ")}`}>{outstanding.length} to go</span>
+            )}
             {saveFailed && <Button type="button" variant="outline" disabled={saving} onClick={() => void persistDraft()}>Retry save</Button>}
             {formOpened && (
               <Button
@@ -1510,11 +1522,6 @@ export function PartnerLeadForm({
               </Button>
             )}
           </div>
-          {formOpened && !canSubmit && outstanding.length > 0 && (
-            <p id={`partner-outstanding-${productCode}`} className="portal-partner-submit-muted">
-              Still needed to submit: {outstanding.join(", ")}.
-            </p>
-          )}
         </form>
       </div>
     </>
