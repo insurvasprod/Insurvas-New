@@ -11,11 +11,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-import { DangerAction, DangerZone, FormSection, FormSections } from "@/components/app/settings/patterns";
-import { Callout, Field, control } from "@/components/app/settings/primitives";
+import { FormSection } from "@/components/app/settings/patterns";
+import { Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -248,9 +249,8 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
   const others = sessions ? sessions.filter((s) => !s.current) : [];
 
   return (
-    <div id="security" className="flex min-w-0 scroll-mt-24 flex-col gap-6">
-      <FormSections>
-        <FormSection id="security-heading" title="Sign-in" info="How you get into your account. Each change asks for your password first.">
+    <div id="security" className="flex min-w-0 flex-1 scroll-mt-24 flex-col gap-4">
+        <div id="security-heading" className="m-glass flex min-w-0 flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">
           <SignInRow
             id="security-email"
             label="Email"
@@ -266,25 +266,30 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
             value={`At least ${PASSWORD_MIN} characters. Changing it signs out every other session.`}
             action={<Button type="button" variant="secondary" size="sm" onClick={() => open("password")}>Change password</Button>}
           />
-        </FormSection>
 
-          <FormSection
-            id="security-two-factor"
-            title="Two-step verification"
-            info="A code from an authenticator app each time you sign in. Text messages are not offered."
-            aside={twoFactor ? (twoFactor.enabled
-              ? <StatusChip tone="good">On since {when(twoFactor.enabledAt ?? "")}</StatusChip>
-              : <StatusChip tone={twoFactor.required ? "warning" : "neutral"}>{twoFactor.required ? "Off · required for your role" : "Off"}</StatusChip>) : null}
-          >
+          <div id="security-two-factor" className="flex flex-col gap-3 border-t border-[var(--border)] pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="m-0 text-label text-[var(--body)]">Two-step verification</p>
+                <p className="m-0 mt-0.5 text-sm text-[var(--muted)]">A code from an authenticator app each time you sign in.</p>
+                {twoFactor && !twoFactor.enabled && twoFactor.required ? (
+                  <p className="m-0 mt-0.5 text-sm text-[var(--muted)]">{promptTwoFactor ? "Set this up now. " : ""}Required for your role: Social Security and bank numbers stay hidden until it is on.</p>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {twoFactor ? (twoFactor.enabled
+                  ? <StatusChip tone="good">On since {when(twoFactor.enabledAt ?? "")}</StatusChip>
+                  : <StatusChip tone="neutral">Off</StatusChip>) : null}
+                {twoFactor && !twoFactor.enabled && !codes && !enrolment ? <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={startEnrolment}>Turn on</Button> : null}
+                {twoFactor?.enabled && !codes && !enrolment ? <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => open("disable")}>Turn off</Button> : null}
+              </div>
+            </div>
             {!twoFactor && twoFactorUnavailable ? (
               <p className="m-0 text-sm text-[var(--muted)]">{TWO_STEP_UNAVAILABLE}</p>
             ) : !twoFactor && loadFailed.twoFactor ? (
               <LoadFailed what="your two-step status" onRetry={retry} />
             ) : !twoFactor ? <SectionLoading rows={2} columns={2} label="Checking two-step verification" /> : (
               <>
-                {!twoFactor.enabled && twoFactor.required ? (
-                  <Callout tone="warning" title={`${promptTwoFactor ? "Set this up now. " : ""}Your role can reveal Social Security and bank numbers.`}>Revealing them is blocked until two-step verification is on. Everything else keeps working.</Callout>
-                ) : null}
                 {twoFactor.enabled && !twoFactor.sessionVerified ? (
                   <p role="status" className="m-0 text-sm text-[var(--body)]">This session started before two-step verification was on. Sign in again with your code to reveal sensitive details here.</p>
                 ) : null}
@@ -324,17 +329,32 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
                     value={`${twoFactor.recoveryCodesLeft} left. Each signs you in once without your phone.`}
                     action={<Button type="button" variant="secondary" size="sm" onClick={() => open("recovery_codes")}>Make new codes</Button>}
                   />
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <div><Button type="button" disabled={busy} onClick={startEnrolment}>Turn on two-step verification</Button></div>
-                    {twoFactorError ? <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{twoFactorError}</p> : null}
-                  </div>
-                )}
+                ) : twoFactorError ? (
+                  <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{twoFactorError}</p>
+                ) : null}
               </>
             )}
-          </FormSection>
+          </div>
+        </div>
 
-        <FormSection id="security-sessions" title="Where you're signed in" info="Ending a session signs that device out on its next click.">
+        <FormSection
+          id="security-sessions"
+          className="flex-1 [&>div:last-child]:flex-1"
+          title="Where you're signed in"
+          info="Ending a session signs that device out on its next click."
+          aside={others.length ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={async () => {
+                if (!(await confirmAction({ title: "Sign out every other session?", description: others.map((s) => s.device).join(", ") || undefined, confirmLabel: "Sign out others", cancelLabel: "Keep them", destructive: true }))) return;
+                await endSession(null);
+              }}
+            >Sign out other sessions</Button>
+          ) : null}
+        >
           {sessions === undefined ? <SectionLoading rows={3} columns={3} label="Loading your sessions" /> : loadFailed.sessions ? (
             <LoadFailed what="your sessions" onRetry={retry} />
           ) : sessions === null ? (
@@ -355,27 +375,7 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
             </ul>
           )}
         </FormSection>
-      </FormSections>
 
-      <DangerZone>
-        <DangerAction
-          title="Sign out every other session"
-          consequence={others.length ? `${others.length} other session${others.length === 1 ? "" : "s"} end${others.length === 1 ? "s" : ""} now. This device stays signed in.` : "No other session is open right now."}
-          label="Sign out others"
-          disabled={busy || !others.length}
-          confirm={{ title: "Sign out every other session?", description: others.map((s) => s.device).join(", ") || undefined, confirmLabel: "Sign out others", cancelLabel: "Keep them" }}
-          onConfirm={() => endSession(null)}
-        />
-        {twoFactor?.enabled ? (
-          <DangerAction
-            title="Turn off two-step verification"
-            consequence="Signing in will need only your password, and your recovery codes stop working."
-            label="Turn off"
-            disabled={busy}
-            onConfirm={() => open("disable")}
-          />
-        ) : null}
-      </DangerZone>
 
       <FormDialog
         open={dialog === "email"}
@@ -452,14 +452,14 @@ export function SecurityLog({ timeZone }: { timeZone: string | null }) {
   const paged = paginate(listed, page, pageSize);
   return (
     <section id="security-log" aria-label="Sign-ins and security" className="scroll-mt-24">
-      <TableCard footer={listed.length ? <Pager page={paged.current} total={listed.length} noun={listed.length === 1 ? "event" : "events"} pageSize={pageSize} onPage={setPage} suffix="newest first" /> : undefined}>
-        <div className="px-4 py-3">
+      <TableCard bodyClassName={events?.length === 0 ? "flex flex-col" : undefined} footer={listed.length ? <Pager page={paged.current} total={listed.length} noun={listed.length === 1 ? "event" : "events"} pageSize={pageSize} onPage={setPage} suffix="newest first" /> : undefined}>
+        <div className={events?.length === 0 ? "flex flex-1 items-center justify-center" : "px-4 py-3"}>
           {events === undefined ? <SectionLoading rows={4} columns={3} label="Loading your sign-ins" /> : failed ? (
             <LoadFailed what="your sign-ins" onRetry={() => { setEvents(undefined); setReloads((n) => n + 1); }} />
           ) : events === null ? (
             <p className="m-0 text-sm text-[var(--muted)]">The security log is not available yet. Contact support.</p>
           ) : events.length === 0 ? (
-            <p className="m-0 text-sm text-[var(--muted)]">Nothing yet. Sign-ins, password changes and two-step changes show here.</p>
+            <EmptyState title="No sign-ins yet" hint="Sign-ins and security changes appear here as they happen." />
           ) : (
             <ul className="m-0 flex list-none flex-col p-0">
               {paged.rows.map((e) => (

@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Ellipsis, Play, Plus, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, Columns2, Ellipsis, Plus, RectangleHorizontal, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { InfoTip } from "@/components/ui/info-tip";
-import { Segmented } from "@/components/ui/view-tabs";
 import { PartnerField } from "@/components/partner/partner-portal-workspace";
 import { AddQuestion } from "@/components/app/form-templates/add-question";
 import type { TemplateField, TemplateFieldType, TemplateFormDefinition, TemplateFormField } from "@/lib/templates/constants";
@@ -18,8 +17,6 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { cardHead, cardSurface } from "@/components/ui/card";
 
 export type Picked = { fieldKey: string; sectionKey: string | null } | null;
-type Width = "computer" | "phone";
-const WIDTHS: ReadonlyArray<{ key: Width; label: string }> = [{ key: "computer", label: "Computer" }, { key: "phone", label: "Phone" }];
 
 const noop = () => {};
 
@@ -30,10 +27,11 @@ const noop = () => {};
  * renamed in place; moving or removing one is in its ⋯ menu. Questions kept for agents only live in
  * the side panel, since partners never see them.
  */
-export function FormCanvas({ form, fields, productName, picked, changed, onPick, onMoveField, onWidth, onDeleteField, onRenameSection, onMoveSection, onRemoveSection, onAddQuestion, onReuse, onAddSection, onTry }: {
+export function FormCanvas({ form, fields, renderEditor, picked, changed, onPick, onMoveField, onWidth, onDeleteField, onRenameSection, onMoveSection, onRemoveSection, onAddQuestion, onReuse, onAddSection }: {
   form: TemplateFormDefinition;
   fields: TemplateField[];
-  productName: string;
+  /** The picked question's editor, opened in place under it (owner 2026-11-03: no popup). */
+  renderEditor: (fieldKey: string, sectionKey: string) => ReactNode;
   picked: Picked;
   /** Field keys whose question or placement differs from the live form. */
   changed: ReadonlySet<string>;
@@ -47,9 +45,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
   onAddQuestion: (sectionKey: string, type: TemplateFieldType) => void;
   onReuse: (sectionKey: string, fieldKey: string) => void;
   onAddSection: () => void;
-  onTry: () => void;
 }) {
-  const [width, setWidth] = useState<Width>("computer");
   // On a phone the preview is what a partner on a phone gets: one column (the switch is hidden there).
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
@@ -64,7 +60,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const toggleFold = (key: string) => setFolded((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   // The partners' own grid: two columns on a computer, one on a phone (globals.css, 640px).
-  const twoColumns = width === "computer" && !narrow;
+  const twoColumns = !narrow;
   const fieldMap = new Map(fields.map((field) => [field.field_key, field]));
   const availability = sectionAvailability(form);
 
@@ -84,10 +80,10 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
     const bounds = isPicked ? fieldMoveBounds(form, sectionKey, field.field_key) : null;
     const full = placementWidth(field, formField) === "full";
     return (
+      <Fragment key={field.field_key}>
       <div
-        key={field.field_key}
         className={cn(
-          "relative min-w-0 rounded-[10px] px-2.5 py-2 transition-colors",
+          "relative min-w-0 rounded-[10px] px-2 py-1 transition-colors",
           twoColumns && full && "col-span-2",
           isPicked ? "bg-[var(--primary-soft)] outline-2 outline-[var(--ink)]" : "hover:bg-[var(--surface-alt)]",
         )}
@@ -114,10 +110,10 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
             {changed.has(field.field_key) && <span className="rounded-full bg-[var(--warning-surface)] px-2 py-0.5 text-xs font-semibold text-[var(--warning-ink)]">changed</span>}
             {isPicked && bounds && (
               <span role="toolbar" aria-label={`Move, resize or delete “${field.label}”`} className="pointer-events-auto relative z-10 ml-auto flex items-center gap-0.5">
-                <Button onClick={() => onMoveField(sectionKey, field.field_key, -1)} type="button" variant="ghost" size="icon" disabled={!bounds.up} aria-label="Move up"><ArrowUp aria-hidden="true" /></Button>
-                <Button onClick={() => onMoveField(sectionKey, field.field_key, 1)} type="button" variant="ghost" size="icon" disabled={!bounds.down} aria-label="Move down"><ArrowDown aria-hidden="true" /></Button>
-                {twoColumns && <Button onClick={() => onWidth(sectionKey, field.field_key, full ? "half" : "full")} type="button" variant="outline" aria-label={full ? "Make it a half row" : "Make it a full row"}>{full ? "Full row" : "Half row"}</Button>}
-                <Button onClick={() => onDeleteField(field.field_key)} type="button" variant="ghost" size="icon" className="text-[var(--error-ink)]" aria-label={`Delete “${field.label}”`}><Trash2 aria-hidden="true" /></Button>
+                <Button onClick={() => onMoveField(sectionKey, field.field_key, -1)} type="button" variant="ghost" size="icon-sm" disabled={!bounds.up} aria-label="Move up" title="Move up"><ArrowUp aria-hidden="true" /></Button>
+                <Button onClick={() => onMoveField(sectionKey, field.field_key, 1)} type="button" variant="ghost" size="icon-sm" disabled={!bounds.down} aria-label="Move down" title="Move down"><ArrowDown aria-hidden="true" /></Button>
+                {twoColumns && <Button onClick={() => onWidth(sectionKey, field.field_key, full ? "half" : "full")} type="button" variant="ghost" size="icon-sm" aria-label={full ? "Make it a half row" : "Make it a full row"} title={full ? "Full row: press for a half row" : "Half row: press for a full row"}>{full ? <RectangleHorizontal aria-hidden="true" /> : <Columns2 aria-hidden="true" />}</Button>}
+                <Button onClick={() => onDeleteField(field.field_key)} type="button" variant="ghost" size="icon-sm" className="text-[var(--error-ink)]" aria-label={`Delete “${field.label}”`} title="Delete question"><Trash2 aria-hidden="true" /></Button>
               </span>
             )}
           </div>
@@ -127,22 +123,23 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
           {field.help_text && <p className="m-0 truncate text-xs text-[var(--body)]">{field.help_text}</p>}
         </div>
       </div>
+      {isPicked && <div className="col-span-full my-1">{renderEditor(field.field_key, sectionKey)}</div>}
+      </Fragment>
     );
   }
 
   return (
-    <section aria-label="What partners see" className={cn(cardSurface, "flex min-w-0 flex-col")}>
-      <div className={cn(cardHead, "flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3")}>
-        <span className="text-xs font-semibold text-[var(--ink)]">What partners see</span>
-        <InfoTip label="About this preview">Drawn from your changes, as partners will get it once you publish. Nothing typed here is saved.</InfoTip>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <span className="hidden sm:contents"><Segmented label="Preview width" options={WIDTHS} value={width} onChange={setWidth} /></span>
-          <Button onClick={onTry} type="button" variant="outline"><Play aria-hidden="true" />Try the form</Button>
-        </div>
+    <section aria-label="Questions" className={cn(cardSurface, "flex min-h-0 min-w-0 flex-col lg:h-full")}>
+      <div className={cn(cardHead, "flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3")}>
+        <span className="text-xs font-semibold text-[var(--ink)]">Questions</span>
+        <InfoTip label="About the questions">Click a question to change it. Parts group the questions; open ⋯ on a part to move or remove it. Open the preview to see what partners get.</InfoTip>
       </div>
 
-      <div className={cn("mx-auto flex w-full flex-col gap-5 p-4 transition-[max-width] duration-200 sm:p-6", width === "phone" ? "max-w-[390px]" : "max-w-[760px]")}>
-        <p className="m-0 text-base font-semibold text-[var(--ink)]">Send us a {productName} lead</p>
+      {/* The header above stays put; the questions scroll in here. */}
+      {/* The canvas: the form sits on it as the sheet a partner sees, so a short or folded form is a small
+          sheet on a quiet ground, not a card that looks empty. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[color-mix(in_srgb,var(--canvas)_60%,transparent)] p-3 sm:p-5">
+      <div className={cn("mx-auto flex w-full flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4", "max-w-[760px]")}>
 
         {form.sections.map((section, index) => {
           const count = section.fields.length;
@@ -152,7 +149,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
           const topicLabel = topic ? TEMPLATE_SECTION_GROUP_LABELS[topic] : "";
           const topicOn = topic ? availability[topic] : true;
           return (
-            <section key={section.section_key} aria-label={`Part ${index + 1}: ${section.label}`} className="flex flex-col gap-1.5 border-t border-[var(--border)] pt-3 first-of-type:border-t-0 first-of-type:pt-0">
+            <section key={section.section_key} aria-label={`Part ${index + 1}: ${section.label}`} className="flex flex-col gap-1 border-t border-[var(--border)] pt-2 first-of-type:border-t-0 first-of-type:pt-0">
               <div className="flex items-center gap-1.5">
                 <Button onClick={() => toggleFold(section.section_key)} type="button" variant="ghost" size="icon" aria-expanded={open} aria-controls={`part-body-${section.section_key}`} aria-label={open ? `Fold part “${section.label}”` : `Open part “${section.label}”`}>
                   <ChevronDown aria-hidden="true" className={cn("transition-transform duration-150", !open && "-rotate-90")} />
@@ -184,10 +181,10 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
                 </DropdownMenu>
               </div>
               {open && (
-              <div id={`part-body-${section.section_key}`} className={cn("grid gap-x-3 gap-y-1", twoColumns ? "grid-cols-2" : "grid-cols-1")}>
+              <div id={`part-body-${section.section_key}`} className={cn("grid gap-x-3 gap-y-0", twoColumns ? "grid-cols-2" : "grid-cols-1")}>
               {count === 0 && <p className="col-span-full m-0 px-3 py-1 text-sm text-[var(--body)]">No questions in this part yet. Add the first one below.</p>}
               {section.fields.map((formField) => question(section.section_key, formField))}
-              <div className="col-span-full mt-1">
+              <div className="col-span-full mt-0.5">
               {addIn === section.section_key ? (
                 <AddQuestion
                   sectionLabel={section.label}
@@ -200,7 +197,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
                 <button
                   onClick={() => setAddIn(section.section_key)}
                   type="button"
-                  className="flex h-9 items-center gap-1.5 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-transparent px-3 text-sm font-semibold text-[var(--body)] transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                  className="flex h-8 items-center gap-1.5 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-transparent px-3 text-sm font-semibold text-[var(--body)] transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                 >
                   <Plus aria-hidden="true" className="size-4" />Add a question to {section.label || `part ${index + 1}`}
                 </button>
@@ -213,7 +210,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
         })}
 
         <Button onClick={onAddSection} type="button" variant="outline" className="self-start"><Plus aria-hidden="true" />Add a part</Button>
-        <p className="m-0 border-t border-[var(--border)] pt-3 text-xs text-[var(--body)]">Partners press <strong className="font-semibold text-[var(--ink)]">Send lead</strong> here. It’s off while you edit.</p>
+      </div>
       </div>
     </section>
   );

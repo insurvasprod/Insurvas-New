@@ -597,7 +597,16 @@ export function AgentSidebar({
 function DesktopSidebar({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: AgentModuleAccess }) {
   const tree = buildSidebarTree(menu, moduleAccess);
   // Starts collapsed (owner 2026-10-30): icons with a hover panel of pages; the toggle opens it.
+  // The person's own choice is remembered, so opening the labels once keeps them across pages.
   const [isCollapsed, setIsCollapsed] = useState(true);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read the user's menu preference once
+    try { if (window.localStorage.getItem("insurvas.app.navCollapsed") === "0") setIsCollapsed(false); } catch { /* storage blocked: start collapsed */ }
+  }, []);
+  const setCollapsed = (next: boolean) => {
+    setIsCollapsed(next);
+    try { window.localStorage.setItem("insurvas.app.navCollapsed", next ? "1" : "0"); } catch { /* storage blocked: the toggle still works */ }
+  };
 
   return (
     <aside data-print-hide className={`portal-agent-sidebar-desktop portal-agent-desktop-nav hidden md:flex md:flex-col ${isCollapsed ? "is-collapsed" : ""}`}>
@@ -608,7 +617,7 @@ function DesktopSidebar({ menu, moduleAccess }: { menu: MenuSection[]; moduleAcc
         </Link>
         <button
           type="button"
-          onClick={() => setIsCollapsed((collapsed) => !collapsed)}
+          onClick={() => setCollapsed(!isCollapsed)}
           aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
           aria-expanded={!isCollapsed}
           title={isCollapsed ? "Expand navigation" : "Collapse navigation"}
@@ -622,7 +631,7 @@ function DesktopSidebar({ menu, moduleAccess }: { menu: MenuSection[]; moduleAcc
           menu={menu}
           moduleAccess={moduleAccess}
           isCollapsed={isCollapsed}
-          onExpand={() => setIsCollapsed(false)}
+          onExpand={() => setCollapsed(false)}
         />
       </div>
     </aside>

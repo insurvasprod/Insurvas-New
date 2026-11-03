@@ -1,7 +1,7 @@
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
- * Settings › Form templates, layout A (2026-10-30): who published the live version of a product's
+ * Settings › Application forms, layout A (2026-10-30): who published the live version of a product's
  * form, and when. The revision row holds the time; the person comes from the revision's created_by,
  * else the publish audit row written beside it (PATCH /api/app/templates/[id]), else the person who
  * first applied the Insurvas template. `by` stays null when none of those names anyone.

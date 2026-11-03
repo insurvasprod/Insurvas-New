@@ -82,7 +82,7 @@ export function PartnerSupportCard() {
                   onChange={(event) => { setError(null); setDraft((current) => ({ ...current, email: event.target.value })); }} />
               </Field>
               <Field label="Phone" htmlFor="agency-support-phone"
-                hint={support?.schemaReady && formatSupportPhone(draft.phone) ? `Partners see it as ${formatSupportPhone(draft.phone)}.` : undefined}>
+                info={support?.schemaReady && formatSupportPhone(draft.phone) ? `Partners see it as ${formatSupportPhone(draft.phone)}.` : undefined}>
                 <input id="agency-support-phone" type="tel" autoComplete="tel" className={control} maxLength={SUPPORT_PHONE_MAX} value={draft.phone}
                   disabled={!support?.schemaReady} placeholder="(312) 555-0100"
                   onChange={(event) => { setError(null); setDraft((current) => ({ ...current, phone: event.target.value })); }} />

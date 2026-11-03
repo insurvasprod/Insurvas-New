@@ -22,16 +22,18 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import {
   Ban, CalendarClock, Check, CircleCheck, CircleX, Clock, DollarSign, FileCheck, GripVertical, Hash, MessageSquare,
-  Moon, PhoneCall, PhoneOff, Plus, Repeat, Settings2, Square, ThumbsDown, Voicemail, type LucideIcon,
+  ChevronLeft, Moon, PhoneCall, PhoneOff, Plus, Repeat, Settings2, Square, ThumbsDown, Trash2, Voicemail, type LucideIcon,
 } from "lucide-react";
 
-import { Callout, SettingsStack, control } from "@/components/app/settings/primitives";
+import { Callout, SettingsStack, control, st } from "@/components/app/settings/primitives";
 import { AgentQuestionsDialog } from "@/components/app/settings/agent-questions";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { StatusChip } from "@/components/ui/status-chip";
+import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HoverHint } from "@/components/ui/hover-hint";
 import { SectionLoading } from "@/components/ui/page-states";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { allowedNextActions, type NextActionKind } from "@/lib/dispositions/nextAction";
@@ -152,11 +154,12 @@ export function PipelinesOutcomesSettings() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState(false);
   const [creating, setCreating] = useState(false);
+  // The main page lists the pipelines; one opens its setup (the outcomes map and the editors) as a page of its own.
+  const [view, setView] = useState<"list" | "setup">("list");
   const [questionsFor, setQuestionsFor] = useState<{ id: string; name: string } | null>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number; dx: number; dy: number; width: number; over: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
   const slots = useRef(new Map<string, { top: number; left: number }>());
   const dropFrom = useRef<{ id: string; top: number; left: number } | null>(null);
   const swallowClick = useRef(false);
@@ -181,33 +184,9 @@ export function PipelinesOutcomesSettings() {
     slots.current = next;
   });
 
-  // The map fills what is left of the window below it (owner, 2026-10-27), like Settings › Carriers;
-  // the outcome and stage lists scroll inside it. Measured from the list's own top, so the editor
-  // opening below it never changes the height.
-  const [mapHeight, setMapHeight] = useState<number | null>(null);
-  const fitMap = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element || window.innerWidth < 1024) { setMapHeight(null); return; }
-    // Less the card's bottom padding and border (15px) and the page's 32px bottom padding.
-    const top = element.getBoundingClientRect().top + window.scrollY;
-    setMapHeight(Math.max(420, Math.round(window.innerHeight - top - 47)));
-  }, []);
-  const ready = loaded !== null;
-  useEffect(() => {
-    if (!ready) return;
-    const timer = window.setTimeout(fitMap, 0);
-    const observer = new ResizeObserver(() => fitMap());
-    observer.observe(document.body);
-    window.addEventListener("resize", fitMap);
-    return () => { window.clearTimeout(timer); observer.disconnect(); window.removeEventListener("resize", fitMap); };
-  }, [fitMap, ready]);
-
-  const pickedKey = picked ? (picked.kind === "outcome" ? `o:${picked.key}` : picked.kind === "stage" ? `s:${picked.id}` : "pipeline") : null;
-  useEffect(() => {
-    if (!pickedKey) return;
-    const frame = requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
-    return () => cancelAnimationFrame(frame);
-  }, [pickedKey]);
+  // The map fills what is left under the top bar, and an open editor is docked under it (owner
+  // 2026-11-03): the map shrinks to make room, so there is nothing to scroll to. Sized by the layout,
+  // not measured.
 
   const reload = useCallback(async (keepPipeline?: string | null) => {
     try {
@@ -387,11 +366,11 @@ export function PipelinesOutcomesSettings() {
     return rest;
   })();
   const heldStage = drag ? stages.find((s) => s.id === drag.id) ?? null : null;
-  const svgHeight = Math.max((outcomes.length + 1) * ROW_O, (stages.length + 2 + (elsewhereKeys.length ? 1 : 0)) * ROW_S);
+  const svgHeight = Math.max(outcomes.length * ROW_O, (stages.length + 1 + (elsewhereKeys.length ? 1 : 0)) * ROW_S);
   const stageRow = (key: string) => {
     const d = dest.get(key)?.dest;
-    if (!d || d.kind === "stays") return stages.length + 1 + (elsewhereKeys.length ? 1 : 0);
-    if (d.kind === "elsewhere") return stages.length + 1;
+    if (!d || d.kind === "stays") return stages.length + (elsewhereKeys.length ? 1 : 0);
+    if (d.kind === "elsewhere") return stages.length;
     return order.findIndex((s) => s.id === d.stageId);
   };
   const lineColor = (key: string) => {
@@ -403,26 +382,78 @@ export function PipelinesOutcomesSettings() {
   const pickedOutcome = picked?.kind === "outcome" ? draft.outcomes.find((o) => o.key === picked.key) ?? null : null;
   const pickedStage = picked?.kind === "stage" ? stages.find((s) => s.id === picked.id) ?? null : null;
 
-  return (
-    <SettingsStack>
-      {/* No section title or purpose line (owner, 2026-10-27): the pipelines are the first line. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div role="radiogroup" aria-label="Pipeline" className="flex flex-wrap items-center gap-2">
-          {draft.pipelines.map((item) => (
-            <span key={item.id} className="contents" title={`${liveStages(item).length} stages`}>
-              <ToggleChip role="radio" selected={item.id === pipeline.id} count={liveStages(item).length} onClick={() => { setPipelineId(item.id); setPicked(null); }}>
-                {item.name || "Unnamed pipeline"}
-              </ToggleChip>
-            </span>
-          ))}
+  const dialogs = (
+    <>
+      {creating && <NewPipelineDialog pipelines={draft.pipelines} rulesReady={loaded.rulesReady} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); await reload(id); setView("setup"); }} />}
+      {questionsFor && <AgentQuestionsDialog stageId={questionsFor.id} stageName={questionsFor.name} onClose={() => setQuestionsFor(null)} />}
+    </>
+  );
+
+  if (view === "list") {
+    const open = (id: string) => { setPipelineId(id); setPicked(null); setView("setup"); };
+    return (
+      <SettingsStack className="min-h-0 flex-1 gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <span className="text-sm text-[var(--muted)]">{draft.pipelines.length} {draft.pipelines.length === 1 ? "pipeline" : "pipelines"}. Open one to set up its outcomes and stages.</span>
+          <Button type="button" onClick={() => setCreating(true)} title="A new pipeline, from one you have or blank"><Plus className="size-4" aria-hidden="true" />New pipeline</Button>
         </div>
-        <span className="contents" title="This pipeline's name, partner type and default">
-          <ToggleChip selected={picked?.kind === "pipeline"} onClick={() => setPicked({ kind: "pipeline" })}><Settings2 className="size-4" aria-hidden="true" />Pipeline settings</ToggleChip>
-        </span>
-        <Button type="button" variant="outline" onClick={() => setCreating(true)} disabled={dirty} title={dirty ? "Save or discard your changes first" : "A new pipeline, from one you have or blank"}><Plus className="size-4" aria-hidden="true" />New pipeline</Button>
+        <TableCard className="flex-1">
+          <table className={st.table}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={st.th}>Pipeline</th>
+                <th scope="col" className={st.th}>For</th>
+                <th scope="col" className={cn(st.th, "text-right")}>Stages</th>
+                <th scope="col" className={cn(st.th, "text-right")}>Leads</th>
+                <th scope="col" className={st.th}><span className="sr-only">Open</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {draft.pipelines.map((item) => {
+                const live = liveStages(item);
+                const leads = live.reduce((sum, stage) => sum + (loaded.leadCounts[stage.id] ?? 0), 0);
+                return (
+                  <tr key={item.id}>
+                    <td className={st.td}>
+                      <button type="button" onClick={() => open(item.id)} className="flex items-center gap-2 text-left text-sm font-semibold text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
+                        {item.name || "Unnamed pipeline"}
+                        {item.is_default && <StatusChip tone="neutral" dot={false}>Default</StatusChip>}
+                      </button>
+                    </td>
+                    <td className={st.td}>{PARTNER_TYPES.find((type) => type.value === item.partner_type)?.label ?? "No partner type"}</td>
+                    <td className={cn(st.td, "text-right tabular-nums")}>{live.length}</td>
+                    <td className={cn(st.td, "text-right tabular-nums")}>{leads.toLocaleString("en-US")}</td>
+                    <td className={cn(st.td, "text-right")}><Button type="button" variant="outline" size="sm" onClick={() => open(item.id)}>Set up</Button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </TableCard>
+        {dialogs}
+      </SettingsStack>
+    );
+  }
+
+  const back = async () => {
+    if (dirty && !(await confirmAction({ title: "Leave without saving?", description: "Your changes to this pipeline are not saved yet.", confirmLabel: "Discard and leave", cancelLabel: "Keep editing" }))) return;
+    if (dirty) { setDraft(clone(loaded.doc)); setPicked(null); setSaveError(null); }
+    setPicked(null);
+    setView("list");
+  };
+
+  return (
+    <SettingsStack className="min-h-0 flex-1 gap-3">
+      {/* No section title or purpose line (owner, 2026-10-27): the pipelines are the first line. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={() => void back()}><ChevronLeft className="size-4" aria-hidden="true" />Pipelines</Button>
+        <h2 className="m-0 text-base font-semibold tracking-[-0.015em] text-[var(--ink)]">{pipeline.name || "Unnamed pipeline"}</h2>
+        <Button type="button" variant={picked?.kind === "pipeline" ? "secondary" : "outline"} size="icon" aria-label="Pipeline settings" aria-pressed={picked?.kind === "pipeline"} title="This pipeline's name, partner type and default" onClick={() => setPicked(picked?.kind === "pipeline" ? null : { kind: "pipeline" })}>
+          <Settings2 className="size-4" aria-hidden="true" />
+        </Button>
         <span className="ml-auto flex flex-wrap items-center gap-2">
-          <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold", dirty ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--primary-soft)] text-[var(--accent-ink)]")}>
-            {dirty ? <span className="size-2 rounded-full bg-[var(--warning)]" aria-hidden="true" /> : <span className="grid size-4 place-items-center rounded-full bg-[var(--primary)] text-[var(--on-primary)]"><Check className="size-3" aria-hidden="true" /></span>}
+          <span role="status" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)]">
+            {dirty ? <span className="size-2 rounded-full bg-[var(--ink)]" aria-hidden="true" /> : <Check className="size-3.5 text-[var(--accent-ink)]" aria-hidden="true" />}
             {dirty ? `${ops.length} unsaved change${ops.length === 1 ? "" : "s"}` : savedNote ? "Saved" : "All saved"}
           </span>
           <LeaveGuard dirty={dirty} onDiscard={() => { setDraft(clone(loaded.doc)); setPicked(null); setSaveError(null); }} what="the pipelines and outcomes" />
@@ -434,24 +465,27 @@ export function PipelinesOutcomesSettings() {
       {problems.length > 0 && dirty && <Callout tone="warning" title={problems[0]} />}
       {saveError && <Callout tone="error" title={saveError} />}
 
-      <div className={cn(cardSurface, "px-4 pt-3 pb-3.5")}>
-        <div className="mb-2.5 grid grid-cols-[minmax(0,280px)_minmax(96px,1fr)_minmax(0,280px)] items-center border-b border-[var(--border)] pb-2">
-          <span data-guide="pipeline-outcomes" className={KICKER}>Outcomes · {draft.outcomes.filter((o) => o.active).length}<Hint id="hint-outcomes" label="About outcomes" text="What an agent can pick after a call." /></span>
-          {/* The map's title sits in the middle, between the two columns it joins (owner, 2026-10-27). */}
-          <span className="flex min-w-0 flex-wrap items-center justify-center gap-x-4 gap-y-1 px-3">
-            <span className="inline-flex items-center gap-1.5">
-              <h3 className="m-0 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]">When a call ends, where the lead goes</h3>
-              <Hint id="hint-flow" label="About this map" text="Each line joins an outcome to the stage it moves the lead to. Drag an outcome onto a stage, or click an outcome and then a stage. Hold a stage and drag it to reorder." />
-            </span>
-            <span className="flex flex-wrap gap-3 text-xs text-[var(--muted)]">
+      <div className={cn(cardSurface, "flex min-h-0 flex-1 flex-col px-4 pt-3 pb-3.5")}>
+        <div className="mb-2 grid shrink-0 grid-cols-[minmax(0,280px)_minmax(96px,1fr)_minmax(0,280px)] items-center border-b border-[var(--border)] pb-1.5">
+          <span className="flex min-w-0 items-center justify-between gap-2">
+            <span data-guide="pipeline-outcomes" className={KICKER}>Outcomes · {draft.outcomes.filter((o) => o.active).length}<Hint id="hint-outcomes" label="About outcomes" text="What an agent can pick after a call." /></span>
+            <Button type="button" variant="outline" size="sm" onClick={addOutcome}><Plus className="size-4" aria-hidden="true" />Add outcome</Button>
+          </span>
+          {/* The map's title is behind the (i); the legend sits on the one line (owner 2026-11-03: it took too much room). */}
+          <span className="flex min-w-0 items-center justify-center gap-x-3 px-3">
+            <span className="flex flex-wrap justify-center gap-x-3 text-xs text-[var(--muted)]">
               {([["Open", KIND_COLOR.open], ["Won", KIND_COLOR.won], ["Lost", KIND_COLOR.lost], ["Stays put", STAY_COLOR]] as const).map(([label, color]) => (
                 <span key={label} className="inline-flex items-center gap-1"><span className="size-2 rounded-full" style={{ background: color }} aria-hidden="true" />{label}</span>
               ))}
             </span>
+            <Hint id="hint-flow" label="About this map" text="When a call ends, each line joins an outcome to the stage it moves the lead to. Drag an outcome onto a stage, or open an outcome and pick its stage. Hold a stage and drag it to reorder." />
           </span>
-          <span className={KICKER}>Stages · {stages.length}<Hint id="hint-stages" label="About stages" text="Where a lead sits in this pipeline, in order. Drag ⋮⋮ to reorder." /></span>
+          <span className="flex min-w-0 items-center justify-between gap-2">
+            <span className={KICKER}>Stages · {stages.length}<Hint id="hint-stages" label="About stages" text="Where a lead sits in this pipeline, in order. Drag ⋮⋮ to reorder." /></span>
+            <Button type="button" size="sm" onClick={addStage}><Plus className="size-4" aria-hidden="true" />Add stage</Button>
+          </span>
         </div>
-        <div ref={scrollRef} className={cn(SCROLL, "pr-1.5", mapHeight === null && "max-h-[420px]")} style={mapHeight === null ? undefined : { height: mapHeight }}>
+        <div ref={scrollRef} className={cn(SCROLL, "max-h-[420px] min-h-0 pr-1.5 lg:max-h-none lg:flex-1")}>
           <div className="grid grid-cols-[minmax(0,280px)_minmax(96px,1fr)_minmax(0,280px)] items-start">
             <div className="flex flex-col gap-1.5">
               {outcomes.map((outcome) => {
@@ -477,7 +511,6 @@ export function PipelinesOutcomesSettings() {
                   </button>
                 );
               })}
-              <button type="button" onClick={addOutcome} className="flex h-[46px] items-center justify-center gap-2 rounded-[12px] border-[1.5px] border-dashed border-[var(--border-strong)] text-sm font-semibold text-[var(--muted)] hover:text-[var(--ink)]"><Plus className="size-4" aria-hidden="true" />Add an outcome</button>
               {archivedCount > 0 && <button type="button" onClick={() => setShowArchived(!showArchived)} className="self-start px-1 py-1 text-xs font-semibold text-[var(--accent-ink)] hover:underline">{showArchived ? "Hide archived" : `Show archived (${archivedCount})`}</button>}
             </div>
 
@@ -518,7 +551,6 @@ export function PipelinesOutcomesSettings() {
                   </div>
                 );
               })}
-              <button type="button" onClick={addStage} className="flex h-[52px] items-center justify-center gap-2 rounded-[12px] border-[1.5px] border-dashed border-[var(--border-strong)] text-sm font-semibold text-[var(--muted)] hover:text-[var(--ink)]"><Plus className="size-4" aria-hidden="true" />Add a stage</button>
               {elsewhereKeys.length > 0 && (
                 <div className="box-border flex h-[52px] items-center gap-2 rounded-[12px] border-[1.5px] border-l-4 border-[var(--border)] px-3" style={{ borderLeftColor: "var(--warning)" }} title={WHY_KIND.elsewhere}>
                   <span className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-[var(--ink)]">Another pipeline</strong><span className="text-xs text-[var(--muted)]">its agency-wide stage</span></span>
@@ -543,8 +575,11 @@ export function PipelinesOutcomesSettings() {
         </div>
       </div>
 
-      {(pickedOutcome || pickedStage || picked?.kind === "pipeline") && (
-      <div ref={editorRef} className={cn(cardSurface, "flex min-h-[300px] scroll-mt-4 scroll-mb-4 flex-col gap-3 border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] px-4 py-4")}>
+      {/* The editor is a popup over the map (owner 2026-11-03), so the map keeps its full height. */}
+      <Dialog open={Boolean(pickedOutcome || pickedStage || picked?.kind === "pipeline")} onOpenChange={(open) => { if (!open) setPicked(null); }}>
+        <DialogContent aria-describedby={undefined} className="max-h-[88dvh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] sm:max-w-3xl">
+          <DialogHeader className="sr-only"><DialogTitle>{pickedOutcome ? `Outcome: ${pickedOutcome.label || "New outcome"}` : pickedStage ? `Stage: ${pickedStage.name || "New stage"}` : "Pipeline settings"}</DialogTitle></DialogHeader>
+          <div className="flex flex-col gap-3">
         {pickedOutcome ? (
           <OutcomeEditor
             key={pickedOutcome.key}
@@ -556,6 +591,7 @@ export function PipelinesOutcomesSettings() {
             onEdit={(fn) => editOutcome(pickedOutcome.key, fn)}
             onRoute={(stageId) => route(pickedOutcome.key, stageId)}
             onReset={() => resetRoute(pickedOutcome.key)}
+            onRemove={() => { const key = pickedOutcome.key; edit((doc) => { doc.outcomes = doc.outcomes.filter((o) => o.key !== key); for (const rows of Object.values(doc.own)) delete rows[key]; }); setPicked(null); }}
             onDone={() => setPicked(null)}
           />
         ) : pickedStage ? (
@@ -574,10 +610,12 @@ export function PipelinesOutcomesSettings() {
             onDone={() => setPicked(null)}
           />
         ) : (
-          <PipelineEditor pipeline={pipeline} canDelete={!pipeline.is_default && !dirty} onEdit={editPipeline} onDone={() => setPicked(null)} onDeleted={async () => { setPicked(null); setPipelineId(null); await reload(null); }} />
+          <PipelineEditor pipeline={pipeline} canDelete={!pipeline.is_default && !dirty} onEdit={editPipeline} onDone={() => setPicked(null)} onDeleted={async () => { setPicked(null); setPipelineId(null); await reload(null); setView("list"); }} />
         )}
-      </div>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
 
       {drag && heldStage && createPortal(
         <div
@@ -591,8 +629,7 @@ export function PipelinesOutcomesSettings() {
       )}
 
 
-      {creating && <NewPipelineDialog pipelines={draft.pipelines} rulesReady={loaded.rulesReady} onClose={() => setCreating(false)} onCreated={async (id) => { setCreating(false); await reload(id); }} />}
-      {questionsFor && <AgentQuestionsDialog stageId={questionsFor.id} stageName={questionsFor.name} onClose={() => setQuestionsFor(null)} />}
+      {dialogs}
     </SettingsStack>
   );
 }
@@ -642,7 +679,7 @@ function MinutesInput({ value, onChange, label }: { value: number | null; onChan
   );
 }
 
-function OutcomeEditor({ outcome, pipeline, destination, nextActionReady, pipelineRowsReady, onEdit, onRoute, onReset, onDone }: {
+function OutcomeEditor({ outcome, pipeline, destination, nextActionReady, pipelineRowsReady, onEdit, onRoute, onReset, onRemove, onDone }: {
   outcome: BoardOutcome;
   pipeline: BoardPipeline;
   destination: { dest: Destination; isDefault: boolean } | null;
@@ -651,6 +688,8 @@ function OutcomeEditor({ outcome, pipeline, destination, nextActionReady, pipeli
   onEdit: (fn: (o: BoardOutcome) => void) => void;
   onRoute: (stageId: string | null) => void;
   onReset: () => void;
+  /** Takes an outcome that was never saved out of the draft. */
+  onRemove: () => void;
   onDone: () => void;
 }) {
   const Icon = OUTCOME_ICON[iconFor(outcome.label, outcome.key)];
@@ -665,7 +704,12 @@ function OutcomeEditor({ outcome, pipeline, destination, nextActionReady, pipeli
     <>
       <Head kicker={outcome.isNew ? "New outcome" : "Outcome"} actions={<>
         {!destination?.isDefault && <button type="button" onClick={onReset} className={CHIP(false)} title="Back to the default: the stage with this outcome's name, or stays">↺ Default</button>}
-        {!outcome.isNew && <button type="button" onClick={() => onEdit((o) => { o.active = !o.active; })} className={cn(CHIP(false), outcome.active && "text-[var(--error-ink)]")}>{outcome.active ? "Archive" : "Restore"}</button>}
+        {/* An outcome that was never saved is simply removed; a saved one is archived (nothing is deleted) and can be restored. */}
+        {outcome.isNew
+          ? <button type="button" onClick={onRemove} className={cn(CHIP(false), "text-[var(--error-ink)]")}><Trash2 className="size-3.5" aria-hidden="true" />Remove</button>
+          : outcome.active
+            ? <button type="button" onClick={() => { onEdit((o) => { o.active = false; }); onDone(); }} className={cn(CHIP(false), "text-[var(--error-ink)]")} title="It leaves the list; nothing is deleted. Show archived brings it back."><Trash2 className="size-3.5" aria-hidden="true" />Remove outcome</button>
+            : <button type="button" onClick={() => onEdit((o) => { o.active = true; })} className={CHIP(false)}>Restore</button>}
         <button type="button" onClick={onDone} className={CHIP(false)}><Check className="size-3.5" aria-hidden="true" />Done</button>
       </>}>
         <span className="grid size-9 place-items-center rounded-[10px] bg-[var(--primary-soft)] text-[var(--accent-ink)]"><Icon className="size-4" aria-hidden="true" /></span>
@@ -757,7 +801,7 @@ function StageEditor({ stage, isLast, leadCount, rulesReady, landing, sameNameOu
     <>
       <Head kicker={stage.isNew ? "New stage" : "Stage"} actions={<>
         {onQuestions && <button type="button" onClick={onQuestions} className={CHIP(false)} title="The questions an agent answers on a lead in this stage">Agent questions</button>}
-        <button type="button" onClick={onRemove} disabled={blocked} title={blocked ? (isLast ? "A pipeline keeps at least one stage" : `${leadCount} lead${leadCount === 1 ? " is" : "s are"} here: move them first`) : undefined} className={cn(CHIP(false), "text-[var(--error-ink)]")}>{stage.isNew ? "Remove" : "Archive"}</button>
+        <button type="button" onClick={onRemove} disabled={blocked} title={blocked ? (isLast ? "A pipeline keeps at least one stage" : `${leadCount} lead${leadCount === 1 ? " is" : "s are"} here: move them first`) : undefined} className={cn(CHIP(false), "text-[var(--error-ink)]")}><Trash2 className="size-3.5" aria-hidden="true" />{stage.isNew ? "Remove" : "Remove stage"}</button>
         <button type="button" onClick={onDone} className={CHIP(false)}><Check className="size-3.5" aria-hidden="true" />Done</button>
       </>}>
         <input className={cn(control, "mt-0 w-[260px] font-semibold")} aria-label="Stage name" placeholder="Name it: e.g. Quoted" maxLength={120} value={stage.name} onChange={(event) => { const value = event.target.value; onEdit((s) => { s.name = value; }); }} autoFocus={stage.isNew} />

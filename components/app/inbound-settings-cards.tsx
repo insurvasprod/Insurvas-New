@@ -9,7 +9,7 @@ import type { LadderValues } from "@/lib/queueSla/ladder";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings › Inbound transfers (Inbound A, chosen 2026-10-25): what sits beside the waiting-time
+ * Settings › Inbound settings (Inbound A, chosen 2026-10-25): what sits beside the waiting-time
  * ladder. The coloured bar is the ladder itself, redrawn as each rung is typed; the three cards are
  * the workspace's alerts, buffer handoff and who gets the next transfer
  * (/api/app/inbound-settings, migration 20261025100000).
