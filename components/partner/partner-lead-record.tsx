@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Languages, MessageSquare, Phone, UserRound } from "lucide-react";
+import { FileText, MessageSquare, Phone, UserRound } from "lucide-react";
 
-import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
+import { when } from "@/components/partner/lead-format";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatusChip } from "@/components/ui/status-chip";
 import { SettingsLayout } from "@/components/ui/settings-layout";
-import { productLineLabel } from "@/lib/format/productLine";
 import type { PartnerLeadDetail } from "@/lib/partnerLeads/types";
 import type { SnapshotGroup } from "@/lib/partnerLeads/view";
 
@@ -114,16 +112,14 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
         title={detail.customer}
         description={`Submitted by ${detail.submittedBy.name}`}
         breadcrumbs={[{ label: "Lead Pipeline", href: backHref }, { label: detail.customer }]}
-        meta={<div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <StatusChip tone={stageTone(detail)}>{stageLabel(detail)}</StatusChip>
-          <StatusChip tone="neutral" className="border border-border">{productLineLabel(detail.product)}</StatusChip>
-          {detail.language && <StatusChip tone="neutral" className="border border-border"><span className="inline-flex items-center gap-1.5" aria-label={`Customer language: ${detail.language}`}><Languages aria-hidden="true" className="size-3.5" />{detail.language}</span></StatusChip>}
-        </div>}
       />
       <SettingsLayout
         active={tab}
         onSelect={(key) => setTab(key as typeof tab)}
+        searchable
         collapsible
+        searchNoun="this lead"
+        groups={[{ key: "lead", label: "This Lead", sections: ["overview", "call-updates", "notes"] }]}
         sections={[
           { key: "overview", label: "Overview", icon: <UserRound className="size-4" aria-hidden="true" /> },
           { key: "call-updates", label: "Call updates", icon: <Phone className="size-4" aria-hidden="true" /> },

@@ -25,6 +25,7 @@ export function SettingsLayout({
   searchable = false,
   collapsible = false,
   fitHeight = false,
+  searchNoun = "settings",
   children,
 }: {
   sections: SettingsSection[];
@@ -35,6 +36,8 @@ export function SettingsLayout({
   searchable?: boolean;
   collapsible?: boolean;
   fitHeight?: boolean;
+  /** What the search looks through, said in its placeholder: "settings", "this lead". */
+  searchNoun?: string;
   children: ReactNode;
 }) {
   const [query, setQuery] = useState("");
@@ -120,16 +123,16 @@ export function SettingsLayout({
                 <button type="button" onClick={() => toggleFold(false)} aria-label="Show the settings menu" title="Show menu" className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
                   <PanelLeftOpen className="size-4" aria-hidden="true" />
                 </button>
-                {searchable && <button type="button" onClick={() => { toggleFold(false); requestAnimationFrame(() => searchRef.current?.focus()); }} aria-label="Search settings" title="Search settings" className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
+                {searchable && <button type="button" onClick={() => { toggleFold(false); requestAnimationFrame(() => searchRef.current?.focus()); }} aria-label={`Search ${searchNoun}`} title={`Search ${searchNoun}`} className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
                   <Search className="size-4" aria-hidden="true" />
                 </button>}
               </>
             ) : (
               searchable && <label className="relative block min-w-0 flex-1">
-                <span className="sr-only">Search settings</span>
+                <span className="sr-only">Search {searchNoun}</span>
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search settings" className="h-9 w-full rounded-[8px] border border-input bg-background pr-9 pl-9 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" />
-                {query && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label="Clear settings search" className="absolute right-1.5 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"><X className="size-3.5" aria-hidden="true" /></button>}
+                <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${searchNoun}`} className="h-9 w-full rounded-[8px] border border-input bg-background pr-9 pl-9 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" />
+                {query && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={`Clear ${searchNoun} search`} className="absolute right-1.5 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"><X className="size-3.5" aria-hidden="true" /></button>}
               </label>
             )}
             {collapsible && !foldedRail && <button type="button" onClick={() => toggleFold(true)} aria-label="Hide the settings menu" title="Hide menu" className="hidden size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] lg:inline-flex"><PanelLeftClose className="size-4" aria-hidden="true" /></button>}
@@ -147,7 +150,7 @@ export function SettingsLayout({
           )}
         >
         {groups ? !visibleGroups?.length ? (
-          <p role="status" className="m-0 px-2.5 py-3 text-sm text-muted-foreground">Nothing in Settings matches “{query.trim()}”.</p>
+          <p role="status" className="m-0 px-2.5 py-3 text-sm text-muted-foreground">Nothing in {searchNoun} matches “{query.trim()}”.</p>
         ) : foldedRail ? visibleGroups.flatMap((group) => group.items).map((section) => {
           const isActive = section.key === active;
           return (
@@ -196,7 +199,7 @@ export function SettingsLayout({
             </section>
           );
         }) : !visibleSections.length ? (
-          <p role="status" className="m-0 px-2.5 py-3 text-sm text-muted-foreground">Nothing in Settings matches “{query.trim()}”.</p>
+          <p role="status" className="m-0 px-2.5 py-3 text-sm text-muted-foreground">Nothing in {searchNoun} matches “{query.trim()}”.</p>
         ) : visibleSections.map(renderSection)}
         </nav>
       </aside>
