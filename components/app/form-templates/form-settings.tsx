@@ -21,7 +21,6 @@ function WhoCanApply({ field, onAges }: { field: TemplateField | null; onAges: (
   if (!field) return <Callout tone="info" title="This form has no date of birth, so anyone can apply.">Add a question that answers with “A date” for the date of birth to set an age range.</Callout>;
   return (
     <div className="flex flex-col gap-3">
-      <p className="m-0 text-sm text-[var(--body)]">Read from “{field.label}”. Checked when a partner sends a lead, and again when leads are imported.</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Youngest age" htmlFor="eligibility-min"><input id="eligibility-min" className={control} type="number" min={0} max={130} placeholder="No limit" value={field.validation?.age_min ?? ""} onChange={(event) => onAges({ age_min: numberOrUndefined(event.target.value) })} /></Field>
         <Field label="Oldest age" htmlFor="eligibility-max"><input id="eligibility-max" className={control} type="number" min={0} max={130} placeholder="No limit" value={field.validation?.age_max ?? ""} onChange={(event) => onAges({ age_max: numberOrUndefined(event.target.value) })} /></Field>
@@ -40,7 +39,6 @@ function PartsOfTheForm({ form, fields, onChange }: { form: TemplateFormDefiniti
   const problem = sectionAvailabilityError(form, fields);
   return (
     <div className="flex flex-col gap-3">
-      <p className="m-0 text-sm text-[var(--body)]">Turn a topic off and partners skip its parts of the form for this product.</p>
       {TEMPLATE_SECTION_GROUPS.filter((group) => governed[group].length > 0).map((group) => (
         <ToggleRow
           key={group}
@@ -133,7 +131,7 @@ export type VersionsProps = {
 };
 
 /** "Version": what is live and who put it there, the form's name, and Insurvas's own templates for this product. */
-function Versions({ current, published, name, onName, templates, selected, chosen, preview, applying, dirty, onSelect, onPreview, onApply }: VersionsProps) {
+function Versions({ current, published, templates, selected, chosen, preview, applying, dirty, onSelect, onPreview, onApply }: VersionsProps) {
   const by = published ? `, published ${published.by ? `by ${published.by}, ` : ""}${when.format(new Date(published.at))}` : "";
   return (
     <div className="flex flex-col gap-3.5">
@@ -141,9 +139,6 @@ function Versions({ current, published, name, onName, templates, selected, chose
         Version <strong className="font-semibold">{current.assignment.definition_version}</strong> is live: {current.template.fields.length} questions{by}.
       </p>
       <p className="m-0 text-xs text-[var(--body)]">Each publish makes a new version; partners who already started a form finish it on theirs.</p>
-      <Field label="Name of this form" htmlFor="copy-name" hint="Only you and your team see it.">
-        <input id="copy-name" className={control} maxLength={120} value={name} onChange={(event) => onName(event.target.value)} />
-      </Field>
       {current.latest && (
         <Callout tone="info" title={`Insurvas has a newer version: ${current.latest.name}, version ${current.latest.version}.`}>
           Choose it below to see what it adds. Your own questions and steps stay.
@@ -187,7 +182,6 @@ function Versions({ current, published, name, onName, templates, selected, chose
 function AgentsOnly({ fields, picked, changed, onPick, onAdd }: { fields: TemplateField[]; picked: string | null; changed: ReadonlySet<string>; onPick: (fieldKey: string) => void; onAdd: () => void }) {
   return (
     <div className="flex flex-col gap-3">
-      <p className="m-0 text-sm text-[var(--body)]">Saved on every lead, but partners never see these. Your agents fill them in.</p>
       {fields.length ? (
         <div className="flex flex-wrap gap-2">
           {fields.map((field) => (
@@ -201,6 +195,16 @@ function AgentsOnly({ fields, picked, changed, onPick, onAdd }: { fields: Templa
       )}
       <Button onClick={onAdd} type="button" variant="outline" className="self-start"><Plus aria-hidden="true" />Add one</Button>
     </div>
+  );
+}
+
+/** A setting that shows its controls, with its explanation behind an (i). */
+function Section({ id, title, info, children }: { id: string; title: string; info?: string; children: ReactNode }) {
+  return (
+    <section id={id} className="flex scroll-mt-24 flex-col gap-2 border-t border-[var(--border)] pt-3">
+      <h3 className="m-0 flex items-center gap-1 text-sm font-semibold text-[var(--ink)]">{title}{info && <InfoTip label={`About ${title.toLowerCase()}`}>{info}</InfoTip>}</h3>
+      {children}
+    </section>
   );
 }
 
@@ -250,20 +254,28 @@ export function FormSettingsPanel({ open, onOpen, onClose, values, eligibility, 
       mode="split"
       splitFrom="xl"
       title={<span className="inline-flex items-center gap-1">Form settings<InfoTip label="About the form settings" side="bottom">Click a question on the form to change it here.</InfoTip></span>}
-      status={<span className="text-sm text-[var(--body)]">{versions.name}</span>}
       onClose={onClose}
       closeLabel="Close the form’s settings"
       // Beside the form it is always there (board FtA), so the × shows only on the sheet below 1280px.
       className="xl:min-h-0 xl:self-stretch xl:[&>div:first-child>button:last-child]:hidden"
-      bodyClassName="flex flex-col px-4 pt-1 pb-4"
+      bodyClassName="flex flex-col gap-4 px-4 pt-3 pb-4"
     >
+      <Field label="Name of this form" htmlFor="copy-name" info="Only you and your team see it.">
+        <input id="copy-name" className={control} maxLength={120} value={versions.name} onChange={(event) => versions.onName(event.target.value)} />
+      </Field>
+      {/* Each id is a settings-search anchor (lib/settings/sections.ts, SETTINGS_TABS). */}
+      <Section id="form-who-can-apply" title="Who can apply" info={eligibility ? `Read from “${eligibility.label}”. Checked when a partner sends a lead, and again when leads are imported.` : undefined}>
+        <WhoCanApply field={eligibility} onAges={onAges} />
+      </Section>
+      <Section id="form-parts" title="Topics" info="Turn a topic off and partners skip its parts of the form for this product.">
+        <PartsOfTheForm form={form} fields={fields} onChange={onGroup} />
+      </Section>
+      <Section id="form-agents-only" title="For your agents only" info="Saved on every lead, but partners never see these. Your agents fill them in.">
+        <AgentsOnly {...agents} />
+      </Section>
       <div className="border-b border-[var(--border)]">
-        {/* Each id is a settings-search anchor (lib/settings/sections.ts, SETTINGS_TABS). */}
-        <Row id="form-who-can-apply" {...rowProps("who")}><WhoCanApply field={eligibility} onAges={onAges} /></Row>
-        <Row id="form-parts" {...rowProps("parts")}><PartsOfTheForm form={form} fields={fields} onChange={onGroup} /></Row>
-        <Row id="form-lead-steps" {...rowProps("steps")}><LeadSteps /></Row>
         <Row id="form-versions" {...rowProps("versions")}><Versions {...versions} /></Row>
-        <Row id="form-agents-only" {...rowProps("agents")}><AgentsOnly {...agents} /></Row>
+        <Row id="form-lead-steps" {...rowProps("steps")}><LeadSteps /></Row>
       </div>
     </DetailPanel>
   );
