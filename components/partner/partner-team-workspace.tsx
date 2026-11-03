@@ -16,7 +16,6 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { activityLabel, dayMonth, dayMonthTime } from "@/lib/format/ago";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
@@ -233,16 +232,27 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
         className="flex min-h-[24rem] min-w-0 flex-1 flex-col"
         bodyClassName="flex min-h-0 flex-1 flex-col"
         toolbar={
-          <DataToolbar actions={<>{seatText && <span className="text-sm tabular-nums text-muted-foreground">{seatText}</span>}<RefreshButton onClick={() => void load()} refreshing={loading} labelClassName="sr-only" className="px-2.5" /></>}>
-            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search members" label="Search members by name or email" />
+          <DataToolbar actions={<>
+            {seatText && <span className="text-sm tabular-nums text-muted-foreground">{seatText}</span>}
             {(pending > 0 || deactivated > 0) && (
-              <div role="radiogroup" aria-label="Which members" className="flex flex-wrap items-center gap-2">
-                <ToggleChip role="radio" selected={filter === "all"} count={users.length} onClick={() => { setFilter("all"); setPage(1); }}>All</ToggleChip>
-                <ToggleChip role="radio" selected={filter === "active"} count={active} onClick={() => { setFilter("active"); setPage(1); }}>Active</ToggleChip>
-                {pending > 0 && <ToggleChip role="radio" selected={filter === "invited"} count={pending} onClick={() => { setFilter("invited"); setPage(1); }}>Invited</ToggleChip>}
-                {deactivated > 0 && <ToggleChip role="radio" selected={filter === "deactivated"} count={deactivated} onClick={() => { setFilter("deactivated"); setPage(1); }}>Deactivated</ToggleChip>}
-              </div>
+              <SelectMenu
+                label="Show members"
+                value={filter}
+                onChange={(next) => { setFilter(next as Filter); setPage(1); }}
+                className="w-44"
+                panelClassName="w-52"
+                panelAlign="end"
+                defaultValue="all"
+                options={[
+                  { value: "all", label: `All (${users.length})` },
+                  { value: "active", label: `Active (${active})` },
+                  ...(pending > 0 ? [{ value: "invited", label: `Invited (${pending})` }] : []),
+                  ...(deactivated > 0 ? [{ value: "deactivated", label: `Deactivated (${deactivated})` }] : []),
+                ]}
+              />
             )}
+            <RefreshButton onClick={() => void load()} refreshing={loading} labelClassName="sr-only" className="px-2.5" /></>}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search members" label="Search members by name or email" />
           </DataToolbar>
         }
         filters={inviteOpen ? (
